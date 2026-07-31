@@ -12,12 +12,16 @@ import TorneoCreate from './pages/admin/TorneoCreate';
 import TorneoDetail from './pages/admin/TorneoDetail';
 import ParejasManager from './pages/admin/ParejasManager';
 import TorneoPublic from './pages/public/TorneoPublic';
+import EliminatoriaView from './pages/admin/EliminatoriaView';
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Redirect raíz a login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+
           {/* Auth (sin layout) */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -35,15 +39,13 @@ export default function App() {
             <Route path="torneos/nuevo" element={<TorneoCreate />} />
             <Route path="torneos/:id" element={<TorneoDetail />} />
             <Route path="torneos/:id/parejas" element={<ParejasManager />} />
+            <Route path="torneos/:id/eliminatoria" element={<EliminatoriaView />} />
           </Route>
 
           {/* Vista pública */}
-          <Route path="/" element={<PublicLayout />}>
-            <Route path=":slug" element={<TorneoPublic />} />
+          <Route path="/torneo/:slug" element={<PublicLayout />}>
+            <Route index element={<TorneoPublic />} />
           </Route>
-
-          {/* Redirect raíz a login */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

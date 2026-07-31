@@ -83,7 +83,7 @@ export default function TorneoDetail() {
             <h3>Menú</h3>
             <ul style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <li><Link to={`/admin/torneos/${id}`}>Fase de Grupos</Link></li>
-              <li><Link to={`/admin/torneos/${id}/eliminatoria`} style={{ color: 'var(--color-text-muted)' }}>Fase Eliminatoria (Pronto)</Link></li>
+              <li><Link to={`/admin/torneos/${id}/eliminatoria`}>Fase Eliminatoria {torneo.estado === 'BORRADOR' && '(Pronto)'}</Link></li>
               <li><Link to={`/admin/torneos/${id}/parejas`}>Gestionar Parejas ({torneo.parejas?.length || 0})</Link></li>
             </ul>
           </div>

@@ -16,6 +16,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ─── Logging middleware ──────────────────────────────────
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
+
 // ─── Health check ────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

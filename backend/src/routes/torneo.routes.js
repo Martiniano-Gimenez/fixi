@@ -22,15 +22,17 @@ router.post('/:id/iniciar', torneoController.iniciarTorneo);
 // Rutas anidadas de partidos y zonas
 const partidoController = require('../controllers/partido.controller');
 const zonaController = require('../controllers/zona.controller');
+const faseEliminatoriaController = require('../controllers/faseEliminatoria.controller');
 
 router.get('/:id/partidos', partidoController.getPartidosByTorneo);
 
 // Ticket 3 — Zonas
 router.get('/:id/zonas', zonaController.getZonasByTorneo);
 
-// Ticket 4.1
-router.post('/:id/generar-eliminatoria', (req, res) => {
-  res.status(501).json({ error: 'No implementado todavía.' });
-});
+// Ticket 4.1 — Generar Eliminatoria
+router.post('/:id/generar-eliminatoria', faseEliminatoriaController.generarEliminatoria);
+
+// Ticket 4 — Obtener Fases Eliminatorias
+router.get('/:id/fases-eliminatorias', faseEliminatoriaController.getFasesEliminatorias);
 
 module.exports = router;
