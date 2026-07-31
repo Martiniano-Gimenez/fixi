@@ -40,7 +40,28 @@ async function getFasesEliminatorias(req, res) {
   }
 }
 
+/**
+ * DELETE /api/torneos/:id/fases-eliminatorias
+ */
+async function deleteFasesEliminatorias(req, res) {
+  try {
+    const { id: torneoId } = req.params;
+    const organizadorId = req.organizadorId;
+
+    const resultado = await faseEliminatoriaService.borrarEliminatoria(
+      organizadorId,
+      torneoId
+    );
+
+    res.status(200).json(resultado);
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({ error: error.message });
+  }
+}
+
 module.exports = {
   generarEliminatoria,
   getFasesEliminatorias,
+  deleteFasesEliminatorias,
 };

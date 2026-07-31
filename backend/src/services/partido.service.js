@@ -150,6 +150,48 @@ async function propagarMiniBracket(zonaId) {
   }
 }
 
+function validarSetPadel(gamesP1, gamesP2, setNum) {
+  if (typeof gamesP1 !== 'number' || typeof gamesP2 !== 'number' || isNaN(gamesP1) || isNaN(gamesP2)) {
+    const error = new Error(`Los games del Set ${setNum} deben ser números válidos.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (gamesP1 < 0 || gamesP2 < 0) {
+    const error = new Error(`Los games del Set ${setNum} no pueden ser negativos.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (gamesP1 === gamesP2) {
+    const error = new Error(`El Set ${setNum} no puede terminar en empate (${gamesP1}-${gamesP2}).`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const max = Math.max(gamesP1, gamesP2);
+  const min = Math.min(gamesP1, gamesP2);
+
+  if (max < 6) {
+    const error = new Error(`El Set ${setNum} (${gamesP1}-${gamesP2}) está incompleto. Se gana con al menos 6 games.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (max === 6 && max - min < 2) {
+    const error = new Error(`El Set ${setNum} (${gamesP1}-${gamesP2}) es inválido. Si van 6-5 debe jugarse hasta 7-5 o 7-6.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (max === 7 && min !== 5 && min !== 6) {
+    const error = new Error(`El Set ${setNum} (${gamesP1}-${gamesP2}) es inválido. Quien gana 7 games debe ser por 7-5 o 7-6.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  if (max > 7) {
+    const error = new Error(`El Set ${setNum} (${gamesP1}-${gamesP2}) es inválido. En pádel un set no puede tener más de 7 games.`);
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
 /**
  * Cargar el resultado de un partido (sets).
  */
@@ -168,6 +210,11 @@ async function cargarResultado(organizadorId, partidoId, data) {
     error.statusCode = 400;
     throw error;
   }
+
+  // Validar cada set según reglas de pádel
+  sets.forEach((s, idx) => {
+    validarSetPadel(s.gamesPareja1, s.gamesPareja2, idx + 1);
+  });
 
   // Validar y calcular ganador del partido
   let setsGanadosP1 = 0;
@@ -224,14 +271,130 @@ async function cargarResultado(organizadorId, partidoId, data) {
     }
   }
 
-  // Ticket 4.2: Si es eliminatoria, propagar
+  // Ticket 4.2: Si es eliminatoria, propagar ganador a la siguiente ronda
   if (partido.faseEliminatoriaId) {
-    // TODO (Ticket 4.2)
+    await propagarEliminatoria(partido, ganadorId);
   }
 
   return { message: 'Resultado cargado exitosamente.' };
 }
 
+/**
+ * Cuando se carga el resultado de un partido de fase eliminatoria,
+ * busca el partido de la siguiente ronda y asigna el ganador en el slot correcto.
+ */
+async function propagarEliminatoria(partido, ganadorId) {
+  // Obtener la fase actual para conocer su ronda
+  const faseActual = await prisma.faseEliminatoria.findUnique({
+    where: { id: partido.faseEliminatoriaId },
+  });
+
+  if (!faseActual) return;
+
+  // La siguiente ronda tiene la mitad de partidos (ronda / 2)
+  // Si ronda === 2 → siguiente es Final (ronda 1)
+  // Si ronda === 1 → ya es la final, no hay siguiente
+  if (faseActual.ronda <= 2) return; // Es la final (ronda=2), no hay siguiente ronda
+
+  const siguienteRondaNum = faseActual.ronda / 2;
+
+  // Buscar la fase de la siguiente ronda
+  const faseSiguiente = await prisma.faseEliminatoria.findFirst({
+    where: {
+      torneoId: partido.torneoId,
+      ronda: siguienteRondaNum,
+    },
+  });
+
+  if (!faseSiguiente) return;
+
+  // Determinar qué slot ocupa el ganador en la siguiente ronda:
+  // Los partidos se emparejan de a 2: pos 1 y 2 alimentan partido 1; pos 3 y 4 → partido 2; etc.
+  // posicionEnRonda del partido actual → Math.ceil(pos / 2) = posición en siguiente ronda
+  // Si posición es impar → slot pareja1; si es par → slot pareja2
+  const posActual = partido.posicionEnRonda;
+  const posSiguiente = Math.ceil(posActual / 2);
+  const esSlotP1 = posActual % 2 === 1; // impar → pareja1
+
+  // Buscar el partido destino en la siguiente ronda
+  const partidoDestino = await prisma.partido.findFirst({
+    where: {
+      faseEliminatoriaId: faseSiguiente.id,
+      posicionEnRonda: posSiguiente,
+    },
+  });
+
+  if (!partidoDestino) return;
+
+  // Determine origenPareja of the winner
+  let origenGanador = null;
+  if (ganadorId) {
+    if (ganadorId === partido.pareja1Id) origenGanador = partido.origenPareja1;
+    else if (ganadorId === partido.pareja2Id) origenGanador = partido.origenPareja2;
+  }
+
+  // Asignar el ganador en el slot correcto (puede ser null si se borra el resultado)
+  await prisma.partido.update({
+    where: { id: partidoDestino.id },
+    data: esSlotP1
+      ? { pareja1Id: ganadorId, origenPareja1: origenGanador }
+      : { pareja2Id: ganadorId, origenPareja2: origenGanador },
+  });
+}
+
+/**
+ * Borra el resultado de un partido y revierte su estado a PENDIENTE.
+ */
+async function borrarResultado(organizadorId, partidoId) {
+  const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+
+  if (partido.estado !== 'FINALIZADO') {
+    return { message: 'El partido no está finalizado.' };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Borrar sets
+    await tx.setPartido.deleteMany({ where: { partidoId } });
+
+    // Actualizar partido
+    await tx.partido.update({
+      where: { id: partidoId },
+      data: {
+        estado: 'PENDIENTE',
+        ganadorId: null,
+      },
+    });
+  });
+
+  // Si es partido de zona, recalcular stats
+  if (partido.zonaId) {
+    const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
+    if (zona.formato === 'ROUND_ROBIN') {
+      await recalcularStatsZona(partido.zonaId);
+    } else if (zona.formato === 'MINI_BRACKET') {
+      await propagarMiniBracket(partido.zonaId);
+    }
+  }
+
+  // Si es eliminatoria, limpiar la propagación
+  if (partido.faseEliminatoriaId) {
+    await propagarEliminatoria(partido, null);
+  }
+
+  return { message: 'Resultado borrado exitosamente.' };
+}
+
+async function updateFechaHora(organizadorId, partidoId, fechaHora) {
+  await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  const partido = await prisma.partido.update({
+    where: { id: partidoId },
+    data: { fechaHora: fechaHora ? new Date(fechaHora) : null },
+  });
+  return partido;
+}
+
 module.exports = {
   cargarResultado,
+  borrarResultado,
+  updateFechaHora,
 };

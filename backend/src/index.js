@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { PORT } = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -37,6 +38,16 @@ app.use('/api/torneos', torneoRoutes);
 app.use('/api/parejas', parejaRoutes);
 app.use('/api/partidos', partidoRoutes);
 app.use('/api/public', publicRoutes);
+
+// ─── Serve Frontend in Production ────────────────────────
+if (process.env.NODE_ENV === 'production') {
+  const frontendPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendPath));
+
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
+}
 
 // ─── Error handler (siempre al final) ────────────────────
 app.use(errorHandler);

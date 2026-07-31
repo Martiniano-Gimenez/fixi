@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const publicController = require('../controllers/public.controller');
 
 // Ticket 5.1 — Vista pública sin auth
-router.get('/:slug', (req, res) => {
-  res.status(501).json({ error: 'No implementado todavía.' });
-});
+router.get('/:slug', publicController.getTorneoPublico);
 
 module.exports = router;

@@ -102,7 +102,9 @@ model Partido {
   faseEliminatoriaId   String?   // Si es partido de eliminatoria
   posicionEnRonda      Int       @default(1) // Ubicación en el cuadro
   pareja1Id            String?   // Nullable hasta que se conozca
+  origenPareja1        String?   // Ej: "1°A", "2°B"
   pareja2Id            String?   // Nullable hasta que se conozca
+  origenPareja2        String?   // Ej: "1°A", "2°B"
   ganadorId            String?   // Nullable hasta que se juegue
   estado               String    @default("PENDIENTE") // "PENDIENTE" | "EN_CURSO" | "FINALIZADO"
   fechaHora            DateTime?

@@ -377,3 +377,54 @@ ul, ol {
   border-radius: var(--radius-lg);
   color: var(--color-text-muted);
 }
+
+/* --- Bracket Tree Connecting Lines ------------------------------------ */
+.bracket-matches-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0;
+}
+.bracket-match-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.bracket-section {
+  display: flex;
+  flex-direction: column;
+}
+/* Horizontal line right */
+.bracket-section:not(:last-child) .bracket-match-wrapper::after {
+  content: '';
+  position: absolute;
+  right: -20px;
+  width: 20px;
+  height: 50%;
+  border-right: 2px solid var(--color-border);
+  z-index: 0;
+}
+.bracket-section:not(:last-child) .bracket-match-wrapper:nth-child(odd)::after {
+  top: 50%;
+  border-top: 2px solid var(--color-border);
+}
+.bracket-section:not(:last-child) .bracket-match-wrapper:nth-child(even)::after {
+  bottom: 50%;
+  border-bottom: 2px solid var(--color-border);
+}
+/* Horizontal line left */
+.bracket-section:not(:first-child) .bracket-match-wrapper::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  width: 20px;
+  border-top: 2px solid var(--color-border);
+  z-index: 0;
+}
+/* Ensure cards stay above lines */
+.match-card-wrapper, .match-card {
+  z-index: 1;
+  position: relative;
+}

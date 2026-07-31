@@ -1,6 +1,6 @@
 import PartidoCard from './PartidoCard';
 
-export default function MiniBracketView({ zona, partidos, onPartidoClick }) {
+export default function MiniBracketView({ zona, partidos, onPartidoClick, onUpdateFechaHora }) {
   // Partidos vienen ordenados por posicionEnRonda
   const p1 = partidos.find(p => p.posicionEnRonda === 1);
   const p2 = partidos.find(p => p.posicionEnRonda === 2);
@@ -21,11 +21,11 @@ export default function MiniBracketView({ zona, partidos, onPartidoClick }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>Partido 1</div>
-            <PartidoCard partido={p1} onClick={() => onPartidoClick(p1)} />
+            <PartidoCard partido={p1} onClick={() => onPartidoClick(p1)} onUpdateFechaHora={onUpdateFechaHora} />
           </div>
           <div>
             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>Partido 2</div>
-            <PartidoCard partido={p2} onClick={() => onPartidoClick(p2)} />
+            <PartidoCard partido={p2} onClick={() => onPartidoClick(p2)} onUpdateFechaHora={onUpdateFechaHora} />
           </div>
         </div>
 
@@ -33,11 +33,11 @@ export default function MiniBracketView({ zona, partidos, onPartidoClick }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>1ro y 2do Puesto</div>
-            <PartidoCard partido={pGanadores} onClick={pGanadores?.pareja1Id && pGanadores?.pareja2Id ? () => onPartidoClick(pGanadores) : undefined} />
+            <PartidoCard partido={pGanadores} onClick={pGanadores?.pareja1Id && pGanadores?.pareja2Id ? () => onPartidoClick(pGanadores) : undefined} onUpdateFechaHora={onUpdateFechaHora} />
           </div>
           <div>
             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>3ro y 4to Puesto (Clasificación)</div>
-            <PartidoCard partido={pPerdedores} onClick={pPerdedores?.pareja1Id && pPerdedores?.pareja2Id ? () => onPartidoClick(pPerdedores) : undefined} />
+            <PartidoCard partido={pPerdedores} onClick={pPerdedores?.pareja1Id && pPerdedores?.pareja2Id ? () => onPartidoClick(pPerdedores) : undefined} onUpdateFechaHora={onUpdateFechaHora} />
           </div>
         </div>
       </div>

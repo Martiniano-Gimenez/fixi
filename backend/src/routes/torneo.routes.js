@@ -32,7 +32,8 @@ router.get('/:id/zonas', zonaController.getZonasByTorneo);
 // Ticket 4.1 — Generar Eliminatoria
 router.post('/:id/generar-eliminatoria', faseEliminatoriaController.generarEliminatoria);
 
-// Ticket 4 — Obtener Fases Eliminatorias
+// Ticket 4 — Obtener/Borrar Fases Eliminatorias
 router.get('/:id/fases-eliminatorias', faseEliminatoriaController.getFasesEliminatorias);
+router.delete('/:id/fases-eliminatorias', faseEliminatoriaController.deleteFasesEliminatorias);
 
 module.exports = router;

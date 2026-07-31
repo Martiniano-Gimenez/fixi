@@ -7,6 +7,10 @@ router.use(auth);
 
 // Tickets 3.2/4.2
 router.put('/:id/resultado', partidoController.cargarResultado);
+router.delete('/:id/resultado', partidoController.borrarResultado);
+
+// Update match time
+router.put('/:id/fecha-hora', partidoController.updateFechaHora);
 
 // Ticket 4.3 — editar bracket
 router.patch('/:id/bracket', (req, res) => {

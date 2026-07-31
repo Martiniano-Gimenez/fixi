@@ -10,6 +10,25 @@ async function cargarResultado(req, res, next) {
   }
 }
 
+async function borrarResultado(req, res, next) {
+  try {
+    const result = await partidoService.borrarResultado(req.organizadorId, req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateFechaHora(req, res, next) {
+  try {
+    const { fechaHora } = req.body;
+    const result = await partidoService.updateFechaHora(req.organizadorId, req.params.id, fechaHora);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 // Endpoint adicional para listar partidos (necesario para el frontend)
 async function getPartidosByTorneo(req, res, next) {
   try {
@@ -44,5 +63,7 @@ async function getPartidosByTorneo(req, res, next) {
 
 module.exports = {
   cargarResultado,
+  borrarResultado,
+  updateFechaHora,
   getPartidosByTorneo,
 };

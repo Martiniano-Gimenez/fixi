@@ -11,6 +11,7 @@ export default function TorneoDetail() {
   const [torneo, setTorneo] = useState(null);
   const [zonas, setZonas] = useState([]);
   const [partidos, setPartidos] = useState([]);
+  const [fasesEliminatorias, setFasesEliminatorias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -26,12 +27,14 @@ export default function TorneoDetail() {
       setTorneo(tData);
 
       if (tData.estado !== 'BORRADOR') {
-        const [zData, pData] = await Promise.all([
+        const [zData, pData, fData] = await Promise.all([
           api.get(`/torneos/${id}/zonas`),
-          api.get(`/torneos/${id}/partidos`)
+          api.get(`/torneos/${id}/partidos`),
+          api.get(`/torneos/${id}/fases-eliminatorias`)
         ]);
         setZonas(zData);
         setPartidos(pData);
+        setFasesEliminatorias(fData);
       }
     } catch (err) {
       setError(err.message);
@@ -52,6 +55,19 @@ export default function TorneoDetail() {
     }
   };
 
+  const handleUpdateFechaHora = async (partidoId, newTimeStr) => {
+    try {
+      if (!newTimeStr) {
+        await api.put(`/partidos/${partidoId}/fecha-hora`, { fechaHora: null });
+      } else {
+        await api.put(`/partidos/${partidoId}/fecha-hora`, { fechaHora: new Date(newTimeStr).toISOString() });
+      }
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error al actualizar horario');
+    }
+  };
+
   const getPartidosZona = (zonaId) => partidos.filter(p => p.zonaId === zonaId);
 
   if (loading) return <div className="loading">Cargando torneo...</div>;
@@ -65,8 +81,18 @@ export default function TorneoDetail() {
           <h1>{torneo.nombre}</h1>
           <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
-            <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              Link público: <a href={`/${torneo.slug}`} target="_blank" rel="noreferrer">/{torneo.slug}</a>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              📡 En vivo: <a href={`/torneo/${torneo.slug}`} target="_blank" rel="noreferrer">/torneo/{torneo.slug}</a>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigator.clipboard.writeText(`${window.location.origin}/torneo/${torneo.slug}`);
+                  const btn = e.target;
+                  btn.textContent = '✅ Copiado!';
+                  setTimeout(() => btn.textContent = '📋 Copiar', 1500);
+                }}
+                style={{ fontSize: 'var(--font-size-xs)', padding: '0.15rem 0.5rem', background: 'var(--color-bg-input)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >📋 Copiar</button>
             </span>
           </div>
         </div>
@@ -107,19 +133,58 @@ export default function TorneoDetail() {
                       <ZonaTable zona={zona} />
                       <div style={{ marginTop: '1rem' }}>
                         <h4 style={{ marginBottom: '1rem', color: 'var(--color-text-secondary)' }}>Partidos</h4>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1.25rem' }}>
                           {getPartidosZona(zona.id).map(p => (
-                            <PartidoCard key={p.id} partido={p} onClick={() => setPartidoSeleccionado(p)} />
+                            <div 
+                              key={p.id} 
+                              style={{ 
+                                opacity: fasesEliminatorias.length > 0 ? 0.7 : 1, 
+                                cursor: fasesEliminatorias.length > 0 ? 'not-allowed' : 'pointer',
+                                transition: 'opacity 0.2s'
+                              }}
+                              title={fasesEliminatorias.length > 0 ? 'Edición bloqueada: La fase eliminatoria ya está generada.' : 'Clic para cargar resultado'}
+                              onClick={(e) => {
+                                if (fasesEliminatorias.length > 0) {
+                                  e.stopPropagation();
+                                  alert('La fase eliminatoria ya fue generada. Para editar la zona, primero debes borrar el bracket eliminatorio.');
+                                  return;
+                                }
+                              }}
+                            >
+                              <PartidoCard 
+                                partido={p} 
+                                onClick={() => {
+                                  if (fasesEliminatorias.length === 0) setPartidoSeleccionado(p);
+                                }} 
+                                onUpdateFechaHora={handleUpdateFechaHora}
+                              />
+                            </div>
                           ))}
                         </div>
                       </div>
                     </>
                   ) : (
-                    <MiniBracketView 
-                      zona={zona} 
-                      partidos={getPartidosZona(zona.id)} 
-                      onPartidoClick={setPartidoSeleccionado}
-                    />
+                    <div 
+                      style={{ 
+                        opacity: fasesEliminatorias.length > 0 ? 0.7 : 1,
+                      }}
+                      title={fasesEliminatorias.length > 0 ? 'Edición bloqueada: La fase eliminatoria ya está generada.' : ''}
+                      onClick={(e) => {
+                        if (fasesEliminatorias.length > 0) {
+                          e.stopPropagationCapture(); // Try to stop it before it reaches child
+                          alert('La fase eliminatoria ya fue generada. Para editar la zona, primero debes borrar el bracket eliminatorio.');
+                        }
+                      }}
+                    >
+                      <MiniBracketView 
+                        zona={zona} 
+                        partidos={getPartidosZona(zona.id)} 
+                        onPartidoClick={(p) => {
+                          if (fasesEliminatorias.length === 0) setPartidoSeleccionado(p);
+                        }}
+                        onUpdateFechaHora={handleUpdateFechaHora}
+                      />
+                    </div>
                   )}
                 </div>
               ))}
