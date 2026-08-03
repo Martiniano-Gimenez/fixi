@@ -61,9 +61,19 @@ async function getPartidosByTorneo(req, res, next) {
   }
 }
 
+async function updateBracketMatch(req, res, next) {
+  try {
+    const result = await partidoService.updateBracketMatch(req.organizadorId, req.params.id, req.body);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   cargarResultado,
   borrarResultado,
   updateFechaHora,
   getPartidosByTorneo,
+  updateBracketMatch,
 };

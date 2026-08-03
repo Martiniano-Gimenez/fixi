@@ -13,8 +13,6 @@ router.delete('/:id/resultado', partidoController.borrarResultado);
 router.put('/:id/fecha-hora', partidoController.updateFechaHora);
 
 // Ticket 4.3 — editar bracket
-router.patch('/:id/bracket', (req, res) => {
-  res.status(501).json({ error: 'No implementado todavía.' });
-});
+router.patch('/:id/bracket', partidoController.updateBracketMatch);
 
 module.exports = router;

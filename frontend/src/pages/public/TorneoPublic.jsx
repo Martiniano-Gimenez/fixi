@@ -74,10 +74,28 @@ export default function TorneoPublic() {
             {torneo.totalParejas} parejas
           </span>
         </div>
-        {lastUpdate && (
-          <p style={{ marginTop: '0.75rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-            🔄 Actualizado: {lastUpdate.toLocaleTimeString()} (auto cada 15s)
-          </p>
+        
+        {/* Navegación rápida entre zonas */}
+        {zonas.length > 1 && (
+          <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {zonas.map((z, idx) => (
+              <span key={z.id} style={{ display: 'flex', alignItems: 'center' }}>
+                <a 
+                  href={`#zona-${z.id}`} 
+                  style={{ 
+                    fontSize: 'var(--font-size-sm)', 
+                    fontWeight: 'bold',
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(255,255,255,0.05)'
+                  }}
+                >
+                  {z.nombre}
+                </a>
+                {idx < zonas.length - 1 && <span style={{ color: 'var(--color-text-muted)', margin: '0 0.5rem' }}>·</span>}
+              </span>
+            ))}
+          </div>
         )}
       </div>
 
@@ -86,22 +104,22 @@ export default function TorneoPublic() {
         <section style={{ marginBottom: '3rem' }}>
           <h2 style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-2xl)' }}>📊 Fase de Grupos</h2>
           {zonas.map((zona) => (
-            <div key={zona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
+            <div id={`zona-${zona.id}`} key={zona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h3>{zona.nombre}</h3>
                 <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
               </div>
 
               {/* Tabla de posiciones */}
-              <div style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
+              <div className="table-responsive" style={{ marginBottom: '1.5rem' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
                       <th style={{ textAlign: 'left', padding: '0.5rem' }}>Pareja</th>
                       <th style={{ padding: '0.5rem' }}>Pts</th>
-                      <th style={{ padding: '0.5rem' }}>PJ</th>
+                      <th className="hide-on-mobile" style={{ padding: '0.5rem' }}>PJ</th>
                       <th style={{ padding: '0.5rem' }}>PG</th>
-                      <th style={{ padding: '0.5rem' }}>PP</th>
+                      <th className="hide-on-mobile" style={{ padding: '0.5rem' }}>PP</th>
                       <th style={{ padding: '0.5rem' }}>Sets</th>
                       <th style={{ padding: '0.5rem' }}>Games</th>
                     </tr>
@@ -119,9 +137,9 @@ export default function TorneoPublic() {
                             {row.pareja}
                           </td>
                           <td style={{ padding: '0.75rem 0.5rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>{row.puntos}</td>
-                          <td style={{ padding: '0.75rem 0.5rem' }}>{row.pj}</td>
+                          <td className="hide-on-mobile" style={{ padding: '0.75rem 0.5rem' }}>{row.pj}</td>
                           <td style={{ padding: '0.75rem 0.5rem' }}>{row.pg}</td>
-                          <td style={{ padding: '0.75rem 0.5rem' }}>{row.pp}</td>
+                          <td className="hide-on-mobile" style={{ padding: '0.75rem 0.5rem' }}>{row.pp}</td>
                           <td style={{ padding: '0.75rem 0.5rem' }}>{row.sf} - {row.sc}</td>
                           <td style={{ padding: '0.75rem 0.5rem' }}>{row.gf} - {row.gc}</td>
                         </tr>
@@ -137,14 +155,15 @@ export default function TorneoPublic() {
                   <h4 style={{ color: 'var(--color-text-secondary)', marginBottom: '0.75rem', fontSize: 'var(--font-size-sm)' }}>
                     Partidos
                   </h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                  <div className="partidos-public-grid">
                     {zona.partidos.map((p) => (
                       <div key={p.id} style={{
                         background: 'var(--color-bg-input)',
-                        border: `1px solid ${p.estado === 'FINALIZADO' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        border: `1px solid ${p.estado === 'FINALIZADO' ? 'var(--color-primary)' : p.estado === 'EN_CURSO' ? 'var(--color-success)' : 'var(--color-border)'}`,
                         borderRadius: 'var(--radius-md)',
                         padding: '0.75rem',
-                        position: 'relative'
+                        position: 'relative',
+                        animation: p.estado === 'EN_CURSO' ? 'pulse-border 2s infinite' : 'none'
                       }}>
                         {p.fechaHora && (
                           <div style={{
@@ -154,28 +173,40 @@ export default function TorneoPublic() {
                             fontWeight: 'bold',
                             marginBottom: '0.4rem',
                             borderBottom: '1px solid var(--color-border)',
-                            paddingBottom: '0.2rem'
+                            paddingBottom: '0.2rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px'
                           }}>
-                            {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+                            📅 {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
                           </div>
                         )}
                         <div style={{ fontSize: 'var(--font-size-sm)', textAlign: 'center', fontWeight: p.ganador === p.pareja1 && p.ganador ? 'bold' : 'normal', color: p.ganador === p.pareja1 && p.ganador ? 'var(--color-primary)' : 'var(--color-text)' }}>
                           {p.pareja1 || 'TBD'}
                         </div>
-                        {p.estado === 'FINALIZADO' && p.sets.length > 0 ? (
-                          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.35rem 0' }}>
-                            {p.sets.map((s, i) => (
-                              <span key={i} style={{
-                                background: 'var(--color-bg)',
-                                border: '1px solid var(--color-border)',
-                                padding: '0.1rem 0.4rem',
-                                borderRadius: '3px',
-                                fontSize: 'var(--font-size-xs)',
-                                fontWeight: 'bold',
-                              }}>
-                                {s.gamesPareja1}-{s.gamesPareja2}
-                              </span>
-                            ))}
+                        {(p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') && p.sets && p.sets.length > 0 ? (
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.35rem 0', flexWrap: 'wrap' }}>
+                            {p.estado === 'EN_CURSO' && (
+                              <span style={{ width: '100%', textAlign: 'center', fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '0.1rem' }}>🟢 En juego</span>
+                            )}
+                            {p.sets.map((s, i) => {
+                              const p1Won = s.gamesPareja1 > s.gamesPareja2;
+                              const p2Won = s.gamesPareja2 > s.gamesPareja1;
+                              return (
+                                <span key={i} style={{
+                                  background: 'var(--color-bg)',
+                                  border: '1px solid var(--color-border)',
+                                  padding: '0.1rem 0.4rem',
+                                  borderRadius: '3px',
+                                  fontSize: 'var(--font-size-xs)',
+                                }}>
+                                  <span style={{ fontWeight: p1Won ? 'bold' : 'normal', color: p1Won ? 'var(--color-primary)' : 'inherit' }}>{s.gamesPareja1}</span>
+                                  {'-'}
+                                  <span style={{ fontWeight: p2Won ? 'bold' : 'normal', color: p2Won ? 'var(--color-primary)' : 'inherit' }}>{s.gamesPareja2}</span>
+                                </span>
+                              );
+                            })}
                           </div>
                         ) : (
                           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', fontWeight: 'bold', margin: '0.35rem 0' }}>vs</div>
@@ -221,18 +252,22 @@ export default function TorneoPublic() {
                           color: 'var(--color-text-secondary)',
                           fontWeight: 'bold',
                           minWidth: '55px',
-                          textAlign: 'right'
+                          textAlign: 'right',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
                         }}>
-                          {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+                          📅 {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
                         </div>
                       )}
                       <div style={{
                         background: 'var(--color-bg-card)',
-                        border: `1px solid ${p.estado === 'FINALIZADO' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        border: `1px solid ${p.estado === 'FINALIZADO' ? 'var(--color-primary)' : p.estado === 'EN_CURSO' ? 'var(--color-success)' : 'var(--color-border)'}`,
                         borderRadius: 'var(--radius-md)',
                         padding: '0.75rem 1rem',
                         minWidth: '200px',
-                        flex: 1
+                        flex: 1,
+                        animation: p.estado === 'EN_CURSO' ? 'pulse-border 2s infinite' : 'none'
                       }}>
                       <div style={{
                         fontSize: 'var(--font-size-sm)',
@@ -247,20 +282,28 @@ export default function TorneoPublic() {
                         )}
                         {p.ganador === p.pareja1 && p.ganador ? '🏆 ' : ''}{p.pareja1 || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Por definirse</span>}
                       </div>
-                      {p.estado === 'FINALIZADO' && p.sets.length > 0 ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.35rem 0' }}>
-                          {p.sets.map((s, i) => (
-                            <span key={i} style={{
-                              background: 'var(--color-bg-input)',
-                              border: '1px solid var(--color-border)',
-                              padding: '0.1rem 0.4rem',
-                              borderRadius: '3px',
-                              fontSize: 'var(--font-size-xs)',
-                              fontWeight: 'bold',
-                            }}>
-                              {s.gamesPareja1}-{s.gamesPareja2}
-                            </span>
-                          ))}
+                      {(p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') && p.sets && p.sets.length > 0 ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.35rem 0', flexWrap: 'wrap' }}>
+                          {p.estado === 'EN_CURSO' && (
+                            <span style={{ width: '100%', textAlign: 'center', fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '0.1rem' }}>🟢 En juego</span>
+                          )}
+                          {p.sets.map((s, i) => {
+                            const p1Won = s.gamesPareja1 > s.gamesPareja2;
+                            const p2Won = s.gamesPareja2 > s.gamesPareja1;
+                            return (
+                              <span key={i} style={{
+                                background: 'var(--color-bg-input)',
+                                border: '1px solid var(--color-border)',
+                                padding: '0.1rem 0.4rem',
+                                borderRadius: '3px',
+                                fontSize: 'var(--font-size-xs)',
+                              }}>
+                                <span style={{ fontWeight: p1Won ? 'bold' : 'normal', color: p1Won ? 'var(--color-primary)' : 'inherit' }}>{s.gamesPareja1}</span>
+                                {'-'}
+                                <span style={{ fontWeight: p2Won ? 'bold' : 'normal', color: p2Won ? 'var(--color-primary)' : 'inherit' }}>{s.gamesPareja2}</span>
+                              </span>
+                            );
+                          })}
                         </div>
                       ) : (
                         <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', fontWeight: 'bold', margin: '0.35rem 0' }}>vs</div>
@@ -288,6 +331,14 @@ export default function TorneoPublic() {
             </div>
           </div>
         </section>
+      )}
+      {/* Footer / Timestamp */}
+      {lastUpdate && (
+        <div style={{ textAlign: 'center', marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)' }}>
+          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            🔄 Actualizado: {lastUpdate.toLocaleTimeString()} (auto cada 15s)
+          </p>
+        </div>
       )}
     </div>
   );

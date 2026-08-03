@@ -42,7 +42,7 @@ async function generarEliminatoria(organizadorId, torneoId) {
     throw error;
   }
 
-  // 0. Verificar que todos los partidos de las zonas estén finalizados
+  // 0. Verificar si todos los partidos de las zonas están finalizados
   const partidosPendientes = await prisma.partido.count({
     where: {
       torneoId,
@@ -51,11 +51,7 @@ async function generarEliminatoria(organizadorId, torneoId) {
     },
   });
 
-  if (partidosPendientes > 0) {
-    const error = new Error(`No se puede generar la eliminatoria. Faltan jugar ${partidosPendientes} partidos de la fase de grupos.`);
-    error.statusCode = 400;
-    throw error;
-  }
+  const gruposFinalizados = partidosPendientes === 0;
 
   // 1. Obtener zonas del torneo
   const zonas = await prisma.zona.findMany({
@@ -85,39 +81,80 @@ async function generarEliminatoria(organizadorId, torneoId) {
 
   zonas.forEach((zona) => {
     const topZona = zona.zonaParejas.slice(0, zona.clasifican);
-    topZona.forEach((zp, index) => {
+    
+    for (let index = 0; index < zona.clasifican; index++) {
+      let parejaId = null;
+      let pareja = null;
+      
+      // Solo asignar las parejas reales si la fase de grupos terminó
+      if (gruposFinalizados && topZona[index]) {
+        parejaId = topZona[index].parejaId;
+        pareja = topZona[index].pareja;
+      }
+
       const p = {
-        parejaId: zp.parejaId,
-        pareja: zp.pareja,
+        parejaId,
+        pareja,
         zonaOrigen: zona.nombre,
-        origenTxt: `${index + 1}°${zona.nombre}`, // Ej: "1°A"
+        origenTxt: `${index + 1}° ${zona.nombre}`, // Ej: "1° A"
       };
+
       if (index === 0) primeros.push(p);
       else if (index === 1) segundos.push(p);
-      else otros.push(p); // Por si clasifican 3ros
-    });
+      else otros.push(p);
+    }
   });
 
   const clasificadas = [...primeros, ...segundos, ...otros];
 
   if (clasificadas.length === 0) {
-    const error = new Error('No hay parejas clasificadas en las zonas.');
+    const error = new Error('No hay parejas para clasificar.');
     error.statusCode = 400;
     throw error;
   }
 
-  // 2.5. Borrar fases eliminatorias viejas si existen
+  // 2.5. Si existen fases eliminatorias viejas, POBLAMOS el bracket en lugar de borrarlo
   const faseViejas = await prisma.faseEliminatoria.findMany({
     where: { torneoId },
   });
   
   if (faseViejas.length > 0) {
-    await prisma.partido.deleteMany({
-      where: { faseEliminatoriaId: { in: faseViejas.map(f => f.id) } }
+    // Armar diccionario de clasificadas para búsqueda rápida
+    const clasificadasMap = new Map();
+    clasificadas.forEach(c => clasificadasMap.set(c.origenTxt, c));
+
+    // Obtener la ronda más alta (la primera ronda del torneo)
+    const primeraRondaNum = Math.max(...faseViejas.map(f => f.ronda));
+    const fasePrimeraRonda = faseViejas.find(f => f.ronda === primeraRondaNum);
+    
+    // Obtener los partidos de esa primera ronda
+    const partidosPrimeraRonda = await prisma.partido.findMany({ 
+      where: { faseEliminatoriaId: fasePrimeraRonda.id } 
     });
-    await prisma.faseEliminatoria.deleteMany({
-      where: { torneoId }
-    });
+
+    // Actualizar las parejas basándonos en los orígenes definidos en la estructura
+    for (const partido of partidosPrimeraRonda) {
+      const updateData = {};
+      
+      if (partido.origenPareja1) {
+        const c1 = clasificadasMap.get(partido.origenPareja1);
+        if (c1) updateData.pareja1Id = c1.parejaId;
+      }
+      
+      if (partido.origenPareja2) {
+        const c2 = clasificadasMap.get(partido.origenPareja2);
+        if (c2) updateData.pareja2Id = c2.parejaId;
+      }
+      
+      if (Object.keys(updateData).length > 0) {
+        await prisma.partido.update({ 
+          where: { id: partido.id }, 
+          data: updateData 
+        });
+      }
+    }
+
+    return { message: 'Clasificados asignados al bracket exitosamente.' };
   }
 
   // 3. Determinar estructura de rondas

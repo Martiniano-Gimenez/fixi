@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import ResultadoModal from '../../components/ResultadoModal';
+import EditBracketMatchModal from '../../components/EditBracketMatchModal';
 import DateTimeInput from '../../components/DateTimeInput';
+import ConfirmModal from '../../components/ConfirmModal';
 import './EliminatoriaView.css';
 
 export default function EliminatoriaView() {
@@ -10,10 +12,13 @@ export default function EliminatoriaView() {
   const navigate = useNavigate();
   const [torneo, setTorneo] = useState(null);
   const [fases, setFases] = useState([]);
+  const [zonas, setZonas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState(null);
   const [partidoModal, setPartidoModal] = useState(null);
+  const [editBracketModal, setEditBracketModal] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null });
 
   useEffect(() => {
     cargarDatos();
@@ -22,12 +27,14 @@ export default function EliminatoriaView() {
   async function cargarDatos() {
     try {
       setLoading(true);
-      const [torneoRes, fasesRes] = await Promise.all([
+      const [torneoRes, fasesRes, zonasRes] = await Promise.all([
         api.get(`/torneos/${torneoId}`),
         api.get(`/torneos/${torneoId}/fases-eliminatorias`),
+        api.get(`/torneos/${torneoId}/zonas`),
       ]);
       setTorneo(torneoRes);
       setFases(fasesRes || []);
+      setZonas(zonasRes || []);
     } catch (err) {
       setError(err.message || 'Error al cargar la eliminatoria');
     } finally {
@@ -36,32 +43,27 @@ export default function EliminatoriaView() {
   }
 
   async function handleGenerarEliminatoria() {
-    if (!window.confirm('¿Seguro que querés generar la fase eliminatoria?')) {
-      return;
-    }
-
-    try {
-      setGenerando(true);
-      await api.post(`/torneos/${torneoId}/generar-eliminatoria`);
-      await cargarDatos();
-    } catch (err) {
-      setError(err.message || 'Error al generar eliminatoria');
-    } finally {
-      setGenerando(false);
-    }
+    setConfirmModal({ isOpen: true, type: 'generate' });
   }
 
   async function handleBorrarEliminatoria() {
-    if (!window.confirm('¿Estás seguro de que querés borrar toda la fase eliminatoria? Esto desbloqueará la edición de las zonas y se perderán todos los resultados cargados en los brackets.')) {
-      return;
-    }
+    setConfirmModal({ isOpen: true, type: 'delete' });
+  }
+
+  async function executeConfirmAction() {
+    const actionType = confirmModal.type;
+    setConfirmModal({ isOpen: false, type: null });
 
     try {
       setGenerando(true);
-      await api.delete(`/torneos/${torneoId}/fases-eliminatorias`);
+      if (actionType === 'generate') {
+        await api.post(`/torneos/${torneoId}/generar-eliminatoria`);
+      } else if (actionType === 'delete') {
+        await api.delete(`/torneos/${torneoId}/fases-eliminatorias`);
+      }
       await cargarDatos();
     } catch (err) {
-      setError(err.message || 'Error al borrar eliminatoria');
+      setError(err.message || `Error al ${actionType === 'generate' ? 'generar' : 'borrar'} eliminatoria`);
     } finally {
       setGenerando(false);
     }
@@ -102,7 +104,7 @@ export default function EliminatoriaView() {
           ← Volver
         </button>
         <h1>{torneo.nombre} — Fase Eliminatoria</h1>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div className="header-actions">
           {fases.length > 0 && (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button 
@@ -123,8 +125,9 @@ export default function EliminatoriaView() {
                 }}
                 onMouseEnter={(e) => e.target.style.color = 'var(--color-text)'}
                 onMouseLeave={(e) => e.target.style.color = 'var(--color-text-secondary)'}
+                title="Asignar clasificados basándose en el diseño actual del bracket"
               >
-                {generando ? 'Cargando...' : '🔄 Re-sortear'}
+                {generando ? 'Cargando...' : '✅ Asignar Clasificados'}
               </button>
               <button 
                 onClick={handleBorrarEliminatoria} 
@@ -180,35 +183,70 @@ export default function EliminatoriaView() {
                     const p2esGanador = isFinalizado && partido.ganadorId === partido.pareja2Id;
 
                     return (
-                      <div key={partido.id} className="bracket-match-wrapper" style={{ padding: '8px 0' }}>
+                      <div key={partido.id} className="bracket-match-wrapper" style={{ padding: '8px 0', position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}>
                         <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div className="match-time-editor">
-                          <DateTimeInput
-                            value={partido.fechaHora ? new Date(new Date(partido.fechaHora).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
-                            onUpdate={(val) => handleUpdateFechaHora(partido.id, val)}
-                            title="Establecer horario"
-                            style={{
-                              padding: '2px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--color-border)',
-                              background: 'var(--color-bg-input)',
-                              color: 'var(--color-text)',
-                              fontSize: '0.65rem',
-                              width: '110px',
-                              cursor: 'pointer'
-                            }}
-                          />
-                        </div>
                         <div
                           className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
                           onClick={() => handleClickPartido(partido)}
                           title={isJugable ? (isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado') : 'Esperando clasificados'}
+                          style={{ position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}
                         >
                           {/* Encabezado con estado */}
                           <div className="match-card-header">
-                            <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
-                              {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                              <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
+                                {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
+                              </span>
+                              
+                              {/* Calendario integrado en el header */}
+                              <div className="match-time-editor" onClick={(e) => e.stopPropagation()}>
+                                <DateTimeInput
+                                  value={partido.fechaHora ? new Date(new Date(partido.fechaHora).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
+                                  onUpdate={(val) => handleUpdateFechaHora(partido.id, val)}
+                                  title="Establecer horario"
+                                  style={{
+                                    padding: '2px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--color-border)',
+                                    background: 'var(--color-bg-input)',
+                                    color: 'var(--color-text)',
+                                    fontSize: '0.65rem',
+                                    width: '110px',
+                                    cursor: 'pointer'
+                                  }}
+                                />
+                              </div>
+
+                              {!isFinalizado && (
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <button
+                                    className="btn-icon"
+                                    title="Editar cruce"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditBracketModal(partido);
+                                    }}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '0 2px' }}
+                                  >
+                                    ⚙️
+                                  </button>
+                                  {editBracketModal?.id === partido.id && (
+                                    <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, marginTop: '8px' }}>
+                                      <EditBracketMatchModal
+                                        partido={editBracketModal}
+                                        zonas={zonas}
+                                        onClose={() => setEditBracketModal(null)}
+                                        onSaved={() => {
+                                          setEditBracketModal(null);
+                                          cargarDatos();
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            
                             {isJugable && (
                               <span className="match-action-hint">
                                 {isFinalizado ? '✏️' : '➕'}
@@ -285,6 +323,19 @@ export default function EliminatoriaView() {
           }}
         />
       )}
+
+      {/* Modal de confirmacion */}
+      <ConfirmModal 
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.type === 'delete' ? '⚠️ Borrar Fase Eliminatoria' : '✅ Asignar Clasificados'}
+        message={confirmModal.type === 'delete' 
+          ? '¿Estás seguro de que querés borrar toda la fase eliminatoria? Esto desbloqueará la edición de las zonas y se perderán todos los resultados cargados en los brackets.' 
+          : '¿Querés asignar las parejas clasificadas de la fase de grupos al bracket? El sistema respetará el diseño de cruces (Ej: 1° Zona A) que hayas establecido.'}
+        confirmText={confirmModal.type === 'delete' ? 'Sí, borrar bracket' : 'Sí, asignar clasificados'}
+        isDanger={confirmModal.type === 'delete'}
+        onCancel={() => setConfirmModal({ isOpen: false, type: null })}
+        onConfirm={executeConfirmAction}
+      />
     </div>
   );
 }

@@ -148,6 +148,46 @@ async function propagarMiniBracket(zonaId) {
       data: { pareja2Id: getPerdedor(p2) },
     });
   }
+
+  // --- NUEVA LÓGICA DE POSICIONES EXACTAS ---
+  // Resetear posiciones a 0
+  await prisma.zonaPareja.updateMany({
+    where: { zonaId },
+    data: { posicion: 0 }
+  });
+
+  // Partido 3 define 1ro y 2do
+  if (pGanadores.estado === 'FINALIZADO' && pGanadores.ganadorId) {
+    const loser = getPerdedor(pGanadores);
+    await prisma.zonaPareja.updateMany({
+      where: { zonaId, parejaId: pGanadores.ganadorId },
+      data: { posicion: 1 }
+    });
+    if (loser) {
+      await prisma.zonaPareja.updateMany({
+        where: { zonaId, parejaId: loser },
+        data: { posicion: 2 }
+      });
+    }
+  }
+
+  // Partido 4 define 3ro y 4to
+  if (pPerdedores.estado === 'FINALIZADO' && pPerdedores.ganadorId) {
+    const loser = getPerdedor(pPerdedores);
+    await prisma.zonaPareja.updateMany({
+      where: { zonaId, parejaId: pPerdedores.ganadorId },
+      data: { posicion: 3 }
+    });
+    if (loser) {
+      await prisma.zonaPareja.updateMany({
+        where: { zonaId, parejaId: loser },
+        data: { posicion: 4 }
+      });
+    }
+  }
+
+  // Actualizar stats visuales de la tabla
+  await recalcularStatsZona(zonaId);
 }
 
 function validarSetPadel(gamesP1, gamesP2, setNum) {
@@ -193,11 +233,14 @@ function validarSetPadel(gamesP1, gamesP2, setNum) {
 }
 
 /**
- * Cargar el resultado de un partido (sets).
+ * Cargar el resultado parcial o total de un partido (sets).
+ * - Si los sets enviados no definen un ganador aún, el partido queda EN_CURSO.
+ * - Si ya hay ganador (2 sets ganados), el partido pasa a FINALIZADO.
+ * - Siempre reemplaza todos los sets guardados con los nuevos.
  */
 async function cargarResultado(organizadorId, partidoId, data) {
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
-  const { sets } = data; // Array: [{ numero: 1, gamesPareja1: 6, gamesPareja2: 4 }, ...]
+  const { sets } = data;
 
   if (!partido.pareja1Id || !partido.pareja2Id) {
     const error = new Error('El partido no tiene las parejas definidas todavía.');
@@ -211,12 +254,18 @@ async function cargarResultado(organizadorId, partidoId, data) {
     throw error;
   }
 
+  if (sets.length > 3) {
+    const error = new Error('Un partido no puede tener más de 3 sets.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   // Validar cada set según reglas de pádel
   sets.forEach((s, idx) => {
     validarSetPadel(s.gamesPareja1, s.gamesPareja2, idx + 1);
   });
 
-  // Validar y calcular ganador del partido
+  // Determinar si ya hay ganador
   let setsGanadosP1 = 0;
   let setsGanadosP2 = 0;
 
@@ -225,21 +274,33 @@ async function cargarResultado(organizadorId, partidoId, data) {
     else if (set.gamesPareja2 > set.gamesPareja1) setsGanadosP2++;
   }
 
-  let ganadorId = null;
-  if (setsGanadosP1 >= 2) ganadorId = partido.pareja1Id;
-  else if (setsGanadosP2 >= 2) ganadorId = partido.pareja2Id;
+  // Validar que no se envíe set 3 innecesario (si ya estaban 2-0)
+  if (sets.length > 2) {
+    const w1 = sets[0].gamesPareja1 > sets[0].gamesPareja2 ? 1 : 2;
+    const w2 = sets[1].gamesPareja1 > sets[1].gamesPareja2 ? 1 : 2;
+    if (w1 === w2) {
+      const error = new Error(`Pareja ${w1} ya ganó los primeros 2 sets. No se puede agregar un tercer set.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
 
-  if (!ganadorId) {
-    const error = new Error('El resultado ingresado no define un ganador (se necesitan ganar 2 sets).');
-    error.statusCode = 400;
-    throw error;
+  // Calcular el estado y ganador resultante
+  let ganadorId = null;
+  let nuevoEstado = 'EN_CURSO';
+
+  if (setsGanadosP1 >= 2) {
+    ganadorId = partido.pareja1Id;
+    nuevoEstado = 'FINALIZADO';
+  } else if (setsGanadosP2 >= 2) {
+    ganadorId = partido.pareja2Id;
+    nuevoEstado = 'FINALIZADO';
   }
 
   await prisma.$transaction(async (tx) => {
-    // Borrar sets anteriores si es una edición
+    // Reemplazar todos los sets con los nuevos
     await tx.setPartido.deleteMany({ where: { partidoId } });
 
-    // Crear nuevos sets
     await tx.setPartido.createMany({
       data: sets.map((s, index) => ({
         partidoId,
@@ -249,34 +310,49 @@ async function cargarResultado(organizadorId, partidoId, data) {
       })),
     });
 
-    // Actualizar partido
+    // Actualizar estado y ganador del partido
     await tx.partido.update({
       where: { id: partidoId },
       data: {
-        estado: 'FINALIZADO',
+        estado: nuevoEstado,
         ganadorId,
       },
     });
   });
 
-  // Si es partido de zona, ejecutamos lógica secundaria
-  if (partido.zonaId) {
-    const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
-    if (zona.formato === 'ROUND_ROBIN') {
-      await recalcularStatsZona(partido.zonaId);
-    } else if (zona.formato === 'MINI_BRACKET') {
-      await propagarMiniBracket(partido.zonaId);
-      // Opcional: recalcularStatsZona(partido.zonaId) también sirve para el mini-bracket para tener tabla, aunque no define posiciones directamente.
-      // La clasificación del mini-bracket se saca por quién gana P3 y P4.
+  // Disparar lógica post-resultado solo cuando el partido está FINALIZADO
+  if (nuevoEstado === 'FINALIZADO') {
+    if (partido.zonaId) {
+      const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
+      if (zona.formato === 'ROUND_ROBIN') {
+        await recalcularStatsZona(partido.zonaId);
+      } else if (zona.formato === 'MINI_BRACKET') {
+        await propagarMiniBracket(partido.zonaId);
+      }
+    }
+
+    if (partido.faseEliminatoriaId) {
+      await propagarEliminatoria(partido, ganadorId);
+    }
+  } else {
+    // Si el partido estaba FINALIZADO y ahora vuelve a EN_CURSO (edición parcial),
+    // revertimos las stats y la propagación del bracket
+    if (partido.estado === 'FINALIZADO') {
+      if (partido.zonaId) {
+        const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
+        if (zona.formato === 'ROUND_ROBIN') {
+          await recalcularStatsZona(partido.zonaId);
+        } else if (zona.formato === 'MINI_BRACKET') {
+          await propagarMiniBracket(partido.zonaId);
+        }
+      }
+      if (partido.faseEliminatoriaId) {
+        await propagarEliminatoria(partido, null);
+      }
     }
   }
 
-  // Ticket 4.2: Si es eliminatoria, propagar ganador a la siguiente ronda
-  if (partido.faseEliminatoriaId) {
-    await propagarEliminatoria(partido, ganadorId);
-  }
-
-  return { message: 'Resultado cargado exitosamente.' };
+  return { message: nuevoEstado === 'FINALIZADO' ? 'Partido finalizado.' : 'Set guardado. Partido en curso.' };
 }
 
 /**
@@ -393,8 +469,42 @@ async function updateFechaHora(organizadorId, partidoId, fechaHora) {
   return partido;
 }
 
+async function updateBracketMatch(organizadorId, partidoId, data) {
+  const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+
+  if (!partido.faseEliminatoriaId) {
+    const error = new Error('El partido no pertenece a una fase eliminatoria.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (partido.estado === 'FINALIZADO') {
+    const error = new Error('No se puede editar un partido que ya finalizó.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const { origenPareja1, origenPareja2 } = data;
+
+  const updateData = {};
+  if (origenPareja1 !== undefined) {
+    updateData.origenPareja1 = origenPareja1 || null;
+  }
+  if (origenPareja2 !== undefined) {
+    updateData.origenPareja2 = origenPareja2 || null;
+  }
+
+  const updated = await prisma.partido.update({
+    where: { id: partidoId },
+    data: updateData,
+  });
+
+  return updated;
+}
+
 module.exports = {
   cargarResultado,
   borrarResultado,
   updateFechaHora,
+  updateBracketMatch,
 };

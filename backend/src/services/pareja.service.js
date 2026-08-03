@@ -4,12 +4,6 @@ const { getTorneoById } = require('./torneo.service');
 async function createPareja(organizadorId, torneoId, data) {
   const torneo = await getTorneoById(organizadorId, torneoId); // Verifica existencia y permisos
 
-  if (torneo.estado !== 'BORRADOR') {
-    const error = new Error('No se pueden agregar parejas a un torneo que ya no está en borrador.');
-    error.statusCode = 400;
-    throw error;
-  }
-
   if (!data.jugador1 || !data.jugador2) {
     const error = new Error('Los nombres de ambos jugadores son obligatorios.');
     error.statusCode = 400;
@@ -75,12 +69,6 @@ async function updatePareja(organizadorId, parejaId, data) {
 
 async function deletePareja(organizadorId, parejaId) {
   const pareja = await getParejaAndVerifyPermisos(organizadorId, parejaId);
-
-  if (pareja.torneo.estado !== 'BORRADOR') {
-    const error = new Error('No se pueden eliminar parejas de un torneo que ya no está en borrador.');
-    error.statusCode = 400;
-    throw error;
-  }
 
   return await prisma.pareja.delete({
     where: { id: pareja.id },

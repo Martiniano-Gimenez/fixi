@@ -2,7 +2,9 @@ import DateTimeInput from './DateTimeInput';
 
 export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
   const isFinalizado = partido.estado === 'FINALIZADO';
-  
+  const isEnCurso = partido.estado === 'EN_CURSO';
+  const hasScore = partido.sets && partido.sets.length > 0;
+
   const getParejaName = (parejaId, parejaObj, isGanador) => {
     if (!parejaId || !parejaObj) return 'Por definirse';
     const name = `${parejaObj.jugador1} / ${parejaObj.jugador2}`;
@@ -21,7 +23,7 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
       onClick={onClick}
       style={{
         background: 'var(--color-bg-card)',
-        border: `1px solid ${isFinalizado ? 'var(--color-primary)' : 'var(--color-border)'}`,
+        border: `1px solid ${isFinalizado ? 'var(--color-primary)' : isEnCurso ? 'var(--color-success)' : 'var(--color-border)'}`,
         borderRadius: 'var(--radius-md)',
         padding: '0.85rem 1rem',
         cursor: onClick ? 'pointer' : 'default',
@@ -30,13 +32,23 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
         gap: '0.6rem',
         position: 'relative',
         transition: 'all 0.2s ease',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        animation: isEnCurso ? 'pulse-border 2s infinite' : 'none'
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.35rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', letterSpacing: '0.5px', fontWeight: 600 }}>
-            {isFinalizado ? 'Finalizado' : 'Pendiente'}
+          <span style={{ 
+            fontSize: '10px', 
+            textTransform: 'uppercase', 
+            color: isEnCurso ? 'var(--color-bg)' : 'var(--color-text-secondary)',
+            background: isEnCurso ? 'var(--color-success)' : 'transparent',
+            padding: isEnCurso ? '0.1rem 0.4rem' : '0',
+            borderRadius: '4px',
+            letterSpacing: '0.5px', 
+            fontWeight: 700 
+          }}>
+            {isFinalizado ? 'Finalizado' : isEnCurso ? 'En juego' : 'Pendiente'}
           </span>
           {onUpdateFechaHora ? (
             <DateTimeInput
@@ -59,9 +71,9 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
           ) : null}
         </div>
         {onClick && (
-          <span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: 500 }}>
-            {isFinalizado ? '✏️ Editar' : '➕ Cargar'}
-          </span>
+          <button className="btn-small" style={{ fontSize: '10px' }}>
+            {isFinalizado ? '✏️ Editar' : isEnCurso ? '➕ Set' : '▶️ Iniciar'}
+          </button>
         )}
       </div>
 
@@ -70,21 +82,32 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
           {p1Name}
         </div>
         
-        {isFinalizado && partido.sets && partido.sets.length > 0 ? (
+        {hasScore ? (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', margin: '0.2rem 0' }}>
-            {partido.sets.map((s, idx) => (
-              <span key={idx} style={{
-                background: 'var(--color-bg-input)',
-                border: '1px solid var(--color-border)',
-                padding: '0.15rem 0.5rem',
-                borderRadius: '4px',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 'bold',
-                color: 'white'
-              }}>
-                {s.gamesPareja1} - {s.gamesPareja2}
-              </span>
-            ))}
+            {partido.sets.map((s, idx) => {
+              const p1Won = s.gamesPareja1 > s.gamesPareja2;
+              const p2Won = s.gamesPareja2 > s.gamesPareja1;
+              return (
+                <span key={idx} style={{
+                  background: 'var(--color-bg-input)',
+                  border: '1px solid var(--color-border)',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '4px',
+                  fontSize: 'var(--font-size-xs)',
+                  color: 'white'
+                }}>
+                  <span style={{ 
+                    fontWeight: p1Won ? 'bold' : 'normal', 
+                    color: p1Won ? 'var(--color-primary)' : 'inherit' 
+                  }}>{s.gamesPareja1}</span>
+                  {' - '}
+                  <span style={{ 
+                    fontWeight: p2Won ? 'bold' : 'normal', 
+                    color: p2Won ? 'var(--color-primary)' : 'inherit' 
+                  }}>{s.gamesPareja2}</span>
+                </span>
+              );
+            })}
           </div>
         ) : (
           <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'bold', color: 'var(--color-text-secondary)', textAlign: 'center', margin: '0.2rem 0' }}>

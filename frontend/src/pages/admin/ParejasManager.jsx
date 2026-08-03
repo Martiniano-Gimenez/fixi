@@ -32,7 +32,6 @@ export default function ParejasManager() {
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    if (torneo?.estado !== 'BORRADOR') return;
     
     try {
       await api.post(`/torneos/${id}/parejas`, { jugador1, jugador2 });
@@ -66,29 +65,23 @@ export default function ParejasManager() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem' }}>
+      <div className="manager-grid">
         
         {/* Formulario (solo en BORRADOR) */}
         <div>
           <div className="torneo-card">
             <h3>Agregar Pareja</h3>
-            {torneo?.estado === 'BORRADOR' ? (
-              <form onSubmit={handleAdd} style={{ marginTop: '1rem' }}>
-                <div className="form-group">
-                  <label>Jugador 1</label>
-                  <input type="text" value={jugador1} onChange={e => setJugador1(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label>Jugador 2</label>
-                  <input type="text" value={jugador2} onChange={e => setJugador2(e.target.value)} required />
-                </div>
-                <button type="submit" className="btn-primary">Añadir</button>
-              </form>
-            ) : (
-              <p style={{ marginTop: '1rem', color: 'var(--color-text-secondary)' }}>
-                No se pueden agregar o eliminar parejas porque el torneo ya no está en borrador.
-              </p>
-            )}
+            <form onSubmit={handleAdd} style={{ marginTop: '1rem' }}>
+              <div className="form-group">
+                <label>Jugador 1</label>
+                <input type="text" value={jugador1} onChange={e => setJugador1(e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label>Jugador 2</label>
+                <input type="text" value={jugador2} onChange={e => setJugador2(e.target.value)} required />
+              </div>
+              <button type="submit" className="btn-primary">Añadir</button>
+            </form>
           </div>
         </div>
 
@@ -103,14 +96,12 @@ export default function ParejasManager() {
                 {parejas.map(p => (
                   <li key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'var(--color-bg-input)', borderRadius: 'var(--radius-md)' }}>
                     <span>{p.jugador1} / {p.jugador2}</span>
-                    {torneo?.estado === 'BORRADOR' && (
-                      <button 
-                        onClick={() => handleDelete(p.id)}
-                        style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
-                      >
-                        Eliminar
-                      </button>
-                    )}
+                    <button 
+                      onClick={() => handleDelete(p.id)}
+                      style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
+                    >
+                      Eliminar
+                    </button>
                   </li>
                 ))}
               </ul>

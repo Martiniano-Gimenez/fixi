@@ -16,7 +16,7 @@ export default function MiniBracketView({ zona, partidos, onPartidoClick, onUpda
         </span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', alignItems: 'center' }}>
+      <div className="mini-bracket-grid">
         {/* Ronda 1 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>

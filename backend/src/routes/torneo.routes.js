@@ -28,6 +28,8 @@ router.get('/:id/partidos', partidoController.getPartidosByTorneo);
 
 // Ticket 3 — Zonas
 router.get('/:id/zonas', zonaController.getZonasByTorneo);
+router.delete('/:id/zonas/resultados', zonaController.limpiarResultadosZonas);
+router.put('/:id/zonas/reestructurar', zonaController.reestructurarZonas);
 
 // Ticket 4.1 — Generar Eliminatoria
 router.post('/:id/generar-eliminatoria', faseEliminatoriaController.generarEliminatoria);
