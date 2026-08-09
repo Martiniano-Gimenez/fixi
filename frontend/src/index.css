@@ -708,3 +708,233 @@ tr:nth-child(1) .pos-number {
     font-size: 0.95rem;
   }
 }
+
+/* ─── Variables faltantes ────────────────────────────────── */
+:root {
+  --color-warning: #f59e0b;
+  --color-warning-bg: rgba(245, 158, 11, 0.1);
+  --color-success-bg: rgba(0, 208, 132, 0.1);
+  --color-text-tertiary: #64748b;
+}
+
+/* ─── Btn secondary ──────────────────────────────────────── */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1.25rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+.btn-secondary:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Btn chip (inline toggle) ────────────────────────────── */
+.btn-chip {
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+.btn-chip:hover, .btn-chip.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+/* ─── Disponibilidad badge ────────────────────────────────── */
+.disponibilidad-badge {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* ─── DisponibilidadEditor ────────────────────────────────── */
+.disponibilidad-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.franjas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.franja-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  font-size: var(--font-size-sm);
+}
+
+.franja-badge {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.franja-hora {
+  flex: 1;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.franja-delete {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.25rem;
+  border-radius: 3px;
+  transition: background 0.15s;
+  line-height: 1;
+}
+.franja-delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.nueva-franja-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.dia-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dia-chip {
+  padding: 0.35rem 0.9rem;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-card);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex: 1;
+  text-align: center;
+}
+.dia-chip.selected {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.hora-inputs {
+  display: flex;
+  gap: 0.75rem;
+}
+.hora-inputs .form-group {
+  flex: 1;
+}
+.hora-inputs label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-bottom: 0.25rem;
+  display: block;
+}
+.hora-inputs input[type="time"] {
+  width: 100%;
+  font-size: var(--font-size-sm);
+}
+
+/* ─── InicioDisponibilidadModal ───────────────────────────── */
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-input);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+}
+
+.alert-warning {
+  background: var(--color-warning-bg);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+  line-height: 1.5;
+}
+
+.alert-success {
+  background: var(--color-success-bg);
+  border: 1px solid rgba(0, 208, 132, 0.3);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-success);
+}
+
+.zona-resumen-item {
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.zona-resumen-item.zona-auto {
+  border-color: rgba(0, 208, 132, 0.3);
+  background: var(--color-success-bg);
+}
+.zona-resumen-item.zona-manual {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: var(--color-warning-bg);
+}
+
+.zona-nombre {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+.zona-parejas {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ─── Animations ─────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

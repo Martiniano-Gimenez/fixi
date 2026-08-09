@@ -6,6 +6,8 @@ import PartidoCard from '../../components/PartidoCard';
 import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import ZoneEditorModal from '../../components/ZoneEditorModal';
+import InicioDisponibilidadModal from '../../components/InicioDisponibilidadModal';
+import AsignarHorariosModal from '../../components/AsignarHorariosModal';
 
 export default function TorneoDetail() {
   const { id } = useParams();
@@ -27,6 +29,8 @@ export default function TorneoDetail() {
   
   const [parejas, setParejas] = useState([]);
   const [zoneEditorOpen, setZoneEditorOpen] = useState(false);
+  const [inicioDisponibilidadOpen, setInicioDisponibilidadOpen] = useState(false);
+  const [asignarHorariosOpen, setAsignarHorariosOpen] = useState(false);
 
   useEffect(() => {
     if (zonas.length > 0) {
@@ -48,17 +52,29 @@ export default function TorneoDetail() {
       const tData = await api.get(`/torneos/${id}`);
       setTorneo(tData);
 
+      // Siempre cargar parejas para la lógica de disponibilidad
+      const parejasBase = await api.get(`/torneos/${id}/parejas`);
+      const parejasConDisp = await Promise.all(
+        parejasBase.map(async (p) => {
+          try {
+            const disps = await api.get(`/parejas/${p.id}/disponibilidades`);
+            return { ...p, _cantFranjas: disps.length };
+          } catch {
+            return { ...p, _cantFranjas: 0 };
+          }
+        })
+      );
+      setParejas(parejasConDisp);
+
       if (tData.estado !== 'BORRADOR') {
-        const [zData, pData, fData, parejasData] = await Promise.all([
+        const [zData, pData, fData] = await Promise.all([
           api.get(`/torneos/${id}/zonas`),
           api.get(`/torneos/${id}/partidos`),
           api.get(`/torneos/${id}/fases-eliminatorias`),
-          api.get(`/torneos/${id}/parejas`)
         ]);
         setZonas(zData);
         setPartidos(pData);
         setFasesEliminatorias(fData);
-        setParejas(parejasData);
       }
     } catch (err) {
       setError(err.message);
@@ -151,9 +167,26 @@ export default function TorneoDetail() {
           </div>
         </div>
         {torneo.estado === 'BORRADOR' ? (
-          <button onClick={() => setIniciarModalOpen(true)} className="btn-primary" style={{ width: 'auto', marginTop: 0 }}>
-            🚀 Iniciar Torneo
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+            <button onClick={() => setIniciarModalOpen(true)} className="btn-primary" style={{ width: 'auto', marginTop: 0 }}>
+              🚀 Iniciar Torneo
+            </button>
+            <button
+              onClick={() => {
+                const conDisp = parejas.filter(p => p._cantFranjas > 0);
+                if (conDisp.length === 0 && parejas.length > 0) {
+                  alert('Ninguna pareja tiene disponibilidad horaria cargada. Cargala desde "Gestionar Parejas" o usá el inicio por sorteo.');
+                  return;
+                }
+                setInicioDisponibilidadOpen(true);
+              }}
+              className="btn-secondary"
+              style={{ width: 'auto', marginTop: 0, fontSize: 'var(--font-size-sm)' }}
+              title={parejas.filter(p => p._cantFranjas > 0).length === 0 ? 'Cargá disponibilidad horaria en Gestionar Parejas primero' : ''}
+            >
+              🗓️ Iniciar por disponibilidad
+            </button>
+          </div>
         ) : (
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <button 
@@ -203,6 +236,14 @@ export default function TorneoDetail() {
             >
               ⚙️ Editar Zonas
             </button>
+            <button
+              onClick={() => setAsignarHorariosOpen(true)}
+              className="btn-secondary"
+              style={{ width: 'auto', marginTop: 0, padding: '0.5rem 1rem', fontSize: 'var(--font-size-sm)' }}
+              title="Asignar horarios automáticamente por disponibilidad"
+            >
+              ⏰ Asignar horarios
+            </button>
           </div>
         )}
       </div>
@@ -224,8 +265,36 @@ export default function TorneoDetail() {
               <h2>Torneo en Preparación</h2>
               <p style={{ marginTop: '1rem', color: 'var(--color-text-secondary)' }}>
                 Actualmente tenés <strong>{torneo.parejas?.length || 0}</strong> parejas inscritas.<br/><br/>
-                Andá a "Gestionar Parejas" para agregar los equipos. Una vez que estén todos, hacé clic en "Iniciar Torneo" arriba a la derecha. Esto sorteará las zonas de 3 (o 2/4) parejas y armará el fixture automáticamente.
+                Andá a "Gestionar Parejas" para agregar los equipos y cargar su disponibilidad horaria (Viernes/Sábado).
+                Una vez que estén todos, iniciá el torneo por sorteo aleatorio o por disponibilidad horaria.
               </p>
+              <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                  <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '120px' }}>
+                    <label htmlFor="canchas-input">Canchas disponibles</label>
+                    <input
+                      id="canchas-input"
+                      type="number"
+                      min="1"
+                      max="20"
+                      defaultValue={torneo.cantidadCanchas ?? 1}
+                      onBlur={(e) => api.patch(`/torneos/${id}`, { cantidadCanchas: Number(e.target.value) }).catch(() => {})}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '140px' }}>
+                    <label htmlFor="duracion-input">Duración partido (min)</label>
+                    <input
+                      id="duracion-input"
+                      type="number"
+                      min="30"
+                      max="180"
+                      step="5"
+                      defaultValue={torneo.duracionPartidoMin ?? 75}
+                      onBlur={(e) => api.patch(`/torneos/${id}`, { duracionPartidoMin: Number(e.target.value) }).catch(() => {})}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div>
@@ -242,11 +311,11 @@ export default function TorneoDetail() {
                         color: activeZonaId === z.id ? 'white' : 'var(--color-text-secondary)',
                         fontWeight: activeZonaId === z.id ? 'bold' : 'normal',
                         border: '1px solid',
-                        borderColor: activeZonaId === z.id ? 'var(--color-primary)' : 'var(--color-border)',
+                        borderColor: activeZonaId === z.id ? 'var(--color-primary)' : z.requiereArmadoManual ? 'var(--color-warning)' : 'var(--color-border)',
                         transition: 'all var(--transition-fast)'
                       }}
                     >
-                      {z.nombre}
+                      {z.nombre}{z.requiereArmadoManual ? ' ⚠️' : ''}
                     </button>
                   ))}
                 </div>
@@ -386,6 +455,35 @@ export default function TorneoDetail() {
           onSaved={() => {
             setZoneEditorOpen(false);
             fetchData();
+          }}
+        />
+      )}
+
+      {inicioDisponibilidadOpen && (
+        <InicioDisponibilidadModal
+          torneoId={torneo.id}
+          parejas={parejas}
+          onClose={() => setInicioDisponibilidadOpen(false)}
+          onSuccess={() => {
+            setInicioDisponibilidadOpen(false);
+            fetchData();
+            setToast('✅ Torneo iniciado por disponibilidad horaria');
+            setTimeout(() => setToast(''), 4000);
+          }}
+        />
+      )}
+
+      {asignarHorariosOpen && (
+        <AsignarHorariosModal
+          torneoId={torneo.id}
+          cantidadCanchas={torneo.cantidadCanchas}
+          duracionPartidoMin={torneo.duracionPartidoMin}
+          onClose={() => setAsignarHorariosOpen(false)}
+          onSuccess={() => {
+            setAsignarHorariosOpen(false);
+            fetchData();
+            setToast('✅ Horarios asignados automáticamente');
+            setTimeout(() => setToast(''), 4000);
           }}
         />
       )}
