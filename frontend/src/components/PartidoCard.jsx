@@ -6,7 +6,9 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
   const hasScore = partido.sets && partido.sets.length > 0;
 
   const getParejaName = (parejaId, parejaObj, isGanador) => {
-    if (!parejaId || !parejaObj) return 'Por definirse';
+    if (!parejaId || !parejaObj) {
+      return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{isFinalizado ? 'BYE' : 'Por definirse'}</span>;
+    }
     const name = `${parejaObj.jugador1} / ${parejaObj.jugador2}`;
     return isGanador ? (
       <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>

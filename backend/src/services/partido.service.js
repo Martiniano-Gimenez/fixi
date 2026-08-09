@@ -404,17 +404,29 @@ async function propagarEliminatoria(partido, ganadorId) {
 
   // Determine origenPareja of the winner
   let origenGanador = null;
+  let parejaGanadoraId = ganadorId;
+
   if (ganadorId) {
     if (ganadorId === partido.pareja1Id) origenGanador = partido.origenPareja1;
     else if (ganadorId === partido.pareja2Id) origenGanador = partido.origenPareja2;
+  } else if (partido.estado === 'FINALIZADO') {
+    // Si el partido es un BYE y los grupos no están finalizados (no hay ganadorId)
+    // Extraemos el origen de la pareja que no es el BYE
+    if (partido.origenPareja1 && !partido.origenPareja2) {
+      origenGanador = partido.origenPareja1;
+      parejaGanadoraId = partido.pareja1Id;
+    } else if (partido.origenPareja2 && !partido.origenPareja1) {
+      origenGanador = partido.origenPareja2;
+      parejaGanadoraId = partido.pareja2Id;
+    }
   }
 
   // Asignar el ganador en el slot correcto (puede ser null si se borra el resultado)
   await prisma.partido.update({
     where: { id: partidoDestino.id },
     data: esSlotP1
-      ? { pareja1Id: ganadorId, origenPareja1: origenGanador }
-      : { pareja2Id: ganadorId, origenPareja2: origenGanador },
+      ? { pareja1Id: parejaGanadoraId, origenPareja1: origenGanador }
+      : { pareja2Id: parejaGanadoraId, origenPareja2: origenGanador },
   });
 }
 
@@ -507,4 +519,5 @@ module.exports = {
   borrarResultado,
   updateFechaHora,
   updateBracketMatch,
+  propagarEliminatoria,
 };

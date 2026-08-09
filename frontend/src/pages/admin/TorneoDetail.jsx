@@ -22,15 +22,22 @@ export default function TorneoDetail() {
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [limpiarModalOpen, setLimpiarModalOpen] = useState(false);
   const [limpiandoZonas, setLimpiandoZonas] = useState(false);
+  const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
+  const [iniciarModalOpen, setIniciarModalOpen] = useState(false);
   
   const [parejas, setParejas] = useState([]);
   const [zoneEditorOpen, setZoneEditorOpen] = useState(false);
 
   useEffect(() => {
-    if (zonas.length > 0 && !activeZonaId) {
-      setActiveZonaId(zonas[0].id);
+    if (zonas.length > 0) {
+      const exists = zonas.find(z => z.id === activeZonaId);
+      if (!exists) {
+        setActiveZonaId(zonas[0].id);
+      }
+    } else {
+      setActiveZonaId(null);
     }
-  }, [zonas]);
+  }, [zonas, activeZonaId]);
 
   useEffect(() => {
     fetchData();
@@ -60,8 +67,8 @@ export default function TorneoDetail() {
     }
   };
 
-  const handleIniciar = async () => {
-    if (!window.confirm('¿Seguro que querés iniciar el torneo? Ya no podrás agregar ni quitar parejas.')) return;
+  const executeIniciar = async () => {
+    setIniciarModalOpen(false);
     try {
       setLoading(true);
       await api.post(`/torneos/${id}/iniciar`);
@@ -71,6 +78,21 @@ export default function TorneoDetail() {
       setLoading(false);
     }
   };
+
+  const executeReiniciar = async () => {
+    setReiniciarModalOpen(false);
+    try {
+      setLoading(true);
+      await api.post(`/torneos/${id}/reiniciar`);
+      fetchData();
+      setToast('🔄 Torneo reiniciado a Borrador');
+      setTimeout(() => setToast(''), 3000);
+    } catch (err) {
+      alert(err.message || 'Error al reiniciar torneo');
+      setLoading(false);
+    }
+  };
+
 
   const handleLimpiarZonas = async () => {
     try {
@@ -129,31 +151,57 @@ export default function TorneoDetail() {
           </div>
         </div>
         {torneo.estado === 'BORRADOR' ? (
-          <button onClick={handleIniciar} className="btn-primary" style={{ width: 'auto', marginTop: 0 }}>
+          <button onClick={() => setIniciarModalOpen(true)} className="btn-primary" style={{ width: 'auto', marginTop: 0 }}>
             🚀 Iniciar Torneo
           </button>
         ) : (
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button 
-              onClick={() => setZoneEditorOpen(true)}
-              className="btn-primary"
-              style={{ width: 'auto', marginTop: 0 }}
-            >
-              ⚙️ Editar Zonas
-            </button>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <button 
               onClick={() => setLimpiarModalOpen(true)} 
               disabled={limpiandoZonas}
-              className="btn-primary" 
               style={{ 
-                width: 'auto', 
-                marginTop: 0, 
-                background: 'var(--color-bg-input)', 
-                border: '1px solid var(--color-danger)', 
-                color: 'var(--color-danger)' 
+                background: 'transparent', 
+                border: '1px solid rgba(239, 68, 68, 0.3)', 
+                color: 'var(--color-danger)',
+                padding: '0.5rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 'var(--font-size-sm)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                opacity: 0.8
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = 0.8; e.currentTarget.style.background = 'transparent' }}
             >
               {limpiandoZonas ? 'Limpiando...' : '🗑️ Limpiar Zonas'}
+            </button>
+            <button 
+              onClick={() => setReiniciarModalOpen(true)} 
+              style={{ 
+                background: 'transparent', 
+                border: '1px solid rgba(239, 68, 68, 0.3)', 
+                color: 'var(--color-danger)',
+                padding: '0.5rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 'var(--font-size-sm)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                opacity: 0.8
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = 0.8; e.currentTarget.style.background = 'transparent' }}
+              title="Borra TODO el fixture y resultados, y vuelve el torneo a estado Borrador"
+            >
+              🔄 Reiniciar Torneo
+            </button>
+            
+            {/* Accion Principal - Más prominente a la derecha */}
+            <button 
+              onClick={() => setZoneEditorOpen(true)}
+              className="btn-primary"
+              style={{ width: 'auto', marginTop: 0, padding: '0.5rem 1.5rem', marginLeft: '0.5rem' }}
+            >
+              ⚙️ Editar Zonas
             </button>
           </div>
         )}
@@ -164,7 +212,6 @@ export default function TorneoDetail() {
           <div className="torneo-card">
             <h3>Menú</h3>
             <ul style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <li><Link to={`/admin/torneos/${id}`}>Fase de Grupos</Link></li>
               <li><Link to={`/admin/torneos/${id}/eliminatoria`}>Fase Eliminatoria {torneo.estado === 'BORRADOR' && '(Pronto)'}</Link></li>
               <li><Link to={`/admin/torneos/${id}/parejas`}>Gestionar Parejas ({torneo.parejas?.length || 0})</Link></li>
             </ul>
@@ -232,9 +279,10 @@ export default function TorneoDetail() {
                               transition: 'opacity 0.2s',
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: '0.4rem',
-                              marginTop: partidoLabel ? '0.5rem' : '0'
+                              justifyContent: 'flex-end',
+                              gap: '0.4rem'
                             }}
+
                             title={bracketBloqueaEdicion ? 'Edición bloqueada: La fase eliminatoria ya está generada con clasificados.' : 'Clic para cargar resultado'}
                             onClick={(e) => {
                               if (bracketBloqueaEdicion) {
@@ -307,13 +355,24 @@ export default function TorneoDetail() {
 
       {limpiarModalOpen && (
         <ConfirmModal 
-          isOpen={true}
-          title="🗑️ Limpiar Resultados de Zonas"
-          message="¿Estás seguro de que querés borrar TODOS los sets y resultados de todas las zonas? Los partidos volverán a estar PENDIENTES. Esta acción no se puede deshacer."
+          isOpen={limpiarModalOpen}
+          title="⚠️ Limpiar Zonas"
+          message="¿Estás seguro de que querés borrar todos los resultados cargados en las zonas? Los partidos volverán a estado Pendiente."
           onConfirm={handleLimpiarZonas}
           onCancel={() => setLimpiarModalOpen(false)}
-          confirmText="Sí, borrar todo"
-          cancelText="Cancelar"
+          confirmText="Sí, limpiar resultados"
+          isDanger={true}
+        />
+      )}
+
+      {reiniciarModalOpen && (
+        <ConfirmModal
+          isOpen={reiniciarModalOpen}
+          title="🚨 Reiniciar Torneo"
+          message="¿Estás completamente seguro de que querés REINICIAR el torneo? Esto borrará de forma permanente TODAS las zonas, TODOS los partidos, TODOS los resultados y TODO el progreso de las fases eliminatorias. El torneo volverá al estado BORRADOR para que puedas agregar o quitar parejas y volver a sortear todo desde cero."
+          onConfirm={executeReiniciar}
+          onCancel={() => setReiniciarModalOpen(false)}
+          confirmText="Sí, reiniciar torneo"
           isDanger={true}
         />
       )}
@@ -328,6 +387,17 @@ export default function TorneoDetail() {
             setZoneEditorOpen(false);
             fetchData();
           }}
+        />
+      )}
+
+      {iniciarModalOpen && (
+        <ConfirmModal
+          isOpen={iniciarModalOpen}
+          title="🚀 Iniciar Torneo"
+          message="¿Seguro que querés iniciar el torneo? Se sortearán las zonas y ya no podrás agregar ni quitar parejas."
+          onConfirm={executeIniciar}
+          onCancel={() => setIniciarModalOpen(false)}
+          confirmText="Sí, iniciar torneo"
         />
       )}
     </div>

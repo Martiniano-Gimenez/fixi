@@ -46,10 +46,20 @@ async function iniciarTorneo(req, res, next) {
   }
 }
 
+async function reiniciarTorneo(req, res, next) {
+  try {
+    const result = await torneoService.reiniciarTorneo(req.organizadorId, req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   createTorneo,
   getTorneos,
   getTorneoById,
   updateTorneo,
   iniciarTorneo,
+  reiniciarTorneo,
 };

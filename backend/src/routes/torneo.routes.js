@@ -18,6 +18,7 @@ router.get('/:id/parejas', parejaController.getParejasByTorneo);
 
 // Ticket 3.1
 router.post('/:id/iniciar', torneoController.iniciarTorneo);
+router.post('/:id/reiniciar', torneoController.reiniciarTorneo);
 
 // Rutas anidadas de partidos y zonas
 const partidoController = require('../controllers/partido.controller');

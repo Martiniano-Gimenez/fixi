@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
+import ConfirmModal from '../../components/ConfirmModal';
 
 export default function ParejasManager() {
   const { id } = useParams();
@@ -10,6 +11,7 @@ export default function ParejasManager() {
   const [jugador2, setJugador2] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [parejaToDelete, setParejaToDelete] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -43,10 +45,15 @@ export default function ParejasManager() {
     }
   };
 
-  const handleDelete = async (parejaId) => {
-    if (!window.confirm('¿Seguro que querés eliminar esta pareja?')) return;
+  const handleDelete = (parejaId) => {
+    setParejaToDelete(parejaId);
+  };
+
+  const executeDelete = async () => {
+    if (!parejaToDelete) return;
     try {
-      await api.delete(`/parejas/${parejaId}`);
+      await api.delete(`/parejas/${parejaToDelete}`);
+      setParejaToDelete(null);
       fetchData();
     } catch (err) {
       alert(err.message);
@@ -110,6 +117,18 @@ export default function ParejasManager() {
         </div>
 
       </div>
+
+      {parejaToDelete && (
+        <ConfirmModal
+          isOpen={true}
+          title="🗑️ Eliminar Pareja"
+          message="¿Estás seguro de que querés eliminar esta pareja? Esta acción no se puede deshacer."
+          onConfirm={executeDelete}
+          onCancel={() => setParejaToDelete(null)}
+          confirmText="Sí, eliminar"
+          isDanger={true}
+        />
+      )}
     </div>
   );
 }

@@ -28,6 +28,10 @@ async function apiClient(endpoint, options = {}) {
     throw err;
   }
 
+  if (response.status === 204) {
+    return null;
+  }
+
   return response.json();
 }
 

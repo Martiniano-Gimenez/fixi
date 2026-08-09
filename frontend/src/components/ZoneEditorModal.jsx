@@ -28,6 +28,14 @@ export default function ZoneEditorModal({ torneoId, zonasOriginales, parejas, on
     }));
   };
 
+  // Calcular la cantidad actual de parejas por zona según las asignaciones locales
+  const parejasPorZona = {};
+  Object.values(asignaciones).forEach(zonaId => {
+    if (zonaId) {
+      parejasPorZona[zonaId] = (parejasPorZona[zonaId] || 0) + 1;
+    }
+  });
+
   const handleSaveClick = () => {
     setConfirmOpen(true);
   };
@@ -98,13 +106,22 @@ export default function ZoneEditorModal({ torneoId, zonasOriginales, parejas, on
                     background: 'var(--color-bg-card)',
                     color: 'var(--color-text)',
                     fontSize: '0.875rem',
-                    width: '150px'
+                    width: 'auto',
+                    minWidth: '180px'
                   }}
                 >
                   <option value="">-- Sin asignar --</option>
-                  {zonasOriginales.map(z => (
-                    <option key={z.id} value={z.id}>{z.nombre}</option>
-                  ))}
+                  {zonasOriginales.map(z => {
+                    const count = parejasPorZona[z.id] || 0;
+                    // Mostramos la cantidad en todas las zonas EXCEPTO en la que ya está seleccionada.
+                    // Esto permite que el select cerrado se vea limpio, pero al abrirlo veas el espacio en las demás zonas.
+                    const showCount = currentZonaId !== z.id;
+                    return (
+                      <option key={z.id} value={z.id}>
+                        {z.nombre}{showCount ? ` (${count} pareja${count !== 1 ? 's' : ''})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             );

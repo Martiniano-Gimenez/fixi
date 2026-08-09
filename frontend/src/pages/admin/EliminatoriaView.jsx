@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import ResultadoModal from '../../components/ResultadoModal';
 import EditBracketMatchModal from '../../components/EditBracketMatchModal';
 import DateTimeInput from '../../components/DateTimeInput';
 import ConfirmModal from '../../components/ConfirmModal';
+import BracketLines from '../../components/BracketLines';
 import './EliminatoriaView.css';
 
 export default function EliminatoriaView() {
@@ -19,6 +20,7 @@ export default function EliminatoriaView() {
   const [partidoModal, setPartidoModal] = useState(null);
   const [editBracketModal, setEditBracketModal] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null });
+  const bracketScrollRef = useRef(null);
 
   useEffect(() => {
     cargarDatos();
@@ -171,7 +173,7 @@ export default function EliminatoriaView() {
         </div>
       ) : (
         <div className="bracket-container">
-          <div className="bracket-scroll">
+          <div className="bracket-scroll" ref={bracketScrollRef} style={{ position: 'relative' }}>
             {fases.map((fase) => (
               <div key={fase.id} className="ronda-section bracket-section">
                 <h3 className="ronda-title">{fase.nombre}</h3>
@@ -183,7 +185,7 @@ export default function EliminatoriaView() {
                     const p2esGanador = isFinalizado && partido.ganadorId === partido.pareja2Id;
 
                     return (
-                      <div key={partido.id} className="bracket-match-wrapper" style={{ padding: '8px 0', position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}>
+                      <div key={partido.id} className="bracket-match-wrapper" style={{ position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}>
                         <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div
                           className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
@@ -191,32 +193,12 @@ export default function EliminatoriaView() {
                           title={isJugable ? (isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado') : 'Esperando clasificados'}
                           style={{ position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}
                         >
-                          {/* Encabezado con estado */}
+                          {/* Encabezado con estado — fila 1: badge + botones */}
                           <div className="match-card-header">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
                                 {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
                               </span>
-                              
-                              {/* Calendario integrado en el header */}
-                              <div className="match-time-editor" onClick={(e) => e.stopPropagation()}>
-                                <DateTimeInput
-                                  value={partido.fechaHora ? new Date(new Date(partido.fechaHora).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
-                                  onUpdate={(val) => handleUpdateFechaHora(partido.id, val)}
-                                  title="Establecer horario"
-                                  style={{
-                                    padding: '2px',
-                                    borderRadius: '4px',
-                                    border: '1px solid var(--color-border)',
-                                    background: 'var(--color-bg-input)',
-                                    color: 'var(--color-text)',
-                                    fontSize: '0.65rem',
-                                    width: '110px',
-                                    cursor: 'pointer'
-                                  }}
-                                />
-                              </div>
-
                               {!isFinalizado && (
                                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                   <button
@@ -246,12 +228,31 @@ export default function EliminatoriaView() {
                                 </div>
                               )}
                             </div>
-                            
                             {isJugable && (
                               <span className="match-action-hint">
                                 {isFinalizado ? '✏️' : '➕'}
                               </span>
                             )}
+                          </div>
+
+                          {/* Fila 2: input de fecha a ancho completo */}
+                          <div className="match-time-editor" onClick={(e) => e.stopPropagation()} style={{ marginBottom: '4px' }}>
+                            <DateTimeInput
+                              value={partido.fechaHora ? new Date(new Date(partido.fechaHora).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
+                              onUpdate={(val) => handleUpdateFechaHora(partido.id, val)}
+                              title="Establecer horario"
+                              style={{
+                                padding: '2px 4px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--color-border)',
+                                background: 'var(--color-bg-input)',
+                                color: 'var(--color-text)',
+                                fontSize: '0.65rem',
+                                width: '100%',
+                                cursor: 'pointer',
+                                boxSizing: 'border-box',
+                              }}
+                            />
                           </div>
 
                         {/* Pareja 1 */}
@@ -265,7 +266,9 @@ export default function EliminatoriaView() {
                             <span className="pareja-name">
                               {partido.pareja1
                                 ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}`
-                                : <span className="por-definirse">Por definirse</span>}
+                                : <span className="por-definirse">
+                                    {partido.origenPareja1 ? 'Por definirse' : (isFinalizado ? 'BYE' : 'Por definirse')}
+                                  </span>}
                             </span>
                           </div>
                           {p1esGanador && <span className="winner-indicator">🏆</span>}
@@ -295,7 +298,9 @@ export default function EliminatoriaView() {
                             <span className="pareja-name">
                               {partido.pareja2
                                 ? `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}`
-                                : <span className="por-definirse">Por definirse</span>}
+                                : <span className="por-definirse">
+                                    {partido.origenPareja2 ? 'Por definirse' : (isFinalizado ? 'BYE' : 'Por definirse')}
+                                  </span>}
                             </span>
                           </div>
                             {p2esGanador && <span className="winner-indicator">🏆</span>}
@@ -308,6 +313,7 @@ export default function EliminatoriaView() {
                 </div>
               </div>
             ))}
+            <BracketLines containerRef={bracketScrollRef} fases={fases} />
           </div>
         </div>
       )}

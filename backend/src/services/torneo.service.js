@@ -71,9 +71,45 @@ async function updateTorneo(organizadorId, torneoId, data) {
   });
 }
 
+async function reiniciarTorneo(organizadorId, torneoId) {
+  const torneo = await getTorneoById(organizadorId, torneoId);
+  
+  if (torneo.estado === 'BORRADOR') {
+    throw new Error('El torneo ya está en estado BORRADOR.');
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Borrar fases eliminatorias (SetNull en partidos, así que mejor borramos los partidos primero o después)
+    // Borramos partidos primero
+    await tx.partido.deleteMany({
+      where: { torneoId: torneo.id }
+    });
+
+    // Borrar fases eliminatorias
+    await tx.faseEliminatoria.deleteMany({
+      where: { torneoId: torneo.id }
+    });
+
+    // Borrar zonas (borra ZonaPareja por cascade)
+    await tx.zona.deleteMany({
+      where: { torneoId: torneo.id }
+    });
+
+    // Volver el torneo a BORRADOR
+    await tx.torneo.update({
+      where: { id: torneo.id },
+      data: { estado: 'BORRADOR' }
+    });
+  });
+
+  return { message: 'Torneo reiniciado con éxito' };
+}
+
 module.exports = {
   createTorneo,
   getTorneos,
   getTorneoById,
   updateTorneo,
+  reiniciarTorneo,
 };
+

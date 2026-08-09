@@ -13,16 +13,17 @@ export default function ZonaTable({ zona }) {
       </div>
 
       <div className="table-responsive">
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+        <table>
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              <th style={{ textAlign: 'left', padding: '0.5rem' }}>Pareja</th>
-              <th title="Puntos" style={{ padding: '0.5rem' }}>Pts</th>
-              <th title="Partidos Jugados" className="hide-on-mobile" style={{ padding: '0.5rem' }}>PJ</th>
-              <th title="Partidos Ganados" style={{ padding: '0.5rem' }}>PG</th>
-              <th title="Partidos Perdidos" className="hide-on-mobile" style={{ padding: '0.5rem' }}>PP</th>
-              <th title="Sets a Favor / En Contra" style={{ padding: '0.5rem' }}>Sets</th>
-              <th title="Games a Favor / En Contra" style={{ padding: '0.5rem' }}>Games</th>
+            <tr>
+              <th>Pos</th>
+              <th>Pareja</th>
+              <th className="text-center" title="Puntos">Pts</th>
+              <th className="text-center hide-on-mobile" title="Partidos Jugados">PJ</th>
+              <th className="text-center" title="Partidos Ganados">PG</th>
+              <th className="text-center hide-on-mobile" title="Partidos Perdidos">PP</th>
+              <th className="text-center" title="Sets a Favor / En Contra">Sets</th>
+              <th className="text-center" title="Games a Favor / En Contra">Games</th>
             </tr>
           </thead>
           <tbody>
@@ -32,20 +33,20 @@ export default function ZonaTable({ zona }) {
                 <tr 
                   key={zp.id} 
                   style={{ 
-                    borderBottom: '1px solid var(--color-border)',
-                    backgroundColor: clasifica ? 'rgba(16, 185, 129, 0.05)' : 'transparent',
-                    borderLeft: clasifica ? '4px solid var(--color-success)' : '4px solid transparent',
+                    backgroundColor: clasifica ? 'var(--color-primary-light)' : 'transparent',
+                    borderLeft: clasifica ? '4px solid var(--color-primary)' : '4px solid transparent',
                   }}
                 >
-                  <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500 }}>
+                  <td><span className="pos-number">{index + 1}</span></td>
+                  <td className="team-name">
                     {zp.pareja.jugador1} / {zp.pareja.jugador2}
                   </td>
-                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>{zp.puntos}</td>
-                  <td className="hide-on-mobile" style={{ padding: '0.75rem 0.5rem' }}>{zp.pj}</td>
-                  <td style={{ padding: '0.75rem 0.5rem' }}>{zp.pg}</td>
-                  <td className="hide-on-mobile" style={{ padding: '0.75rem 0.5rem' }}>{zp.pp}</td>
-                  <td style={{ padding: '0.75rem 0.5rem' }}>{zp.sf} - {zp.sc}</td>
-                  <td style={{ padding: '0.75rem 0.5rem' }}>{zp.gf} - {zp.gc}</td>
+                  <td className="text-center stat-pts">{zp.puntos}</td>
+                  <td className="text-center hide-on-mobile">{zp.pj}</td>
+                  <td className="text-center stat-highlight">{zp.pg}</td>
+                  <td className="text-center hide-on-mobile">{zp.pp}</td>
+                  <td className="text-center">{zp.sf} - {zp.sc}</td>
+                  <td className="text-center">{zp.gf} - {zp.gc}</td>
                 </tr>
               );
             })}

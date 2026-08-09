@@ -146,11 +146,30 @@ async function generarEliminatoria(organizadorId, torneoId) {
         if (c2) updateData.pareja2Id = c2.parejaId;
       }
       
+      // Si el partido es un BYE (está FINALIZADO por defecto) y no tenía ganador, o cambió
+      if (partido.estado === 'FINALIZADO') {
+        const pareja1Id = updateData.pareja1Id !== undefined ? updateData.pareja1Id : partido.pareja1Id;
+        const pareja2Id = updateData.pareja2Id !== undefined ? updateData.pareja2Id : partido.pareja2Id;
+        
+        if (pareja1Id && !pareja2Id) {
+          updateData.ganadorId = pareja1Id;
+        } else if (pareja2Id && !pareja1Id) {
+          updateData.ganadorId = pareja2Id;
+        }
+      }
+
       if (Object.keys(updateData).length > 0) {
         await prisma.partido.update({ 
           where: { id: partido.id }, 
           data: updateData 
         });
+
+        // Propagar el ganador si es un BYE y el ganador se asignó/actualizó
+        if (partido.estado === 'FINALIZADO' && updateData.ganadorId) {
+          const { propagarEliminatoria } = require('./partido.service');
+          const updatedPartido = { ...partido, ...updateData };
+          await propagarEliminatoria(updatedPartido, updateData.ganadorId);
+        }
       }
     }
 
@@ -328,13 +347,17 @@ async function generarEliminatoria(organizadorId, torneoId) {
     partidosPrimeraRonda.push(partido);
   }
 
-  // 7. Crear Partidos vacíos para rondas posteriores
+  // 7. Crear Partidos vacíos para rondas posteriores y propagar BYEs directamente
+  // Primero creamos todos los partidos vacíos de las rondas siguientes,
+  // luego actualizamos los que reciben un pase de BYE
+  const partidosPorRondaYPos = {}; // key: `${ronda}:${pos}` → partidoId
+
   for (let i = 1; i < rondas.length; i++) {
     const r = rondas[i];
     const cantPartidosEnRonda = Math.floor(r / 2);
 
     for (let j = 0; j < cantPartidosEnRonda; j++) {
-      await prisma.partido.create({
+      const p = await prisma.partido.create({
         data: {
           torneoId,
           faseEliminatoriaId: fases[r],
@@ -344,15 +367,52 @@ async function generarEliminatoria(organizadorId, torneoId) {
           estado: 'PENDIENTE',
         },
       });
+      partidosPorRondaYPos[`${r}:${j + 1}`] = p.id;
     }
   }
 
-  // 8. Propagar ganadores de BYEs a la siguiente ronda
+  // 8. Propagar ganadores / orígenes de BYEs a la siguiente ronda
   for (const partido of partidosPrimeraRonda) {
-    if (partido.estado === 'FINALIZADO' && partido.ganadorId) {
-      const { propagarEliminatoria } = require('./partido.service');
-      await propagarEliminatoria(partido, partido.ganadorId);
+    if (partido.estado !== 'FINALIZADO') continue;
+
+    // Determinar qué pareja avanza y cuál es su origen
+    let parejaAvanza = partido.ganadorId || null;
+    let origenAvanza = null;
+
+    if (partido.ganadorId) {
+      // Grupos terminados: tenemos ganadorId real
+      if (partido.ganadorId === partido.pareja1Id) origenAvanza = partido.origenPareja1;
+      else if (partido.ganadorId === partido.pareja2Id) origenAvanza = partido.origenPareja2;
+    } else {
+      // Grupos NO terminados: inferir quién avanza por la presencia de un solo origenPareja
+      if (partido.origenPareja1 && !partido.origenPareja2) {
+        parejaAvanza = partido.pareja1Id;
+        origenAvanza = partido.origenPareja1;
+      } else if (partido.origenPareja2 && !partido.origenPareja1) {
+        parejaAvanza = partido.pareja2Id;
+        origenAvanza = partido.origenPareja2;
+      }
     }
+
+    if (!origenAvanza) continue; // partido BYE sin info de origen, no propagar
+
+    // Calcular posición destino en la siguiente ronda
+    const posActual = partido.posicionEnRonda;
+    const posSiguiente = Math.ceil(posActual / 2);
+    const esSlotP1 = posActual % 2 === 1;
+
+    // Obtener la siguiente ronda
+    const siguienteRondaNum = primeraRonda / 2;
+    const partidoDestinoId = partidosPorRondaYPos[`${siguienteRondaNum}:${posSiguiente}`];
+
+    if (!partidoDestinoId) continue;
+
+    await prisma.partido.update({
+      where: { id: partidoDestinoId },
+      data: esSlotP1
+        ? { pareja1Id: parejaAvanza, origenPareja1: origenAvanza }
+        : { pareja2Id: parejaAvanza, origenPareja2: origenAvanza },
+    });
   }
 
   return {

@@ -101,6 +101,7 @@ async function getTorneoPublico(req, res, next) {
           .filter((p) => p.zonaId === z.id)
           .map((p) => ({
             id: p.id,
+            posicionEnRonda: p.posicionEnRonda,
             estado: p.estado,
             fechaHora: p.fechaHora,
             pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,

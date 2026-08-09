@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
+import BracketLines from '../../components/BracketLines';
 
 const POLL_INTERVAL = 15000; // 15 seconds
 
@@ -11,6 +12,7 @@ export default function TorneoPublic() {
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const intervalRef = useRef(null);
+  const publicBracketRef = useRef(null);
 
   const fetchData = async () => {
     try {
@@ -112,16 +114,17 @@ export default function TorneoPublic() {
 
               {/* Tabla de posiciones */}
               <div className="table-responsive" style={{ marginBottom: '1.5rem' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                <table>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                      <th style={{ textAlign: 'left', padding: '0.5rem' }}>Pareja</th>
-                      <th style={{ padding: '0.5rem' }}>Pts</th>
-                      <th className="hide-on-mobile" style={{ padding: '0.5rem' }}>PJ</th>
-                      <th style={{ padding: '0.5rem' }}>PG</th>
-                      <th className="hide-on-mobile" style={{ padding: '0.5rem' }}>PP</th>
-                      <th style={{ padding: '0.5rem' }}>Sets</th>
-                      <th style={{ padding: '0.5rem' }}>Games</th>
+                    <tr>
+                      <th>Pos</th>
+                      <th>Pareja</th>
+                      <th className="text-center" title="Puntos">Pts</th>
+                      <th className="text-center hide-on-mobile" title="Partidos Jugados">PJ</th>
+                      <th className="text-center" title="Partidos Ganados">PG</th>
+                      <th className="text-center hide-on-mobile" title="Partidos Perdidos">PP</th>
+                      <th className="text-center" title="Sets a Favor / En Contra">Sets</th>
+                      <th className="text-center" title="Games a Favor / En Contra">Games</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -129,19 +132,20 @@ export default function TorneoPublic() {
                       const clasifica = idx < zona.clasifican;
                       return (
                         <tr key={idx} style={{
-                          borderBottom: '1px solid var(--color-border)',
-                          backgroundColor: clasifica ? 'rgba(16, 185, 129, 0.05)' : 'transparent',
+                          backgroundColor: clasifica ? 'var(--color-primary-light)' : 'transparent',
+                          borderLeft: clasifica ? '4px solid var(--color-primary)' : '4px solid transparent',
                         }}>
-                          <td style={{ textAlign: 'left', padding: '0.75rem 0.5rem', fontWeight: 500 }}>
-                            {clasifica && <span style={{ color: 'var(--color-success)', marginRight: '0.25rem' }}>▲</span>}
+                          <td><span className="pos-number">{idx + 1}</span></td>
+                          <td className="team-name">
+                            {clasifica && <span style={{ color: 'var(--color-primary)', marginRight: '0.25rem', textShadow: '0 0 5px var(--color-accent-glow)' }}>▲</span>}
                             {row.pareja}
                           </td>
-                          <td style={{ padding: '0.75rem 0.5rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>{row.puntos}</td>
-                          <td className="hide-on-mobile" style={{ padding: '0.75rem 0.5rem' }}>{row.pj}</td>
-                          <td style={{ padding: '0.75rem 0.5rem' }}>{row.pg}</td>
-                          <td className="hide-on-mobile" style={{ padding: '0.75rem 0.5rem' }}>{row.pp}</td>
-                          <td style={{ padding: '0.75rem 0.5rem' }}>{row.sf} - {row.sc}</td>
-                          <td style={{ padding: '0.75rem 0.5rem' }}>{row.gf} - {row.gc}</td>
+                          <td className="text-center stat-pts">{row.puntos}</td>
+                          <td className="text-center hide-on-mobile">{row.pj}</td>
+                          <td className="text-center stat-highlight">{row.pg}</td>
+                          <td className="text-center hide-on-mobile">{row.pp}</td>
+                          <td className="text-center">{row.sf} - {row.sc}</td>
+                          <td className="text-center">{row.gf} - {row.gc}</td>
                         </tr>
                       );
                     })}
@@ -156,7 +160,13 @@ export default function TorneoPublic() {
                     Partidos
                   </h4>
                   <div className="partidos-public-grid">
-                    {zona.partidos.map((p) => (
+                    {zona.partidos.map((p) => {
+                      let partidoLabel = '';
+                      if (zona.formato === 'MINI_BRACKET') {
+                        if (p.posicionEnRonda === 3) partidoLabel = 'Ganador vs Ganador';
+                        if (p.posicionEnRonda === 4) partidoLabel = 'Perdedor vs Perdedor';
+                      }
+                      return (
                       <div key={p.id} style={{
                         background: 'var(--color-bg-input)',
                         border: `1px solid ${p.estado === 'FINALIZADO' ? 'var(--color-primary)' : p.estado === 'EN_CURSO' ? 'var(--color-success)' : 'var(--color-border)'}`,
@@ -165,6 +175,19 @@ export default function TorneoPublic() {
                         position: 'relative',
                         animation: p.estado === 'EN_CURSO' ? 'pulse-border 2s infinite' : 'none'
                       }}>
+                        {partidoLabel && (
+                          <div style={{
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 'bold',
+                            color: 'var(--color-primary)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            textAlign: 'center',
+                            marginBottom: '0.5rem'
+                          }}>
+                            {partidoLabel}
+                          </div>
+                        )}
                         {p.fechaHora && (
                           <div style={{
                             textAlign: 'center',
@@ -182,8 +205,14 @@ export default function TorneoPublic() {
                             📅 {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
                           </div>
                         )}
-                        <div style={{ fontSize: 'var(--font-size-sm)', textAlign: 'center', fontWeight: p.ganador === p.pareja1 && p.ganador ? 'bold' : 'normal', color: p.ganador === p.pareja1 && p.ganador ? 'var(--color-primary)' : 'var(--color-text)' }}>
-                          {p.pareja1 || 'TBD'}
+                        <div style={{ 
+                          fontSize: 'var(--font-size-sm)', 
+                          textAlign: 'center', 
+                          fontWeight: p.ganador === p.pareja1 && p.ganador ? 'bold' : 'normal', 
+                          color: p.ganador === p.pareja1 && p.ganador ? 'var(--color-primary)' : (p.pareja1 ? 'var(--color-text)' : 'var(--color-text-muted)'),
+                          fontStyle: p.pareja1 ? 'normal' : 'italic'
+                        }}>
+                          {p.pareja1 || 'Por definirse'}
                         </div>
                         {(p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') && p.sets && p.sets.length > 0 ? (
                           <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.35rem 0', flexWrap: 'wrap' }}>
@@ -211,11 +240,18 @@ export default function TorneoPublic() {
                         ) : (
                           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', fontWeight: 'bold', margin: '0.35rem 0' }}>vs</div>
                         )}
-                        <div style={{ fontSize: 'var(--font-size-sm)', textAlign: 'center', fontWeight: p.ganador === p.pareja2 && p.ganador ? 'bold' : 'normal', color: p.ganador === p.pareja2 && p.ganador ? 'var(--color-primary)' : 'var(--color-text)' }}>
-                          {p.pareja2 || 'TBD'}
+                        <div style={{ 
+                          fontSize: 'var(--font-size-sm)', 
+                          textAlign: 'center', 
+                          fontWeight: p.ganador === p.pareja2 && p.ganador ? 'bold' : 'normal', 
+                          color: p.ganador === p.pareja2 && p.ganador ? 'var(--color-primary)' : (p.pareja2 ? 'var(--color-text)' : 'var(--color-text-muted)'),
+                          fontStyle: p.pareja2 ? 'normal' : 'italic'
+                        }}>
+                          {p.pareja2 || 'Por definirse'}
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </div>
               )}
@@ -229,7 +265,7 @@ export default function TorneoPublic() {
         <section>
           <h2 style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-2xl)' }}>🏆 Fase Eliminatoria</h2>
           <div style={{ overflowX: 'auto', paddingBottom: '1rem' }}>
-            <div style={{ display: 'flex', gap: '2.5rem', minWidth: 'min-content', padding: '1rem 0' }}>
+            <div ref={publicBracketRef} style={{ display: 'flex', gap: '2.5rem', minWidth: 'min-content', padding: '1rem 0', position: 'relative' }}>
               {eliminatoria.map((fase) => (
                 <div key={fase.id} className="bracket-section" style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <h4 style={{
@@ -244,90 +280,95 @@ export default function TorneoPublic() {
                   </h4>
                   <div className="bracket-matches-column">
                     {fase.partidos.map((p) => (
-                      <div key={p.id} className="bracket-match-wrapper" style={{ padding: '8px 0' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          {p.fechaHora && (
-                        <div style={{
-                          fontSize: '0.7rem',
-                          color: 'var(--color-text-secondary)',
-                          fontWeight: 'bold',
-                          minWidth: '55px',
-                          textAlign: 'right',
+                      <div key={p.id} className="bracket-match-wrapper">
+                        <div className="match-card" style={{
+                          background: 'var(--color-bg-card)',
+                          border: `1px solid ${p.estado === 'FINALIZADO' ? 'var(--color-primary)' : p.estado === 'EN_CURSO' ? 'var(--color-success)' : 'var(--color-border)'}`,
+                          animation: p.estado === 'EN_CURSO' ? 'pulse-border 2s infinite' : 'none',
                           display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
                         }}>
-                          📅 {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      )}
-                      <div style={{
-                        background: 'var(--color-bg-card)',
-                        border: `1px solid ${p.estado === 'FINALIZADO' ? 'var(--color-primary)' : p.estado === 'EN_CURSO' ? 'var(--color-success)' : 'var(--color-border)'}`,
-                        borderRadius: 'var(--radius-md)',
-                        padding: '0.75rem 1rem',
-                        minWidth: '200px',
-                        flex: 1,
-                        animation: p.estado === 'EN_CURSO' ? 'pulse-border 2s infinite' : 'none'
-                      }}>
-                      <div style={{
-                        fontSize: 'var(--font-size-sm)',
-                        textAlign: 'center',
-                        fontWeight: p.ganador === p.pareja1 && p.ganador ? 'bold' : 'normal',
-                        color: p.ganador === p.pareja1 && p.ganador ? 'var(--color-primary)' : 'var(--color-text)',
-                      }}>
-                        {p.origenPareja1 && (
-                          <div style={{ fontSize: '0.65rem', color: 'var(--color-text-tertiary)', fontWeight: 'bold' }}>
-                            {p.origenPareja1}
-                          </div>
-                        )}
-                        {p.ganador === p.pareja1 && p.ganador ? '🏆 ' : ''}{p.pareja1 || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Por definirse</span>}
-                      </div>
-                      {(p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') && p.sets && p.sets.length > 0 ? (
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.35rem 0', flexWrap: 'wrap' }}>
-                          {p.estado === 'EN_CURSO' && (
-                            <span style={{ width: '100%', textAlign: 'center', fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '0.1rem' }}>🟢 En juego</span>
+                          {/* Fecha dentro de la card */}
+                          {p.fechaHora && (
+                            <div style={{
+                              fontSize: '0.65rem',
+                              color: 'var(--color-text-secondary)',
+                              fontWeight: 'bold',
+                              textAlign: 'center',
+                              borderBottom: '1px solid var(--color-border)',
+                              paddingBottom: '4px',
+                              marginBottom: '4px',
+                            }}>
+                              📅 {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </div>
                           )}
-                          {p.sets.map((s, i) => {
-                            const p1Won = s.gamesPareja1 > s.gamesPareja2;
-                            const p2Won = s.gamesPareja2 > s.gamesPareja1;
-                            return (
-                              <span key={i} style={{
-                                background: 'var(--color-bg-input)',
-                                border: '1px solid var(--color-border)',
-                                padding: '0.1rem 0.4rem',
-                                borderRadius: '3px',
-                                fontSize: 'var(--font-size-xs)',
-                              }}>
-                                <span style={{ fontWeight: p1Won ? 'bold' : 'normal', color: p1Won ? 'var(--color-primary)' : 'inherit' }}>{s.gamesPareja1}</span>
-                                {'-'}
-                                <span style={{ fontWeight: p2Won ? 'bold' : 'normal', color: p2Won ? 'var(--color-primary)' : 'inherit' }}>{s.gamesPareja2}</span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', fontWeight: 'bold', margin: '0.35rem 0' }}>vs</div>
-                      )}
-                      <div style={{
-                        fontSize: 'var(--font-size-sm)',
-                        textAlign: 'center',
-                        fontWeight: p.ganador === p.pareja2 && p.ganador ? 'bold' : 'normal',
-                        color: p.ganador === p.pareja2 && p.ganador ? 'var(--color-primary)' : 'var(--color-text)',
-                      }}>
-                        {p.origenPareja2 && (
-                          <div style={{ fontSize: '0.65rem', color: 'var(--color-text-tertiary)', fontWeight: 'bold' }}>
-                            {p.origenPareja2}
+                          {/* Pareja 1 */}
+                          <div style={{
+                            fontSize: 'var(--font-size-sm)',
+                            textAlign: 'center',
+                            fontWeight: p.ganador === p.pareja1 && p.ganador ? 'bold' : 'normal',
+                            color: p.ganador === p.pareja1 && p.ganador ? 'var(--color-primary)' : 'var(--color-text)',
+                          }}>
+                            {p.origenPareja1 && (
+                              <div style={{ fontSize: '0.65rem', color: 'var(--color-text-tertiary)', fontWeight: 'bold' }}>
+                                {p.origenPareja1}
+                              </div>
+                            )}
+                            {p.ganador === p.pareja1 && p.ganador ? '🏆 ' : ''}{p.pareja1
+                              ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}`
+                              : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{p.origenPareja1 ? 'Por definirse' : (p.estado === 'FINALIZADO' ? 'BYE' : 'Por definirse')}</span>}
                           </div>
-                        )}
-                        {p.ganador === p.pareja2 && p.ganador ? '🏆 ' : ''}{p.pareja2 || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Por definirse</span>}
+                          {/* Sets o VS */}
+                          {(p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') && p.sets && p.sets.length > 0 ? (
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.25rem 0', flexWrap: 'wrap' }}>
+                              {p.estado === 'EN_CURSO' && (
+                                <span style={{ width: '100%', textAlign: 'center', fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '0.1rem' }}>🟢 En juego</span>
+                              )}
+                              {p.sets.map((s, i) => {
+                                const p1Won = s.gamesPareja1 > s.gamesPareja2;
+                                const p2Won = s.gamesPareja2 > s.gamesPareja1;
+                                return (
+                                  <span key={i} style={{
+                                    background: 'var(--color-bg-input)',
+                                    border: '1px solid var(--color-border)',
+                                    padding: '0.1rem 0.4rem',
+                                    borderRadius: '3px',
+                                    fontSize: 'var(--font-size-xs)',
+                                  }}>
+                                    <span style={{ fontWeight: p1Won ? 'bold' : 'normal', color: p1Won ? 'var(--color-primary)' : 'inherit' }}>{s.gamesPareja1}</span>
+                                    {'-'}
+                                    <span style={{ fontWeight: p2Won ? 'bold' : 'normal', color: p2Won ? 'var(--color-primary)' : 'inherit' }}>{s.gamesPareja2}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', fontWeight: 'bold', margin: '0.25rem 0' }}>vs</div>
+                          )}
+                          {/* Pareja 2 */}
+                          <div style={{
+                            fontSize: 'var(--font-size-sm)',
+                            textAlign: 'center',
+                            fontWeight: p.ganador === p.pareja2 && p.ganador ? 'bold' : 'normal',
+                            color: p.ganador === p.pareja2 && p.ganador ? 'var(--color-primary)' : 'var(--color-text)',
+                          }}>
+                            {p.origenPareja2 && (
+                              <div style={{ fontSize: '0.65rem', color: 'var(--color-text-tertiary)', fontWeight: 'bold' }}>
+                                {p.origenPareja2}
+                              </div>
+                            )}
+                            {p.ganador === p.pareja2 && p.ganador ? '🏆 ' : ''}{p.pareja2
+                              ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}`
+                              : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{p.origenPareja2 ? 'Por definirse' : (p.estado === 'FINALIZADO' ? 'BYE' : 'Por definirse')}</span>}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
                 ))}
                 </div>
               </div>
             ))}
+              <BracketLines containerRef={publicBracketRef} fases={eliminatoria} />
             </div>
           </div>
         </section>
