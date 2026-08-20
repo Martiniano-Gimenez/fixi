@@ -217,17 +217,17 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 7 sesiones de trabajo, sumando un aproximado total de entre 9 y 11 horas de programación, refactorización y depuración.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 7 sesiones de trabajo, sumando un aproximado total de entre 16 y 19 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
-| **1** | ~1 hora | CRUD Base, Generación algorítmica de Zonas, Tablas de Posiciones y persistencia, Setup de DB (SQLite). |
-| **2** | ~30 minutos | Implementación base de Brackets (CSS), Inyección de selectores Fecha/Hora seguros, Propagación de Etiquetas ("1°A"). |
-| **3** | 1.5 a 2 horas | Modificación transaccional (Gestión manual post-sorteo), Refactorización de Lógica de Clasificación en Mini-Bracket. |
-| **4** | 1.5 a 2 horas | Algoritmia de avance ("BYE") en brackets incompletos, Reescritura del renderizado de Brackets mediante SVG dinámico. |
-| **5** | 1.5 a 2 horas | Re-diseño Global UI (Dark Premium Deportivo), Fixes de UX (Jerarquías), Tablas Responsivas, State Management. |
-| **6** | 2 a 2.5 horas | Módulo de disponibilidad horaria: slots discretos (75m), trasnoche, compatibilidad por intersección de conjuntos, centralización de canchas/jornada en Organizador y scheduler cross-torneo. |
-| **7** | ~1 hora | Rediseño de navegación (Header/Sidebar con estados activos `useLocation`), tokens de peligro, estilos de modales con blur y migración a iconografía vectorial integral (`lucide-react`). |
-| **Total** | **~9 a 11 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling, multitorneo y diseño UI/UX premium. |
+| **1** | ~2 horas | CRUD Base, Generación algorítmica de Zonas, Tablas de Posiciones y persistencia, Setup de DB (SQLite). |
+| **2** | ~1.5 horas | Implementación base de Brackets (CSS), Inyección de selectores Fecha/Hora seguros, Propagación de Etiquetas ("1°A"). |
+| **3** | ~2.5 a 3 horas | Modificación transaccional (Gestión manual post-sorteo), Refactorización de Lógica de Clasificación en Mini-Bracket. |
+| **4** | ~2.5 a 3 horas | Algoritmia de avance ("BYE") en brackets incompletos, Reescritura del renderizado de Brackets mediante SVG dinámico. |
+| **5** | ~2.5 a 3 horas | Re-diseño Global UI (Dark Premium Deportivo), Fixes de UX (Jerarquías), Tablas Responsivas, State Management. |
+| **6** | ~3.5 a 4 horas | Módulo de disponibilidad horaria: slots discretos (75m), trasnoche, compatibilidad por intersección de conjuntos, centralización de canchas/jornada en Club y scheduler cross-torneo. |
+| **7** | ~2.5 a 3 horas | Inicio masivo con prioridad *"Most Constrained First"*, eliminación en cascada, rediseño de navegación con `useLocation`, modales con blur y migración total a `lucide-react`. |
+| **Total** | **~16 a 19 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling, multitorneo y diseño UI/UX premium. |
 
-> **Nota:** esta tabla cubre únicamente las sesiones de codificación. No incluye el tiempo dedicado a definición de producto, validación, diseño UX/UI, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
+> **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
