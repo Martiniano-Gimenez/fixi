@@ -64,8 +64,6 @@ async function updateTorneo(organizadorId, torneoId, data) {
   if (data.nombre) updateData.nombre = data.nombre;
   if (data.fecha !== undefined) updateData.fecha = data.fecha ? new Date(data.fecha) : null;
   if (data.estado) updateData.estado = data.estado;
-  if (data.cantidadCanchas !== undefined) updateData.cantidadCanchas = Number(data.cantidadCanchas);
-  if (data.duracionPartidoMin !== undefined) updateData.duracionPartidoMin = Number(data.duracionPartidoMin);
 
   return await prisma.torneo.update({
     where: { id: torneo.id },

@@ -69,11 +69,6 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
           ) : partido.fechaHora ? (
             <span style={{ fontSize: '10px', color: 'var(--color-text-tertiary)', fontWeight: 'bold' }}>
               {new Date(partido.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
-              {partido.canchaNumero ? <span style={{ marginLeft: '4px', color: 'var(--color-text-secondary)' }}>· C{partido.canchaNumero}</span> : null}
-            </span>
-          ) : partido.sinHorarioAsignado ? (
-            <span style={{ fontSize: '9px', color: 'var(--color-warning)', fontWeight: 'bold', background: 'rgba(234,179,8,0.1)', padding: '1px 5px', borderRadius: '4px' }}>
-              ⚠️ Sin horario
             </span>
           ) : null}
         </div>

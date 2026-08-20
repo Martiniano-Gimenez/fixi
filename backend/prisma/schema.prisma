@@ -23,16 +23,14 @@ model Organizador {
 }
 
 model Torneo {
-  id                 String    @id @default(uuid())
-  organizadorId      String
-  nombre             String
-  fecha              DateTime?
-  slug               String    @unique
-  estado             String    @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
-  cantidadCanchas    Int       @default(1)
-  duracionPartidoMin Int       @default(75)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  organizadorId  String
+  nombre         String
+  fecha          DateTime?
+  slug           String    @unique
+  estado         String    @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organizador         Organizador          @relation(fields: [organizadorId], references: [id])
   parejas             Pareja[]
@@ -48,21 +46,19 @@ model Pareja {
   jugador2  String
   orden     Int    @default(0)
 
-  torneo           Torneo                 @relation(fields: [torneoId], references: [id], onDelete: Cascade)
-  zonaParejas      ZonaPareja[]
-  partidosComoP1   Partido[]              @relation("Pareja1")
-  partidosComoP2   Partido[]              @relation("Pareja2")
-  partidosGanados  Partido[]              @relation("Ganador")
-  disponibilidades DisponibilidadPareja[]
+  torneo          Torneo       @relation(fields: [torneoId], references: [id], onDelete: Cascade)
+  zonaParejas     ZonaPareja[]
+  partidosComoP1  Partido[]    @relation("Pareja1")
+  partidosComoP2  Partido[]    @relation("Pareja2")
+  partidosGanados Partido[]    @relation("Ganador")
 }
 
 model Zona {
-  id                  String  @id @default(uuid())
-  torneoId            String
-  nombre              String  // "Zona A", "Zona B", etc.
-  clasifican          Int     @default(2)
-  formato             String  @default("ROUND_ROBIN") // "ROUND_ROBIN" | "MINI_BRACKET"
-  requiereArmadoManual Boolean @default(false)
+  id         String @id @default(uuid())
+  torneoId   String
+  nombre     String // "Zona A", "Zona B", etc.
+  clasifican Int    @default(2)
+  formato    String @default("ROUND_ROBIN") // "ROUND_ROBIN" | "MINI_BRACKET"
 
   torneo      Torneo       @relation(fields: [torneoId], references: [id], onDelete: Cascade)
   zonaParejas ZonaPareja[]
@@ -112,8 +108,6 @@ model Partido {
   ganadorId            String?   // Nullable hasta que se juegue
   estado               String    @default("PENDIENTE") // "PENDIENTE" | "EN_CURSO" | "FINALIZADO"
   fechaHora            DateTime?
-  canchaNumero         Int?      // Cancha asignada (1..cantidadCanchas del torneo)
-  sinHorarioAsignado   Boolean   @default(false) // true si el algoritmo no pudo asignarle slot
 
   torneo             Torneo            @relation(fields: [torneoId], references: [id], onDelete: Cascade)
   zona               Zona?             @relation(fields: [zonaId], references: [id], onDelete: SetNull)
@@ -134,14 +128,4 @@ model SetPartido {
   partido Partido @relation(fields: [partidoId], references: [id], onDelete: Cascade)
 
   @@unique([partidoId, numero])
-}
-
-model DisponibilidadPareja {
-  id         String @id @default(uuid())
-  parejaId   String
-  dia        String // "Viernes" | "Sabado"
-  horaInicio String // "HH:MM" (24h)
-  horaFin    String // "HH:MM" (24h)
-
-  pareja Pareja @relation(fields: [parejaId], references: [id], onDelete: Cascade)
 }

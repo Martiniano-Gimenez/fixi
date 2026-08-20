@@ -55,24 +55,6 @@ async function reiniciarTorneo(req, res, next) {
   }
 }
 
-async function iniciarTorneoConDisponibilidad(req, res, next) {
-  try {
-    const result = await zonaService.iniciarTorneoConDisponibilidad(req.organizadorId, req.params.id);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function asignarHorariosAutomatico(req, res, next) {
-  try {
-    const result = await zonaService.asignarHorariosAutomatico(req.organizadorId, req.params.id);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-}
-
 module.exports = {
   createTorneo,
   getTorneos,
@@ -80,6 +62,4 @@ module.exports = {
   updateTorneo,
   iniciarTorneo,
   reiniciarTorneo,
-  iniciarTorneoConDisponibilidad,
-  asignarHorariosAutomatico,
 };
