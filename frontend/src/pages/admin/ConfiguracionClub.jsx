@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
+import { Building2, Calendar, Save, ChevronLeft } from 'lucide-react';
 
 export default function ConfiguracionClub() {
   const [loading, setLoading] = useState(true);
@@ -80,7 +81,7 @@ export default function ConfiguracionClub() {
 
       // 3. Guardar directamente si no hay impacto negativo
       await api.patch('/organizador/perfil', payload);
-      setToast('✅ Configuración del club guardada');
+      setToast('Configuración del club guardada');
       setTimeout(() => setToast(''), 3500);
       fetchPerfil();
     } catch (err) {
@@ -96,7 +97,7 @@ export default function ConfiguracionClub() {
     setSaving(true);
     try {
       await api.patch('/organizador/perfil', payload);
-      setToast('✅ Horarios del club actualizados y turnos obsoletos limpiados');
+      setToast('Horarios del club actualizados y turnos obsoletos limpiados');
       setTimeout(() => setToast(''), 4000);
       fetchPerfil();
     } catch (err) {
@@ -112,8 +113,23 @@ export default function ConfiguracionClub() {
     <div className="page" style={{ maxWidth: '720px' }}>
       <div className="flex-header">
         <div>
-          <Link to="/admin" style={{ fontSize: 'var(--font-size-sm)' }}>← Volver a Mis Torneos</Link>
-          <h1 style={{ marginTop: '0.5rem' }}>🏟️ Configuración del Club</h1>
+          <Link
+            to="/admin"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            <ChevronLeft size={14} strokeWidth={2} />
+            Volver a Mis Torneos
+          </Link>
+          <h1 style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Building2 size={24} strokeWidth={2} />
+            Configuración del Club
+          </h1>
         </div>
       </div>
 
@@ -146,14 +162,15 @@ export default function ConfiguracionClub() {
           </div>
 
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div>
-              <h3 style={{ fontSize: 'var(--font-size-base)', margin: 0 }}>⏰ Horarios de Apertura (Jornada)</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Calendar size={16} strokeWidth={2} style={{ color: 'var(--color-text-secondary)' }} />
+              <h3 style={{ fontSize: 'var(--font-size-base)', margin: 0 }}>Horarios de Apertura (Jornada)</h3>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
               {/* Viernes */}
               <div style={{ background: 'var(--color-bg-input)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <h4 style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.75rem' }}>🗓️ Viernes</h4>
+                <h4 style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.75rem' }}>Viernes</h4>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <div className="form-group" style={{ margin: 0, flex: 1 }}>
                     <label style={{ fontSize: 'var(--font-size-xs)' }}>Inicio</label>
@@ -176,7 +193,7 @@ export default function ConfiguracionClub() {
 
               {/* Sábado */}
               <div style={{ background: 'var(--color-bg-input)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <h4 style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.75rem' }}>🗓️ Sábado</h4>
+                <h4 style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.75rem' }}>Sábado</h4>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <div className="form-group" style={{ margin: 0, flex: 1 }}>
                     <label style={{ fontSize: 'var(--font-size-xs)' }}>Inicio</label>
@@ -203,9 +220,10 @@ export default function ConfiguracionClub() {
             type="submit"
             className="btn-primary"
             disabled={saving}
-            style={{ width: 'auto', alignSelf: 'flex-start', marginTop: '0.5rem' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', width: 'auto', alignSelf: 'flex-start', marginTop: '0.5rem' }}
           >
-            {saving ? 'Guardando...' : '💾 Guardar configuración del club'}
+            <Save size={16} strokeWidth={2} />
+            {saving ? 'Guardando...' : 'Guardar configuración del club'}
           </button>
         </form>
       </div>
