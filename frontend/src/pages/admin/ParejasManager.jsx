@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import DisponibilidadEditor from '../../components/DisponibilidadEditor';
+import { ChevronLeft, Plus, Clock, Trash2, Users } from 'lucide-react';
 
 export default function ParejasManager() {
   const { id } = useParams();
@@ -95,8 +96,23 @@ export default function ParejasManager() {
     <div className="page">
       <div className="flex-header">
         <div>
-          <Link to={`/admin/torneos/${id}`} style={{ fontSize: 'var(--font-size-sm)' }}>← Volver al torneo</Link>
-          <h1 style={{ marginTop: '0.5rem' }}>Gestionar Parejas</h1>
+          <Link
+            to={`/admin/torneos/${id}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            <ChevronLeft size={14} strokeWidth={2} />
+            Volver al torneo
+          </Link>
+          <h1 style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Users size={24} strokeWidth={2} />
+            Gestionar Parejas
+          </h1>
         </div>
       </div>
 
@@ -114,7 +130,14 @@ export default function ParejasManager() {
                 <label>Jugador 2</label>
                 <input type="text" value={jugador2} onChange={(e) => setJugador2(e.target.value)} required />
               </div>
-              <button type="submit" className="btn-primary">Añadir</button>
+              <button
+                type="submit"
+                className="btn-primary"
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              >
+                <Plus size={16} strokeWidth={2} />
+                Añadir Pareja
+              </button>
             </form>
           </div>
         </div>
@@ -134,6 +157,7 @@ export default function ParejasManager() {
                       background: 'var(--color-bg-input)',
                       borderRadius: 'var(--radius-md)',
                       overflow: 'hidden',
+                      border: '1px solid var(--color-border)',
                     }}
                   >
                     {/* Fila principal */}
@@ -150,8 +174,8 @@ export default function ParejasManager() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                         <span style={{ fontWeight: 500 }}>{p.jugador1} / {p.jugador2}</span>
                         {(p._cantSlots || 0) > 0 ? (
-                          <span className="disponibilidad-badge">
-                            ⏰ {p._cantSlots} turno{p._cantSlots === 1 ? '' : 's'}
+                          <span className="disponibilidad-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Clock size={11} strokeWidth={2} /> {p._cantSlots} turno{p._cantSlots === 1 ? '' : 's'}
                           </span>
                         ) : (
                           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
@@ -165,16 +189,37 @@ export default function ParejasManager() {
                           type="button"
                           onClick={() => toggleDisponibilidad(p.id)}
                           className={`btn-chip ${expandedParejaId === p.id ? 'active' : ''}`}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
                           title="Definir horarios disponibles"
                         >
-                          ⏰ Horarios
+                          <Clock size={12} strokeWidth={2} />
+                          Horarios
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDelete(p.id)}
-                          style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)', background: 'none', border: 'none', cursor: 'pointer' }}
+                          style={{
+                            color: 'var(--color-text-muted)',
+                            padding: '0.25rem',
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            transition: 'all 0.2s',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = 'var(--color-danger)';
+                            e.currentTarget.style.background = 'var(--color-danger-bg)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = 'var(--color-text-muted)';
+                            e.currentTarget.style.background = 'none';
+                          }}
+                          title="Eliminar pareja"
                         >
-                          Eliminar
+                          <Trash2 size={16} strokeWidth={2} />
                         </button>
                       </div>
                     </div>
@@ -211,7 +256,7 @@ export default function ParejasManager() {
       {parejaToDelete && (
         <ConfirmModal
           isOpen={true}
-          title="🗑️ Eliminar Pareja"
+          title="Eliminar Pareja"
           message="¿Estás seguro de que querés eliminar esta pareja? Esta acción no se puede deshacer."
           onConfirm={executeDelete}
           onCancel={() => setParejaToDelete(null)}
