@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
+import { Award, AlertTriangle, Users, Trophy, Calendar, RefreshCw } from 'lucide-react';
 
 const POLL_INTERVAL = 15000; // 15 seconds
 
@@ -36,7 +37,9 @@ export default function TorneoPublic() {
   if (loading) {
     return (
       <div className="public-page" style={{ textAlign: 'center', paddingTop: '4rem' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🏸</div>
+        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
+          <Award size={36} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
+        </div>
         <p style={{ color: 'var(--color-text-secondary)' }}>Cargando torneo...</p>
       </div>
     );
@@ -45,7 +48,9 @@ export default function TorneoPublic() {
   if (error) {
     return (
       <div className="public-page" style={{ textAlign: 'center', paddingTop: '4rem' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>😕</div>
+        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
+          <AlertTriangle size={36} strokeWidth={2} style={{ color: 'var(--color-danger)' }} />
+        </div>
         <p style={{ color: 'var(--color-danger)' }}>{error}</p>
       </div>
     );
@@ -64,8 +69,9 @@ export default function TorneoPublic() {
         paddingBottom: '1.5rem',
         borderBottom: '1px solid var(--color-border)',
       }}>
-        <h1 style={{ fontSize: 'var(--font-size-3xl)', marginBottom: '0.5rem' }}>
-          🏸 {torneo.nombre}
+        <h1 style={{ fontSize: 'var(--font-size-3xl)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+          <Award size={28} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
+          {torneo.nombre}
         </h1>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
@@ -104,7 +110,10 @@ export default function TorneoPublic() {
       {/* Zonas */}
       {zonas.length > 0 && (
         <section style={{ marginBottom: '3rem' }}>
-          <h2 style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-2xl)' }}>📊 Fase de Grupos</h2>
+          <h2 style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-2xl)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Users size={22} strokeWidth={2} />
+            Fase de Grupos
+          </h2>
           {zonas.map((zona) => (
             <div id={`zona-${zona.id}`} key={zona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -202,7 +211,8 @@ export default function TorneoPublic() {
                             justifyContent: 'center',
                             gap: '4px'
                           }}>
-                            📅 {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+                            <Calendar size={11} strokeWidth={2} />
+                            {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
                           </div>
                         )}
                         <div style={{ 
@@ -217,7 +227,9 @@ export default function TorneoPublic() {
                         {(p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') && p.sets && p.sets.length > 0 ? (
                           <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.35rem 0', flexWrap: 'wrap' }}>
                             {p.estado === 'EN_CURSO' && (
-                              <span style={{ width: '100%', textAlign: 'center', fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '0.1rem' }}>🟢 En juego</span>
+                              <span style={{ width: '100%', textAlign: 'center', fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '0.1rem' }}>
+                                ● En juego
+                              </span>
                             )}
                             {p.sets.map((s, i) => {
                               const p1Won = s.gamesPareja1 > s.gamesPareja2;
@@ -263,7 +275,10 @@ export default function TorneoPublic() {
       {/* Eliminatoria */}
       {eliminatoria.length > 0 && (
         <section>
-          <h2 style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-2xl)' }}>🏆 Fase Eliminatoria</h2>
+          <h2 style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-2xl)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Trophy size={22} strokeWidth={2} />
+            Fase Eliminatoria
+          </h2>
           <div style={{ overflowX: 'auto', paddingBottom: '1rem' }}>
             <div ref={publicBracketRef} style={{ display: 'flex', gap: '2.5rem', minWidth: 'min-content', padding: '1rem 0', position: 'relative' }}>
               {eliminatoria.map((fase) => (
@@ -299,8 +314,13 @@ export default function TorneoPublic() {
                               borderBottom: '1px solid var(--color-border)',
                               paddingBottom: '4px',
                               marginBottom: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px'
                             }}>
-                              📅 {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                              <Calendar size={10} strokeWidth={2} />
+                              {new Date(p.fechaHora).toLocaleString([], { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                             </div>
                           )}
                           {/* Pareja 1 */}
@@ -315,7 +335,7 @@ export default function TorneoPublic() {
                                 {p.origenPareja1}
                               </div>
                             )}
-                            {p.ganador === p.pareja1 && p.ganador ? '🏆 ' : ''}{p.pareja1
+                            {p.pareja1
                               ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}`
                               : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{p.origenPareja1 ? 'Por definirse' : (p.estado === 'FINALIZADO' ? 'BYE' : 'Por definirse')}</span>}
                           </div>
@@ -323,7 +343,9 @@ export default function TorneoPublic() {
                           {(p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') && p.sets && p.sets.length > 0 ? (
                             <div style={{ display: 'flex', justifyContent: 'center', gap: '0.35rem', margin: '0.25rem 0', flexWrap: 'wrap' }}>
                               {p.estado === 'EN_CURSO' && (
-                                <span style={{ width: '100%', textAlign: 'center', fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '0.1rem' }}>🟢 En juego</span>
+                                <span style={{ width: '100%', textAlign: 'center', fontSize: '0.65rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '0.1rem' }}>
+                                  ● En juego
+                                </span>
                               )}
                               {p.sets.map((s, i) => {
                                 const p1Won = s.gamesPareja1 > s.gamesPareja2;
@@ -358,16 +380,16 @@ export default function TorneoPublic() {
                                 {p.origenPareja2}
                               </div>
                             )}
-                            {p.ganador === p.pareja2 && p.ganador ? '🏆 ' : ''}{p.pareja2
+                            {p.pareja2
                               ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}`
                               : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{p.origenPareja2 ? 'Por definirse' : (p.estado === 'FINALIZADO' ? 'BYE' : 'Por definirse')}</span>}
                           </div>
                         </div>
                       </div>
                 ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
               <BracketLines containerRef={publicBracketRef} fases={eliminatoria} />
             </div>
           </div>
@@ -376,8 +398,9 @@ export default function TorneoPublic() {
       {/* Footer / Timestamp */}
       {lastUpdate && (
         <div style={{ textAlign: 'center', marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px solid var(--color-border)' }}>
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-            🔄 Actualizado: {lastUpdate.toLocaleTimeString()} (auto cada 15s)
+          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+            <RefreshCw size={12} strokeWidth={2} />
+            Actualizado: {lastUpdate.toLocaleTimeString()} (auto cada 15s)
           </p>
         </div>
       )}
