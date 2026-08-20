@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { GitBranch, Users, Building2, Trash2 } from 'lucide-react';
 import { api } from '../../api/client';
 import ZonaTable from '../../components/ZonaTable';
 import PartidoCard from '../../components/PartidoCard';
@@ -12,6 +13,7 @@ import AsignarHorariosModal from '../../components/AsignarHorariosModal';
 export default function TorneoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [torneo, setTorneo] = useState(null);
   const [zonas, setZonas] = useState([]);
   const [partidos, setPartidos] = useState([]);
@@ -271,42 +273,42 @@ export default function TorneoDetail() {
         <div className="sidebar">
           <div className="torneo-card">
             <h3>Menú</h3>
-            <ul style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <li>
-                <Link to={`/admin/torneos/${id}/eliminatoria`}>
-                  Fase Eliminatoria {torneo.estado === 'BORRADOR' && '(Pronto)'}
-                </Link>
-              </li>
-              <li>
-                <Link to={`/admin/torneos/${id}/parejas`}>
-                  Gestionar Parejas ({parejas.length})
-                </Link>
-              </li>
-              <li>
-                <Link to="/admin/club">
-                  🏟️ Configuración del Club
-                </Link>
-              </li>
-              <li style={{ marginTop: '0.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setEliminarModalOpen(true)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--color-danger)',
-                    padding: 0,
-                    fontSize: 'var(--font-size-sm)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                  }}
-                >
-                  🗑️ Eliminar Torneo
-                </button>
-              </li>
-            </ul>
+            <nav className="sidebar-nav">
+              <Link
+                to={`/admin/torneos/${id}/eliminatoria`}
+                className={`sidebar-nav-item${location.pathname === `/admin/torneos/${id}/eliminatoria` ? ' active' : ''}`}
+              >
+                <GitBranch size={16} strokeWidth={2} />
+                Fase Eliminatoria {torneo.estado === 'BORRADOR' && '(Pronto)'}
+              </Link>
+
+              <Link
+                to={`/admin/torneos/${id}/parejas`}
+                className={`sidebar-nav-item${location.pathname === `/admin/torneos/${id}/parejas` ? ' active' : ''}`}
+              >
+                <Users size={16} strokeWidth={2} />
+                Gestionar Parejas ({parejas.length})
+              </Link>
+
+              <Link
+                to="/admin/club"
+                className={`sidebar-nav-item${location.pathname === '/admin/club' ? ' active' : ''}`}
+              >
+                <Building2 size={16} strokeWidth={2} />
+                Configuración del Club
+              </Link>
+
+              <hr className="sidebar-nav-divider" />
+
+              <button
+                type="button"
+                className="sidebar-nav-item danger"
+                onClick={() => setEliminarModalOpen(true)}
+              >
+                <Trash2 size={16} strokeWidth={2} />
+                Eliminar Torneo
+              </button>
+            </nav>
           </div>
         </div>
 
