@@ -225,11 +225,8 @@ export default function TorneosList() {
                     border: '1px solid var(--color-border)',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                  <div style={{ marginBottom: '0.35rem' }}>
                     <strong>{item.nombre}</strong>
-                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                      Avg. {item.promedioSlots} turnos/pareja
-                    </span>
                   </div>
                   <div style={{ fontSize: 'var(--font-size-xs)', display: 'flex', gap: '1rem' }}>
                     <span style={{ color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
