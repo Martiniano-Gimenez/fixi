@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
-import { GitBranch, Users, Building2, Trash2 } from 'lucide-react';
+import { GitBranch, Users, Building2, Trash2, Play, Calendar, RotateCcw, Settings, Copy, Check } from 'lucide-react';
 import { api } from '../../api/client';
 import ZonaTable from '../../components/ZonaTable';
 import PartidoCard from '../../components/PartidoCard';
@@ -8,7 +8,6 @@ import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import ZoneEditorModal from '../../components/ZoneEditorModal';
 import InicioDisponibilidadModal from '../../components/InicioDisponibilidadModal';
-import AsignarHorariosModal from '../../components/AsignarHorariosModal';
 
 export default function TorneoDetail() {
   const { id } = useParams();
@@ -34,7 +33,7 @@ export default function TorneoDetail() {
 
   const [zoneEditorOpen, setZoneEditorOpen] = useState(false);
   const [inicioDisponibilidadOpen, setInicioDisponibilidadOpen] = useState(false);
-  const [asignarHorariosOpen, setAsignarHorariosOpen] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -177,21 +176,33 @@ export default function TorneoDetail() {
                 onClick={(e) => {
                   e.stopPropagation();
                   navigator.clipboard.writeText(`${window.location.origin}/torneo/${torneo.slug}`);
-                  const btn = e.target;
-                  btn.textContent = '✅ Copiado!';
-                  setTimeout(() => (btn.textContent = '📋 Copiar'), 1500);
+                  setCopiado(true);
+                  setTimeout(() => setCopiado(false), 1500);
                 }}
                 style={{
                   fontSize: 'var(--font-size-xs)',
-                  padding: '0.15rem 0.5rem',
+                  padding: '0.2rem 0.5rem',
                   background: 'var(--color-bg-input)',
                   border: '1px solid var(--color-border)',
                   borderRadius: 'var(--radius-sm)',
                   color: 'var(--color-text-secondary)',
                   cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
                 }}
               >
-                📋 Copiar
+                {copiado ? (
+                  <>
+                    <Check size={12} strokeWidth={2} style={{ color: 'var(--color-success)' }} />
+                    Copiado
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} strokeWidth={2} />
+                    Copiar
+                  </>
+                )}
               </button>
             </span>
           </div>
@@ -199,8 +210,13 @@ export default function TorneoDetail() {
 
         {torneo.estado === 'BORRADOR' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-            <button onClick={() => setIniciarModalOpen(true)} className="btn-primary" style={{ width: 'auto', marginTop: 0 }}>
-              🚀 Iniciar Torneo (Sorteo)
+            <button
+              onClick={() => setIniciarModalOpen(true)}
+              className="btn-primary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', marginTop: 0 }}
+            >
+              <Play size={14} strokeWidth={2} />
+              Iniciar Torneo (Sorteo)
             </button>
             <button
               type="button"
@@ -213,9 +229,10 @@ export default function TorneoDetail() {
                 setInicioDisponibilidadOpen(true);
               }}
               className="btn-secondary"
-              style={{ width: 'auto', marginTop: 0, fontSize: 'var(--font-size-sm)' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', marginTop: 0, fontSize: 'var(--font-size-sm)' }}
             >
-              🗓️ Iniciar por disponibilidad
+              <Calendar size={14} strokeWidth={2} />
+              Iniciar por disponibilidad
             </button>
           </div>
         ) : (
@@ -231,9 +248,13 @@ export default function TorneoDetail() {
                 borderRadius: 'var(--radius-md)',
                 fontSize: 'var(--font-size-sm)',
                 cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
               }}
             >
-              {limpiandoZonas ? 'Limpiando...' : '🗑️ Limpiar Zonas'}
+              <Trash2 size={14} strokeWidth={2} />
+              {limpiandoZonas ? 'Limpiando...' : 'Limpiar Zonas'}
             </button>
             <button
               onClick={() => setReiniciarModalOpen(true)}
@@ -245,25 +266,22 @@ export default function TorneoDetail() {
                 borderRadius: 'var(--radius-md)',
                 fontSize: 'var(--font-size-sm)',
                 cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
               }}
               title="Borra TODO el fixture y resultados, y vuelve el torneo a estado Borrador"
             >
-              🔄 Reiniciar Torneo
+              <RotateCcw size={14} strokeWidth={2} />
+              Reiniciar Torneo
             </button>
             <button
               onClick={() => setZoneEditorOpen(true)}
               className="btn-primary"
-              style={{ width: 'auto', marginTop: 0, padding: '0.5rem 1.25rem' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', marginTop: 0, padding: '0.5rem 1.25rem' }}
             >
-              ⚙️ Editar Zonas
-            </button>
-            <button
-              onClick={() => setAsignarHorariosOpen(true)}
-              className="btn-secondary"
-              style={{ width: 'auto', marginTop: 0, padding: '0.5rem 1rem', fontSize: 'var(--font-size-sm)' }}
-              title="Asignar horarios automáticamente por disponibilidad respetando canchas del club"
-            >
-              ⏰ Asignar horarios
+              <Settings size={14} strokeWidth={2} />
+              Editar Zonas
             </button>
           </div>
         )}
@@ -543,20 +561,7 @@ export default function TorneoDetail() {
           onSuccess={() => {
             setInicioDisponibilidadOpen(false);
             fetchData();
-            setToast('✅ Torneo iniciado por disponibilidad horaria');
-            setTimeout(() => setToast(''), 4000);
-          }}
-        />
-      )}
-
-      {asignarHorariosOpen && (
-        <AsignarHorariosModal
-          torneoId={torneo.id}
-          onClose={() => setAsignarHorariosOpen(false)}
-          onSuccess={() => {
-            setAsignarHorariosOpen(false);
-            fetchData();
-            setToast('✅ Horarios asignados automáticamente');
+            setToast('Torneo iniciado por disponibilidad horaria');
             setTimeout(() => setToast(''), 4000);
           }}
         />
@@ -565,7 +570,7 @@ export default function TorneoDetail() {
       {eliminarModalOpen && (
         <ConfirmModal
           isOpen={true}
-          title="🗑️ Eliminar Torneo"
+          title="Eliminar Torneo"
           message={`¿Estás seguro de que querés eliminar el torneo "${torneo.nombre}"? Esta acción borrará todas sus parejas, zonas, partidos y resultados permanentemente.`}
           onConfirm={executeEliminarTorneo}
           onCancel={() => setEliminarModalOpen(false)}

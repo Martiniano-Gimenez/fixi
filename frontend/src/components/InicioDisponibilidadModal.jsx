@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api/client';
+import { Calendar, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 
 /**
  * Modal para iniciar el torneo por disponibilidad horaria.
@@ -55,7 +56,10 @@ export default function InicioDisponibilidadModal({ torneoId, parejas, onClose, 
         {/* ── Fase 1: Confirmación ── */}
         {fase === 'confirmar' && (
           <>
-            <h2 style={{ marginBottom: '1rem' }}>🗓️ Iniciar por disponibilidad horaria</h2>
+            <h2 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Calendar size={20} strokeWidth={2} />
+              Iniciar por disponibilidad horaria
+            </h2>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
               <div className="info-row">
@@ -71,9 +75,12 @@ export default function InicioDisponibilidadModal({ torneoId, parejas, onClose, 
             </div>
 
             {sinDisponibilidad > 0 && (
-              <div className="alert-warning" style={{ marginBottom: '1.25rem' }}>
-                ⚠️ Las {sinDisponibilidad} pareja{sinDisponibilidad > 1 ? 's' : ''} sin horarios cargados no
-                podrán compatibilizarse automáticamente y quedarán en una zona de armado manual.
+              <div className="alert-warning" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                <AlertTriangle size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  Las {sinDisponibilidad} pareja{sinDisponibilidad > 1 ? 's' : ''} sin horarios cargados no
+                  podrán compatibilizarse automáticamente y quedarán en una zona de armado manual.
+                </div>
               </div>
             )}
 
@@ -98,7 +105,10 @@ export default function InicioDisponibilidadModal({ torneoId, parejas, onClose, 
         {/* ── Fase 2: Resultado del inicio ── */}
         {fase === 'resultado' && resultado && (
           <>
-            <h2 style={{ marginBottom: '1rem' }}>✅ Torneo iniciado</h2>
+            <h2 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <CheckCircle2 size={20} strokeWidth={2} style={{ color: 'var(--color-success)' }} />
+              Torneo iniciado
+            </h2>
 
             {resultado.zonasCreadas.length > 0 && (
               <div style={{ marginBottom: '1.25rem' }}>
@@ -121,7 +131,7 @@ export default function InicioDisponibilidadModal({ torneoId, parejas, onClose, 
             {resultado.zonasManual.length > 0 && (
               <div style={{ marginBottom: '1.25rem' }}>
                 <h3 style={{ marginBottom: '0.5rem', fontSize: 'var(--font-size-base)', color: 'var(--color-warning)' }}>
-                  ⚠️ Zonas que requieren armado manual ({resultado.zonasManual.length})
+                  Zonas que requieren armado manual ({resultado.zonasManual.length})
                 </h3>
                 <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {resultado.zonasManual.map((z) => (
@@ -143,8 +153,14 @@ export default function InicioDisponibilidadModal({ torneoId, parejas, onClose, 
                 ¿Querés asignar los horarios de partidos automáticamente ahora?
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <button className="btn-primary" onClick={handleAsignarHorarios} disabled={loading}>
-                  {loading ? 'Asignando horarios...' : '⏰ Sí, asignar horarios ahora'}
+                <button
+                  className="btn-primary"
+                  onClick={handleAsignarHorarios}
+                  disabled={loading}
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                >
+                  <Clock size={16} strokeWidth={2} />
+                  {loading ? 'Asignando horarios...' : 'Sí, asignar horarios ahora'}
                 </button>
                 <button
                   type="button"
@@ -161,7 +177,10 @@ export default function InicioDisponibilidadModal({ torneoId, parejas, onClose, 
         {/* ── Fase 3: Resultado asignación de horarios ── */}
         {fase === 'asignando' && (
           <>
-            <h2 style={{ marginBottom: '1rem' }}>⏰ Asignación de horarios</h2>
+            <h2 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Clock size={20} strokeWidth={2} />
+              Asignación de horarios
+            </h2>
 
             {loading && (
               <p style={{ color: 'var(--color-text-secondary)' }}>Asignando horarios y canchas...</p>
@@ -180,14 +199,18 @@ export default function InicioDisponibilidadModal({ torneoId, parejas, onClose, 
                   </strong>
                 </div>
                 {resultadoHorarios.sinHorario > 0 && (
-                  <div className="alert-warning">
-                    ⚠️ {resultadoHorarios.sinHorario} partido{resultadoHorarios.sinHorario > 1 ? 's' : ''} quedaron
-                    sin horario asignado por incompatibilidad o canchas completas. Podés asignarles horario manualmente.
+                  <div className="alert-warning" style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                    <AlertTriangle size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                      {resultadoHorarios.sinHorario} partido{resultadoHorarios.sinHorario > 1 ? 's' : ''} quedaron
+                      sin horario asignado por incompatibilidad o canchas completas. Podés asignarles horario manualmente.
+                    </div>
                   </div>
                 )}
                 {resultadoHorarios.sinHorario === 0 && (
-                  <div className="alert-success">
-                    ✅ Todos los partidos tienen horario y cancha asignados.
+                  <div className="alert-success" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <CheckCircle2 size={16} strokeWidth={2} />
+                    Todos los partidos tienen horario y cancha asignados.
                   </div>
                 )}
               </div>
