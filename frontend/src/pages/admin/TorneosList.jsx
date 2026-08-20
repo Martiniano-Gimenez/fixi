@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
-import { Plus, Play, Trash2, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Plus, Play, Trash2, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export default function TorneosList() {
   const [torneos, setTorneos] = useState([]);
@@ -175,20 +175,13 @@ export default function TorneosList() {
               Se iniciarán los siguientes <strong>{torneosBorrador.length} torneos en borrador</strong> armando sus zonas por disponibilidad y asignando sus horarios en simultáneo:
             </p>
 
-            <ul style={{ background: 'var(--color-bg-input)', padding: '0.75rem 1.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem', fontSize: 'var(--font-size-sm)' }}>
+            <ul style={{ background: 'var(--color-bg-input)', padding: '0.75rem 1.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontSize: 'var(--font-size-sm)' }}>
               {torneosBorrador.map((t) => (
                 <li key={t.id} style={{ margin: '0.35rem 0' }}>
                   <strong>{t.nombre}</strong>
                 </li>
               ))}
             </ul>
-
-            <div className="alert-warning" style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-xs)', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-              <Info size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <strong>Prioridad inteligente:</strong> El sistema priorizará a los torneos y parejas con menor disponibilidad horaria para acomodarlos primero en las canchas del club, minimizando ajustes manuales.
-              </div>
-            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <button
