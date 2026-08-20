@@ -10,7 +10,7 @@ organizadores que hoy llevan todo en papel.
 
 ## Stack
 - Frontend: React 19 + Vite + React Router v7, estado local con hooks
-  (sin Redux ni Context API), Vanilla CSS (`index.css` con variables/tokens del sistema de diseño)
+  (sin Redux ni Context API), Vanilla CSS (`index.css` con variables/tokens del sistema de diseño), `lucide-react` para iconografía vectorial consistente.
 - Backend: Node.js + Express
 - DB: SQLite + Prisma como ORM (preparado para migrar a Postgres/MySQL
   en producción sin cambios de código, gracias al ORM)
@@ -44,9 +44,9 @@ organizadores que hoy llevan todo en papel.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.
 - Fase eliminatoria con bracket SVG dinámico, manejo de BYEs, edición manual de cruces y propagación dinámica de orígenes ("1°A", "2°B").
-- Modales de confirmación propios consistentes para todas las acciones destructivas.
+- Modales de confirmación propios consistentes para todas las acciones destructivas y diálogos con overlay blur y animaciones fluidas.
 - Vista pública (`/torneo/:slug`) con polling cada 15s (actualiza a nivel de partido completo).
-- Sistema de diseño "Dark Premium Deportivo" aplicado globalmente.
+- Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con navegación activa (`useLocation`), tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo
 - Trabajar en ramas por feature (`feature/nombre-ticket`), nunca directo a main.

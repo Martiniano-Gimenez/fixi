@@ -200,9 +200,24 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+## 10. Rediseño Premium de Navegación, Estados Activos e Iconografía Vectorial (`lucide-react`)
+
+### Estandarización Visual, Jerarquías de Navegación y Tokenización
+- **Problema o necesidad que motivó el trabajo:** La aplicación utilizaba emojis de texto plano dispersos en botones, títulos y badges, los cuales se renderizaban de forma inconsistente entre sistemas operativos y navegadores móviles. Asimismo, la barra superior (header) y el sidebar de torneos carecían de estados activos vinculados a la URL y de separación clara entre navegación principal y acciones destructivas (logout, eliminación de torneo, reinicio).
+- **Qué decidí y por qué:** 
+  1. Instalé la librería `lucide-react` para estandarizar toda la iconografía de la aplicación con trazos vectoriales uniformes y consistentes.
+  2. Implementé detección de rutas activas mediante `useLocation()` de React Router, aplicando estilos sutiles con el color de acento (`var(--color-primary-light)` y `var(--color-primary)`).
+  3. En el sidebar del torneo, diseñé el estado activo con borde izquierdo de acento y `border-radius: 0 var(--radius-md) var(--radius-md) 0` (radio asimétrico) para asegurar que el trazo quede alineado limpiamente con el contenedor sin el efecto visual de "borde flotante".
+  4. Creé el token `--color-danger-bg` en `:root` para unificar los fondos hover de las acciones destructivas y de riesgo (logout, eliminar torneo, borrar bracket, eliminar parejas).
+  5. Centralicé los estilos de `.modal-overlay` y `.modal-content` con `position: fixed`, `backdrop-filter: blur(6px)` y micro-animaciones fluidas, y extendí la limpieza de iconos y textos a todas las pantallas: Login, Registro, Administración (Torneos, Club, Parejas, Eliminatoria) y Vista Pública.
+- **Alternativas que consideré y descarté:** Mantener emojis de texto o usar paquetes de fuentes pesados como FontAwesome. Se descartó para priorizar rendimiento, diseño moderno y uniformidad en dispositivos móviles.
+- **Resultado final:** Rama `feature/nav-premium-redesign` con interfaz 100% pulida, navegación contextual y jerarquías visuales limpias en toda la aplicación.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 6 sesiones de trabajo, sumando un aproximado total de entre 8 y 10 horas de programación, refactorización y depuración.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 7 sesiones de trabajo, sumando un aproximado total de entre 9 y 11 horas de programación, refactorización y depuración.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -212,6 +227,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 6 se
 | **4** | 1.5 a 2 horas | Algoritmia de avance ("BYE") en brackets incompletos, Reescritura del renderizado de Brackets mediante SVG dinámico. |
 | **5** | 1.5 a 2 horas | Re-diseño Global UI (Dark Premium Deportivo), Fixes de UX (Jerarquías), Tablas Responsivas, State Management. |
 | **6** | 2 a 2.5 horas | Módulo de disponibilidad horaria: slots discretos (75m), trasnoche, compatibilidad por intersección de conjuntos, centralización de canchas/jornada en Organizador y scheduler cross-torneo. |
-| **Total** | **~8 a 10 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling y multitorneo. |
+| **7** | ~1 hora | Rediseño de navegación (Header/Sidebar con estados activos `useLocation`), tokens de peligro, estilos de modales con blur y migración a iconografía vectorial integral (`lucide-react`). |
+| **Total** | **~9 a 11 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling, multitorneo y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación. No incluye el tiempo dedicado a definición de producto, validación, diseño UX/UI, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
