@@ -6,6 +6,7 @@ import EditBracketMatchModal from '../../components/EditBracketMatchModal';
 import DateTimeInput from '../../components/DateTimeInput';
 import ConfirmModal from '../../components/ConfirmModal';
 import BracketLines from '../../components/BracketLines';
+import { ChevronLeft, GitBranch, UserCheck, Trash2, Settings, Trophy, Edit2, Plus } from 'lucide-react';
 import './EliminatoriaView.css';
 
 export default function EliminatoriaView() {
@@ -102,59 +103,78 @@ export default function EliminatoriaView() {
   return (
     <div className="eliminatoria-container">
       <div className="header">
-        <button onClick={() => navigate(`/admin/torneos/${torneoId}`)} className="back-btn">
-          ← Volver
+        <button
+          onClick={() => navigate(`/admin/torneos/${torneoId}`)}
+          className="back-btn"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+        >
+          <ChevronLeft size={16} strokeWidth={2} />
+          Volver
         </button>
         <h1>{torneo.nombre} — Fase Eliminatoria</h1>
         <div className="header-actions">
           {fases.length > 0 && (
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button 
-                onClick={handleGenerarEliminatoria} 
-                disabled={generando} 
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleGenerarEliminatoria}
+                disabled={generando}
                 style={{
                   width: 'auto',
                   marginTop: 0,
                   padding: '0.5rem 1rem',
                   fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'bold',
+                  fontWeight: '500',
                   background: 'var(--color-bg-input)',
                   border: '1px solid var(--color-border)',
                   borderRadius: 'var(--radius-md)',
                   color: 'var(--color-text-secondary)',
                   transition: 'all 0.2s ease',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
                 }}
-                onMouseEnter={(e) => e.target.style.color = 'var(--color-text)'}
-                onMouseLeave={(e) => e.target.style.color = 'var(--color-text-secondary)'}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'var(--color-text)';
+                  e.currentTarget.style.borderColor = 'var(--color-primary)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--color-text-secondary)';
+                  e.currentTarget.style.borderColor = 'var(--color-border)';
+                }}
                 title="Asignar clasificados basándose en el diseño actual del bracket"
               >
-                {generando ? 'Cargando...' : '✅ Asignar Clasificados'}
+                <UserCheck size={15} strokeWidth={2} />
+                {generando ? 'Cargando...' : 'Asignar Clasificados'}
               </button>
-              <button 
-                onClick={handleBorrarEliminatoria} 
-                disabled={generando} 
+              <button
+                onClick={handleBorrarEliminatoria}
+                disabled={generando}
                 style={{
                   width: 'auto',
                   marginTop: 0,
                   padding: '0.5rem 1rem',
                   fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'bold',
+                  fontWeight: '500',
                   background: 'var(--color-bg-input)',
                   border: '1px solid var(--color-danger)',
                   borderRadius: 'var(--radius-md)',
                   color: 'var(--color-danger)',
                   transition: 'all 0.2s ease',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(239, 68, 68, 0.1)';
+                  e.currentTarget.style.background = 'var(--color-danger-bg)';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.background = 'var(--color-bg-input)';
+                  e.currentTarget.style.background = 'var(--color-bg-input)';
                 }}
               >
-                🗑️ Borrar Bracket
+                <Trash2 size={15} strokeWidth={2} />
+                Borrar Bracket
               </button>
             </div>
           )}
@@ -167,8 +187,14 @@ export default function EliminatoriaView() {
       {fases.length === 0 ? (
         <div className="no-eliminatoria">
           <p>La fase eliminatoria aún no ha sido generada.</p>
-          <button onClick={handleGenerarEliminatoria} disabled={generando} className="btn-primary">
-            {generando ? 'Generando...' : '🚀 Generar Eliminatoria'}
+          <button
+            onClick={handleGenerarEliminatoria}
+            disabled={generando}
+            className="btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', margin: '0 auto' }}
+          >
+            <GitBranch size={16} strokeWidth={2} />
+            {generando ? 'Generando...' : 'Generar Eliminatoria'}
           </button>
         </div>
       ) : (
@@ -208,9 +234,20 @@ export default function EliminatoriaView() {
                                       e.stopPropagation();
                                       setEditBracketModal(partido);
                                     }}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '0 2px' }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      padding: '2px',
+                                      color: 'var(--color-text-muted)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      transition: 'color 0.2s',
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-primary)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
                                   >
-                                    ⚙️
+                                    <Settings size={13} strokeWidth={2} />
                                   </button>
                                   {editBracketModal?.id === partido.id && (
                                     <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, marginTop: '8px' }}>
@@ -229,8 +266,8 @@ export default function EliminatoriaView() {
                               )}
                             </div>
                             {isJugable && (
-                              <span className="match-action-hint">
-                                {isFinalizado ? '✏️' : '➕'}
+                              <span className="match-action-hint" style={{ color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}>
+                                {isFinalizado ? <Edit2 size={12} strokeWidth={2} /> : <Plus size={12} strokeWidth={2} />}
                               </span>
                             )}
                           </div>
@@ -271,7 +308,11 @@ export default function EliminatoriaView() {
                                   </span>}
                             </span>
                           </div>
-                          {p1esGanador && <span className="winner-indicator">🏆</span>}
+                          {p1esGanador && (
+                            <span className="winner-indicator" style={{ display: 'flex', alignItems: 'center' }}>
+                              <Trophy size={14} strokeWidth={2} style={{ color: 'var(--color-accent)' }} />
+                            </span>
+                          )}
                         </div>
 
                         {/* Sets o VS */}
@@ -303,11 +344,15 @@ export default function EliminatoriaView() {
                                   </span>}
                             </span>
                           </div>
-                            {p2esGanador && <span className="winner-indicator">🏆</span>}
-                          </div>
-                        </div>
+                          {p2esGanador && (
+                            <span className="winner-indicator" style={{ display: 'flex', alignItems: 'center' }}>
+                              <Trophy size={14} strokeWidth={2} style={{ color: 'var(--color-accent)' }} />
+                            </span>
+                          )}
                         </div>
                       </div>
+                      </div>
+                    </div>
                     );
                   })}
                 </div>
@@ -333,7 +378,7 @@ export default function EliminatoriaView() {
       {/* Modal de confirmacion */}
       <ConfirmModal 
         isOpen={confirmModal.isOpen}
-        title={confirmModal.type === 'delete' ? '⚠️ Borrar Fase Eliminatoria' : '✅ Asignar Clasificados'}
+        title={confirmModal.type === 'delete' ? 'Borrar Fase Eliminatoria' : 'Asignar Clasificados'}
         message={confirmModal.type === 'delete' 
           ? '¿Estás seguro de que querés borrar toda la fase eliminatoria? Esto desbloqueará la edición de las zonas y se perderán todos los resultados cargados en los brackets.' 
           : '¿Querés asignar las parejas clasificadas de la fase de grupos al bracket? El sistema respetará el diseño de cruces (Ej: 1° Zona A) que hayas establecido.'}
