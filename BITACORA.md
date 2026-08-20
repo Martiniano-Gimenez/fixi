@@ -29,6 +29,12 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 - **Alternativas que consideré y descarté:** Consideré permitir asignar parejas a dedo directamente en la fase eliminatoria, pero se descartó para mantener la trazabilidad. También descarté desarrollar una interfaz de "Drag and Drop" para evitar librerías externas pesadas.
 - **Resultado final:** Se implementó un endpoint transaccional (`reestructurarZonas`) en el backend y el modal en el frontend. El administrador puede mover parejas o agregarlas. El sistema regenera los partidos automáticamente según el nuevo tamaño de la zona.
 
+### Eliminación de Torneos en Cascada
+- **Problema o necesidad que motivó el trabajo:** El usuario administrador no disponía de una opción para borrar torneos de prueba o cancelados directamente desde la interfaz, quedando registros residuales en la base de datos.
+- **Qué decidí y por qué:** Implementé el endpoint `DELETE /api/torneos/:id` con eliminación en cascada en la base de datos (borrando parejas, zonas, fases eliminatorias, partidos, sets y disponibilidad asociada). En el frontend, agregué botones de eliminación protegidos por modal de confirmación (`ConfirmModal`) tanto en las tarjetas del listado principal como en el menú lateral del detalle del torneo.
+- **Alternativas que consideré y descarté:** Baja lógica (soft delete). Se descartó para mantener el modelo simple y evitar acumulación de datos innecesarios en la etapa actual del producto.
+- **Resultado final:** Eliminación completa y segura de torneos accesible desde la lista y desde el detalle, con redirección y actualización automática del listado.
+
 ---
 
 ## 3. Fase de Grupos y Generación de Partidos
@@ -168,15 +174,35 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ### Diseño de Alcance: Armado de Zonas y Asignación de Horarios por Disponibilidad
 - **Problema o necesidad que motivó el trabajo:** En los torneos reales de mi ciudad, cada pareja informa al inscribirse en qué días y franjas horarias puede jugar la fase de grupos (ej. viernes de 15 a 19, sábado de 9 a 12). Hoy los organizadores arman las zonas cruzando estos horarios manualmente.
-- **Qué decidí y por qué:** Definí el alcance de la funcionalidad: (1) el sistema arma las zonas agrupando parejas con compatibilidad horaria, permitiendo que el organizador ajuste manualmente el resultado del algoritmo; (2) el organizador puede definir la cantidad de canchas disponibles para el torneo (ej. 5), con una duración estimada de 1:15hs por partido; (3) el sistema asigna automáticamente el horario exacto de cada partido, respetando la disponibilidad de ambas parejas y evitando superposiciones de cancha u horario para una misma pareja.
+- **Qué decidí y por qué:** Definí el alcance de la funcionalidad: (1) el sistema arma las zonas agrupando parejas con compatibilidad horaria, permitiendo que el organizador ajuste manualmente el resultado del algoritmo; (2) el organizador define la capacidad de canchas y los horarios de apertura del club; (3) el sistema asigna automáticamente el horario exacto de cada partido, respetando la disponibilidad de ambas parejas y evitando superposiciones de cancha u horario para una misma pareja.
 - **Alternativas que consideré y descarté:** Evalué limitar el alcance solo al armado de zonas, dejando la asignación de horario exacto de cada partido a cargo del organizador. Decidí incluir también la asignación automática de horarios, ya que consideré que el nivel de complejidad (un problema de scheduling con restricciones) es apropiado para el volumen de horas que exige la Práctica Profesional Supervisada.
-- **Resultado final:** Alcance definido, pendiente de diseño de algoritmo e implementación.
+- **Resultado final:** Alcance definido, pasando a la fase de diseño e implementación técnica.
+
+---
+
+## 9. Armado de Zonas por Disponibilidad Horaria y Asignación Automática de Canchas/Horarios
+
+### Evolución de Enfoque: De Rangos Libres Continuos a Slots Discretos Fijos (75 min)
+- **Problema o necesidad que motivó el trabajo:** La idea inicial de permitir que cada pareja cargue rangos libres de horas (ej. 14:30 a 18:15) generaba una complejidad matemática alta de solapamiento de intervalos y, más importante, no reflejaba la realidad de los clubes de pádel, donde los partidos se organizan en turnos discretos y estandarizados (75 minutos).
+- **Qué decidí y por qué:** Rediseñé la funcionalidad desde cero basándola en **slots discretos fijos de 75 minutos**. A partir de las horas de apertura de Viernes y Sábado, el backend genera dinámicamente la grilla de turnos (ej. 13:00, 14:15, 15:30, etc., con soporte completo para turnos que cruzan la medianoche). Las parejas seleccionan los turnos que les sirven mediante chips interactivos multi-select. La compatibilidad entre parejas se simplificó de forma elegante a una **intersección de conjuntos**, haciendo el algoritmo más predecible, rápido y exacto.
+- **Alternativas que consideré y descarté:** Mantener rangos continuos y redondear al turno más cercano. Se descartó porque introducía ambigüedad en los bordes y complicaba la interfaz de usuario en dispositivos móviles.
+- **Resultado final:** Modelo `SlotPareja` en Prisma, servicio de cálculo puro `slots.service.js`, editor visual por chips en `DisponibilidadEditor.jsx` e inicio de torneo por compatibilidad con backtracking acotado (máx. 5.000 iteraciones).
+
+### Centralización de Recursos a Nivel Club y Scheduler Cross-Torneo
+- **Problema o necesidad que motivó el trabajo:** Los clubes suelen organizar simultáneamente 4 o 5 categorías distintas durante el mismo fin de semana, compartiendo el mismo conjunto total de canchas (ej. 6 canchas). Modelar las canchas y horarios de forma aislada por torneo no permitía coordinar la ocupación real del club.
+- **Qué decidí y por qué:** Moví la configuración de `cantidadCanchas` y los horarios de apertura de Viernes/Sábado desde la entidad `Torneo` hacia la entidad `Organizador` (Club). Creé una pantalla centralizada de "Configuración del Club" (`/admin/club`) y reescribí el scheduler automático (`asignarHorariosAutomatico`) para que evalúe colisiones de canchas considerando los partidos programados en **todos los torneos simultáneos del club**, además de los partidos en memoria del torneo actual.
+- **Alternativas que consideré y descarté:** Mantener las canchas por torneo y pedirle al organizador que reparta cupos fijos (ej. 2 canchas para 4ta, 2 para 5ta). Se descartó porque es rígido e ineficiente; un pool compartido permite que el scheduler aproveche huecos libres entre categorías de manera óptima.
+### Inicio Masivo de Torneos y Algoritmo de Prioridad ("Most Constrained First")
+- **Problema o necesidad que motivó el trabajo:** Iniciar y programar torneos categoría por categoría requería múltiples pasos manuales repetitivos para el organizador. Además, al compartir un mismo pool de canchas, el orden en que se asignaban los torneos afectaba directamente cuántos partidos quedaban sin horario compatible.
+- **Qué decidí y por qué:** Implementé la funcionalidad de **"Iniciar todos los torneos"** desde el dashboard principal. El backend ejecuta un pipeline en dos etapas: primero genera las zonas de todos los torneos en borrador (por disponibilidad o sorteo); luego calcula un *score de flexibilidad* por categoría (promedio de turnos seleccionados por pareja) y programa los partidos en orden de menor a mayor disponibilidad (**Most Constrained First**). De esta forma, las categorías y parejas con menos opciones horarias ocupan las canchas primero, maximizando la cantidad total de partidos programados automáticamente y minimizando la necesidad de ajustes manuales posteriores.
+- **Alternativas que consideré y descarté:** Programar los torneos por orden de creación o por tamaño de inscriptos. Se descartaron porque no contemplaban las restricciones horarias reales, lo que provocaba que torneos muy restrictivos se quedaran sin turnos libres al ejecutarse al final.
+- **Resultado final:** Endpoint `POST /api/organizador/iniciar-todos`, modal con resumen interactivo de cobertura por torneo en `TorneosList.jsx` y ordenamiento heurístico cross-torneo.
 
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 5 sesiones de trabajo, sumando un aproximado total de entre 6 y 7 horas y media de programación, refactorización y depuración.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 6 sesiones de trabajo, sumando un aproximado total de entre 8 y 10 horas de programación, refactorización y depuración.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -185,6 +211,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 5 se
 | **3** | 1.5 a 2 horas | Modificación transaccional (Gestión manual post-sorteo), Refactorización de Lógica de Clasificación en Mini-Bracket. |
 | **4** | 1.5 a 2 horas | Algoritmia de avance ("BYE") en brackets incompletos, Reescritura del renderizado de Brackets mediante SVG dinámico. |
 | **5** | 1.5 a 2 horas | Re-diseño Global UI (Dark Premium Deportivo), Fixes de UX (Jerarquías), Tablas Responsivas, State Management. |
-| **Total** | **~6 a 7.5 hrs** | Implementación Full-Stack integral MVP (Frontend + Backend + DB). |
+| **6** | 2 a 2.5 horas | Módulo de disponibilidad horaria: slots discretos (75m), trasnoche, compatibilidad por intersección de conjuntos, centralización de canchas/jornada en Organizador y scheduler cross-torneo. |
+| **Total** | **~8 a 10 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling y multitorneo. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación. No incluye el tiempo dedicado a definición de producto, validación, diseño UX/UI, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

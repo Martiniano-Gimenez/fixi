@@ -13,6 +13,7 @@ import TorneoDetail from './pages/admin/TorneoDetail';
 import ParejasManager from './pages/admin/ParejasManager';
 import TorneoPublic from './pages/public/TorneoPublic';
 import EliminatoriaView from './pages/admin/EliminatoriaView';
+import ConfiguracionClub from './pages/admin/ConfiguracionClub';
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
             }
           >
             <Route index element={<TorneosList />} />
+            <Route path="club" element={<ConfiguracionClub />} />
             <Route path="torneos/nuevo" element={<TorneoCreate />} />
             <Route path="torneos/:id" element={<TorneoDetail />} />
             <Route path="torneos/:id/parejas" element={<ParejasManager />} />

@@ -37,9 +37,36 @@ async function updateTorneo(req, res, next) {
   }
 }
 
+async function deleteTorneo(req, res, next) {
+  try {
+    const result = await torneoService.deleteTorneo(req.organizadorId, req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function iniciarTorneo(req, res, next) {
   try {
     const result = await zonaService.iniciarTorneo(req.organizadorId, req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function iniciarTorneoConDisponibilidad(req, res, next) {
+  try {
+    const result = await zonaService.iniciarTorneoConDisponibilidad(req.organizadorId, req.params.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function asignarHorariosAutomatico(req, res, next) {
+  try {
+    const result = await zonaService.asignarHorariosAutomatico(req.organizadorId, req.params.id);
     res.json(result);
   } catch (error) {
     next(error);
@@ -60,6 +87,9 @@ module.exports = {
   getTorneos,
   getTorneoById,
   updateTorneo,
+  deleteTorneo,
   iniciarTorneo,
+  iniciarTorneoConDisponibilidad,
+  asignarHorariosAutomatico,
   reiniciarTorneo,
 };

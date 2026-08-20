@@ -6,6 +6,7 @@ const errorHandler = require('./middleware/errorHandler');
 
 // Rutas
 const authRoutes = require('./routes/auth.routes');
+const organizadorRoutes = require('./routes/organizador.routes');
 const torneoRoutes = require('./routes/torneo.routes');
 const parejaRoutes = require('./routes/pareja.routes');
 const partidoRoutes = require('./routes/partido.routes');
@@ -34,6 +35,7 @@ app.get('/api/health', (req, res) => {
 
 // ─── Rutas de la API ─────────────────────────────────────
 app.use('/api/auth', authRoutes);
+app.use('/api/organizador', organizadorRoutes);
 app.use('/api/torneos', torneoRoutes);
 app.use('/api/parejas', parejaRoutes);
 app.use('/api/partidos', partidoRoutes);

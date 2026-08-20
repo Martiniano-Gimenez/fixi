@@ -10,14 +10,17 @@ router.post('/', torneoController.createTorneo);
 router.get('/', torneoController.getTorneos);
 router.get('/:id', torneoController.getTorneoById);
 router.patch('/:id', torneoController.updateTorneo);
+router.delete('/:id', torneoController.deleteTorneo);
 
 // Rutas anidadas de parejas (crear y listar por torneo)
 const parejaController = require('../controllers/pareja.controller');
 router.post('/:id/parejas', parejaController.createPareja);
 router.get('/:id/parejas', parejaController.getParejasByTorneo);
 
-// Ticket 3.1
+// Inicio y reinicio de torneo
 router.post('/:id/iniciar', torneoController.iniciarTorneo);
+router.post('/:id/iniciar-disponibilidad', torneoController.iniciarTorneoConDisponibilidad);
+router.post('/:id/asignar-horarios', torneoController.asignarHorariosAutomatico);
 router.post('/:id/reiniciar', torneoController.reiniciarTorneo);
 
 // Rutas anidadas de partidos y zonas

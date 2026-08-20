@@ -39,7 +39,7 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.35rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <span style={{ 
             fontSize: '10px', 
             textTransform: 'uppercase', 
@@ -53,24 +53,38 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
             {isFinalizado ? 'Finalizado' : isEnCurso ? 'En juego' : 'Pendiente'}
           </span>
           {onUpdateFechaHora ? (
-            <DateTimeInput
-              value={partido.fechaHora ? new Date(new Date(partido.fechaHora).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
-              onUpdate={(val) => onUpdateFechaHora(partido.id, val)}
-              title="Establecer horario"
-              style={{
-                fontSize: '9px',
-                padding: '2px 4px',
-                background: 'var(--color-bg-input)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text)',
-                borderRadius: '4px'
-              }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <DateTimeInput
+                value={partido.fechaHora ? new Date(new Date(partido.fechaHora).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
+                onUpdate={(val) => onUpdateFechaHora(partido.id, val)}
+                title="Establecer horario"
+                style={{
+                  fontSize: '9px',
+                  padding: '2px 4px',
+                  background: 'var(--color-bg-input)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text)',
+                  borderRadius: '4px'
+                }}
+              />
+              {partido.canchaNumero ? (
+                <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                  C{partido.canchaNumero}
+                </span>
+              ) : null}
+            </div>
           ) : partido.fechaHora ? (
             <span style={{ fontSize: '10px', color: 'var(--color-text-tertiary)', fontWeight: 'bold' }}>
               {new Date(partido.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+              {partido.canchaNumero ? <span style={{ marginLeft: '4px', color: 'var(--color-text-secondary)' }}>· C{partido.canchaNumero}</span> : null}
             </span>
           ) : null}
+
+          {partido.sinHorarioAsignado && (
+            <span style={{ fontSize: '9px', color: 'var(--color-warning)', fontWeight: 'bold', background: 'rgba(234,179,8,0.1)', padding: '1px 5px', borderRadius: '4px' }}>
+              ⚠️ Sin horario
+            </span>
+          )}
         </div>
         {onClick && (
           <button className="btn-small" style={{ fontSize: '10px' }}>
@@ -124,4 +138,3 @@ export default function PartidoCard({ partido, onClick, onUpdateFechaHora }) {
     </div>
   );
 }
-

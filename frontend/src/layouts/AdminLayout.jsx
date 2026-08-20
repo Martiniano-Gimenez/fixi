@@ -18,6 +18,7 @@ export default function AdminLayout() {
         </div>
         <nav className="admin-nav">
           <Link to="/admin">Mis Torneos</Link>
+          <Link to="/admin/club">🏟️ Mi Club</Link>
           <button onClick={handleLogout} className="btn-logout">Cerrar sesión</button>
         </nav>
       </header>

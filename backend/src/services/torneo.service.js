@@ -38,6 +38,17 @@ async function getTorneoById(organizadorId, torneoId) {
     where: { id: torneoId },
     include: {
       parejas: { orderBy: { orden: 'asc' } },
+      organizador: {
+        select: {
+          id: true,
+          nombre: true,
+          cantidadCanchas: true,
+          viernesInicio: true,
+          viernesFin: true,
+          sabadoInicio: true,
+          sabadoFin: true,
+        },
+      },
     },
   });
 
@@ -57,18 +68,27 @@ async function getTorneoById(organizadorId, torneoId) {
 }
 
 async function updateTorneo(organizadorId, torneoId, data) {
-  const torneo = await getTorneoById(organizadorId, torneoId); // Verifica existencia y permisos
+  const torneo = await getTorneoById(organizadorId, torneoId);
 
-  // Solo permitimos editar ciertos campos
   const updateData = {};
-  if (data.nombre) updateData.nombre = data.nombre;
+  if (data.nombre !== undefined) updateData.nombre = data.nombre;
   if (data.fecha !== undefined) updateData.fecha = data.fecha ? new Date(data.fecha) : null;
-  if (data.estado) updateData.estado = data.estado;
+  if (data.estado !== undefined) updateData.estado = data.estado;
 
   return await prisma.torneo.update({
     where: { id: torneo.id },
     data: updateData,
   });
+}
+
+async function deleteTorneo(organizadorId, torneoId) {
+  const torneo = await getTorneoById(organizadorId, torneoId);
+
+  await prisma.torneo.delete({
+    where: { id: torneo.id },
+  });
+
+  return { message: 'Torneo eliminado con éxito' };
 }
 
 async function reiniciarTorneo(organizadorId, torneoId) {
@@ -79,26 +99,21 @@ async function reiniciarTorneo(organizadorId, torneoId) {
   }
 
   await prisma.$transaction(async (tx) => {
-    // Borrar fases eliminatorias (SetNull en partidos, así que mejor borramos los partidos primero o después)
-    // Borramos partidos primero
     await tx.partido.deleteMany({
-      where: { torneoId: torneo.id }
+      where: { torneoId: torneo.id },
     });
 
-    // Borrar fases eliminatorias
     await tx.faseEliminatoria.deleteMany({
-      where: { torneoId: torneo.id }
+      where: { torneoId: torneo.id },
     });
 
-    // Borrar zonas (borra ZonaPareja por cascade)
     await tx.zona.deleteMany({
-      where: { torneoId: torneo.id }
+      where: { torneoId: torneo.id },
     });
 
-    // Volver el torneo a BORRADOR
     await tx.torneo.update({
       where: { id: torneo.id },
-      data: { estado: 'BORRADOR' }
+      data: { estado: 'BORRADOR' },
     });
   });
 
@@ -110,6 +125,6 @@ module.exports = {
   getTorneos,
   getTorneoById,
   updateTorneo,
+  deleteTorneo,
   reiniciarTorneo,
 };
-

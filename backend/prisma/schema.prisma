@@ -19,6 +19,13 @@ model Organizador {
   nombre       String
   createdAt    DateTime @default(now())
 
+  // Configuración de jornada y canchas a nivel club
+  cantidadCanchas  Int     @default(1)
+  viernesInicio    String? // "13:00" — null = no se juega viernes
+  viernesFin       String? // "21:00"
+  sabadoInicio     String? // "09:00" — null = no se juega sábado
+  sabadoFin        String? // "20:00"
+
   torneos Torneo[]
 }
 
@@ -46,19 +53,32 @@ model Pareja {
   jugador2  String
   orden     Int    @default(0)
 
-  torneo          Torneo       @relation(fields: [torneoId], references: [id], onDelete: Cascade)
-  zonaParejas     ZonaPareja[]
-  partidosComoP1  Partido[]    @relation("Pareja1")
-  partidosComoP2  Partido[]    @relation("Pareja2")
-  partidosGanados Partido[]    @relation("Ganador")
+  torneo             Torneo       @relation(fields: [torneoId], references: [id], onDelete: Cascade)
+  zonaParejas        ZonaPareja[]
+  partidosComoP1     Partido[]    @relation("Pareja1")
+  partidosComoP2     Partido[]    @relation("Pareja2")
+  partidosGanados    Partido[]    @relation("Ganador")
+  slotsSeleccionados SlotPareja[]
+}
+
+// Selección de slots de disponibilidad por pareja
+model SlotPareja {
+  id        String @id @default(uuid())
+  parejaId  String
+  slotId    String // "Viernes-13:00", "Sabado-09:00", etc.
+
+  pareja Pareja @relation(fields: [parejaId], references: [id], onDelete: Cascade)
+
+  @@unique([parejaId, slotId])
 }
 
 model Zona {
-  id         String @id @default(uuid())
-  torneoId   String
-  nombre     String // "Zona A", "Zona B", etc.
-  clasifican Int    @default(2)
-  formato    String @default("ROUND_ROBIN") // "ROUND_ROBIN" | "MINI_BRACKET"
+  id                   String  @id @default(uuid())
+  torneoId             String
+  nombre               String  // "Zona A", "Zona B", etc.
+  clasifican           Int     @default(2)
+  formato              String  @default("ROUND_ROBIN") // "ROUND_ROBIN" | "MINI_BRACKET"
+  requiereArmadoManual Boolean @default(false)
 
   torneo      Torneo       @relation(fields: [torneoId], references: [id], onDelete: Cascade)
   zonaParejas ZonaPareja[]
@@ -108,6 +128,8 @@ model Partido {
   ganadorId            String?   // Nullable hasta que se juegue
   estado               String    @default("PENDIENTE") // "PENDIENTE" | "EN_CURSO" | "FINALIZADO"
   fechaHora            DateTime?
+  canchaNumero         Int?
+  sinHorarioAsignado   Boolean   @default(false)
 
   torneo             Torneo            @relation(fields: [torneoId], references: [id], onDelete: Cascade)
   zona               Zona?             @relation(fields: [zonaId], references: [id], onDelete: SetNull)

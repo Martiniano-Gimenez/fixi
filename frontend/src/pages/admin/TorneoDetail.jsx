@@ -1,21 +1,25 @@
-import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import ZonaTable from '../../components/ZonaTable';
 import PartidoCard from '../../components/PartidoCard';
 import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import ZoneEditorModal from '../../components/ZoneEditorModal';
+import InicioDisponibilidadModal from '../../components/InicioDisponibilidadModal';
+import AsignarHorariosModal from '../../components/AsignarHorariosModal';
 
 export default function TorneoDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [torneo, setTorneo] = useState(null);
   const [zonas, setZonas] = useState([]);
   const [partidos, setPartidos] = useState([]);
   const [fasesEliminatorias, setFasesEliminatorias] = useState([]);
+  const [parejas, setParejas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   const [partidoSeleccionado, setPartidoSeleccionado] = useState(null);
   const [toast, setToast] = useState('');
   const [activeZonaId, setActiveZonaId] = useState(null);
@@ -23,14 +27,56 @@ export default function TorneoDetail() {
   const [limpiarModalOpen, setLimpiarModalOpen] = useState(false);
   const [limpiandoZonas, setLimpiandoZonas] = useState(false);
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
+  const [eliminarModalOpen, setEliminarModalOpen] = useState(false);
   const [iniciarModalOpen, setIniciarModalOpen] = useState(false);
-  
-  const [parejas, setParejas] = useState([]);
+
   const [zoneEditorOpen, setZoneEditorOpen] = useState(false);
+  const [inicioDisponibilidadOpen, setInicioDisponibilidadOpen] = useState(false);
+  const [asignarHorariosOpen, setAsignarHorariosOpen] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const tData = await api.get(`/torneos/${id}`);
+      setTorneo(tData);
+
+      // Siempre cargar parejas con su conteo de slots
+      const parejasBase = await api.get(`/torneos/${id}/parejas`);
+      const parejasConSlots = await Promise.all(
+        parejasBase.map(async (p) => {
+          try {
+            const slots = await api.get(`/parejas/${p.id}/disponibilidad`);
+            return { ...p, _cantSlots: slots.length };
+          } catch {
+            return { ...p, _cantSlots: 0 };
+          }
+        })
+      );
+      setParejas(parejasConSlots);
+
+      if (tData.estado !== 'BORRADOR') {
+        const [zData, pData, fData] = await Promise.all([
+          api.get(`/torneos/${id}/zonas`),
+          api.get(`/torneos/${id}/partidos`),
+          api.get(`/torneos/${id}/fases-eliminatorias`),
+        ]);
+        setZonas(zData);
+        setPartidos(pData);
+        setFasesEliminatorias(fData);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
     if (zonas.length > 0) {
-      const exists = zonas.find(z => z.id === activeZonaId);
+      const exists = zonas.find((z) => z.id === activeZonaId);
       if (!exists) {
         setActiveZonaId(zonas[0].id);
       }
@@ -38,34 +84,6 @@ export default function TorneoDetail() {
       setActiveZonaId(null);
     }
   }, [zonas, activeZonaId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [id]);
-
-  const fetchData = async () => {
-    try {
-      const tData = await api.get(`/torneos/${id}`);
-      setTorneo(tData);
-
-      if (tData.estado !== 'BORRADOR') {
-        const [zData, pData, fData, parejasData] = await Promise.all([
-          api.get(`/torneos/${id}/zonas`),
-          api.get(`/torneos/${id}/partidos`),
-          api.get(`/torneos/${id}/fases-eliminatorias`),
-          api.get(`/torneos/${id}/parejas`)
-        ]);
-        setZonas(zData);
-        setPartidos(pData);
-        setFasesEliminatorias(fData);
-        setParejas(parejasData);
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const executeIniciar = async () => {
     setIniciarModalOpen(false);
@@ -85,18 +103,30 @@ export default function TorneoDetail() {
       setLoading(true);
       await api.post(`/torneos/${id}/reiniciar`);
       fetchData();
-      setToast('🔄 Torneo reiniciado a Borrador');
+      setToast('✅ Torneo reiniciado a estado BORRADOR');
       setTimeout(() => setToast(''), 3000);
     } catch (err) {
       alert(err.message || 'Error al reiniciar torneo');
+    } finally {
       setLoading(false);
     }
   };
 
+  const executeEliminarTorneo = async () => {
+    setEliminarModalOpen(false);
+    try {
+      setLoading(true);
+      await api.delete(`/torneos/${id}`);
+      navigate('/admin');
+    } catch (err) {
+      alert(err.message || 'Error al eliminar torneo');
+      setLoading(false);
+    }
+  };
 
   const handleLimpiarZonas = async () => {
+    setLimpiandoZonas(true);
     try {
-      setLimpiandoZonas(true);
       await api.delete(`/torneos/${id}/zonas/resultados`);
       setLimpiarModalOpen(false);
       fetchData();
@@ -122,11 +152,14 @@ export default function TorneoDetail() {
     }
   };
 
-  const getPartidosZona = (zonaId) => partidos.filter(p => p.zonaId === zonaId);
+  const getPartidosZona = (zonaId) => partidos.filter((p) => p.zonaId === zonaId);
 
   if (loading) return <div className="loading">Cargando torneo...</div>;
   if (error) return <div className="error-message">{error}</div>;
   if (!torneo) return null;
+
+  const org = torneo.organizador || {};
+  const tieneJornada = org.viernesInicio || org.sabadoInicio;
 
   return (
     <div className="page">
@@ -138,70 +171,97 @@ export default function TorneoDetail() {
             <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               📡 En vivo: <a href={`/torneo/${torneo.slug}`} target="_blank" rel="noreferrer">/torneo/{torneo.slug}</a>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   navigator.clipboard.writeText(`${window.location.origin}/torneo/${torneo.slug}`);
                   const btn = e.target;
                   btn.textContent = '✅ Copiado!';
-                  setTimeout(() => btn.textContent = '📋 Copiar', 1500);
+                  setTimeout(() => (btn.textContent = '📋 Copiar'), 1500);
                 }}
-                style={{ fontSize: 'var(--font-size-xs)', padding: '0.15rem 0.5rem', background: 'var(--color-bg-input)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
-              >📋 Copiar</button>
+                style={{
+                  fontSize: 'var(--font-size-xs)',
+                  padding: '0.15rem 0.5rem',
+                  background: 'var(--color-bg-input)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                📋 Copiar
+              </button>
             </span>
           </div>
         </div>
+
         {torneo.estado === 'BORRADOR' ? (
-          <button onClick={() => setIniciarModalOpen(true)} className="btn-primary" style={{ width: 'auto', marginTop: 0 }}>
-            🚀 Iniciar Torneo
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+            <button onClick={() => setIniciarModalOpen(true)} className="btn-primary" style={{ width: 'auto', marginTop: 0 }}>
+              🚀 Iniciar Torneo (Sorteo)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const conSlots = parejas.filter((p) => (p._cantSlots || 0) > 0);
+                if (conSlots.length === 0 && parejas.length > 0) {
+                  alert('Ninguna pareja tiene horarios seleccionados. Cargalos desde "Gestionar Parejas" o usá el inicio por sorteo.');
+                  return;
+                }
+                setInicioDisponibilidadOpen(true);
+              }}
+              className="btn-secondary"
+              style={{ width: 'auto', marginTop: 0, fontSize: 'var(--font-size-sm)' }}
+            >
+              🗓️ Iniciar por disponibilidad
+            </button>
+          </div>
         ) : (
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <button 
-              onClick={() => setLimpiarModalOpen(true)} 
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setLimpiarModalOpen(true)}
               disabled={limpiandoZonas}
-              style={{ 
-                background: 'transparent', 
-                border: '1px solid rgba(239, 68, 68, 0.3)', 
+              style={{
+                background: 'transparent',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
                 color: 'var(--color-danger)',
                 padding: '0.5rem 1rem',
                 borderRadius: 'var(--radius-md)',
                 fontSize: 'var(--font-size-sm)',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
-                opacity: 0.8
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = 0.8; e.currentTarget.style.background = 'transparent' }}
             >
               {limpiandoZonas ? 'Limpiando...' : '🗑️ Limpiar Zonas'}
             </button>
-            <button 
-              onClick={() => setReiniciarModalOpen(true)} 
-              style={{ 
-                background: 'transparent', 
-                border: '1px solid rgba(239, 68, 68, 0.3)', 
+            <button
+              onClick={() => setReiniciarModalOpen(true)}
+              style={{
+                background: 'transparent',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
                 color: 'var(--color-danger)',
                 padding: '0.5rem 1rem',
                 borderRadius: 'var(--radius-md)',
                 fontSize: 'var(--font-size-sm)',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
-                opacity: 0.8
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = 0.8; e.currentTarget.style.background = 'transparent' }}
               title="Borra TODO el fixture y resultados, y vuelve el torneo a estado Borrador"
             >
               🔄 Reiniciar Torneo
             </button>
-            
-            {/* Accion Principal - Más prominente a la derecha */}
-            <button 
+            <button
               onClick={() => setZoneEditorOpen(true)}
               className="btn-primary"
-              style={{ width: 'auto', marginTop: 0, padding: '0.5rem 1.5rem', marginLeft: '0.5rem' }}
+              style={{ width: 'auto', marginTop: 0, padding: '0.5rem 1.25rem' }}
             >
               ⚙️ Editar Zonas
+            </button>
+            <button
+              onClick={() => setAsignarHorariosOpen(true)}
+              className="btn-secondary"
+              style={{ width: 'auto', marginTop: 0, padding: '0.5rem 1rem', fontSize: 'var(--font-size-sm)' }}
+              title="Asignar horarios automáticamente por disponibilidad respetando canchas del club"
+            >
+              ⏰ Asignar horarios
             </button>
           </div>
         )}
@@ -212,26 +272,98 @@ export default function TorneoDetail() {
           <div className="torneo-card">
             <h3>Menú</h3>
             <ul style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <li><Link to={`/admin/torneos/${id}/eliminatoria`}>Fase Eliminatoria {torneo.estado === 'BORRADOR' && '(Pronto)'}</Link></li>
-              <li><Link to={`/admin/torneos/${id}/parejas`}>Gestionar Parejas ({torneo.parejas?.length || 0})</Link></li>
+              <li>
+                <Link to={`/admin/torneos/${id}/eliminatoria`}>
+                  Fase Eliminatoria {torneo.estado === 'BORRADOR' && '(Pronto)'}
+                </Link>
+              </li>
+              <li>
+                <Link to={`/admin/torneos/${id}/parejas`}>
+                  Gestionar Parejas ({parejas.length})
+                </Link>
+              </li>
+              <li>
+                <Link to="/admin/club">
+                  🏟️ Configuración del Club
+                </Link>
+              </li>
+              <li style={{ marginTop: '0.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setEliminarModalOpen(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-danger)',
+                    padding: 0,
+                    fontSize: 'var(--font-size-sm)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                  }}
+                >
+                  🗑️ Eliminar Torneo
+                </button>
+              </li>
             </ul>
           </div>
         </div>
 
         <div className="main-content">
           {torneo.estado === 'BORRADOR' ? (
-            <div className="torneo-card">
-              <h2>Torneo en Preparación</h2>
-              <p style={{ marginTop: '1rem', color: 'var(--color-text-secondary)' }}>
-                Actualmente tenés <strong>{torneo.parejas?.length || 0}</strong> parejas inscritas.<br/><br/>
-                Andá a "Gestionar Parejas" para agregar los equipos. Una vez que estén todos, hacé clic en "Iniciar Torneo" arriba a la derecha. Esto sorteará las zonas de 3 (o 2/4) parejas y armará el fixture automáticamente.
-              </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Card de información */}
+              <div className="torneo-card">
+                <h2>Torneo en Preparación</h2>
+                <p style={{ marginTop: '0.75rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                  Actualmente tenés <strong>{parejas.length}</strong> parejas inscritas en esta categoría.
+                </p>
+              </div>
+
+              {/* Card informativa de Canchas y Horarios del Club (Solo lectura) */}
+              <div className="torneo-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div>
+                    <h3 style={{ margin: 0 }}>🏟️ Recursos y Horarios del Club</h3>
+                    <p style={{ marginTop: '0.25rem', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)' }}>
+                      Configuración general compartida por todas las categorías del club.
+                    </p>
+                  </div>
+                  <Link to="/admin/club" className="btn-secondary" style={{ fontSize: 'var(--font-size-xs)', padding: '0.35rem 0.75rem' }}>
+                    ⚙️ Configurar Club
+                  </Link>
+                </div>
+
+                <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                  <div className="info-row">
+                    <span>Canchas totales del club</span>
+                    <strong>{org.cantidadCanchas || 1} cancha{org.cantidadCanchas === 1 ? '' : 's'}</strong>
+                  </div>
+
+                  <div className="info-row">
+                    <span>Jornada Viernes</span>
+                    <strong>{org.viernesInicio && org.viernesFin ? `${org.viernesInicio} - ${org.viernesFin}` : 'No configurado'}</strong>
+                  </div>
+
+                  <div className="info-row">
+                    <span>Jornada Sábado</span>
+                    <strong>{org.sabadoInicio && org.sabadoFin ? `${org.sabadoInicio} - ${org.sabadoFin}` : 'No configurado'}</strong>
+                  </div>
+                </div>
+
+                {!tieneJornada && (
+                  <div className="alert-warning" style={{ marginTop: '1rem', fontSize: 'var(--font-size-xs)' }}>
+                    ⚠️ Todavía no configuraste los horarios de apertura del club. Andá a <Link to="/admin/club" style={{ color: 'inherit', fontWeight: 'bold', textDecoration: 'underline' }}>Configuración del Club</Link> para definirlos y generar la grilla de turnos.
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div>
               {zonas.length > 1 && (
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-                  {zonas.map(z => (
+                  {zonas.map((z) => (
                     <button
                       key={z.id}
                       onClick={() => setActiveZonaId(z.id)}
@@ -242,28 +374,30 @@ export default function TorneoDetail() {
                         color: activeZonaId === z.id ? 'white' : 'var(--color-text-secondary)',
                         fontWeight: activeZonaId === z.id ? 'bold' : 'normal',
                         border: '1px solid',
-                        borderColor: activeZonaId === z.id ? 'var(--color-primary)' : 'var(--color-border)',
-                        transition: 'all var(--transition-fast)'
+                        borderColor: activeZonaId === z.id ? 'var(--color-primary)' : z.requiereArmadoManual ? 'var(--color-warning)' : 'var(--color-border)',
+                        transition: 'all var(--transition-fast)',
                       }}
                     >
                       {z.nombre}
+                      {z.requiereArmadoManual ? ' ⚠️' : ''}
                     </button>
                   ))}
                 </div>
               )}
-              
-              {zonas.filter(z => z.id === (activeZonaId || zonas[0]?.id)).map(zona => (
-                <div key={zona.id} style={{ marginBottom: '3rem' }}>
-                  <>
+
+              {zonas
+                .filter((z) => z.id === (activeZonaId || zonas[0]?.id))
+                .map((zona) => (
+                  <div key={zona.id} style={{ marginBottom: '3rem' }}>
                     <ZonaTable zona={zona} />
                     <div style={{ marginTop: '1rem' }}>
                       <h4 style={{ marginBottom: '1rem', color: 'var(--color-text-secondary)' }}>Partidos</h4>
                       <div className="partidos-grid">
-                        {getPartidosZona(zona.id).map(p => {
-                          const bracketBloqueaEdicion = fasesEliminatorias.some(f => 
-                            f.partidos.some(part => part.pareja1Id !== null || part.pareja2Id !== null)
+                        {getPartidosZona(zona.id).map((p) => {
+                          const bracketBloqueaEdicion = fasesEliminatorias.some((f) =>
+                            f.partidos.some((part) => part.pareja1Id !== null || part.pareja2Id !== null)
                           );
-                          
+
                           let partidoLabel = '';
                           if (zona.formato === 'MINI_BRACKET') {
                             if (p.posicionEnRonda === 3) partidoLabel = 'Ganador vs Ganador';
@@ -271,61 +405,61 @@ export default function TorneoDetail() {
                           }
 
                           return (
-                          <div 
-                            key={p.id} 
-                            style={{ 
-                              opacity: bracketBloqueaEdicion ? 0.7 : 1, 
-                              cursor: bracketBloqueaEdicion ? 'not-allowed' : 'pointer',
-                              transition: 'opacity 0.2s',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              justifyContent: 'flex-end',
-                              gap: '0.4rem'
-                            }}
-
-                            title={bracketBloqueaEdicion ? 'Edición bloqueada: La fase eliminatoria ya está generada con clasificados.' : 'Clic para cargar resultado'}
-                            onClick={(e) => {
-                              if (bracketBloqueaEdicion) {
-                                e.stopPropagation();
-                                setAlertModalOpen(true);
-                                return;
-                              }
-                            }}
-                          >
-                            {partidoLabel && (
-                              <div style={{
-                                fontSize: 'var(--font-size-xs)',
-                                fontWeight: 'bold',
-                                color: 'var(--color-primary)',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.5px'
-                              }}>
-                                {partidoLabel}
-                              </div>
-                            )}
-                            <PartidoCard 
-                              partido={p} 
-                              onClick={() => {
-                                if (!bracketBloqueaEdicion) setPartidoSeleccionado(p);
-                              }} 
-                              onUpdateFechaHora={handleUpdateFechaHora}
-                            />
-                          </div>
+                            <div
+                              key={p.id}
+                              style={{
+                                opacity: bracketBloqueaEdicion ? 0.7 : 1,
+                                cursor: bracketBloqueaEdicion ? 'not-allowed' : 'pointer',
+                                transition: 'opacity 0.2s',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'flex-end',
+                                gap: '0.4rem',
+                              }}
+                              title={bracketBloqueaEdicion ? 'Edición bloqueada: La fase eliminatoria ya está generada.' : 'Clic para cargar resultado'}
+                              onClick={(e) => {
+                                if (bracketBloqueaEdicion) {
+                                  e.stopPropagation();
+                                  setAlertModalOpen(true);
+                                  return;
+                                }
+                              }}
+                            >
+                              {partidoLabel && (
+                                <div
+                                  style={{
+                                    fontSize: 'var(--font-size-xs)',
+                                    fontWeight: 'bold',
+                                    color: 'var(--color-primary)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px',
+                                  }}
+                                >
+                                  {partidoLabel}
+                                </div>
+                              )}
+                              <PartidoCard
+                                partido={p}
+                                onClick={() => {
+                                  if (!bracketBloqueaEdicion) setPartidoSeleccionado(p);
+                                }}
+                                onUpdateFechaHora={handleUpdateFechaHora}
+                              />
+                            </div>
                           );
                         })}
                       </div>
                     </div>
-                  </>
-                </div>
-              ))}
+                  </div>
+                ))}
             </div>
           )}
         </div>
       </div>
 
       {partidoSeleccionado && (
-        <ResultadoModal 
-          partido={partidoSeleccionado} 
+        <ResultadoModal
+          partido={partidoSeleccionado}
           onClose={() => setPartidoSeleccionado(null)}
           onSaved={() => {
             setPartidoSeleccionado(null);
@@ -338,23 +472,21 @@ export default function TorneoDetail() {
 
       {toast && (
         <div className="toast-container">
-          <div className="toast-message">
-            {toast}
-          </div>
+          <div className="toast-message">{toast}</div>
         </div>
       )}
 
       <ConfirmModal
         isOpen={alertModalOpen}
         title="⚠️ Edición Bloqueada"
-        message="La fase eliminatoria ya fue generada con los clasificados. Para editar la zona, primero debes borrar el bracket eliminatorio o re-sortearlo."
+        message="La fase eliminatoria ya fue generada con los clasificados. Para editar la zona, primero debés borrar el bracket eliminatorio o re-sortearlo."
         confirmText="Entendido"
         onConfirm={() => setAlertModalOpen(false)}
         isAlert={true}
       />
 
       {limpiarModalOpen && (
-        <ConfirmModal 
+        <ConfirmModal
           isOpen={limpiarModalOpen}
           title="⚠️ Limpiar Zonas"
           message="¿Estás seguro de que querés borrar todos los resultados cargados en las zonas? Los partidos volverán a estado Pendiente."
@@ -369,7 +501,7 @@ export default function TorneoDetail() {
         <ConfirmModal
           isOpen={reiniciarModalOpen}
           title="🚨 Reiniciar Torneo"
-          message="¿Estás completamente seguro de que querés REINICIAR el torneo? Esto borrará de forma permanente TODAS las zonas, TODOS los partidos, TODOS los resultados y TODO el progreso de las fases eliminatorias. El torneo volverá al estado BORRADOR para que puedas agregar o quitar parejas y volver a sortear todo desde cero."
+          message="¿Estás completamente seguro de que querés REINICIAR el torneo? Esto borrará de forma permanente TODAS las zonas, partidos, resultados y fases eliminatorias. El torneo volverá al estado BORRADOR."
           onConfirm={executeReiniciar}
           onCancel={() => setReiniciarModalOpen(false)}
           confirmText="Sí, reiniciar torneo"
@@ -398,6 +530,45 @@ export default function TorneoDetail() {
           onConfirm={executeIniciar}
           onCancel={() => setIniciarModalOpen(false)}
           confirmText="Sí, iniciar torneo"
+        />
+      )}
+
+      {inicioDisponibilidadOpen && (
+        <InicioDisponibilidadModal
+          torneoId={torneo.id}
+          parejas={parejas}
+          onClose={() => setInicioDisponibilidadOpen(false)}
+          onSuccess={() => {
+            setInicioDisponibilidadOpen(false);
+            fetchData();
+            setToast('✅ Torneo iniciado por disponibilidad horaria');
+            setTimeout(() => setToast(''), 4000);
+          }}
+        />
+      )}
+
+      {asignarHorariosOpen && (
+        <AsignarHorariosModal
+          torneoId={torneo.id}
+          onClose={() => setAsignarHorariosOpen(false)}
+          onSuccess={() => {
+            setAsignarHorariosOpen(false);
+            fetchData();
+            setToast('✅ Horarios asignados automáticamente');
+            setTimeout(() => setToast(''), 4000);
+          }}
+        />
+      )}
+
+      {eliminarModalOpen && (
+        <ConfirmModal
+          isOpen={true}
+          title="🗑️ Eliminar Torneo"
+          message={`¿Estás seguro de que querés eliminar el torneo "${torneo.nombre}"? Esta acción borrará todas sus parejas, zonas, partidos y resultados permanentemente.`}
+          onConfirm={executeEliminarTorneo}
+          onCancel={() => setEliminarModalOpen(false)}
+          confirmText="Sí, eliminar torneo"
+          isDanger={true}
         />
       )}
     </div>
