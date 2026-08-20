@@ -2,31 +2,39 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
+import { Award, UserPlus } from 'lucide-react';
 
 export default function Register() {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     try {
       const data = await api.post('/auth/register', { nombre, email, password });
       login(data.token);
       navigate('/admin');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>🏸 Pádel Torneos</h1>
+        <h1 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+          <Award size={26} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
+          Pádel Torneos
+        </h1>
         <h2>Registrarse</h2>
         
         {error && <div className="error-message">{error}</div>}
@@ -62,7 +70,15 @@ export default function Register() {
               required 
             />
           </div>
-          <button type="submit" className="btn-primary">Registrarme</button>
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={loading}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+          >
+            <UserPlus size={16} strokeWidth={2} />
+            {loading ? 'Registrando...' : 'Registrarme'}
+          </button>
         </form>
 
         <p className="auth-links">
