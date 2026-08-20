@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { Calendar, Moon, AlertTriangle } from 'lucide-react';
 
 function horaAMinutos(hora) {
   if (!hora) return 0;
@@ -89,9 +90,12 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
       {error && <div className="error-message" style={{ marginBottom: '0.75rem' }}>{error}</div>}
 
       {sinSlotsConfigurados ? (
-        <div className="alert-warning" style={{ margin: '0.5rem 0' }}>
-          ⚠️ No hay horarios configurados para este torneo. El organizador debe definir la hora de inicio y fin de
-          Viernes/Sábado en la configuración del torneo.
+        <div className="alert-warning" style={{ margin: '0.5rem 0', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+          <AlertTriangle size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            No hay horarios configurados para este torneo. El organizador debe definir la hora de inicio y fin de
+            Viernes/Sábado en la configuración del club.
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -103,7 +107,10 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
           {grilla.viernes.length > 0 && (
             <div className="dia-slots-group">
               <div className="dia-slots-header">
-                <span className="dia-titulo">🗓️ Viernes ({grilla.viernes.length} turnos)</span>
+                <span className="dia-titulo" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Calendar size={13} strokeWidth={2} />
+                  Viernes ({grilla.viernes.length} turnos)
+                </span>
                 <button
                   type="button"
                   className="btn-link-action"
@@ -127,8 +134,10 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
                       onClick={() => toggleSlot(slotId)}
                       disabled={saving}
                       title={esTrasnoche ? `${hora} (trasnoche / madrugada)` : `${hora}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}
                     >
-                      {hora} {esTrasnoche && <span style={{ fontSize: '10px' }}>🌙</span>}
+                      {hora}
+                      {esTrasnoche && <Moon size={10} strokeWidth={2} style={{ color: 'var(--color-warning)' }} />}
                     </button>
                   );
                 })}
@@ -140,7 +149,10 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
           {grilla.sabado.length > 0 && (
             <div className="dia-slots-group">
               <div className="dia-slots-header">
-                <span className="dia-titulo">🗓️ Sábado ({grilla.sabado.length} turnos)</span>
+                <span className="dia-titulo" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Calendar size={13} strokeWidth={2} />
+                  Sábado ({grilla.sabado.length} turnos)
+                </span>
                 <button
                   type="button"
                   className="btn-link-action"
@@ -164,8 +176,10 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
                       onClick={() => toggleSlot(slotId)}
                       disabled={saving}
                       title={esTrasnoche ? `${hora} (trasnoche / madrugada)` : `${hora}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}
                     >
-                      {hora} {esTrasnoche && <span style={{ fontSize: '10px' }}>🌙</span>}
+                      {hora}
+                      {esTrasnoche && <Moon size={10} strokeWidth={2} style={{ color: 'var(--color-warning)' }} />}
                     </button>
                   );
                 })}
