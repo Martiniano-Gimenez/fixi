@@ -104,7 +104,7 @@ export default function TorneoDetail() {
       setLoading(true);
       await api.post(`/torneos/${id}/reiniciar`);
       fetchData();
-      setToast('✅ Torneo reiniciado a estado BORRADOR');
+      setToast('Torneo reiniciado a estado BORRADOR');
       setTimeout(() => setToast(''), 3000);
     } catch (err) {
       alert(err.message || 'Error al reiniciar torneo');
@@ -131,7 +131,7 @@ export default function TorneoDetail() {
       await api.delete(`/torneos/${id}/zonas/resultados`);
       setLimpiarModalOpen(false);
       fetchData();
-      setToast('✅ Resultados de zonas limpiados');
+      setToast('Resultados borrados con éxito');
       setTimeout(() => setToast(''), 3000);
     } catch (err) {
       alert(err.message || 'Error al limpiar zonas');
@@ -254,7 +254,7 @@ export default function TorneoDetail() {
               }}
             >
               <Trash2 size={14} strokeWidth={2} />
-              {limpiandoZonas ? 'Limpiando...' : 'Limpiar Zonas'}
+              {limpiandoZonas ? 'Borrando...' : 'Borrar Resultados'}
             </button>
             <button
               onClick={() => setReiniciarModalOpen(true)}
@@ -484,7 +484,7 @@ export default function TorneoDetail() {
           onSaved={() => {
             setPartidoSeleccionado(null);
             fetchData();
-            setToast('✅ Resultado guardado');
+            setToast('Resultado guardado');
             setTimeout(() => setToast(''), 3000);
           }}
         />
@@ -498,7 +498,7 @@ export default function TorneoDetail() {
 
       <ConfirmModal
         isOpen={alertModalOpen}
-        title="⚠️ Edición Bloqueada"
+        title="Edición Bloqueada"
         message="La fase eliminatoria ya fue generada con los clasificados. Para editar la zona, primero debés borrar el bracket eliminatorio o re-sortearlo."
         confirmText="Entendido"
         onConfirm={() => setAlertModalOpen(false)}
@@ -508,11 +508,11 @@ export default function TorneoDetail() {
       {limpiarModalOpen && (
         <ConfirmModal
           isOpen={limpiarModalOpen}
-          title="⚠️ Limpiar Zonas"
+          title="Borrar Resultados"
           message="¿Estás seguro de que querés borrar todos los resultados cargados en las zonas? Los partidos volverán a estado Pendiente."
           onConfirm={handleLimpiarZonas}
           onCancel={() => setLimpiarModalOpen(false)}
-          confirmText="Sí, limpiar resultados"
+          confirmText="Sí, borrar resultados"
           isDanger={true}
         />
       )}
@@ -520,7 +520,7 @@ export default function TorneoDetail() {
       {reiniciarModalOpen && (
         <ConfirmModal
           isOpen={reiniciarModalOpen}
-          title="🚨 Reiniciar Torneo"
+          title="Reiniciar Torneo"
           message="¿Estás completamente seguro de que querés REINICIAR el torneo? Esto borrará de forma permanente TODAS las zonas, partidos, resultados y fases eliminatorias. El torneo volverá al estado BORRADOR."
           onConfirm={executeReiniciar}
           onCancel={() => setReiniciarModalOpen(false)}
