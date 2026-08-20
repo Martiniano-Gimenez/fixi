@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
+import { Plus, Play, Trash2, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export default function TorneosList() {
   const [torneos, setTorneos] = useState([]);
@@ -77,13 +78,19 @@ export default function TorneosList() {
               type="button"
               className="btn-secondary"
               onClick={() => setIniciarTodosModal(true)}
-              style={{ width: 'auto' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
             >
+              <Play size={14} strokeWidth={2} />
               Iniciar todos los torneos ({torneosBorrador.length})
             </button>
           )}
-          <Link to="/admin/torneos/nuevo" className="btn-primary" style={{ width: 'auto' }}>
-            + Crear Torneo
+          <Link
+            to="/admin/torneos/nuevo"
+            className="btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+          >
+            <Plus size={16} strokeWidth={2} />
+            Crear Torneo
           </Link>
         </div>
       </div>
@@ -112,19 +119,26 @@ export default function TorneosList() {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: 'var(--color-danger)',
-                      fontSize: '1rem',
+                      color: 'var(--color-text-muted)',
                       cursor: 'pointer',
-                      padding: '0.2rem 0.4rem',
+                      padding: '0.25rem',
                       borderRadius: 'var(--radius-sm)',
-                      opacity: 0.7,
-                      transition: 'opacity 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-                    onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.7')}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--color-danger)';
+                      e.currentTarget.style.background = 'var(--color-danger-bg)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--color-text-muted)';
+                      e.currentTarget.style.background = 'none';
+                    }}
                     title="Eliminar torneo"
                   >
-                    🗑️
+                    <Trash2 size={16} strokeWidth={2} />
                   </button>
                 </div>
                 <p style={{ marginTop: '0.5rem' }}>
@@ -143,7 +157,7 @@ export default function TorneosList() {
       {torneoAEliminar && (
         <ConfirmModal
           isOpen={true}
-          title="🗑️ Eliminar Torneo"
+          title="Eliminar Torneo"
           message={`¿Estás seguro de que querés eliminar el torneo "${torneoAEliminar.nombre}"? Esta acción borrará todas sus parejas, zonas, partidos y resultados permanentemente.`}
           onConfirm={executeDelete}
           onCancel={() => setTorneoAEliminar(null)}
@@ -169,8 +183,11 @@ export default function TorneosList() {
               ))}
             </ul>
 
-            <div className="alert-warning" style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-xs)' }}>
-              ℹ️ <strong>Prioridad inteligente:</strong> El sistema priorizará a los torneos y parejas con menor disponibilidad horaria para acomodarlos primero en las canchas del club, minimizando ajustes manuales.
+            <div className="alert-warning" style={{ marginBottom: '1.5rem', fontSize: 'var(--font-size-xs)', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+              <Info size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong>Prioridad inteligente:</strong> El sistema priorizará a los torneos y parejas con menor disponibilidad horaria para acomodarlos primero en las canchas del club, minimizando ajustes manuales.
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -222,12 +239,12 @@ export default function TorneosList() {
                     </span>
                   </div>
                   <div style={{ fontSize: 'var(--font-size-xs)', display: 'flex', gap: '1rem' }}>
-                    <span style={{ color: 'var(--color-success)' }}>
-                      ✅ {item.asignados} con horario
+                    <span style={{ color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <CheckCircle2 size={13} strokeWidth={2} /> {item.asignados} con horario
                     </span>
                     {item.sinHorario > 0 ? (
-                      <span style={{ color: 'var(--color-warning)' }}>
-                        ⚠️ {item.sinHorario} sin horario
+                      <span style={{ color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <AlertTriangle size={13} strokeWidth={2} /> {item.sinHorario} sin horario
                       </span>
                     ) : (
                       <span style={{ color: 'var(--color-text-muted)' }}>
