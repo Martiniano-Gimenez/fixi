@@ -40,7 +40,8 @@ organizadores que hoy llevan todo en papel.
 - Gestión de Club / Organizador (`/admin/club`): edición de canchas totales y horarios de apertura con advertencia y modal de impacto ante cambios que invaliden turnos.
 - Carga de disponibilidad por pareja con chips interactivos multi-select por día.
 - Generación de zonas por sorteo aleatorio (Fisher-Yates) o por compatibilidad horaria (greedy con backtracking acotado).
-- Asignación automática inteligente de horarios y canchas por torneo y masiva ("Iniciar todos los torneos").
+- Asignación automática inteligente de horarios y canchas por torneo y masiva ("Iniciar todos los torneos") con pre-verificación de compatibilidad (dry-run transaccional, rollback y cache de plan determinista con invalidación por fingerprinting).
+- Bloqueo de inicio ante partidos sin turno compatible o zonas manuales no resueltas.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.
 - Fase eliminatoria con bracket SVG dinámico, manejo de BYEs, edición manual de cruces y propagación dinámica de orígenes ("1°A", "2°B").

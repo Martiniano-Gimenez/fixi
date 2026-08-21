@@ -638,6 +638,15 @@ ul, ol {
   }
 }
 
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* --- Bracket Tree Connecting Lines (drawn via SVG overlay in JS) ------ */
 .bracket-matches-column {
   display: flex;

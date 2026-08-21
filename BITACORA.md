@@ -215,9 +215,25 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+## 11. Validación Pre-Inicio: Dry-Run Transaccional y Cache Determinista con Fingerprinting
+
+### Bloqueo Estricto ante Incompatibilidades y Prevención de Partidos Flotantes
+- **Problema o necesidad que motivó el trabajo:** Al iniciar múltiples categorías simultáneamente, si alguna pareja no contaba con horarios compatibles con sus rivales o si la capacidad de canchas saturaba los turnos, el sistema permitía iniciar de todos modos y reportaba los partidos "sin horario" post-facto. Esto generaba torneos activos con partidos flotantes que requerían solución manual compleja y sin un bloqueo preventivo claro.
+- **Qué decidí y por qué:** 
+  1. Diseñé un endpoint de pre-verificación `POST /api/organizador/pre-check-inicio` que ejecuta el pipeline real (`iniciarTorneo` / `iniciarTorneoConDisponibilidad` y `asignarHorariosAutomatico` con heurística MCF) dentro de una transacción `prisma.$transaction` que **siempre hace rollback**.
+  2. Si el dry-run detecta cualquier partido con `sinHorarioAsignado: true` o zonas con `requiereArmadoManual: true`, el backend devuelve un reporte detallado con los cruces conflictivos y el frontend bloquea la confirmación, mostrando un modal explicativo sin botón de forzar.
+  3. Para resolver el no-determinismo del sorteo aleatorio (Fisher-Yates) entre el pre-check y la confirmación, serialicé el plan completo validado en memoria (`planesCache`) con un identificador UUID (`planId`) y TTL de 5 minutos, guardando solo referencias lógicas (evitando IDs de autoincremento/UUIDs de la transacción revertida).
+  4. Para prevenir que el plan se aplique si la configuración del club o la disponibilidad de las parejas fue modificada entre el pre-check y la confirmación, implementé un **fingerprint reactivo** (`JSON.stringify([clubConfig, ...parejasSlots])`). Si el fingerprint no coincide al momento de confirmar, se rechaza la operación con código HTTP 409 solicitando una nueva verificación.
+- **Alternativas que consideré y descarté:** 
+  - *Chequeo combinatorio estático de todos los pares posibles:* Descartado por generar falsos positivos (parejas que nunca se cruzaban en el sorteo) y duplicar la lógica del scheduler real.
+  - *Seedear `Math.random()`:* Descartado por complejidad innecesaria en Node.js; el snapshot lógico en memoria garantiza 100% de reproducibilidad.
+- **Resultado final:** Rama `feature/pre-check-inicio` con validación 100% robusta, prevención de partidos sin horario y feedback claro al organizador antes de confirmar.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 7 sesiones de trabajo, sumando un aproximado total de entre 16 y 19 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 8 sesiones de trabajo, sumando un aproximado total de entre 18 y 21 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -228,6 +244,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 7 se
 | **5** | ~2.5 a 3 horas | Re-diseño Global UI (Dark Premium Deportivo), Fixes de UX (Jerarquías), Tablas Responsivas, State Management. |
 | **6** | ~3.5 a 4 horas | Módulo de disponibilidad horaria: slots discretos (75m), trasnoche, compatibilidad por intersección de conjuntos, centralización de canchas/jornada en Club y scheduler cross-torneo. |
 | **7** | ~2.5 a 3 horas | Inicio masivo con prioridad *"Most Constrained First"*, eliminación en cascada, rediseño de navegación con `useLocation`, modales con blur y migración total a `lucide-react`. |
-| **Total** | **~16 a 19 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling, multitorneo y diseño UI/UX premium. |
+| **8** | ~1.5 a 2 horas | Validación pre-inicio simultáneo: pipeline en dry-run con rollback transaccional, plan cache determinista, fingerprinting de invalidación reactiva y modal de bloqueo. |
+| **Total** | **~18 a 21 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling, multitorneo, validaciones transaccionales y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

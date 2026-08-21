@@ -33,8 +33,9 @@ async function getTorneos(organizadorId) {
   });
 }
 
-async function getTorneoById(organizadorId, torneoId) {
-  const torneo = await prisma.torneo.findUnique({
+async function getTorneoById(organizadorId, torneoId, tx = null) {
+  const db = tx || prisma;
+  const torneo = await db.torneo.findUnique({
     where: { id: torneoId },
     include: {
       parejas: { orderBy: { orden: 'asc' } },

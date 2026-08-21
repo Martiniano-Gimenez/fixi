@@ -87,8 +87,9 @@ async function generarPartidosZonaHelper(tx, torneoId, zonaId, formato, size, pa
 /**
  * Lógica de inicio de torneo y generación de zonas (Sorteo aleatorio)
  */
-async function iniciarTorneo(organizadorId, torneoId) {
-  const torneo = await getTorneoById(organizadorId, torneoId);
+async function iniciarTorneo(organizadorId, torneoId, externalTx = null) {
+  const db = externalTx || prisma;
+  const torneo = await getTorneoById(organizadorId, torneoId, db);
 
   if (torneo.estado !== 'BORRADOR') {
     const error = new Error('El torneo ya fue iniciado.');
@@ -96,7 +97,7 @@ async function iniciarTorneo(organizadorId, torneoId) {
     throw error;
   }
 
-  const parejas = await prisma.pareja.findMany({ where: { torneoId } });
+  const parejas = await db.pareja.findMany({ where: { torneoId } });
   const numParejas = parejas.length;
 
   if (numParejas < 2) {
@@ -110,7 +111,7 @@ async function iniciarTorneo(organizadorId, torneoId) {
 
   const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-  await prisma.$transaction(async (tx) => {
+  const runOperation = async (tx) => {
     let parejaIndex = 0;
 
     for (let i = 0; i < configuracionZonas.length; i++) {
@@ -147,7 +148,13 @@ async function iniciarTorneo(organizadorId, torneoId) {
       where: { id: torneoId },
       data: { estado: 'EN_CURSO' },
     });
-  });
+  };
+
+  if (externalTx) {
+    await runOperation(externalTx);
+  } else {
+    await prisma.$transaction(runOperation);
+  }
 
   return { message: 'Torneo iniciado y zonas generadas.' };
 }
@@ -258,8 +265,9 @@ function intentarArmarGrupo(candidatos, size, asignado, matriz) {
 /**
  * Iniciar torneo agrupando zonas por disponibilidad horaria
  */
-async function iniciarTorneoConDisponibilidad(organizadorId, torneoId) {
-  const torneo = await getTorneoById(organizadorId, torneoId);
+async function iniciarTorneoConDisponibilidad(organizadorId, torneoId, externalTx = null) {
+  const db = externalTx || prisma;
+  const torneo = await getTorneoById(organizadorId, torneoId, db);
 
   if (torneo.estado !== 'BORRADOR') {
     const error = new Error('El torneo ya fue iniciado.');
@@ -267,7 +275,7 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId) {
     throw error;
   }
 
-  const parejas = await prisma.pareja.findMany({
+  const parejas = await db.pareja.findMany({
     where: { torneoId },
     include: { slotsSeleccionados: true },
   });
@@ -307,7 +315,7 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId) {
   const resumenZonasCreadas = [];
   const resumenZonasManual = [];
 
-  await prisma.$transaction(async (tx) => {
+  const runOperation = async (tx) => {
     let letraIndex = 0;
 
     for (const grupo of grupos) {
@@ -366,7 +374,13 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId) {
       where: { id: torneoId },
       data: { estado: 'EN_CURSO' },
     });
-  });
+  };
+
+  if (externalTx) {
+    await runOperation(externalTx);
+  } else {
+    await prisma.$transaction(runOperation);
+  }
 
   return {
     message: 'Torneo iniciado por disponibilidad horaria.',
@@ -397,8 +411,9 @@ function proximaFechaPorDia(dia, fechaBase = new Date()) {
  * Asigna automáticamente horarios (slots) y canchas a los partidos de zonas,
  * respetando las canchas compartidas de TODO el club (cross-tournament).
  */
-async function asignarHorariosAutomatico(organizadorId, torneoId) {
-  const torneo = await getTorneoById(organizadorId, torneoId);
+async function asignarHorariosAutomatico(organizadorId, torneoId, externalTx = null) {
+  const db = externalTx || prisma;
+  const torneo = await getTorneoById(organizadorId, torneoId, db);
 
   if (torneo.estado === 'BORRADOR') {
     const error = new Error('El torneo está en borrador. Iniciá el torneo primero.');
@@ -406,14 +421,14 @@ async function asignarHorariosAutomatico(organizadorId, torneoId) {
     throw error;
   }
 
-  const organizador = await prisma.organizador.findUnique({
+  const organizador = await db.organizador.findUnique({
     where: { id: organizadorId },
   });
 
   const cantidadCanchas = organizador?.cantidadCanchas || 1;
 
   // 1. Cargar partidos ya programados de OTROS torneos del mismo organizador (para evitar colisión de canchas)
-  const partidosOtrosTorneos = await prisma.partido.findMany({
+  const partidosOtrosTorneos = await db.partido.findMany({
     where: {
       torneo: { organizadorId },
       torneoId: { not: torneoId },
@@ -424,7 +439,7 @@ async function asignarHorariosAutomatico(organizadorId, torneoId) {
   });
 
   // 2. Cargar partidos pendientes de zonas del torneo actual
-  const partidos = await prisma.partido.findMany({
+  const partidos = await db.partido.findMany({
     where: {
       torneoId,
       zonaId: { not: null },
@@ -541,18 +556,31 @@ async function asignarHorariosAutomatico(organizadorId, torneoId) {
   }
 
   // Persistir en base de datos
-  await prisma.$transaction(
-    updates.map((u) =>
-      prisma.partido.update({
+  if (externalTx) {
+    for (const u of updates) {
+      await externalTx.partido.update({
         where: { id: u.id },
         data: {
           fechaHora: u.fechaHora,
           canchaNumero: u.canchaNumero,
           sinHorarioAsignado: u.sinHorarioAsignado,
         },
-      })
-    )
-  );
+      });
+    }
+  } else {
+    await prisma.$transaction(
+      updates.map((u) =>
+        prisma.partido.update({
+          where: { id: u.id },
+          data: {
+            fechaHora: u.fechaHora,
+            canchaNumero: u.canchaNumero,
+            sinHorarioAsignado: u.sinHorarioAsignado,
+          },
+        })
+      )
+    );
+  }
 
   const asignados = updates.filter((u) => !u.sinHorarioAsignado).length;
   const sinHorario = updates.filter((u) => u.sinHorarioAsignado).length;
