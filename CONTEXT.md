@@ -32,9 +32,9 @@ organizadores que hoy llevan todo en papel.
 - **Reglas de Pádel en Resultados:** Mínimo 6 games para ganar set, diferencia de 2 en 6-5 (se permiten 7-5 / 7-6).
 - **Mini-Bracket (Zonas de 4):** 2 partidos iniciales (P1 vs P2, P3 vs P4) y 2 definitorios ("Ganador vs Ganador" para 1°/2° puesto y "Perdedor vs Perdedor" para 3° puesto). El orden se fija mediante el campo explícito `posicion`.
 - **Compatibilidad Horaria:** Las parejas cargan disponibilidad en slots discretos (75 min) que se fusionan en ventanas continuas. La compatibilidad se calcula como la intersección de ventanas continuas entre parejas.
-- **Scheduler Continuo en Dos Pasadas:** Cada cancha gestiona su propia línea de tiempo ordenada de intervalos ocupados (partidos del club de todos los torneos y del torneo actual). La asignación se realiza en dos fases para maximizar partidos agendados y prevenir canibalización de franjas pico:
-  - *Pasada 1:* Asigna primero en horarios de grilla estándar únicamente los partidos hiper-restringidos (1 sola opción día+franja válida).
-  - *Pasada 2:* Asigna los partidos flexibles (múltiples opciones día+franja), pudiendo usar tanto turnos estándar como huecos irregulares de 15 min en cualquier cancha (aprovechando desfasajes cross-torneo y gaps intermedios).
+- **Scheduler Continuo en Dos Pasadas con Pool Global Multi-Torneo:** Cada cancha gestiona su propia línea de tiempo ordenada de intervalos ocupados (partidos del club de todos los torneos y del torneo actual). La asignación masiva se realiza en dos fases a nivel club unificado para maximizar partidos agendados y prevenir canibalización de franjas pico:
+  - *Pasada 1 Global:* Asigna primero en horarios de grilla estándar todos los partidos hiper-restringidos de todas las categorías juntas (1 sola opción día+franja válida).
+  - *Pasada 2 Global:* Asigna todos los partidos flexibles de todas las categorías en una sola cola ordenada por escasez de opciones (MCF Global), pudiendo usar tanto turnos estándar como huecos irregulares de 15 min en cualquier cancha (aprovechando desfasajes cross-torneo y gaps intermedios).
 - **Prioridad de Scheduling ("Most Constrained First"):** Partidos y torneos se ordenan de menor a mayor cantidad de combinaciones día+franja válidas compartidas (sin sesgo fijo por día), reservando los recursos más escasos para los cruces con menos alternativas.
 
 ## Funcionalidades ya implementadas
@@ -42,7 +42,7 @@ organizadores que hoy llevan todo en papel.
 - Gestión de Club / Organizador (`/admin/club`): edición de canchas totales y horarios de apertura con advertencia y modal de impacto ante cambios que invaliden turnos.
 - Carga de disponibilidad por pareja con chips interactivos multi-select por día.
 - Generación de zonas por sorteo aleatorio (Fisher-Yates) o por compatibilidad horaria (greedy con backtracking acotado).
-- Asignación automática continua de horarios y canchas por torneo y masiva ("Iniciar todos los torneos") con timeline por cancha, detección de huecos intermedios, pre-verificación de compatibilidad (dry-run transaccional, rollback y cache de plan determinista con invalidación por fingerprinting).
+- Asignación automática continua de horarios y canchas por torneo y masiva ("Iniciar todos los torneos") con timeline por cancha, pool global multi-torneo ("MCF Global"), detección de huecos intermedios, pre-verificación de compatibilidad (dry-run transaccional, rollback y cache de plan determinista con invalidación por fingerprinting).
 - Bloqueo de inicio ante partidos sin turno compatible o zonas manuales no resueltas.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.
