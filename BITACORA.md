@@ -251,9 +251,32 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+## 13. Reestructuración de Dominio: Jerarquía Club → Torneo (Evento) → Categorías (Cuadros de Juego)
+
+### Adaptación al Modelo Real de Clubes de Pádel
+- **Problema o necesidad que motivó el trabajo:** Los clubes de pádel organizan eventos de fin de semana o mensuales (ej. "Pares Agosto", "Impares Agosto", "Torneo Aniversario") que contienen múltiples categorías compitiendo simultáneamente (4ta, 6ta, 8va, Damas 5ta, etc.). El sistema anterior modelaba cada categoría como un torneo separado, obligando al organizador a gestionar múltiples links públicos inconexos y dispersando la asignación de turnos.
+- **Qué decidí y por qué:**
+  1. **Evolución del Schema de Base de Datos:**
+     - Se incorporó la entidad intermedia `Categoria` entre `Torneo` y las entidades de juego (`Pareja`, `Zona`, `FaseEliminatoria`, `Partido`).
+     - `Torneo` conserva el `organizadorId`, `nombre`, `fecha` y `slug` público unificado.
+     - `Categoria` almacena el nivel (`nombre`), `estado` (`BORRADOR`, `EN_CURSO`, `FINALIZADO`) y referencia a su `torneoId`.
+  2. **Arquitectura Backend:**
+     - Se crearon `categoria.service.js`, `categoria.controller.js` y `categoria.routes.js` con endpoints anidados (`/api/torneos/:torneoId/categorias` y `/api/categorias/:id/...`).
+     - Se adaptaron los servicios de `zona`, `pareja`, `partido` y `faseEliminatoria` para operar sobre `categoriaId`.
+     - El scheduler continuo con pool multi-categoría corre a nivel Torneo (`/api/torneos/:id/iniciar` y `/api/torneos/:id/pre-check-inicio`), optimizando los recursos de todas las categorías en paralelo.
+  3. **Frontend y Experiencia de Usuario:**
+     - `TorneosList.jsx`: Panel de eventos con métricas de categorías y parejas totales.
+     - `TorneoDetail.jsx`: Hub central del torneo con link público unificado, gestión de categorías y asignación masiva de turnos.
+     - `CategoriaDetail.jsx`: Vista de administración por categoría con soporte automático para Zonas Round Robin y Mini-Brackets de 4 parejas, tabla de posiciones y accesos directos.
+     - `TorneoPublic.jsx`: Vista pública unificada con navegación fluida entre categorías mediante chips interactivos, brackets eliminatorios y actualización en vivo cada 15 segundos.
+     - **Componentes y Modales Pulidos:** Integración de `ConfirmModal` con diseño *Dark Premium* para borrado de resultados, `MiniBracketView` con cruces definitorios ("Ganador vs Ganador", "Perdedor vs Perdedor") y `PartidoCard` con textos de origen claros y selector de horarios inline.
+- **Resultado final:** Modelo de dominio 100% alineado con la operativa real de clubes de pádel, reduciendo la fricción administrativa y centralizando la experiencia para jugadores y espectadores.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 9 sesiones de trabajo, sumando un aproximado total de entre 20.5 y 24 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 10 sesiones de trabajo, sumando un aproximado total de entre 24 y 28 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -266,6 +289,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 9 se
 | **7** | ~2.5 a 3 horas | Inicio masivo con prioridad *"Most Constrained First"*, eliminación en cascada, rediseño de navegación con `useLocation`, modales con blur y migración total a `lucide-react`. |
 | **8** | ~1.5 a 2 horas | Validación pre-inicio simultáneo: pipeline en dry-run con rollback transaccional, plan cache determinista, fingerprinting de invalidación reactiva y modal de bloqueo. |
 | **9** | ~2.5 a 3 horas | Scheduler continuo por cancha en dos pasadas: timelines independientes, ventanas fusionadas, detección de huecos intermedios (15m grid), protección de franjas pico y validación exhaustiva multiescenario. |
-| **Total** | **~20.5 a 24 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling continuo en dos pasadas, multitorneo, validaciones transaccionales y diseño UI/UX premium. |
+| **10** | ~3.5 a 4 horas | Reestructuración de Dominio: Jerarquía Club → Torneo (Evento) → Categorías (Cuadros), migración completa de Frontend y Backend, vista pública multicategoría y confirmación estilizada de resultados. |
+| **Total** | **~24 a 28 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, sistema de scheduling continuo en dos pasadas, pre-check transaccional, brackets dinámicos y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

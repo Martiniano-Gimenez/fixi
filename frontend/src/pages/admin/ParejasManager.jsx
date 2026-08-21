@@ -6,8 +6,8 @@ import DisponibilidadEditor from '../../components/DisponibilidadEditor';
 import { ChevronLeft, Plus, Clock, Trash2, Users } from 'lucide-react';
 
 export default function ParejasManager() {
-  const { id } = useParams();
-  const [torneo, setTorneo] = useState(null);
+  const { torneoId, id } = useParams();
+  const [categoria, setCategoria] = useState(null);
   const [parejas, setParejas] = useState([]);
   const [jugador1, setJugador1] = useState('');
   const [jugador2, setJugador2] = useState('');
@@ -18,11 +18,11 @@ export default function ParejasManager() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [torneoData, parejasData] = await Promise.all([
-        api.get(`/torneos/${id}`),
-        api.get(`/torneos/${id}/parejas`),
+      const [categoriaData, parejasData] = await Promise.all([
+        api.get(`/categorias/${id}`),
+        api.get(`/categorias/${id}/parejas`),
       ]);
-      setTorneo(torneoData);
+      setCategoria(categoriaData);
 
       // Cargar disponibilidades de cada pareja para mostrar el badge
       const parejasConSlots = await Promise.all(
@@ -55,7 +55,7 @@ export default function ParejasManager() {
   const handleAdd = async (e) => {
     e.preventDefault();
     try {
-      await api.post(`/torneos/${id}/parejas`, { jugador1, jugador2 });
+      await api.post(`/categorias/${id}/parejas`, { jugador1, jugador2 });
       setJugador1('');
       setJugador2('');
       fetchData();
@@ -89,29 +89,32 @@ export default function ParejasManager() {
     );
   };
 
-  if (loading) return <div className="loading">Cargando...</div>;
-  if (error) return <div className="error-message">{error}</div>;
+  if (loading) return <div className="loading">Cargando parejas...</div>;
+  if (error || !categoria) return <div className="error-message">{error || 'Categoría no encontrada'}</div>;
+
+  const backUrl = `/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}`;
 
   return (
     <div className="page">
       <div className="flex-header">
         <div>
           <Link
-            to={`/admin/torneos/${id}`}
+            to={backUrl}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '0.35rem',
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-secondary)',
+              textDecoration: 'none',
             }}
           >
             <ChevronLeft size={14} strokeWidth={2} />
-            Volver al torneo
+            Volver a Categoría {categoria.nombre} ({categoria.torneo?.nombre})
           </Link>
           <h1 style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Users size={24} strokeWidth={2} />
-            Gestionar Parejas
+            Parejas — {categoria.nombre}
           </h1>
         </div>
       </div>
@@ -124,11 +127,23 @@ export default function ParejasManager() {
             <form onSubmit={handleAdd} style={{ marginTop: '1rem' }}>
               <div className="form-group">
                 <label>Jugador 1</label>
-                <input type="text" value={jugador1} onChange={(e) => setJugador1(e.target.value)} required />
+                <input
+                  type="text"
+                  value={jugador1}
+                  onChange={(e) => setJugador1(e.target.value)}
+                  placeholder="Nombre y apellido"
+                  required
+                />
               </div>
               <div className="form-group">
                 <label>Jugador 2</label>
-                <input type="text" value={jugador2} onChange={(e) => setJugador2(e.target.value)} required />
+                <input
+                  type="text"
+                  value={jugador2}
+                  onChange={(e) => setJugador2(e.target.value)}
+                  placeholder="Nombre y apellido"
+                  required
+                />
               </div>
               <button
                 type="submit"
@@ -142,128 +157,144 @@ export default function ParejasManager() {
           </div>
         </div>
 
-        {/* Listado */}
+        {/* Lista de parejas inscriptas */}
         <div>
           <div className="torneo-card">
-            <h3>Parejas Inscritas ({parejas.length})</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>Parejas Inscriptas ({parejas.length})</h3>
+            </div>
+
             {parejas.length === 0 ? (
-              <p style={{ marginTop: '1rem', color: 'var(--color-text-secondary)' }}>No hay parejas todavía.</p>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+                No hay parejas cargadas en esta categoría aún.
+              </p>
             ) : (
-              <ul style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {parejas.map((p) => (
-                  <li
-                    key={p.id}
-                    style={{
-                      background: 'var(--color-bg-input)',
-                      borderRadius: 'var(--radius-md)',
-                      overflow: 'hidden',
-                      border: '1px solid var(--color-border)',
-                    }}
-                  >
-                    {/* Fila principal */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {parejas.map((pareja) => {
+                  const isExpanded = expandedParejaId === pareja.id;
+                  const cantSlots = pareja._cantSlots || 0;
+
+                  return (
                     <div
+                      key={pareja.id}
                       style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '0.75rem 1rem',
-                        gap: '0.5rem',
-                        flexWrap: 'wrap',
+                        background: 'var(--color-surface)',
+                        border: isExpanded
+                          ? '1px solid var(--color-primary)'
+                          : '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-md)',
+                        overflow: 'hidden',
+                        transition: 'border-color var(--transition-fast)',
                       }}
                     >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                        <span style={{ fontWeight: 500 }}>{p.jugador1} / {p.jugador2}</span>
-                        {(p._cantSlots || 0) > 0 ? (
-                          <span className="disponibilidad-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Clock size={11} strokeWidth={2} /> {p._cantSlots} turno{p._cantSlots === 1 ? '' : 's'}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                            Sin horarios definidos
-                          </span>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => toggleDisponibilidad(p.id)}
-                          className={`btn-chip ${expandedParejaId === p.id ? 'active' : ''}`}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
-                          title="Definir horarios disponibles"
-                        >
-                          <Clock size={12} strokeWidth={2} />
-                          Horarios
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(p.id)}
-                          style={{
-                            color: 'var(--color-text-muted)',
-                            padding: '0.25rem',
-                            borderRadius: 'var(--radius-sm)',
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            transition: 'all 0.2s',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = 'var(--color-danger)';
-                            e.currentTarget.style.background = 'var(--color-danger-bg)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = 'var(--color-text-muted)';
-                            e.currentTarget.style.background = 'none';
-                          }}
-                          title="Eliminar pareja"
-                        >
-                          <Trash2 size={16} strokeWidth={2} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Panel de disponibilidad expandible */}
-                    {expandedParejaId === p.id && (
+                      {/* Fila principal de la pareja */}
                       <div
                         style={{
-                          borderTop: '1px solid var(--color-border)',
-                          padding: '1rem',
-                          background: 'var(--color-bg-card)',
-                          animation: 'fadeIn 0.15s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.75rem 1rem',
+                          gap: '0.5rem',
                         }}
                       >
-                        <h4 style={{ marginBottom: '0.75rem', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                          Disponibilidad horaria de {p.jugador1} / {p.jugador2}
-                        </h4>
-                        <DisponibilidadEditor
-                          parejaId={p.id}
-                          torneoId={id}
-                          onChanged={(cant) => handleSlotsChanged(p.id, cant)}
-                          onClose={() => setExpandedParejaId(null)}
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                          <span
+                            style={{
+                              color: 'var(--color-text-secondary)',
+                              fontSize: 'var(--font-size-xs)',
+                              fontWeight: 700,
+                              width: '1.5rem',
+                              flexShrink: 0,
+                            }}
+                          >
+                            #{pareja.orden}
+                          </span>
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              fontSize: 'var(--font-size-sm)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {pareja.jugador1} / {pareja.jugador2}
+                          </span>
+                        </div>
+
+                        {/* Botones de acción */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                          <button
+                            type="button"
+                            onClick={() => toggleDisponibilidad(pareja.id)}
+                            className={isExpanded ? 'btn-primary' : 'btn-secondary'}
+                            style={{
+                              padding: '0.3rem 0.65rem',
+                              fontSize: 'var(--font-size-xs)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              width: 'auto',
+                            }}
+                            title="Configurar disponibilidad horaria"
+                          >
+                            <Clock size={12} strokeWidth={2} />
+                            <span>
+                              {cantSlots > 0
+                                ? `${cantSlots} turno${cantSlots > 1 ? 's' : ''}`
+                                : 'Sin horario'}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-danger"
+                            onClick={() => handleDelete(pareja.id)}
+                            style={{
+                              padding: '0.3rem 0.5rem',
+                              background: 'transparent',
+                              borderColor: 'transparent',
+                            }}
+                            title="Eliminar pareja"
+                          >
+                            <Trash2 size={14} strokeWidth={2} style={{ color: 'var(--color-danger)' }} />
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+
+                      {/* Editor desplegable de disponibilidad */}
+                      {isExpanded && (
+                        <div
+                          style={{
+                            borderTop: '1px solid var(--color-border)',
+                            background: 'var(--color-bg)',
+                            padding: '1rem',
+                          }}
+                        >
+                          <DisponibilidadEditor
+                            parejaId={pareja.id}
+                            onSlotsChanged={(count) => handleSlotsChanged(pareja.id, count)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {parejaToDelete && (
-        <ConfirmModal
-          isOpen={true}
-          title="Eliminar Pareja"
-          message="¿Estás seguro de que querés eliminar esta pareja? Esta acción no se puede deshacer."
-          onConfirm={executeDelete}
-          onCancel={() => setParejaToDelete(null)}
-          confirmText="Sí, eliminar"
-          isDanger={true}
-        />
-      )}
+      <ConfirmModal
+        isOpen={Boolean(parejaToDelete)}
+        title="Eliminar Pareja"
+        message="¿Estás seguro de que querés eliminar esta pareja de la categoría?"
+        confirmText="Eliminar"
+        isDanger={true}
+        onConfirm={executeDelete}
+        onCancel={() => setParejaToDelete(null)}
+      />
     </div>
   );
 }

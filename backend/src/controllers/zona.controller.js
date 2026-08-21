@@ -1,25 +1,15 @@
-const prisma = require('../lib/prisma');
+const zonaService = require('../services/zona.service');
 
-async function getZonasByTorneo(req, res, next) {
+function getOrgId(req) {
+  return req.organizadorId || req.organizador?.id;
+}
+
+async function getZonasByCategoria(req, res, next) {
   try {
-    const torneoId = req.params.id;
-    const zonas = await prisma.zona.findMany({
-      where: { torneoId },
-      include: {
-        zonaParejas: {
-          include: { pareja: true },
-          // Orden de posiciones predeterminado (Criterios de desempate)
-          orderBy: [
-            { puntos: 'desc' },
-            { sf: 'desc' }, // Diferencia sets (simplificado, debería ser sf - sc)
-            { gf: 'desc' }, // Diferencia games
-          ]
-        },
-      },
-      orderBy: { nombre: 'asc' }
-    });
+    const organizadorId = getOrgId(req);
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const zonas = await zonaService.getZonasByCategoria(organizadorId, categoriaId);
 
-    // Como Prisma no soporta order by computados fácilmente (sf - sc), lo reordenamos en JS
     for (const zona of zonas) {
       if (zona.formato === 'ROUND_ROBIN' || zona.formato === 'MINI_BRACKET') {
         zona.zonaParejas.sort((a, b) => {
@@ -39,7 +29,7 @@ async function getZonasByTorneo(req, res, next) {
           const diffGamesB = b.gf - b.gc;
           if (diffGamesB !== diffGamesA) return diffGamesB - diffGamesA;
 
-          return 0; // Se podría agregar enfrentamiento directo
+          return 0;
         });
       }
     }
@@ -50,13 +40,11 @@ async function getZonasByTorneo(req, res, next) {
   }
 }
 
-const zonaService = require('../services/zona.service');
-
 async function limpiarResultadosZonas(req, res, next) {
   try {
-    const organizadorId = req.organizadorId;
-    const torneoId = req.params.id;
-    const result = await zonaService.limpiarResultadosZonas(organizadorId, torneoId);
+    const organizadorId = getOrgId(req);
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const result = await zonaService.limpiarResultadosZonas(organizadorId, categoriaId);
     res.json(result);
   } catch (error) {
     next(error);
@@ -65,13 +53,13 @@ async function limpiarResultadosZonas(req, res, next) {
 
 async function reestructurarZonas(req, res, next) {
   try {
-    const organizadorId = req.organizadorId;
-    const torneoId = req.params.id;
+    const organizadorId = getOrgId(req);
+    const categoriaId = req.params.categoriaId || req.params.id;
     const { zonas } = req.body;
     if (!zonas || !Array.isArray(zonas)) {
       return res.status(400).json({ message: 'El payload debe contener un array de zonas.' });
     }
-    const result = await zonaService.reestructurarZonas(organizadorId, torneoId, zonas);
+    const result = await zonaService.reestructurarZonas(organizadorId, categoriaId, zonas);
     res.json(result);
   } catch (error) {
     next(error);
@@ -79,7 +67,8 @@ async function reestructurarZonas(req, res, next) {
 }
 
 module.exports = {
-  getZonasByTorneo,
+  getZonasByCategoria,
+  getZonasByTorneo: getZonasByCategoria,
   limpiarResultadosZonas,
   reestructurarZonas,
 };

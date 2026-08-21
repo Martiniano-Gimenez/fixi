@@ -39,21 +39,33 @@ model Torneo {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organizador         Organizador          @relation(fields: [organizadorId], references: [id])
-  parejas             Pareja[]
-  zonas               Zona[]
-  fasesEliminatorias  FaseEliminatoria[]
-  partidos            Partido[]
+  organizador    Organizador @relation(fields: [organizadorId], references: [id])
+  categorias     Categoria[]
+}
+
+model Categoria {
+  id        String   @id @default(uuid())
+  torneoId  String
+  nombre    String   // "4ta", "6ta", "8va", "5ta Damas", etc.
+  estado    String   @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  torneo             Torneo             @relation(fields: [torneoId], references: [id], onDelete: Cascade)
+  parejas            Pareja[]
+  zonas              Zona[]
+  fasesEliminatorias FaseEliminatoria[]
+  partidos           Partido[]
 }
 
 model Pareja {
-  id        String @id @default(uuid())
-  torneoId  String
-  jugador1  String
-  jugador2  String
-  orden     Int    @default(0)
+  id          String @id @default(uuid())
+  categoriaId String
+  jugador1    String
+  jugador2    String
+  orden       Int    @default(0)
 
-  torneo             Torneo       @relation(fields: [torneoId], references: [id], onDelete: Cascade)
+  categoria          Categoria    @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
   zonaParejas        ZonaPareja[]
   partidosComoP1     Partido[]    @relation("Pareja1")
   partidosComoP2     Partido[]    @relation("Pareja2")
@@ -74,13 +86,13 @@ model SlotPareja {
 
 model Zona {
   id                   String  @id @default(uuid())
-  torneoId             String
+  categoriaId          String
   nombre               String  // "Zona A", "Zona B", etc.
   clasifican           Int     @default(2)
   formato              String  @default("ROUND_ROBIN") // "ROUND_ROBIN" | "MINI_BRACKET"
   requiereArmadoManual Boolean @default(false)
 
-  torneo      Torneo       @relation(fields: [torneoId], references: [id], onDelete: Cascade)
+  categoria   Categoria    @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
   zonaParejas ZonaPareja[]
   partidos    Partido[]
 }
@@ -106,46 +118,46 @@ model ZonaPareja {
 }
 
 model FaseEliminatoria {
-  id       String @id @default(uuid())
-  torneoId String
-  nombre   String // "Cuartos de Final", "Semifinal", "Final"
-  ronda    Int    // 1=final, 2=semis, 4=cuartos, 8=octavos...
+  id          String @id @default(uuid())
+  categoriaId String
+  nombre      String // "Cuartos de Final", "Semifinal", "Final"
+  ronda       Int    // 1=final, 2=semis, 4=cuartos, 8=octavos...
 
-  torneo   Torneo    @relation(fields: [torneoId], references: [id], onDelete: Cascade)
-  partidos Partido[]
+  categoria Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  partidos  Partido[]
 }
 
 model Partido {
-  id                   String    @id @default(uuid())
-  torneoId             String
-  zonaId               String?   // Si es partido de zona
-  faseEliminatoriaId   String?   // Si es partido de eliminatoria
-  posicionEnRonda      Int       @default(1) // Ubicación en el cuadro
-  pareja1Id            String?   // Nullable hasta que se conozca
-  origenPareja1        String?   // Ej: "1°A", "2°B"
-  pareja2Id            String?   // Nullable hasta que se conozca
-  origenPareja2        String?   // Ej: "1°A", "2°B"
-  ganadorId            String?   // Nullable hasta que se juegue
-  estado               String    @default("PENDIENTE") // "PENDIENTE" | "EN_CURSO" | "FINALIZADO"
-  fechaHora            DateTime?
-  canchaNumero         Int?
-  sinHorarioAsignado   Boolean   @default(false)
+  id                 String    @id @default(uuid())
+  categoriaId        String
+  zonaId             String?   // Si es partido de zona
+  faseEliminatoriaId String?   // Si es partido de eliminatoria
+  posicionEnRonda    Int       @default(1) // Ubicación en el cuadro
+  pareja1Id          String?   // Nullable hasta que se conozca
+  origenPareja1      String?   // Ej: "1°A", "2°B"
+  pareja2Id          String?   // Nullable hasta que se conozca
+  origenPareja2      String?   // Ej: "1°A", "2°B"
+  ganadorId          String?   // Nullable hasta que se juegue
+  estado             String    @default("PENDIENTE") // "PENDIENTE" | "EN_CURSO" | "FINALIZADO"
+  fechaHora          DateTime?
+  canchaNumero       Int?
+  sinHorarioAsignado Boolean   @default(false)
 
-  torneo             Torneo            @relation(fields: [torneoId], references: [id], onDelete: Cascade)
-  zona               Zona?             @relation(fields: [zonaId], references: [id], onDelete: SetNull)
-  faseEliminatoria   FaseEliminatoria? @relation(fields: [faseEliminatoriaId], references: [id], onDelete: SetNull)
-  pareja1            Pareja?           @relation("Pareja1", fields: [pareja1Id], references: [id], onDelete: SetNull)
-  pareja2            Pareja?           @relation("Pareja2", fields: [pareja2Id], references: [id], onDelete: SetNull)
-  ganador            Pareja?           @relation("Ganador", fields: [ganadorId], references: [id], onDelete: SetNull)
-  sets               SetPartido[]
+  categoria        Categoria         @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  zona             Zona?             @relation(fields: [zonaId], references: [id], onDelete: SetNull)
+  faseEliminatoria FaseEliminatoria? @relation(fields: [faseEliminatoriaId], references: [id], onDelete: SetNull)
+  pareja1          Pareja?           @relation("Pareja1", fields: [pareja1Id], references: [id], onDelete: SetNull)
+  pareja2          Pareja?           @relation("Pareja2", fields: [pareja2Id], references: [id], onDelete: SetNull)
+  ganador          Pareja?           @relation("Ganador", fields: [ganadorId], references: [id], onDelete: SetNull)
+  sets             SetPartido[]
 }
 
 model SetPartido {
-  id            String @id @default(uuid())
-  partidoId     String
-  numero        Int    // 1, 2 o 3
-  gamesPareja1  Int
-  gamesPareja2  Int
+  id           String @id @default(uuid())
+  partidoId    String
+  numero       Int    // 1, 2 o 3
+  gamesPareja1 Int
+  gamesPareja2 Int
 
   partido Partido @relation(fields: [partidoId], references: [id], onDelete: Cascade)
 

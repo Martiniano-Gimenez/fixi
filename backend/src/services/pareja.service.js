@@ -1,8 +1,8 @@
 const prisma = require('../lib/prisma');
-const { getTorneoById } = require('./torneo.service');
+const { getCategoriaById } = require('./categoria.service');
 
-async function createPareja(organizadorId, torneoId, data) {
-  const torneo = await getTorneoById(organizadorId, torneoId); // Verifica existencia y permisos
+async function createPareja(organizadorId, categoriaId, data) {
+  await getCategoriaById(organizadorId, categoriaId); // Verifica existencia y permisos
 
   if (!data.jugador1 || !data.jugador2) {
     const error = new Error('Los nombres de ambos jugadores son obligatorios.');
@@ -11,23 +11,26 @@ async function createPareja(organizadorId, torneoId, data) {
   }
 
   // Asignar el orden (seed) basado en la cantidad actual
-  const parejasCount = await prisma.pareja.count({ where: { torneoId } });
+  const parejasCount = await prisma.pareja.count({ where: { categoriaId } });
 
   return await prisma.pareja.create({
     data: {
-      torneoId,
-      jugador1: data.jugador1,
-      jugador2: data.jugador2,
+      categoriaId,
+      jugador1: data.jugador1.trim(),
+      jugador2: data.jugador2.trim(),
       orden: parejasCount + 1,
     },
   });
 }
 
-async function getParejasByTorneo(organizadorId, torneoId) {
-  await getTorneoById(organizadorId, torneoId); // Verifica permisos
+async function getParejasByCategoria(organizadorId, categoriaId) {
+  await getCategoriaById(organizadorId, categoriaId); // Verifica permisos
 
   return await prisma.pareja.findMany({
-    where: { torneoId },
+    where: { categoriaId },
+    include: {
+      slotsSeleccionados: true,
+    },
     orderBy: { orden: 'asc' },
   });
 }
@@ -35,7 +38,13 @@ async function getParejasByTorneo(organizadorId, torneoId) {
 async function getParejaAndVerifyPermisos(organizadorId, parejaId) {
   const pareja = await prisma.pareja.findUnique({
     where: { id: parejaId },
-    include: { torneo: true },
+    include: {
+      categoria: {
+        include: {
+          torneo: true,
+        },
+      },
+    },
   });
 
   if (!pareja) {
@@ -44,7 +53,7 @@ async function getParejaAndVerifyPermisos(organizadorId, parejaId) {
     throw error;
   }
 
-  if (pareja.torneo.organizadorId !== organizadorId) {
+  if (pareja.categoria.torneo.organizadorId !== organizadorId) {
     const error = new Error('No tenés permisos sobre esta pareja.');
     error.statusCode = 403;
     throw error;
@@ -57,8 +66,8 @@ async function updatePareja(organizadorId, parejaId, data) {
   const pareja = await getParejaAndVerifyPermisos(organizadorId, parejaId);
 
   const updateData = {};
-  if (data.jugador1) updateData.jugador1 = data.jugador1;
-  if (data.jugador2) updateData.jugador2 = data.jugador2;
+  if (data.jugador1) updateData.jugador1 = data.jugador1.trim();
+  if (data.jugador2) updateData.jugador2 = data.jugador2.trim();
   if (data.orden !== undefined) updateData.orden = data.orden;
 
   return await prisma.pareja.update({
@@ -77,7 +86,7 @@ async function deletePareja(organizadorId, parejaId) {
 
 module.exports = {
   createPareja,
-  getParejasByTorneo,
+  getParejasByCategoria,
   updatePareja,
   deletePareja,
 };

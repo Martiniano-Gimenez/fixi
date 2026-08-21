@@ -8,18 +8,18 @@ function generarSlug(nombre) {
 }
 
 async function createTorneo(organizadorId, { nombre, fecha }) {
-  if (!nombre) {
+  if (!nombre || !nombre.trim()) {
     const error = new Error('El nombre del torneo es obligatorio.');
     error.statusCode = 400;
     throw error;
   }
 
-  const slug = generarSlug(nombre);
+  const slug = generarSlug(nombre.trim());
 
   return await prisma.torneo.create({
     data: {
       organizadorId,
-      nombre,
+      nombre: nombre.trim(),
       fecha: fecha ? new Date(fecha) : null,
       slug,
     },
@@ -29,6 +29,15 @@ async function createTorneo(organizadorId, { nombre, fecha }) {
 async function getTorneos(organizadorId) {
   return await prisma.torneo.findMany({
     where: { organizadorId },
+    include: {
+      categorias: {
+        include: {
+          parejas: { select: { id: true } },
+          zonas: { select: { id: true } },
+          partidos: { select: { id: true, estado: true } },
+        },
+      },
+    },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -38,7 +47,6 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
   const torneo = await db.torneo.findUnique({
     where: { id: torneoId },
     include: {
-      parejas: { orderBy: { orden: 'asc' } },
       organizador: {
         select: {
           id: true,
@@ -49,6 +57,17 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
           sabadoInicio: true,
           sabadoFin: true,
         },
+      },
+      categorias: {
+        include: {
+          parejas: {
+            orderBy: { orden: 'asc' },
+            include: { slotsSeleccionados: true },
+          },
+          zonas: { select: { id: true, nombre: true } },
+          partidos: { select: { id: true, estado: true } },
+        },
+        orderBy: { createdAt: 'asc' },
       },
     },
   });
@@ -72,7 +91,7 @@ async function updateTorneo(organizadorId, torneoId, data) {
   const torneo = await getTorneoById(organizadorId, torneoId);
 
   const updateData = {};
-  if (data.nombre !== undefined) updateData.nombre = data.nombre;
+  if (data.nombre !== undefined && data.nombre.trim()) updateData.nombre = data.nombre.trim();
   if (data.fecha !== undefined) updateData.fecha = data.fecha ? new Date(data.fecha) : null;
   if (data.estado !== undefined) updateData.estado = data.estado;
 
@@ -94,23 +113,28 @@ async function deleteTorneo(organizadorId, torneoId) {
 
 async function reiniciarTorneo(organizadorId, torneoId) {
   const torneo = await getTorneoById(organizadorId, torneoId);
-  
-  if (torneo.estado === 'BORRADOR') {
-    throw new Error('El torneo ya está en estado BORRADOR.');
-  }
+
+  const categoriaIds = torneo.categorias.map((c) => c.id);
 
   await prisma.$transaction(async (tx) => {
-    await tx.partido.deleteMany({
-      where: { torneoId: torneo.id },
-    });
+    if (categoriaIds.length > 0) {
+      await tx.partido.deleteMany({
+        where: { categoriaId: { in: categoriaIds } },
+      });
 
-    await tx.faseEliminatoria.deleteMany({
-      where: { torneoId: torneo.id },
-    });
+      await tx.faseEliminatoria.deleteMany({
+        where: { categoriaId: { in: categoriaIds } },
+      });
 
-    await tx.zona.deleteMany({
-      where: { torneoId: torneo.id },
-    });
+      await tx.zona.deleteMany({
+        where: { categoriaId: { in: categoriaIds } },
+      });
+
+      await tx.categoria.updateMany({
+        where: { id: { in: categoriaIds } },
+        data: { estado: 'BORRADOR' },
+      });
+    }
 
     await tx.torneo.update({
       where: { id: torneo.id },

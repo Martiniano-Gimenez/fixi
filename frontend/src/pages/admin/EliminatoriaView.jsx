@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ResultadoModal from '../../components/ResultadoModal';
 import EditBracketMatchModal from '../../components/EditBracketMatchModal';
@@ -10,9 +10,9 @@ import { ChevronLeft, GitBranch, UserCheck, Trash2, Settings, Trophy, Edit2, Plu
 import './EliminatoriaView.css';
 
 export default function EliminatoriaView() {
-  const { id: torneoId } = useParams();
+  const { torneoId, id: categoriaId } = useParams();
   const navigate = useNavigate();
-  const [torneo, setTorneo] = useState(null);
+  const [categoria, setCategoria] = useState(null);
   const [fases, setFases] = useState([]);
   const [zonas, setZonas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,17 +25,17 @@ export default function EliminatoriaView() {
 
   useEffect(() => {
     cargarDatos();
-  }, [torneoId]);
+  }, [categoriaId]);
 
   async function cargarDatos() {
     try {
       setLoading(true);
-      const [torneoRes, fasesRes, zonasRes] = await Promise.all([
-        api.get(`/torneos/${torneoId}`),
-        api.get(`/torneos/${torneoId}/fases-eliminatorias`),
-        api.get(`/torneos/${torneoId}/zonas`),
+      const [categoriaRes, fasesRes, zonasRes] = await Promise.all([
+        api.get(`/categorias/${categoriaId}`),
+        api.get(`/categorias/${categoriaId}/fases-eliminatorias`),
+        api.get(`/categorias/${categoriaId}/zonas`),
       ]);
-      setTorneo(torneoRes);
+      setCategoria(categoriaRes);
       setFases(fasesRes || []);
       setZonas(zonasRes || []);
     } catch (err) {
@@ -60,9 +60,9 @@ export default function EliminatoriaView() {
     try {
       setGenerando(true);
       if (actionType === 'generate') {
-        await api.post(`/torneos/${torneoId}/generar-eliminatoria`);
+        await api.post(`/categorias/${categoriaId}/generar-eliminatoria`);
       } else if (actionType === 'delete') {
-        await api.delete(`/torneos/${torneoId}/fases-eliminatorias`);
+        await api.delete(`/categorias/${categoriaId}/fases-eliminatorias`);
       }
       await cargarDatos();
     } catch (err) {
@@ -86,7 +86,6 @@ export default function EliminatoriaView() {
   }
 
   function handleClickPartido(partido) {
-    // Solo abrir modal si tiene ambas parejas definidas
     if (partido.pareja1Id && partido.pareja2Id) {
       setPartidoModal(partido);
     }
@@ -96,22 +95,26 @@ export default function EliminatoriaView() {
     return <div className="loading">Cargando...</div>;
   }
 
-  if (!torneo) {
-    return <div className="error">Torneo no encontrado</div>;
+  if (!categoria) {
+    return <div className="error">Categoría no encontrada</div>;
   }
+
+  const backUrl = `/admin/torneos/${torneoId || categoria.torneoId}/categorias/${categoriaId}`;
 
   return (
     <div className="eliminatoria-container">
       <div className="header">
-        <button
-          onClick={() => navigate(`/admin/torneos/${torneoId}`)}
+        <Link
+          to={backUrl}
           className="back-btn"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
         >
           <ChevronLeft size={16} strokeWidth={2} />
-          Volver
-        </button>
-        <h1>{torneo.nombre} — Fase Eliminatoria</h1>
+          Volver a Categoría {categoria.nombre}
+        </Link>
+        <h1>
+          {categoria.torneo?.nombre} — Categoría {categoria.nombre} (Fase Eliminatoria)
+        </h1>
         <div className="header-actions">
           {fases.length > 0 && (
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -178,7 +181,7 @@ export default function EliminatoriaView() {
               </button>
             </div>
           )}
-          <div className="status">{torneo.estado}</div>
+          <div className="status">{categoria.estado}</div>
         </div>
       </div>
 
@@ -213,179 +216,151 @@ export default function EliminatoriaView() {
                     return (
                       <div key={partido.id} className="bracket-match-wrapper" style={{ position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}>
                         <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div
-                          className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
-                          onClick={() => handleClickPartido(partido)}
-                          title={isJugable ? (isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado') : 'Esperando clasificados'}
-                          style={{ position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}
-                        >
-                          {/* Encabezado con estado — fila 1: badge + botones */}
-                          <div className="match-card-header">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
-                                {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
-                              </span>
-                              {!isFinalizado && (
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                  <button
-                                    className="btn-icon"
-                                    title="Editar cruce"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditBracketModal(partido);
-                                    }}
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      padding: '2px',
-                                      color: 'var(--color-text-muted)',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      transition: 'color 0.2s',
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-primary)'}
-                                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
-                                  >
-                                    <Settings size={13} strokeWidth={2} />
-                                  </button>
-                                  {editBracketModal?.id === partido.id && (
-                                    <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, marginTop: '8px' }}>
-                                      <EditBracketMatchModal
-                                        partido={editBracketModal}
-                                        zonas={zonas}
-                                        onClose={() => setEditBracketModal(null)}
-                                        onSaved={() => {
-                                          setEditBracketModal(null);
-                                          cargarDatos();
-                                        }}
-                                      />
-                                    </div>
+                          <div
+                            className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
+                            onClick={() => handleClickPartido(partido)}
+                            title={isJugable ? (isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado') : 'Esperando clasificados'}
+                            style={{ position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}
+                          >
+                            <div className="match-card-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
+                                  {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
+                                </span>
+                                {!isFinalizado && (
+                                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                    <button
+                                      className="btn-icon"
+                                      title="Editar cruce"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditBracketModal(partido);
+                                      }}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        transition: 'color 0.2s',
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+                                    >
+                                      <Settings size={13} strokeWidth={2} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              <span className="match-position">#{partido.posicionEnRonda}</span>
+                            </div>
+
+                            <div className="match-time-row" onClick={(e) => e.stopPropagation()}>
+                              <DateTimeInput
+                                value={partido.fechaHora}
+                                onChange={(val) => handleUpdateFechaHora(partido.id, val)}
+                              />
+                            </div>
+
+                            <div className="parejas-list">
+                              <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
+                                <div className="pareja-info">
+                                  {partido.pareja1 ? (
+                                    <span className="pareja-nombre">
+                                      {partido.pareja1.jugador1} / {partido.pareja1.jugador2}
+                                    </span>
+                                  ) : (
+                                    <span className="pareja-esperando">
+                                      {partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando...'}
+                                    </span>
                                   )}
                                 </div>
-                              )}
+                                {partido.sets && partido.sets.length > 0 && (
+                                  <div className="sets-container">
+                                    {partido.sets.map((set, idx) => (
+                                      <span key={idx} className="set-score">
+                                        {set.gamesPareja1}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className={`pareja-row ${p2esGanador ? 'ganador' : ''}`}>
+                                <div className="pareja-info">
+                                  {partido.pareja2 ? (
+                                    <span className="pareja-nombre">
+                                      {partido.pareja2.jugador1} / {partido.pareja2.jugador2}
+                                    </span>
+                                  ) : (
+                                    <span className="pareja-esperando">
+                                      {partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando...'}
+                                    </span>
+                                  )}
+                                </div>
+                                {partido.sets && partido.sets.length > 0 && (
+                                  <div className="sets-container">
+                                    {partido.sets.map((set, idx) => (
+                                      <span key={idx} className="set-score">
+                                        {set.gamesPareja2}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            {isJugable && (
-                              <span className="match-action-hint" style={{ color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}>
-                                {isFinalizado ? <Edit2 size={12} strokeWidth={2} /> : <Plus size={12} strokeWidth={2} />}
-                              </span>
-                            )}
                           </div>
-
-                          {/* Fila 2: input de fecha a ancho completo */}
-                          <div className="match-time-editor" onClick={(e) => e.stopPropagation()} style={{ marginBottom: '4px' }}>
-                            <DateTimeInput
-                              value={partido.fechaHora ? new Date(new Date(partido.fechaHora).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ''}
-                              onUpdate={(val) => handleUpdateFechaHora(partido.id, val)}
-                              title="Establecer horario"
-                              style={{
-                                padding: '2px 4px',
-                                borderRadius: '4px',
-                                border: '1px solid var(--color-border)',
-                                background: 'var(--color-bg-input)',
-                                color: 'var(--color-text)',
-                                fontSize: '0.65rem',
-                                width: '100%',
-                                cursor: 'pointer',
-                                boxSizing: 'border-box',
-                              }}
-                            />
-                          </div>
-
-                        {/* Pareja 1 */}
-                        <div className={`match-pareja p1 ${p1esGanador ? 'ganador' : ''}`}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            {partido.origenPareja1 && (
-                              <span style={{ fontSize: '0.65rem', color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px', fontWeight: 'bold' }}>
-                                {partido.origenPareja1}
-                              </span>
-                            )}
-                            <span className="pareja-name">
-                              {partido.pareja1
-                                ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}`
-                                : <span className="por-definirse">
-                                    {partido.origenPareja1 ? 'Por definirse' : (isFinalizado ? 'BYE' : 'Por definirse')}
-                                  </span>}
-                            </span>
-                          </div>
-                          {p1esGanador && (
-                            <span className="winner-indicator" style={{ display: 'flex', alignItems: 'center' }}>
-                              <Trophy size={14} strokeWidth={2} style={{ color: 'var(--color-accent)' }} />
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Sets o VS */}
-                        {isFinalizado && partido.sets && partido.sets.length > 0 ? (
-                          <div className="match-sets">
-                            {partido.sets.map((s, idx) => (
-                              <span key={idx} className="set-score">
-                                {s.gamesPareja1}-{s.gamesPareja2}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="match-vs">vs</div>
-                        )}
-
-                        {/* Pareja 2 */}
-                        <div className={`match-pareja p2 ${p2esGanador ? 'ganador' : ''}`}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            {partido.origenPareja2 && (
-                              <span style={{ fontSize: '0.65rem', color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px', fontWeight: 'bold' }}>
-                                {partido.origenPareja2}
-                              </span>
-                            )}
-                            <span className="pareja-name">
-                              {partido.pareja2
-                                ? `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}`
-                                : <span className="por-definirse">
-                                    {partido.origenPareja2 ? 'Por definirse' : (isFinalizado ? 'BYE' : 'Por definirse')}
-                                  </span>}
-                            </span>
-                          </div>
-                          {p2esGanador && (
-                            <span className="winner-indicator" style={{ display: 'flex', alignItems: 'center' }}>
-                              <Trophy size={14} strokeWidth={2} style={{ color: 'var(--color-accent)' }} />
-                            </span>
-                          )}
                         </div>
                       </div>
-                      </div>
-                    </div>
                     );
                   })}
                 </div>
               </div>
             ))}
-            <BracketLines containerRef={bracketScrollRef} fases={fases} />
+            <BracketLines scrollContainerRef={bracketScrollRef} fases={fases} />
           </div>
         </div>
       )}
 
-      {/* Modal para cargar resultado */}
       {partidoModal && (
         <ResultadoModal
+          isOpen={Boolean(partidoModal)}
           partido={partidoModal}
           onClose={() => setPartidoModal(null)}
-          onSaved={() => {
+          onSuccess={() => {
             setPartidoModal(null);
             cargarDatos();
           }}
         />
       )}
 
-      {/* Modal de confirmacion */}
-      <ConfirmModal 
+      {editBracketModal && (
+        <EditBracketMatchModal
+          isOpen={Boolean(editBracketModal)}
+          partido={editBracketModal}
+          zonas={zonas}
+          onClose={() => setEditBracketModal(null)}
+          onSuccess={() => {
+            setEditBracketModal(null);
+            cargarDatos();
+          }}
+        />
+      )}
+
+      <ConfirmModal
         isOpen={confirmModal.isOpen}
-        title={confirmModal.type === 'delete' ? 'Borrar Fase Eliminatoria' : 'Asignar Clasificados'}
-        message={confirmModal.type === 'delete' 
-          ? '¿Estás seguro de que querés borrar toda la fase eliminatoria? Esto desbloqueará la edición de las zonas y se perderán todos los resultados cargados en los brackets.' 
-          : '¿Querés asignar las parejas clasificadas de la fase de grupos al bracket? El sistema respetará el diseño de cruces (Ej: 1° Zona A) que hayas establecido.'}
-        confirmText={confirmModal.type === 'delete' ? 'Sí, borrar bracket' : 'Sí, asignar clasificados'}
+        title={confirmModal.type === 'generate' ? 'Generar Eliminatoria' : 'Borrar Bracket'}
+        message={
+          confirmModal.type === 'generate'
+            ? 'Esto clasificará automáticamente a los mejores de cada zona y armará el cuadro. Si ya existen llaves, se asignarán los clasificados al diseño actual.'
+            : '¿Estás seguro de que querés borrar el cuadro eliminatorio completo? Se perderán todos los cruces y resultados cargados en la llave.'
+        }
+        confirmText={confirmModal.type === 'generate' ? 'Generar' : 'Borrar'}
         isDanger={confirmModal.type === 'delete'}
-        onCancel={() => setConfirmModal({ isOpen: false, type: null })}
         onConfirm={executeConfirmAction}
+        onCancel={() => setConfirmModal({ isOpen: false, type: null })}
       />
     </div>
   );

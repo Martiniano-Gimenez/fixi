@@ -1,12 +1,6 @@
 const prisma = require('../lib/prisma');
+const { getCategoriaById } = require('./categoria.service');
 
-/**
- * El número `ronda` representa la cantidad de participantes en esa fase:
- *   ronda=2  → Final (1 partido)
- *   ronda=4  → Semifinal (2 partidos)
- *   ronda=8  → Cuartos de Final (4 partidos)
- *   ronda=16 → Octavos de Final (8 partidos)
- */
 function nombreRonda(ronda) {
   const nombres = {
     2: 'Final',
@@ -20,32 +14,17 @@ function nombreRonda(ronda) {
 }
 
 /**
- * Generar eliminatoria: obtener clasificadas y crear bracket
- * @param {string} organizadorId - ID del organizador (para verificación)
- * @param {string} torneoId - ID del torneo
+ * Generar eliminatoria: obtener clasificadas y crear bracket por categoría
+ * @param {string} organizadorId - ID del organizador
+ * @param {string} categoriaId - ID de la categoría
  */
-async function generarEliminatoria(organizadorId, torneoId) {
-  // Verificar que el torneo existe y pertenece al organizador
-  const torneo = await prisma.torneo.findUnique({
-    where: { id: torneoId },
-  });
-
-  if (!torneo) {
-    const error = new Error('Torneo no encontrado.');
-    error.statusCode = 404;
-    throw error;
-  }
-
-  if (torneo.organizadorId !== organizadorId) {
-    const error = new Error('No tenés permisos para este torneo.');
-    error.statusCode = 403;
-    throw error;
-  }
+async function generarEliminatoria(organizadorId, categoriaId) {
+  await getCategoriaById(organizadorId, categoriaId);
 
   // 0. Verificar si todos los partidos de las zonas están finalizados
   const partidosPendientes = await prisma.partido.count({
     where: {
-      torneoId,
+      categoriaId,
       zonaId: { not: null },
       estado: { not: 'FINALIZADO' },
     },
@@ -53,9 +32,9 @@ async function generarEliminatoria(organizadorId, torneoId) {
 
   const gruposFinalizados = partidosPendientes === 0;
 
-  // 1. Obtener zonas del torneo
+  // 1. Obtener zonas de la categoría
   const zonas = await prisma.zona.findMany({
-    where: { torneoId },
+    where: { categoriaId },
     orderBy: { nombre: 'asc' },
     include: {
       zonaParejas: {
@@ -69,7 +48,7 @@ async function generarEliminatoria(organizadorId, torneoId) {
   });
 
   if (zonas.length === 0) {
-    const error = new Error('El torneo no tiene zonas generadas.');
+    const error = new Error('La categoría no tiene zonas generadas.');
     error.statusCode = 400;
     throw error;
   }
@@ -86,7 +65,6 @@ async function generarEliminatoria(organizadorId, torneoId) {
       let parejaId = null;
       let pareja = null;
       
-      // Solo asignar las parejas reales si la fase de grupos terminó
       if (gruposFinalizados && topZona[index]) {
         parejaId = topZona[index].parejaId;
         pareja = topZona[index].pareja;
@@ -96,7 +74,7 @@ async function generarEliminatoria(organizadorId, torneoId) {
         parejaId,
         pareja,
         zonaOrigen: zona.nombre,
-        origenTxt: `${index + 1}° ${zona.nombre}`, // Ej: "1° A"
+        origenTxt: `${index + 1}° ${zona.nombre}`,
       };
 
       if (index === 0) primeros.push(p);
@@ -115,24 +93,20 @@ async function generarEliminatoria(organizadorId, torneoId) {
 
   // 2.5. Si existen fases eliminatorias viejas, POBLAMOS el bracket en lugar de borrarlo
   const faseViejas = await prisma.faseEliminatoria.findMany({
-    where: { torneoId },
+    where: { categoriaId },
   });
   
   if (faseViejas.length > 0) {
-    // Armar diccionario de clasificadas para búsqueda rápida
     const clasificadasMap = new Map();
     clasificadas.forEach(c => clasificadasMap.set(c.origenTxt, c));
 
-    // Obtener la ronda más alta (la primera ronda del torneo)
     const primeraRondaNum = Math.max(...faseViejas.map(f => f.ronda));
     const fasePrimeraRonda = faseViejas.find(f => f.ronda === primeraRondaNum);
     
-    // Obtener los partidos de esa primera ronda
     const partidosPrimeraRonda = await prisma.partido.findMany({ 
       where: { faseEliminatoriaId: fasePrimeraRonda.id } 
     });
 
-    // Actualizar las parejas basándonos en los orígenes definidos en la estructura
     for (const partido of partidosPrimeraRonda) {
       const updateData = {};
       
@@ -146,7 +120,6 @@ async function generarEliminatoria(organizadorId, torneoId) {
         if (c2) updateData.pareja2Id = c2.parejaId;
       }
       
-      // Si el partido es un BYE (está FINALIZADO por defecto) y no tenía ganador, o cambió
       if (partido.estado === 'FINALIZADO') {
         const pareja1Id = updateData.pareja1Id !== undefined ? updateData.pareja1Id : partido.pareja1Id;
         const pareja2Id = updateData.pareja2Id !== undefined ? updateData.pareja2Id : partido.pareja2Id;
@@ -164,7 +137,6 @@ async function generarEliminatoria(organizadorId, torneoId) {
           data: updateData 
         });
 
-        // Propagar el ganador si es un BYE y el ganador se asignó/actualizó
         if (partido.estado === 'FINALIZADO' && updateData.ganadorId) {
           const { propagarEliminatoria } = require('./partido.service');
           const updatedPartido = { ...partido, ...updateData };
@@ -199,7 +171,7 @@ async function generarEliminatoria(organizadorId, torneoId) {
   for (const ronda of rondas) {
     const fase = await prisma.faseEliminatoria.create({
       data: {
-        torneoId,
+        categoriaId,
         nombre: nombreRonda(ronda),
         ronda,
       },
@@ -208,9 +180,8 @@ async function generarEliminatoria(organizadorId, torneoId) {
   }
 
   // 5. Lógica de Seeding Dinámico
-  const M = potencia / 2; // Cantidad de partidos en primera ronda
+  const M = potencia / 2;
 
-  // Función para generar la secuencia estándar de partidos (ej: 1, 8, 5, 4, 3, 6, 7, 2 para M=8)
   function getMatchSequence(m) {
     if (m === 1) return [1];
     let seq = [1, 2];
@@ -252,8 +223,6 @@ async function generarEliminatoria(organizadorId, torneoId) {
   const restoClasificados = [...segundos, ...otros];
   for (let i = 0; i < restoClasificados.length; i++) {
     const equipo = restoClasificados[i];
-    
-    // El "compañero de cluster" ideal (ej. el 2B va al lugar complementario del 1B)
     const idealSeqIdx = i ^ 1; 
     let placed = false;
 
@@ -265,12 +234,10 @@ async function generarEliminatoria(organizadorId, torneoId) {
       }
     }
 
-    // Fallback: Buscar en la mitad opuesta del 1ro correspondiente
     if (!placed) {
       const firstMatchIdx = i < seq.length ? seq[i] - 1 : 0;
       const isFirstTopHalf = firstMatchIdx < M / 2;
 
-      // Orden de búsqueda en la mitad opuesta según secuencia de seeds
       const searchIndices = [];
       for (let k = 0; k < M; k++) {
         const idx = seq[k] - 1;
@@ -280,7 +247,6 @@ async function generarEliminatoria(organizadorId, torneoId) {
         }
       }
 
-      // Pass 1: Completar un partido que tenga p1 pero no p2
       for (const idx of searchIndices) {
         if (matchSlots[idx].p1 !== null && matchSlots[idx].p2 === null) {
           matchSlots[idx].p2 = equipo;
@@ -289,7 +255,6 @@ async function generarEliminatoria(organizadorId, torneoId) {
         }
       }
 
-      // Pass 2: Ocupar un partido vacío
       if (!placed) {
         for (const idx of searchIndices) {
           if (matchSlots[idx].p1 === null) {
@@ -300,7 +265,6 @@ async function generarEliminatoria(organizadorId, torneoId) {
         }
       }
 
-      // Pass 3: Safety net (cualquier hueco)
       if (!placed) {
         for (let j = 0; j < M; j++) {
           if (matchSlots[j].p1 === null) { matchSlots[j].p1 = equipo; placed = true; break; }
@@ -319,7 +283,6 @@ async function generarEliminatoria(organizadorId, torneoId) {
     const p1 = slot.p1?.isBye ? null : slot.p1;
     const p2 = slot.p2?.isBye ? null : slot.p2;
     
-    // Si uno de los dos es BYE, el otro pasa directo (estado FINALIZADO, ganador asignado)
     const isBye = slot.p1?.isBye || slot.p2?.isBye;
     let estado = 'PENDIENTE';
     let ganadorId = null;
@@ -332,7 +295,7 @@ async function generarEliminatoria(organizadorId, torneoId) {
 
     const partido = await prisma.partido.create({
       data: {
-        torneoId,
+        categoriaId,
         faseEliminatoriaId: fases[primeraRonda],
         posicionEnRonda: i + 1,
         pareja1Id: p1?.parejaId || null,
@@ -348,9 +311,7 @@ async function generarEliminatoria(organizadorId, torneoId) {
   }
 
   // 7. Crear Partidos vacíos para rondas posteriores y propagar BYEs directamente
-  // Primero creamos todos los partidos vacíos de las rondas siguientes,
-  // luego actualizamos los que reciben un pase de BYE
-  const partidosPorRondaYPos = {}; // key: `${ronda}:${pos}` → partidoId
+  const partidosPorRondaYPos = {};
 
   for (let i = 1; i < rondas.length; i++) {
     const r = rondas[i];
@@ -359,7 +320,7 @@ async function generarEliminatoria(organizadorId, torneoId) {
     for (let j = 0; j < cantPartidosEnRonda; j++) {
       const p = await prisma.partido.create({
         data: {
-          torneoId,
+          categoriaId,
           faseEliminatoriaId: fases[r],
           posicionEnRonda: j + 1,
           pareja1Id: null,
@@ -375,16 +336,13 @@ async function generarEliminatoria(organizadorId, torneoId) {
   for (const partido of partidosPrimeraRonda) {
     if (partido.estado !== 'FINALIZADO') continue;
 
-    // Determinar qué pareja avanza y cuál es su origen
     let parejaAvanza = partido.ganadorId || null;
     let origenAvanza = null;
 
     if (partido.ganadorId) {
-      // Grupos terminados: tenemos ganadorId real
       if (partido.ganadorId === partido.pareja1Id) origenAvanza = partido.origenPareja1;
       else if (partido.ganadorId === partido.pareja2Id) origenAvanza = partido.origenPareja2;
     } else {
-      // Grupos NO terminados: inferir quién avanza por la presencia de un solo origenPareja
       if (partido.origenPareja1 && !partido.origenPareja2) {
         parejaAvanza = partido.pareja1Id;
         origenAvanza = partido.origenPareja1;
@@ -394,14 +352,12 @@ async function generarEliminatoria(organizadorId, torneoId) {
       }
     }
 
-    if (!origenAvanza) continue; // partido BYE sin info de origen, no propagar
+    if (!origenAvanza) continue;
 
-    // Calcular posición destino en la siguiente ronda
     const posActual = partido.posicionEnRonda;
     const posSiguiente = Math.ceil(posActual / 2);
     const esSlotP1 = posActual % 2 === 1;
 
-    // Obtener la siguiente ronda
     const siguienteRondaNum = primeraRonda / 2;
     const partidoDestinoId = partidosPorRondaYPos[`${siguienteRondaNum}:${posSiguiente}`];
 
@@ -423,33 +379,12 @@ async function generarEliminatoria(organizadorId, torneoId) {
   };
 }
 
-/**
- * Obtener fases eliminatorias y sus partidos
- * @param {string} organizadorId - ID del organizador (para verificación)
- * @param {string} torneoId - ID del torneo
- */
-async function getFasesEliminatorias(organizadorId, torneoId) {
-  // Verificar que el torneo existe y pertenece al organizador
-  const torneo = await prisma.torneo.findUnique({
-    where: { id: torneoId },
-  });
+async function getFasesEliminatorias(organizadorId, categoriaId) {
+  await getCategoriaById(organizadorId, categoriaId);
 
-  if (!torneo) {
-    const error = new Error('Torneo no encontrado.');
-    error.statusCode = 404;
-    throw error;
-  }
-
-  if (torneo.organizadorId !== organizadorId) {
-    const error = new Error('No tenés permisos para este torneo.');
-    error.statusCode = 403;
-    throw error;
-  }
-
-  // Obtener fases con sus partidos
-  const fases = await prisma.faseEliminatoria.findMany({
-    where: { torneoId },
-    orderBy: { ronda: 'desc' }, // De mayor a menor (octavos, cuartos, semis, final)
+  return await prisma.faseEliminatoria.findMany({
+    where: { categoriaId },
+    orderBy: { ronda: 'desc' },
     include: {
       partidos: {
         orderBy: { posicionEnRonda: 'asc' },
@@ -462,40 +397,21 @@ async function getFasesEliminatorias(organizadorId, torneoId) {
       },
     },
   });
-
-  return fases;
 }
 
-/**
- * Borra toda la fase eliminatoria de un torneo.
- */
-async function borrarEliminatoria(organizadorId, torneoId) {
-  const torneo = await prisma.torneo.findUnique({ where: { id: torneoId } });
-  
-  if (!torneo) {
-    const error = new Error('Torneo no encontrado.');
-    error.statusCode = 404;
-    throw error;
-  }
-  
-  if (torneo.organizadorId !== organizadorId) {
-    const error = new Error('No tenés permisos sobre este torneo.');
-    error.statusCode = 403;
-    throw error;
-  }
+async function borrarEliminatoria(organizadorId, categoriaId) {
+  await getCategoriaById(organizadorId, categoriaId);
 
   await prisma.$transaction(async (tx) => {
-    // Borrar todos los partidos que pertenecen a una fase eliminatoria de este torneo
     await tx.partido.deleteMany({
       where: {
-        torneoId,
+        categoriaId,
         faseEliminatoriaId: { not: null },
       },
     });
 
-    // Borrar las fases
     await tx.faseEliminatoria.deleteMany({
-      where: { torneoId },
+      where: { categoriaId },
     });
   });
 

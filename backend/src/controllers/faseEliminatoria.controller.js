@@ -1,62 +1,54 @@
 const faseEliminatoriaService = require('../services/faseEliminatoria.service');
 
-/**
- * POST /api/torneos/:id/generar-eliminatoria
- */
-async function generarEliminatoria(req, res) {
+function getOrgId(req) {
+  return req.organizadorId || req.organizador?.id;
+}
+
+async function generarEliminatoria(req, res, next) {
   try {
-    const { id: torneoId } = req.params;
-    const organizadorId = req.organizadorId;
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const organizadorId = getOrgId(req);
 
     const resultado = await faseEliminatoriaService.generarEliminatoria(
       organizadorId,
-      torneoId
+      categoriaId
     );
 
     res.status(201).json(resultado);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    res.status(statusCode).json({ error: error.message });
+    next(error);
   }
 }
 
-/**
- * GET /api/torneos/:id/fases-eliminatorias
- */
-async function getFasesEliminatorias(req, res) {
+async function getFasesEliminatorias(req, res, next) {
   try {
-    const { id: torneoId } = req.params;
-    const organizadorId = req.organizadorId;
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const organizadorId = getOrgId(req);
 
     const fases = await faseEliminatoriaService.getFasesEliminatorias(
       organizadorId,
-      torneoId
+      categoriaId
     );
 
     res.status(200).json(fases);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    res.status(statusCode).json({ error: error.message });
+    next(error);
   }
 }
 
-/**
- * DELETE /api/torneos/:id/fases-eliminatorias
- */
-async function deleteFasesEliminatorias(req, res) {
+async function deleteFasesEliminatorias(req, res, next) {
   try {
-    const { id: torneoId } = req.params;
-    const organizadorId = req.organizadorId;
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const organizadorId = getOrgId(req);
 
     const resultado = await faseEliminatoriaService.borrarEliminatoria(
       organizadorId,
-      torneoId
+      categoriaId
     );
 
     res.status(200).json(resultado);
   } catch (error) {
-    const statusCode = error.statusCode || 500;
-    res.status(statusCode).json({ error: error.message });
+    next(error);
   }
 }
 

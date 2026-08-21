@@ -1,69 +1,56 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
-import { GitBranch, Users, Building2, Trash2, Play, Calendar, RotateCcw, Settings, Copy, Check } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
-import ZonaTable from '../../components/ZonaTable';
-import PartidoCard from '../../components/PartidoCard';
-import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
-import ZoneEditorModal from '../../components/ZoneEditorModal';
-import InicioDisponibilidadModal from '../../components/InicioDisponibilidadModal';
+import {
+  ChevronLeft,
+  Plus,
+  Play,
+  Calendar,
+  RotateCcw,
+  Copy,
+  Check,
+  Trash2,
+  Layers,
+  Users,
+  AlertTriangle,
+  RefreshCw,
+  Eye,
+  Settings,
+} from 'lucide-react';
 
 export default function TorneoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
+
   const [torneo, setTorneo] = useState(null);
-  const [zonas, setZonas] = useState([]);
-  const [partidos, setPartidos] = useState([]);
-  const [fasesEliminatorias, setFasesEliminatorias] = useState([]);
-  const [parejas, setParejas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [partidoSeleccionado, setPartidoSeleccionado] = useState(null);
-  const [toast, setToast] = useState('');
-  const [activeZonaId, setActiveZonaId] = useState(null);
-  const [alertModalOpen, setAlertModalOpen] = useState(false);
-  const [limpiarModalOpen, setLimpiarModalOpen] = useState(false);
-  const [limpiandoZonas, setLimpiandoZonas] = useState(false);
-  const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
-  const [eliminarModalOpen, setEliminarModalOpen] = useState(false);
-  const [iniciarModalOpen, setIniciarModalOpen] = useState(false);
-
-  const [zoneEditorOpen, setZoneEditorOpen] = useState(false);
-  const [inicioDisponibilidadOpen, setInicioDisponibilidadOpen] = useState(false);
+  // Modales y estados
   const [copiado, setCopiado] = useState(false);
+  const [nuevaCatModalOpen, setNuevaCatModalOpen] = useState(false);
+  const [nombreNuevaCat, setNombreNuevaCat] = useState('');
+  const [creandoCat, setCreandoCat] = useState(false);
+
+  const [categoriaAEliminar, setCategoriaAEliminar] = useState(null);
+  const [eliminandoCat, setEliminandoCat] = useState(false);
+
+  const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
+  const [reiniciando, setReiniciando] = useState(false);
+
+  // Iniciar Torneo Multi-categoría
+  const [verificandoInicio, setVerificandoInicio] = useState(false);
+  const [iniciarModalOpen, setIniciarModalOpen] = useState(false);
+  const [iniciandoTorneo, setIniciandoTorneo] = useState(false);
+  const [planId, setPlanId] = useState(null);
+  const [conflictosBloqueo, setConflictosBloqueo] = useState(null);
+  const [resultadoInicio, setResultadoInicio] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const tData = await api.get(`/torneos/${id}`);
-      setTorneo(tData);
-
-      // Siempre cargar parejas con su conteo de slots
-      const parejasBase = await api.get(`/torneos/${id}/parejas`);
-      const parejasConSlots = await Promise.all(
-        parejasBase.map(async (p) => {
-          try {
-            const slots = await api.get(`/parejas/${p.id}/disponibilidad`);
-            return { ...p, _cantSlots: slots.length };
-          } catch {
-            return { ...p, _cantSlots: 0 };
-          }
-        })
-      );
-      setParejas(parejasConSlots);
-
-      if (tData.estado !== 'BORRADOR') {
-        const [zData, pData, fData] = await Promise.all([
-          api.get(`/torneos/${id}/zonas`),
-          api.get(`/torneos/${id}/partidos`),
-          api.get(`/torneos/${id}/fases-eliminatorias`),
-        ]);
-        setZonas(zData);
-        setPartidos(pData);
-        setFasesEliminatorias(fData);
-      }
+      const data = await api.get(`/torneos/${id}`);
+      setTorneo(data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -75,508 +62,525 @@ export default function TorneoDetail() {
     fetchData();
   }, [fetchData]);
 
-  useEffect(() => {
-    if (zonas.length > 0) {
-      const exists = zonas.find((z) => z.id === activeZonaId);
-      if (!exists) {
-        setActiveZonaId(zonas[0].id);
-      }
-    } else {
-      setActiveZonaId(null);
-    }
-  }, [zonas, activeZonaId]);
-
-  const executeIniciar = async () => {
-    setIniciarModalOpen(false);
-    try {
-      setLoading(true);
-      await api.post(`/torneos/${id}/iniciar`);
-      fetchData();
-    } catch (err) {
-      alert(err.message);
-      setLoading(false);
-    }
+  const handleCopyLink = () => {
+    if (!torneo?.slug) return;
+    const url = `${window.location.origin}/torneo/${torneo.slug}`;
+    navigator.clipboard.writeText(url);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
   };
 
-  const executeReiniciar = async () => {
-    setReiniciarModalOpen(false);
+  const handleCrearCategoria = async (e) => {
+    e.preventDefault();
+    if (!nombreNuevaCat.trim()) return;
+    setCreandoCat(true);
     try {
-      setLoading(true);
-      await api.post(`/torneos/${id}/reiniciar`);
+      await api.post(`/torneos/${id}/categorias`, { nombre: nombreNuevaCat.trim() });
+      setNombreNuevaCat('');
+      setNuevaCatModalOpen(false);
       fetchData();
-      setToast('Torneo reiniciado a estado BORRADOR');
-      setTimeout(() => setToast(''), 3000);
     } catch (err) {
-      alert(err.message || 'Error al reiniciar torneo');
+      alert(err.message || 'Error al crear la categoría.');
     } finally {
-      setLoading(false);
+      setCreandoCat(false);
     }
   };
 
-  const executeEliminarTorneo = async () => {
-    setEliminarModalOpen(false);
+  const executeEliminarCategoria = async () => {
+    if (!categoriaAEliminar) return;
+    setEliminandoCat(true);
     try {
-      setLoading(true);
-      await api.delete(`/torneos/${id}`);
-      navigate('/admin');
-    } catch (err) {
-      alert(err.message || 'Error al eliminar torneo');
-      setLoading(false);
-    }
-  };
-
-  const handleLimpiarZonas = async () => {
-    setLimpiandoZonas(true);
-    try {
-      await api.delete(`/torneos/${id}/zonas/resultados`);
-      setLimpiarModalOpen(false);
+      await api.delete(`/categorias/${categoriaAEliminar.id}`);
+      setCategoriaAEliminar(null);
       fetchData();
-      setToast('Resultados borrados con éxito');
-      setTimeout(() => setToast(''), 3000);
     } catch (err) {
-      alert(err.message || 'Error al limpiar zonas');
+      alert(err.message || 'Error al eliminar categoría.');
     } finally {
-      setLimpiandoZonas(false);
+      setEliminandoCat(false);
     }
   };
 
-  const handleUpdateFechaHora = async (partidoId, newTimeStr) => {
+  const handlePreCheckInicio = async () => {
+    setVerificandoInicio(true);
+    setConflictosBloqueo(null);
     try {
-      if (!newTimeStr) {
-        await api.put(`/partidos/${partidoId}/fecha-hora`, { fechaHora: null });
+      const res = await api.post(`/torneos/${id}/pre-check-inicio`);
+      if (res.bloqueado) {
+        setConflictosBloqueo(res.conflictos || []);
       } else {
-        await api.put(`/partidos/${partidoId}/fecha-hora`, { fechaHora: new Date(newTimeStr).toISOString() });
+        setPlanId(res.planId);
+        setIniciarModalOpen(true);
       }
-      fetchData();
     } catch (err) {
-      alert(err.message || 'Error al actualizar horario');
+      alert(err.message || 'Error al verificar la disponibilidad de las categorías.');
+    } finally {
+      setVerificandoInicio(false);
     }
   };
 
-  const getPartidosZona = (zonaId) => partidos.filter((p) => p.zonaId === zonaId);
+  const executeIniciarTorneo = async () => {
+    setIniciandoTorneo(true);
+    try {
+      const res = await api.post(`/torneos/${id}/iniciar`, { planId });
+      setIniciarModalOpen(false);
+      setPlanId(null);
+      setResultadoInicio(res);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error al iniciar el torneo.');
+      setIniciarModalOpen(false);
+      setPlanId(null);
+      fetchData();
+    } finally {
+      setIniciandoTorneo(false);
+    }
+  };
+
+  const executeReiniciarTorneo = async () => {
+    setReiniciando(true);
+    try {
+      await api.post(`/torneos/${id}/reiniciar`);
+      setReiniciarModalOpen(false);
+      fetchData();
+    } catch (err) {
+      alert(err.message || 'Error al reiniciar el torneo.');
+    } finally {
+      setReiniciando(false);
+    }
+  };
 
   if (loading) return <div className="loading">Cargando torneo...</div>;
-  if (error) return <div className="error-message">{error}</div>;
-  if (!torneo) return null;
+  if (error || !torneo) return <div className="error-message">{error || 'Torneo no encontrado'}</div>;
 
-  const org = torneo.organizador || {};
-  const tieneJornada = org.viernesInicio || org.sabadoInicio;
+  const categoriasBorrador = (torneo.categorias || []).filter((c) => c.estado === 'BORRADOR');
+  const puedeIniciar = categoriasBorrador.length > 0 && categoriasBorrador.some((c) => c.parejas?.length >= 2);
 
   return (
     <div className="page">
-      <div className="flex-header">
-        <div>
-          <h1>{torneo.nombre}</h1>
-          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
-            <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              📡 En vivo: <a href={`/torneo/${torneo.slug}`} target="_blank" rel="noreferrer">/torneo/{torneo.slug}</a>
+      {/* Volver */}
+      <div style={{ marginBottom: '1rem' }}>
+        <Link
+          to="/admin"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            color: 'var(--color-text-secondary)',
+            textDecoration: 'none',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
+          <ChevronLeft size={16} /> Volver a Mis Torneos
+        </Link>
+      </div>
+
+      {/* Header del Torneo */}
+      <div className="card" style={{ marginBottom: '1.5rem', background: 'var(--color-surface-elevated)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <h1 style={{ margin: 0, fontSize: 'var(--font-size-2xl)' }}>{torneo.nombre}</h1>
+              <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1.25rem',
+                color: 'var(--color-text-secondary)',
+                fontSize: 'var(--font-size-sm)',
+                marginTop: '0.6rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Calendar size={15} />
+                {torneo.fecha
+                  ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric',
+                    })
+                  : 'Fecha a confirmar'}
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Layers size={15} />
+                {torneo.categorias?.length || 0} {(torneo.categorias?.length === 1) ? 'categoría' : 'categorías'}
+              </span>
+            </div>
+          </div>
+
+          {/* Acciones principales */}
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleCopyLink}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+              title="Copiar link público para compartir con jugadores"
+            >
+              {copiado ? <Check size={16} style={{ color: 'var(--color-primary)' }} /> : <Copy size={16} />}
+              {copiado ? 'Link Copiado!' : 'Copiar Link Público'}
+            </button>
+
+            <a
+              href={`/torneo/${torneo.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', textDecoration: 'none' }}
+              title="Abrir vista pública en nueva pestaña"
+            >
+              <Eye size={16} /> Ver Público
+            </a>
+
+            {puedeIniciar && (
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigator.clipboard.writeText(`${window.location.origin}/torneo/${torneo.slug}`);
-                  setCopiado(true);
-                  setTimeout(() => setCopiado(false), 1500);
-                }}
-                style={{
-                  fontSize: 'var(--font-size-xs)',
-                  padding: '0.2rem 0.5rem',
-                  background: 'var(--color-bg-input)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--color-text-secondary)',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                }}
+                className="btn-primary"
+                onClick={handlePreCheckInicio}
+                disabled={verificandoInicio}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
               >
-                {copiado ? (
+                {verificandoInicio ? (
                   <>
-                    <Check size={12} strokeWidth={2} style={{ color: 'var(--color-success)' }} />
-                    Copiado
+                    <RefreshCw size={16} className="spin" /> Verificando turnos...
                   </>
                 ) : (
                   <>
-                    <Copy size={12} strokeWidth={2} />
-                    Copiar
+                    <Play size={16} /> Iniciar Torneo y Asignar Horarios
                   </>
                 )}
               </button>
-            </span>
-          </div>
-        </div>
+            )}
 
-        {torneo.estado === 'BORRADOR' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-            <button
-              onClick={() => setIniciarModalOpen(true)}
-              className="btn-primary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', marginTop: 0 }}
-            >
-              <Play size={14} strokeWidth={2} />
-              Iniciar Torneo (Sorteo)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const conSlots = parejas.filter((p) => (p._cantSlots || 0) > 0);
-                if (conSlots.length === 0 && parejas.length > 0) {
-                  alert('Ninguna pareja tiene horarios seleccionados. Cargalos desde "Gestionar Parejas" o usá el inicio por sorteo.');
-                  return;
-                }
-                setInicioDisponibilidadOpen(true);
-              }}
-              className="btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', marginTop: 0, fontSize: 'var(--font-size-sm)' }}
-            >
-              <Calendar size={14} strokeWidth={2} />
-              Iniciar por disponibilidad
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => setLimpiarModalOpen(true)}
-              disabled={limpiandoZonas}
-              style={{
-                background: 'transparent',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: 'var(--color-danger)',
-                padding: '0.5rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-sm)',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-              }}
-            >
-              <Trash2 size={14} strokeWidth={2} />
-              {limpiandoZonas ? 'Borrando...' : 'Borrar Resultados'}
-            </button>
-            <button
-              onClick={() => setReiniciarModalOpen(true)}
-              style={{
-                background: 'transparent',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: 'var(--color-danger)',
-                padding: '0.5rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-sm)',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-              }}
-              title="Borra TODO el fixture y resultados, y vuelve el torneo a estado Borrador"
-            >
-              <RotateCcw size={14} strokeWidth={2} />
-              Reiniciar Torneo
-            </button>
-            <button
-              onClick={() => setZoneEditorOpen(true)}
-              className="btn-primary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', marginTop: 0, padding: '0.5rem 1.25rem' }}
-            >
-              <Settings size={14} strokeWidth={2} />
-              Editar Zonas
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="torneo-dashboard dashboard-grid">
-        <div className="sidebar">
-          <div className="torneo-card">
-            <h3>Menú</h3>
-            <nav className="sidebar-nav">
-              <Link
-                to={`/admin/torneos/${id}/eliminatoria`}
-                className={`sidebar-nav-item${location.pathname === `/admin/torneos/${id}/eliminatoria` ? ' active' : ''}`}
-              >
-                <GitBranch size={16} strokeWidth={2} />
-                Fase Eliminatoria {torneo.estado === 'BORRADOR' && '(Pronto)'}
-              </Link>
-
-              <Link
-                to={`/admin/torneos/${id}/parejas`}
-                className={`sidebar-nav-item${location.pathname === `/admin/torneos/${id}/parejas` ? ' active' : ''}`}
-              >
-                <Users size={16} strokeWidth={2} />
-                Gestionar Parejas ({parejas.length})
-              </Link>
-
-              <Link
-                to="/admin/club"
-                className={`sidebar-nav-item${location.pathname === '/admin/club' ? ' active' : ''}`}
-              >
-                <Building2 size={16} strokeWidth={2} />
-                Configuración del Club
-              </Link>
-
-              <hr className="sidebar-nav-divider" />
-
+            {torneo.estado !== 'BORRADOR' && (
               <button
                 type="button"
-                className="sidebar-nav-item danger"
-                onClick={() => setEliminarModalOpen(true)}
+                className="btn-secondary"
+                onClick={() => setReiniciarModalOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  width: 'auto',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                  color: 'var(--color-danger)',
+                }}
               >
-                <Trash2 size={16} strokeWidth={2} />
-                Eliminar Torneo
+                <RotateCcw size={16} /> Reiniciar Torneo
               </button>
-            </nav>
+            )}
           </div>
-        </div>
-
-        <div className="main-content">
-          {torneo.estado === 'BORRADOR' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              {/* Card de información */}
-              <div className="torneo-card">
-                <h2>Torneo en Preparación</h2>
-                <p style={{ marginTop: '0.75rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                  Actualmente tenés <strong>{parejas.length}</strong> parejas inscritas en esta categoría.
-                </p>
-              </div>
-
-              {/* Card informativa de Canchas y Horarios del Club (Solo lectura) */}
-              <div className="torneo-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <div>
-                    <h3 style={{ margin: 0 }}>🏟️ Recursos y Horarios del Club</h3>
-                    <p style={{ marginTop: '0.25rem', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)' }}>
-                      Configuración general compartida por todas las categorías del club.
-                    </p>
-                  </div>
-                  <Link to="/admin/club" className="btn-secondary" style={{ fontSize: 'var(--font-size-xs)', padding: '0.35rem 0.75rem' }}>
-                    ⚙️ Configurar Club
-                  </Link>
-                </div>
-
-                <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-                  <div className="info-row">
-                    <span>Canchas totales del club</span>
-                    <strong>{org.cantidadCanchas || 1} cancha{org.cantidadCanchas === 1 ? '' : 's'}</strong>
-                  </div>
-
-                  <div className="info-row">
-                    <span>Jornada Viernes</span>
-                    <strong>{org.viernesInicio && org.viernesFin ? `${org.viernesInicio} - ${org.viernesFin}` : 'No configurado'}</strong>
-                  </div>
-
-                  <div className="info-row">
-                    <span>Jornada Sábado</span>
-                    <strong>{org.sabadoInicio && org.sabadoFin ? `${org.sabadoInicio} - ${org.sabadoFin}` : 'No configurado'}</strong>
-                  </div>
-                </div>
-
-                {!tieneJornada && (
-                  <div className="alert-warning" style={{ marginTop: '1rem', fontSize: 'var(--font-size-xs)' }}>
-                    ⚠️ Todavía no configuraste los horarios de apertura del club. Andá a <Link to="/admin/club" style={{ color: 'inherit', fontWeight: 'bold', textDecoration: 'underline' }}>Configuración del Club</Link> para definirlos y generar la grilla de turnos.
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div>
-              {zonas.length > 1 && (
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-                  {zonas.map((z) => (
-                    <button
-                      key={z.id}
-                      onClick={() => setActiveZonaId(z.id)}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        borderRadius: 'var(--radius-md)',
-                        background: activeZonaId === z.id ? 'var(--color-primary)' : 'var(--color-bg-input)',
-                        color: activeZonaId === z.id ? 'white' : 'var(--color-text-secondary)',
-                        fontWeight: activeZonaId === z.id ? 'bold' : 'normal',
-                        border: '1px solid',
-                        borderColor: activeZonaId === z.id ? 'var(--color-primary)' : z.requiereArmadoManual ? 'var(--color-warning)' : 'var(--color-border)',
-                        transition: 'all var(--transition-fast)',
-                      }}
-                    >
-                      {z.nombre}
-                      {z.requiereArmadoManual ? ' ⚠️' : ''}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {zonas
-                .filter((z) => z.id === (activeZonaId || zonas[0]?.id))
-                .map((zona) => (
-                  <div key={zona.id} style={{ marginBottom: '3rem' }}>
-                    <ZonaTable zona={zona} />
-                    <div style={{ marginTop: '1rem' }}>
-                      <h4 style={{ marginBottom: '1rem', color: 'var(--color-text-secondary)' }}>Partidos</h4>
-                      <div className="partidos-grid">
-                        {getPartidosZona(zona.id).map((p) => {
-                          const bracketBloqueaEdicion = fasesEliminatorias.some((f) =>
-                            f.partidos.some((part) => part.pareja1Id !== null || part.pareja2Id !== null)
-                          );
-
-                          let partidoLabel = '';
-                          if (zona.formato === 'MINI_BRACKET') {
-                            if (p.posicionEnRonda === 3) partidoLabel = 'Ganador vs Ganador';
-                            if (p.posicionEnRonda === 4) partidoLabel = 'Perdedor vs Perdedor';
-                          }
-
-                          return (
-                            <div
-                              key={p.id}
-                              style={{
-                                opacity: bracketBloqueaEdicion ? 0.7 : 1,
-                                cursor: bracketBloqueaEdicion ? 'not-allowed' : 'pointer',
-                                transition: 'opacity 0.2s',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                justifyContent: 'flex-end',
-                                gap: '0.4rem',
-                              }}
-                              title={bracketBloqueaEdicion ? 'Edición bloqueada: La fase eliminatoria ya está generada.' : 'Clic para cargar resultado'}
-                              onClick={(e) => {
-                                if (bracketBloqueaEdicion) {
-                                  e.stopPropagation();
-                                  setAlertModalOpen(true);
-                                  return;
-                                }
-                              }}
-                            >
-                              {partidoLabel && (
-                                <div
-                                  style={{
-                                    fontSize: 'var(--font-size-xs)',
-                                    fontWeight: 'bold',
-                                    color: 'var(--color-primary)',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.5px',
-                                  }}
-                                >
-                                  {partidoLabel}
-                                </div>
-                              )}
-                              <PartidoCard
-                                partido={p}
-                                onClick={() => {
-                                  if (!bracketBloqueaEdicion) setPartidoSeleccionado(p);
-                                }}
-                                onUpdateFechaHora={handleUpdateFechaHora}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
         </div>
       </div>
 
-      {partidoSeleccionado && (
-        <ResultadoModal
-          partido={partidoSeleccionado}
-          onClose={() => setPartidoSeleccionado(null)}
-          onSaved={() => {
-            setPartidoSeleccionado(null);
-            fetchData();
-            setToast('Resultado guardado');
-            setTimeout(() => setToast(''), 3000);
+      {/* Banner de resultado tras iniciar */}
+      {resultadoInicio && (
+        <div
+          className="card"
+          style={{
+            marginBottom: '1.5rem',
+            background: 'rgba(34, 197, 94, 0.1)',
+            borderColor: 'rgba(34, 197, 94, 0.3)',
           }}
-        />
-      )}
-
-      {toast && (
-        <div className="toast-container">
-          <div className="toast-message">{toast}</div>
+        >
+          <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--color-primary)' }}>
+            🎉 ¡Torneo iniciado exitosamente!
+          </h3>
+          <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+            Se crearon las zonas y se asignaron automáticamente los turnos y canchas para todas las categorías.
+          </p>
         </div>
       )}
 
+      {/* Listado de Categorías */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Layers size={22} style={{ color: 'var(--color-primary)' }} />
+            Categorías del Torneo
+          </h2>
+          <p style={{ margin: '0.2rem 0 0 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+            Cada categoría cuenta con su propio cuadro de parejas, zonas, fixture y eliminatorias.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => setNuevaCatModalOpen(true)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+        >
+          <Plus size={16} /> Nueva Categoría
+        </button>
+      </div>
+
+      {(!torneo.categorias || torneo.categorias.length === 0) ? (
+        <div className="empty-state" style={{ padding: '3rem 1rem', textAlign: 'center' }}>
+          <Layers size={44} style={{ color: 'var(--color-text-secondary)', marginBottom: '0.75rem', opacity: 0.5 }} />
+          <h3 style={{ margin: '0 0 0.4rem 0' }}>No hay categorías cargadas</h3>
+          <p style={{ margin: '0 0 1.25rem 0', color: 'var(--color-text-secondary)' }}>
+            Comenzá agregando las categorías que participarán en este torneo (ej. 4ta, 6ta, 8va, Damas 5ta).
+          </p>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setNuevaCatModalOpen(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+          >
+            <Plus size={16} /> Agregar Categoría
+          </button>
+        </div>
+      ) : (
+        <div className="torneos-grid">
+          {torneo.categorias.map((cat) => {
+            const totalParejas = cat.parejas?.length || 0;
+            const totalZonas = cat.zonas?.length || 0;
+            const totalPartidos = cat.partidos?.length || 0;
+            const partidosFinalizados = (cat.partidos || []).filter((p) => p.estado === 'FINALIZADO').length;
+
+            return (
+              <div
+                key={cat.id}
+                className="torneo-card"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  cursor: 'default',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                    <h3 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{cat.nombre}</h3>
+                    <span className={`badge badge-${cat.estado.toLowerCase()}`}>{cat.estado}</span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '1rem',
+                      color: 'var(--color-text-secondary)',
+                      fontSize: 'var(--font-size-sm)',
+                      marginTop: '0.75rem',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Users size={15} style={{ color: 'var(--color-primary)' }} />
+                      <strong style={{ color: 'var(--color-text)' }}>{totalParejas}</strong> parejas
+                    </span>
+                    {totalZonas > 0 && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <Layers size={15} />
+                        <strong style={{ color: 'var(--color-text)' }}>{totalZonas}</strong> zonas
+                      </span>
+                    )}
+                    {totalPartidos > 0 && (
+                      <span style={{ fontSize: 'var(--font-size-xs)' }}>
+                        {partidosFinalizados}/{totalPartidos} jugados
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingTop: '0.75rem',
+                    borderTop: '1px solid var(--color-border)',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <Link
+                    to={`/admin/torneos/${torneo.id}/categorias/${cat.id}`}
+                    className="btn-primary"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      flex: 1,
+                      justifyContent: 'center',
+                      padding: '0.45rem 0.75rem',
+                      fontSize: 'var(--font-size-sm)',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Settings size={15} /> Administrar Categoría
+                  </Link>
+
+                  <button
+                    type="button"
+                    className="btn-danger"
+                    title="Eliminar categoría"
+                    onClick={() => setCategoriaAEliminar(cat)}
+                    style={{
+                      padding: '0.45rem 0.6rem',
+                      background: 'transparent',
+                      borderColor: 'transparent',
+                    }}
+                  >
+                    <Trash2 size={16} style={{ color: 'var(--color-danger)' }} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal para crear categoría */}
+      {nuevaCatModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '420px' }}>
+            <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Plus size={20} style={{ color: 'var(--color-primary)' }} /> Nueva Categoría
+            </h3>
+
+            <form onSubmit={handleCrearCategoria}>
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: 'var(--font-size-sm)' }}>
+                  Nombre de la categoría:
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: 4ta, 6ta, 8va, Damas 5ta..."
+                  value={nombreNuevaCat}
+                  onChange={(e) => setNombreNuevaCat(e.target.value)}
+                  autoFocus
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setNuevaCatModalOpen(false);
+                    setNombreNuevaCat('');
+                  }}
+                  disabled={creandoCat}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={creandoCat || !nombreNuevaCat.trim()}>
+                  {creandoCat ? 'Creando...' : 'Crear Categoría'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación para eliminar categoría */}
       <ConfirmModal
-        isOpen={alertModalOpen}
-        title="Edición Bloqueada"
-        message="La fase eliminatoria ya fue generada con los clasificados. Para editar la zona, primero debés borrar el bracket eliminatorio o re-sortearlo."
-        confirmText="Entendido"
-        onConfirm={() => setAlertModalOpen(false)}
-        isAlert={true}
+        isOpen={Boolean(categoriaAEliminar)}
+        title="Eliminar Categoría"
+        message={
+          <>
+            ¿Estás seguro de que querés eliminar la categoría{' '}
+            <strong>"{categoriaAEliminar?.nombre}"</strong>?
+            <br />
+            <br />
+            Se eliminarán sus parejas inscriptas, zonas y partidos.
+          </>
+        }
+        confirmText="Eliminar Categoría"
+        isDanger={true}
+        isLoading={eliminandoCat}
+        onConfirm={executeEliminarCategoria}
+        onCancel={() => setCategoriaAEliminar(null)}
       />
 
-      {limpiarModalOpen && (
-        <ConfirmModal
-          isOpen={limpiarModalOpen}
-          title="Borrar Resultados"
-          message="¿Estás seguro de que querés borrar todos los resultados cargados en las zonas? Los partidos volverán a estado Pendiente."
-          onConfirm={handleLimpiarZonas}
-          onCancel={() => setLimpiarModalOpen(false)}
-          confirmText="Sí, borrar resultados"
-          isDanger={true}
-        />
-      )}
+      {/* Modal de confirmación para reiniciar torneo */}
+      <ConfirmModal
+        isOpen={reiniciarModalOpen}
+        title="Reiniciar Torneo a Borrador"
+        message={
+          <>
+            ¿Estás seguro de que querés reiniciar el torneo a <strong>BORRADOR</strong>?
+            <br />
+            <br />
+            Se resetearán todas las zonas, partidos, llaves eliminatorias y horarios de todas las categorías. Las parejas y sus disponibilidades se mantendrán intactas.
+          </>
+        }
+        confirmText="Sí, reiniciar torneo"
+        isDanger={true}
+        isLoading={reiniciando}
+        onConfirm={executeReiniciarTorneo}
+        onCancel={() => setReiniciarModalOpen(false)}
+      />
 
-      {reiniciarModalOpen && (
-        <ConfirmModal
-          isOpen={reiniciarModalOpen}
-          title="Reiniciar Torneo"
-          message="¿Estás completamente seguro de que querés REINICIAR el torneo? Esto borrará de forma permanente TODAS las zonas, partidos, resultados y fases eliminatorias. El torneo volverá al estado BORRADOR."
-          onConfirm={executeReiniciar}
-          onCancel={() => setReiniciarModalOpen(false)}
-          confirmText="Sí, reiniciar torneo"
-          isDanger={true}
-        />
-      )}
+      {/* Modal de confirmación para Iniciar Torneo Multi-categoría */}
+      <ConfirmModal
+        isOpen={iniciarModalOpen}
+        title="Iniciar Torneo y Asignar Horarios"
+        message={
+          <>
+            Se generarán las zonas para todas las categorías en borrador y se asignarán los turnos y canchas optimizados sin solapamientos.
+            <br />
+            <br />
+            ¿Deseas continuar?
+          </>
+        }
+        confirmText="Confirmar e Iniciar"
+        isLoading={iniciandoTorneo}
+        onConfirm={executeIniciarTorneo}
+        onCancel={() => {
+          setIniciarModalOpen(false);
+          setPlanId(null);
+        }}
+      />
 
-      {zoneEditorOpen && (
-        <ZoneEditorModal
-          torneoId={torneo.id}
-          zonasOriginales={zonas}
-          parejas={parejas}
-          onClose={() => setZoneEditorOpen(false)}
-          onSaved={() => {
-            setZoneEditorOpen(false);
-            fetchData();
-          }}
-        />
-      )}
+      {/* Modal de conflictos de bloqueo */}
+      {conflictosBloqueo && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '550px' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <AlertTriangle size={22} /> No se puede iniciar el torneo
+            </h3>
+            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+              Existen incompatibilidades de horarios entre parejas o no hay franjas libres suficientes en las canchas configuradas:
+            </p>
 
-      {iniciarModalOpen && (
-        <ConfirmModal
-          isOpen={iniciarModalOpen}
-          title="🚀 Iniciar Torneo"
-          message="¿Seguro que querés iniciar el torneo? Se sortearán las zonas y ya no podrás agregar ni quitar parejas."
-          onConfirm={executeIniciar}
-          onCancel={() => setIniciarModalOpen(false)}
-          confirmText="Sí, iniciar torneo"
-        />
-      )}
+            <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '1.25rem' }}>
+              {conflictosBloqueo.map((c) => (
+                <div
+                  key={c.categoriaId}
+                  style={{
+                    padding: '0.75rem',
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    borderRadius: 'var(--radius-sm)',
+                    marginBottom: '0.5rem',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                  }}
+                >
+                  <strong style={{ color: 'var(--color-danger)' }}>{c.nombreCategoria}</strong>
+                  <ul style={{ margin: '0.4rem 0 0 1.25rem', fontSize: 'var(--font-size-sm)', padding: 0 }}>
+                    {c.partidosSinHorario.map((p, idx) => (
+                      <li key={idx} style={{ marginBottom: '0.25rem' }}>
+                        {p.zona}: {p.pareja1} vs {p.pareja2}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
 
-      {inicioDisponibilidadOpen && (
-        <InicioDisponibilidadModal
-          torneoId={torneo.id}
-          parejas={parejas}
-          onClose={() => setInicioDisponibilidadOpen(false)}
-          onSuccess={() => {
-            setInicioDisponibilidadOpen(false);
-            fetchData();
-            setToast('Torneo iniciado por disponibilidad horaria');
-            setTimeout(() => setToast(''), 4000);
-          }}
-        />
-      )}
-
-      {eliminarModalOpen && (
-        <ConfirmModal
-          isOpen={true}
-          title="Eliminar Torneo"
-          message={`¿Estás seguro de que querés eliminar el torneo "${torneo.nombre}"? Esta acción borrará todas sus parejas, zonas, partidos y resultados permanentemente.`}
-          onConfirm={executeEliminarTorneo}
-          onCancel={() => setEliminarModalOpen(false)}
-          confirmText="Sí, eliminar torneo"
-          isDanger={true}
-        />
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setConflictosBloqueo(null)}>
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

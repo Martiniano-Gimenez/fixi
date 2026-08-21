@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma');
-const { getTorneoById } = require('./torneo.service');
+const { getCategoriaById } = require('./categoria.service');
 const { calcularCompatibilidad, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
 
 // Fisher-Yates shuffle
@@ -15,12 +15,12 @@ function shuffleArray(array) {
 /**
  * Función auxiliar para generar partidos de una zona
  */
-async function generarPartidosZonaHelper(tx, torneoId, zonaId, formato, size, parejasEnEstaZona) {
+async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size, parejasEnEstaZona) {
   if (formato === 'ROUND_ROBIN') {
     if (size === 2) {
       await tx.partido.create({
         data: {
-          torneoId,
+          categoriaId,
           zonaId,
           pareja1Id: parejasEnEstaZona[0].id,
           pareja2Id: parejasEnEstaZona[1].id,
@@ -33,7 +33,7 @@ async function generarPartidosZonaHelper(tx, torneoId, zonaId, formato, size, pa
         const [p1Idx, p2Idx] = enfrentamientos[k];
         await tx.partido.create({
           data: {
-            torneoId,
+            categoriaId,
             zonaId,
             pareja1Id: parejasEnEstaZona[p1Idx].id,
             pareja2Id: parejasEnEstaZona[p2Idx].id,
@@ -47,7 +47,7 @@ async function generarPartidosZonaHelper(tx, torneoId, zonaId, formato, size, pa
         const [p1Idx, p2Idx] = enfrentamientos[k];
         await tx.partido.create({
           data: {
-            torneoId,
+            categoriaId,
             zonaId,
             pareja1Id: parejasEnEstaZona[p1Idx].id,
             pareja2Id: parejasEnEstaZona[p2Idx].id,
@@ -59,7 +59,7 @@ async function generarPartidosZonaHelper(tx, torneoId, zonaId, formato, size, pa
   } else if (formato === 'MINI_BRACKET') {
     await tx.partido.create({
       data: {
-        torneoId,
+        categoriaId,
         zonaId,
         pareja1Id: parejasEnEstaZona[0].id,
         pareja2Id: parejasEnEstaZona[1].id,
@@ -68,7 +68,7 @@ async function generarPartidosZonaHelper(tx, torneoId, zonaId, formato, size, pa
     });
     await tx.partido.create({
       data: {
-        torneoId,
+        categoriaId,
         zonaId,
         pareja1Id: parejasEnEstaZona[2].id,
         pareja2Id: parejasEnEstaZona[3].id,
@@ -76,32 +76,44 @@ async function generarPartidosZonaHelper(tx, torneoId, zonaId, formato, size, pa
       },
     });
     await tx.partido.create({
-      data: { torneoId, zonaId, posicionEnRonda: 3 },
+      data: {
+        categoriaId,
+        zonaId,
+        posicionEnRonda: 3,
+        origenPareja1: 'Ganador Partido 1',
+        origenPareja2: 'Ganador Partido 2',
+      },
     });
     await tx.partido.create({
-      data: { torneoId, zonaId, posicionEnRonda: 4 },
+      data: {
+        categoriaId,
+        zonaId,
+        posicionEnRonda: 4,
+        origenPareja1: 'Perdedor Partido 1',
+        origenPareja2: 'Perdedor Partido 2',
+      },
     });
   }
 }
 
 /**
- * Lógica de inicio de torneo y generación de zonas (Sorteo aleatorio)
+ * Lógica de inicio de categoría y generación de zonas (Sorteo aleatorio)
  */
-async function iniciarTorneo(organizadorId, torneoId, externalTx = null) {
+async function iniciarCategoria(organizadorId, categoriaId, externalTx = null) {
   const db = externalTx || prisma;
-  const torneo = await getTorneoById(organizadorId, torneoId, db);
+  const categoria = await getCategoriaById(organizadorId, categoriaId, db);
 
-  if (torneo.estado !== 'BORRADOR') {
-    const error = new Error('El torneo ya fue iniciado.');
+  if (categoria.estado !== 'BORRADOR') {
+    const error = new Error('La categoría ya fue iniciada.');
     error.statusCode = 400;
     throw error;
   }
 
-  const parejas = await db.pareja.findMany({ where: { torneoId } });
+  const parejas = await db.pareja.findMany({ where: { categoriaId } });
   const numParejas = parejas.length;
 
   if (numParejas < 2) {
-    const error = new Error('Se necesitan al menos 2 parejas para iniciar el torneo.');
+    const error = new Error('Se necesitan al menos 2 parejas para iniciar la categoría.');
     error.statusCode = 400;
     throw error;
   }
@@ -122,7 +134,7 @@ async function iniciarTorneo(organizadorId, torneoId, externalTx = null) {
 
       const zona = await tx.zona.create({
         data: {
-          torneoId,
+          categoriaId,
           nombre: nombreZona,
           clasifican,
           formato,
@@ -141,11 +153,11 @@ async function iniciarTorneo(organizadorId, torneoId, externalTx = null) {
         });
       }
 
-      await generarPartidosZonaHelper(tx, torneoId, zona.id, formato, size, parejasEnEstaZona);
+      await generarPartidosZonaHelper(tx, categoriaId, zona.id, formato, size, parejasEnEstaZona);
     }
 
-    await tx.torneo.update({
-      where: { id: torneoId },
+    await tx.categoria.update({
+      where: { id: categoriaId },
       data: { estado: 'EN_CURSO' },
     });
   };
@@ -156,7 +168,7 @@ async function iniciarTorneo(organizadorId, torneoId, externalTx = null) {
     await prisma.$transaction(runOperation);
   }
 
-  return { message: 'Torneo iniciado y zonas generadas.' };
+  return { message: 'Categoría iniciada y zonas generadas.' };
 }
 
 /**
@@ -179,7 +191,6 @@ function calcularConfigZonas(numParejas) {
 
 /**
  * Arma grupos de parejas maximizando compatibilidad por slots discretos.
- * Greedy con backtracking acotado (máx 5000 iteraciones).
  */
 function armarGruposPorCompatibilidad(parejas, configZonas, matriz) {
   const n = parejas.length;
@@ -253,36 +264,30 @@ function intentarArmarGrupo(candidatos, size, asignado, matriz) {
     return null;
   }
 
-  const candidatosOrdenados = [...candidatos].sort((a, b) => {
-    const scoreA = candidatos.reduce((acc, c) => acc + matriz[a][c], 0);
-    const scoreB = candidatos.reduce((acc, c) => acc + matriz[b][c], 0);
-    return scoreB - scoreA;
-  });
-
   return backtrack(0, []);
 }
 
 /**
- * Iniciar torneo agrupando zonas por disponibilidad horaria
+ * Iniciar categoría agrupando zonas por disponibilidad horaria
  */
-async function iniciarTorneoConDisponibilidad(organizadorId, torneoId, externalTx = null) {
+async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, externalTx = null) {
   const db = externalTx || prisma;
-  const torneo = await getTorneoById(organizadorId, torneoId, db);
+  const categoria = await getCategoriaById(organizadorId, categoriaId, db);
 
-  if (torneo.estado !== 'BORRADOR') {
-    const error = new Error('El torneo ya fue iniciado.');
+  if (categoria.estado !== 'BORRADOR') {
+    const error = new Error('La categoría ya fue iniciada.');
     error.statusCode = 400;
     throw error;
   }
 
   const parejas = await db.pareja.findMany({
-    where: { torneoId },
+    where: { categoriaId },
     include: { slotsSeleccionados: true },
   });
 
   const numParejas = parejas.length;
   if (numParejas < 2) {
-    const error = new Error('Se necesitan al menos 2 parejas para iniciar el torneo.');
+    const error = new Error('Se necesitan al menos 2 parejas para iniciar la categoría.');
     error.statusCode = 400;
     throw error;
   }
@@ -325,7 +330,7 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId, externalT
       const clasifican = size === 4 ? 3 : 2;
 
       const zona = await tx.zona.create({
-        data: { torneoId, nombre: nombreZona, clasifican, formato },
+        data: { categoriaId, nombre: nombreZona, clasifican, formato },
       });
 
       const parejasEnZona = grupo.map((idx) => parejas[idx]);
@@ -334,7 +339,7 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId, externalT
         await tx.zonaPareja.create({ data: { zonaId: zona.id, parejaId: p.id } });
       }
 
-      await generarPartidosZonaHelper(tx, torneoId, zona.id, formato, size, parejasEnZona);
+      await generarPartidosZonaHelper(tx, categoriaId, zona.id, formato, size, parejasEnZona);
 
       resumenZonasCreadas.push({
         nombre: nombreZona,
@@ -350,7 +355,7 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId, externalT
 
       await tx.zona.create({
         data: {
-          torneoId,
+          categoriaId,
           nombre: nombreZona,
           clasifican: 2,
           formato: 'ROUND_ROBIN',
@@ -370,8 +375,8 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId, externalT
       });
     }
 
-    await tx.torneo.update({
-      where: { id: torneoId },
+    await tx.categoria.update({
+      where: { id: categoriaId },
       data: { estado: 'EN_CURSO' },
     });
   };
@@ -383,7 +388,7 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId, externalT
   }
 
   return {
-    message: 'Torneo iniciado por disponibilidad horaria.',
+    message: 'Categoría iniciada por disponibilidad horaria.',
     zonasCreadas: resumenZonasCreadas,
     zonasManual: resumenZonasManual,
     parejasSinDisponibilidad: parejas
@@ -398,168 +403,120 @@ async function iniciarTorneoConDisponibilidad(organizadorId, torneoId, externalT
 function proximaFechaPorDia(dia, fechaBase = new Date()) {
   const targetDia = dia === 'Viernes' ? 5 : 6;
   const hoy = new Date(fechaBase);
-  const diaSemana = hoy.getDay();
-  let diff = targetDia - diaSemana;
+  const diaActual = hoy.getDay();
+  let diff = targetDia - diaActual;
   if (diff < 0) diff += 7;
-  const fecha = new Date(hoy);
-  fecha.setDate(hoy.getDate() + diff);
-  fecha.setHours(0, 0, 0, 0);
-  return fecha;
+  const targetDate = new Date(hoy);
+  targetDate.setDate(hoy.getDate() + diff);
+  targetDate.setHours(0, 0, 0, 0);
+  return targetDate;
 }
 
 /**
- * Convierte un slotId ("Viernes-18:00") a un intervalo { startMs, endMs, dia, slotId }
+ * Convierte un slotId ("Viernes-18:00") a una fecha completa DateTime
  */
-function slotIdToInterval(slotId, baseFriday, baseSaturday, organizador) {
+function parseSlotToDate(slotId, fechaBase = new Date()) {
+  if (!slotId) return null;
   const [dia, horaStr] = slotId.split('-');
-  const [h, m] = horaStr.split(':').map(Number);
-  const slotMin = h * 60 + m;
-  const isFriday = dia === 'Viernes';
-  const baseDate = isFriday ? baseFriday : baseSaturday;
-  const horaInicioJornada = isFriday ? organizador.viernesInicio : organizador.sabadoInicio;
-  const jornadaInicioMin = horaAMinutos(horaInicioJornada);
+  if (!dia || !horaStr) return null;
+  const [hh, mm] = horaStr.split(':').map(Number);
+  if (isNaN(hh) || isNaN(mm)) return null;
 
-  let effectiveMin = slotMin;
-  if (slotMin < jornadaInicioMin) {
-    // Madrugada del día siguiente (+24hs)
-    effectiveMin += 24 * 60;
-  }
+  const baseDate = proximaFechaPorDia(dia, fechaBase);
+  baseDate.setHours(hh, mm, 0, 0);
+  return baseDate;
+}
 
-  const startMs = baseDate.getTime() + effectiveMin * 60 * 1000;
+/**
+ * Convierte un slotId a su ventana continua en milisegundos [startMs, endMs]
+ */
+function slotIdToMsWindow(slotId, refFecha) {
+  const startDate = parseSlotToDate(slotId, refFecha);
+  if (!startDate) return null;
+  const startMs = startDate.getTime();
   const endMs = startMs + DURACION_PARTIDO_MIN * 60 * 1000;
-  return { startMs, endMs, dia, slotId };
+  return { startMs, endMs, dia: slotId.split('-')[0] };
 }
 
 /**
- * Fusiona slots contiguos/solapados de una pareja en ventanas continuas por día,
- * preservando el orden secuencial de días en que fueron seleccionados.
+ * Fusiona slots adyacentes de una lista de slotIds en ventanas continuas
  */
-function buildOrderedAvailabilityWindows(slotIds, baseFriday, baseSaturday, organizador) {
-  if (!slotIds || slotIds.length === 0) return [];
-  const intervals = slotIds.map((s) => slotIdToInterval(s, baseFriday, baseSaturday, organizador));
-
-  const dayOrder = [];
-  const byDay = new Map();
-  for (const inv of intervals) {
-    if (!byDay.has(inv.dia)) {
-      dayOrder.push(inv.dia);
-      byDay.set(inv.dia, []);
-    }
-    byDay.get(inv.dia).push(inv);
-  }
-
-  const result = [];
-  for (const dia of dayOrder) {
-    const dayIntervals = byDay.get(dia).sort((a, b) => a.startMs - b.startMs);
-    const merged = [];
-    for (const inv of dayIntervals) {
-      if (merged.length === 0) {
-        merged.push({ startMs: inv.startMs, endMs: inv.endMs, dia: inv.dia });
-      } else {
-        const last = merged[merged.length - 1];
-        if (inv.startMs <= last.endMs) {
-          last.endMs = Math.max(last.endMs, inv.endMs);
-        } else {
-          merged.push({ startMs: inv.startMs, endMs: inv.endMs, dia: inv.dia });
-        }
-      }
-    }
-    result.push(...merged);
-  }
-
-  return result;
-}
-
-/**
- * Intersección ordenada de dos arrays de ventanas de disponibilidad por día
- */
-function intersectOrderedWindows(windowsA, windowsB) {
-  const result = [];
-  for (const a of windowsA) {
-    for (const b of windowsB) {
-      if (a.dia !== b.dia) continue;
-      const start = Math.max(a.startMs, b.startMs);
-      const end = Math.min(a.endMs, b.endMs);
-      if (start < end && end - start >= DURACION_PARTIDO_MIN * 60 * 1000) {
-        result.push({ startMs: start, endMs: end, dia: a.dia });
-      }
-    }
-  }
-  return result;
-}
-
-/**
- * Computa huecos libres de duración >= minDuracionMs en una cancha
- */
-function computeFreeGaps(occupiedIntervals, dayStartMs, dayEndMs, minDuracionMs) {
-  const gaps = [];
-  let currentStart = dayStartMs;
-
-  const relevant = (occupiedIntervals || [])
-    .filter((inv) => inv.endMs > dayStartMs && inv.startMs < dayEndMs)
+function fusionarSlotsEnVentanas(slotIds, refFecha) {
+  const rawWindows = slotIds
+    .map((s) => slotIdToMsWindow(s, refFecha))
+    .filter(Boolean)
     .sort((a, b) => a.startMs - b.startMs);
 
-  for (const inv of relevant) {
-    const occStart = Math.max(inv.startMs, dayStartMs);
-    const occEnd = Math.min(inv.endMs, dayEndMs);
+  if (rawWindows.length === 0) return [];
 
-    if (occStart > currentStart) {
-      if (occStart - currentStart >= minDuracionMs) {
-        gaps.push({ startMs: currentStart, endMs: occStart });
+  const merged = [];
+  let current = { ...rawWindows[0] };
+
+  for (let i = 1; i < rawWindows.length; i++) {
+    const next = rawWindows[i];
+    if (next.dia === current.dia && next.startMs <= current.endMs) {
+      current.endMs = Math.max(current.endMs, next.endMs);
+    } else {
+      merged.push(current);
+      current = { ...next };
+    }
+  }
+  merged.push(current);
+  return merged;
+}
+
+/**
+ * Calcula la intersección de ventanas continuas entre dos listas de ventanas
+ */
+function interseccionVentanas(ventanasA, ventanasB) {
+  const result = [];
+  for (const a of ventanasA) {
+    for (const b of ventanasB) {
+      if (a.dia !== b.dia) continue;
+      const startMs = Math.max(a.startMs, b.startMs);
+      const endMs = Math.min(a.endMs, b.endMs);
+      if (endMs - startMs >= DURACION_PARTIDO_MIN * 60 * 1000) {
+        result.push({ dia: a.dia, startMs, endMs });
       }
     }
-    currentStart = Math.max(currentStart, occEnd);
   }
-
-  if (dayEndMs - currentStart >= minDuracionMs) {
-    gaps.push({ startMs: currentStart, endMs: dayEndMs });
-  }
-
-  return gaps;
-}
-
-/**
- * Redondea timestampMs al próximo múltiplo de 15 min respecto a baseDateMs
- */
-function ceilTo15Min(timestampMs, baseDateMs) {
-  const offsetMin = (timestampMs - baseDateMs) / (60 * 1000);
-  const ceiledMin = Math.ceil(offsetMin / 15) * 15;
-  return baseDateMs + ceiledMin * 60 * 1000;
-}
-
-/**
- * Verifica si una pareja ya tiene un partido asignado en colisión con [startMs, endMs]
- */
-function parejaTieneColision(parejaAssignments, parejaId, startMs, endMs) {
-  if (!parejaId) return false;
-  const assignments = parejaAssignments.get(parejaId);
-  if (!assignments || assignments.length === 0) return false;
-  return assignments.some((a) => a.startMs < endMs && a.endMs > startMs);
+  return result;
 }
 
 /**
  * Asigna automáticamente horarios y canchas a los partidos de zonas en dos pasadas
  * con línea de tiempo continua e independiente por cancha, respetando canchas compartidas
- * de TODO el club (cross-tournament y cruces con horario fijado en este torneo).
- * Soporta recibir un torneoId individual o un array de torneoIds para optimización global (MCF Global).
+ * de TODO el club (cross-category y cruces con horario fijado).
+ * Soporta recibir un categoriaId individual o un array de categoriaIds para optimización global (MCF Global).
  */
-async function asignarHorariosAutomatico(organizadorId, torneoIdOrIds, externalTx = null) {
+async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, externalTx = null) {
   const db = externalTx || prisma;
-  const torneoIds = Array.isArray(torneoIdOrIds) ? torneoIdOrIds : [torneoIdOrIds];
+  const categoriaIds = Array.isArray(categoriaIdOrIds) ? categoriaIdOrIds : [categoriaIdOrIds];
 
-  const torneos = await db.torneo.findMany({
-    where: { id: { in: torneoIds }, organizadorId },
+  const categorias = await db.categoria.findMany({
+    where: { id: { in: categoriaIds } },
+    include: {
+      torneo: true,
+    },
   });
 
-  if (torneos.length === 0) {
-    const error = new Error('No se encontraron torneos.');
+  if (categorias.length === 0) {
+    const error = new Error('No se encontraron categorías.');
     error.statusCode = 404;
     throw error;
   }
 
-  const enBorrador = torneos.find((t) => t.estado === 'BORRADOR');
+  for (const c of categorias) {
+    if (c.torneo.organizadorId !== organizadorId) {
+      const error = new Error('No tenés permisos para gestionar una o más categorías seleccionadas.');
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
+  const enBorrador = categorias.find((c) => c.estado === 'BORRADOR');
   if (enBorrador) {
-    const error = new Error(`El torneo "${enBorrador.nombre}" está en borrador. Iniciá el torneo primero.`);
+    const error = new Error(`La categoría "${enBorrador.nombre}" está en borrador. Iniciá la categoría primero.`);
     error.statusCode = 400;
     throw error;
   }
@@ -571,17 +528,19 @@ async function asignarHorariosAutomatico(organizadorId, torneoIdOrIds, externalT
   const cantidadCanchas = Math.max(1, organizador?.cantidadCanchas || 1);
   const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 
-  // 1. Cargar todos los partidos ya agendados de TODO el club (otros torneos y cruces con horario fijado)
+  // 1. Cargar todos los partidos ya agendados de TODO el club
   const partidosYaAgendados = await db.partido.findMany({
     where: {
-      torneo: { organizadorId },
+      categoria: {
+        torneo: { organizadorId },
+      },
       canchaNumero: { not: null },
       fechaHora: { not: null },
       sinHorarioAsignado: false,
     },
     select: {
       id: true,
-      torneoId: true,
+      categoriaId: true,
       fechaHora: true,
       canchaNumero: true,
       pareja1Id: true,
@@ -618,30 +577,28 @@ async function asignarHorariosAutomatico(organizadorId, torneoIdOrIds, externalT
     }
   }
 
-  // 3. Cargar partidos pendientes de zonas de los torneos especificados
+  // 3. Cargar partidos pendientes de zonas de las categorías especificadas
   const partidos = await db.partido.findMany({
     where: {
-      torneoId: { in: torneoIds },
+      categoriaId: { in: categoriaIds },
       zonaId: { not: null },
       estado: 'PENDIENTE',
       pareja1Id: { not: null },
       pareja2Id: { not: null },
     },
     include: {
-      torneo: true,
+      categoria: { include: { torneo: true } },
       pareja1: { include: { slotsSeleccionados: true } },
       pareja2: { include: { slotsSeleccionados: true } },
     },
   });
 
-  // Los partidos a procesar son aquellos que NO tienen horario firme asignado
   const partidosAAsignar = partidos.filter((p) => !yaAgendadosIds.has(p.id));
 
-  const refFecha = torneos[0]?.fecha || new Date();
+  const refFecha = categorias[0]?.torneo?.fecha || new Date();
   const baseFriday = proximaFechaPorDia('Viernes', refFecha);
   const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
 
-  // Calcular límites de jornada de club para Viernes y Sábado
   const friInicioMin = horaAMinutos(organizador.viernesInicio);
   const friFinMin = horaAMinutos(organizador.viernesFin);
   let friEffectiveFinMin = friFinMin;
@@ -662,144 +619,144 @@ async function asignarHorariosAutomatico(organizadorId, torneoIdOrIds, externalT
   const satDayEndMs = baseSaturday.getTime() + satEffectiveFinMin * 60 * 1000;
   const hasSaturday = Boolean(organizador.sabadoInicio && organizador.sabadoFin && satDayEndMs > satDayStartMs);
 
-  // 4. Precomputar slots comunes y ventanas continuas por partido
-  const partidosInfo = partidosAAsignar.map((p) => {
-    const slotsP1 = p.pareja1.slotsSeleccionados.map((s) => s.slotId);
-    const slotsP2 = new Set(p.pareja2.slotsSeleccionados.map((s) => s.slotId));
-    const comunes = slotsP1.filter((s) => slotsP2.has(s));
+  // 4. Preprocesar y clasificar partidos en grupos de prioridad (MCF Global)
+  const grupo1 = [];
+  const grupo2 = [];
 
-    const winP1 = buildOrderedAvailabilityWindows(slotsP1, baseFriday, baseSaturday, organizador);
-    const winP2 = buildOrderedAvailabilityWindows(Array.from(slotsP2), baseFriday, baseSaturday, organizador);
-    const sharedWindows = intersectOrderedWindows(winP1, winP2);
-    const totalAvailableMs = sharedWindows.reduce((acc, w) => acc + (w.endMs - w.startMs), 0);
+  for (const partido of partidosAAsignar) {
+    const slotsP1 = (partido.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
+    const slotsP2 = (partido.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
 
-    return { partido: p, slotsComunes: comunes, sharedWindows, totalAvailableMs };
-  });
+    const conSlotsP1 = slotsP1.length > 0;
+    const conSlotsP2 = slotsP2.length > 0;
 
-  const updatesMap = new Map();
+    let slotsComunes = [];
+    let sharedWindows = [];
 
-  // Partidos sin slots comunes o sin ventanas compatibles van directo a sinHorarioAsignado
-  for (const item of partidosInfo) {
-    if (item.slotsComunes.length === 0 || item.sharedWindows.length === 0 || item.totalAvailableMs < DURACION_MS) {
-      updatesMap.set(item.partido.id, {
-        id: item.partido.id,
-        sinHorarioAsignado: true,
-        fechaHora: null,
-        canchaNumero: null,
-      });
-    }
-  }
+    if (conSlotsP1 && conSlotsP2) {
+      const set2 = new Set(slotsP2);
+      slotsComunes = slotsP1.filter((s) => set2.has(s));
 
-  // Separación por criterio MCF de combinaciones día+franja:
-  // Grupo 1: 1 sola opción día+franja (hiper-restringidos, sin alternativa)
-  // Grupo 2: Múltiples opciones día+franja (flexibles)
-  const pendientes = partidosInfo.filter((item) => !updatesMap.has(item.partido.id));
-  const grupo1 = pendientes.filter((item) => item.slotsComunes.length === 1);
-  const grupo2 = pendientes.filter((item) => item.slotsComunes.length > 1);
-
-  grupo2.sort(
-    (a, b) => a.slotsComunes.length - b.slotsComunes.length || a.totalAvailableMs - b.totalAvailableMs
-  );
-
-  // Helper para asignar un slot aprovechando huecos de cancha alineados
-  function tryAssignSlotWithGap(partido, slotId, sharedWindows) {
-    const slotInterval = slotIdToInterval(slotId, baseFriday, baseSaturday, organizador);
-    const isFriday = slotInterval.dia === 'Viernes';
-    const baseDateMs = isFriday ? baseFriday.getTime() : baseSaturday.getTime();
-
-    const matchingWin = sharedWindows.find(
-      (w) => w.dia === slotInterval.dia && w.startMs <= slotInterval.startMs && w.endMs >= slotInterval.endMs
-    ) || { startMs: slotInterval.startMs, endMs: slotInterval.endMs, dia: slotInterval.dia };
-
-    let bestCandidate = null;
-
-    for (let c = 1; c <= cantidadCanchas; c++) {
-      const courtIntervals = courtTimelines.get(c) || [];
-      const gaps = isFriday
-        ? (hasFriday ? computeFreeGaps(courtIntervals, friDayStartMs, friDayEndMs, DURACION_MS) : [])
-        : (hasSaturday ? computeFreeGaps(courtIntervals, satDayStartMs, satDayEndMs, DURACION_MS) : []);
-
-      for (const gap of gaps) {
-        const overlapStart = Math.max(gap.startMs, matchingWin.startMs);
-        const overlapEnd = Math.min(gap.endMs, matchingWin.endMs);
-        if (overlapEnd - overlapStart < DURACION_MS) continue;
-
-        let T = ceilTo15Min(overlapStart, baseDateMs);
-        while (T + DURACION_MS <= overlapEnd) {
-          if (T + DURACION_MS > slotInterval.startMs && T < slotInterval.endMs) {
-            if (
-              !parejaTieneColision(parejaAssignments, partido.pareja1Id, T, T + DURACION_MS) &&
-              !parejaTieneColision(parejaAssignments, partido.pareja2Id, T, T + DURACION_MS)
-            ) {
-              if (bestCandidate === null || T < bestCandidate.T) {
-                bestCandidate = { T, cancha: c };
-              }
-              break;
-            }
-          }
-          T += 15 * 60 * 1000;
-        }
+      const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
+      const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
+      sharedWindows = interseccionVentanas(win1, win2);
+    } else if (conSlotsP1 || conSlotsP2) {
+      slotsComunes = conSlotsP1 ? slotsP1 : slotsP2;
+      sharedWindows = fusionarSlotsEnVentanas(slotsComunes, refFecha);
+    } else {
+      if (hasFriday) {
+        sharedWindows.push({ dia: 'Viernes', startMs: friDayStartMs, endMs: friDayEndMs });
+      }
+      if (hasSaturday) {
+        sharedWindows.push({ dia: 'Sabado', startMs: satDayStartMs, endMs: satDayEndMs });
       }
     }
 
-    if (bestCandidate !== null) {
-      courtTimelines.get(bestCandidate.cancha).push({
-        startMs: bestCandidate.T,
-        endMs: bestCandidate.T + DURACION_MS,
-      });
+    const item = { partido, slotsComunes, sharedWindows, numOptions: sharedWindows.length };
+
+    if (slotsComunes.length === 1 || (slotsComunes.length === 0 && sharedWindows.length === 1)) {
+      grupo1.push(item);
+    } else {
+      grupo2.push(item);
+    }
+  }
+
+  // Ordenar grupo2 por menor cantidad de opciones
+  grupo2.sort((a, b) => a.numOptions - b.numOptions);
+
+  const updatesMap = new Map();
+
+  function isCourtFree(cancha, startMs, endMs) {
+    const timeline = courtTimelines.get(cancha) || [];
+    for (const interval of timeline) {
+      if (startMs < interval.endMs && endMs > interval.startMs) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function isPairFree(parejaId, startMs, endMs) {
+    if (!parejaId) return true;
+    const intervals = parejaAssignments.get(parejaId) || [];
+    for (const interval of intervals) {
+      if (startMs < interval.endMs && endMs > interval.startMs) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function findFreeCourtAt(startMs, endMs) {
+    for (let c = 1; c <= cantidadCanchas; c++) {
+      if (isCourtFree(c, startMs, endMs)) {
+        return c;
+      }
+    }
+    return null;
+  }
+
+  function tryAssignSlotWithGap(partido, slotId, sharedWindows) {
+    const slotWin = slotIdToMsWindow(slotId, refFecha);
+    if (!slotWin) return false;
+
+    const startMs = slotWin.startMs;
+    const endMs = slotWin.endMs;
+
+    let withinShared = false;
+    for (const w of sharedWindows) {
+      if (w.dia === slotWin.dia && startMs >= w.startMs && endMs <= w.endMs) {
+        withinShared = true;
+        break;
+      }
+    }
+    if (!withinShared) return false;
+
+    if (!isPairFree(partido.pareja1Id, startMs, endMs) || !isPairFree(partido.pareja2Id, startMs, endMs)) {
+      return false;
+    }
+
+    const canchaLibre = findFreeCourtAt(startMs, endMs);
+    if (canchaLibre !== null) {
+      courtTimelines.get(canchaLibre).push({ startMs, endMs });
       if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
-      parejaAssignments.get(partido.pareja1Id).push({
-        startMs: bestCandidate.T,
-        endMs: bestCandidate.T + DURACION_MS,
-      });
+      parejaAssignments.get(partido.pareja1Id).push({ startMs, endMs });
       if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
-      parejaAssignments.get(partido.pareja2Id).push({
-        startMs: bestCandidate.T,
-        endMs: bestCandidate.T + DURACION_MS,
-      });
+      parejaAssignments.get(partido.pareja2Id).push({ startMs, endMs });
 
       updatesMap.set(partido.id, {
         id: partido.id,
         sinHorarioAsignado: false,
-        fechaHora: new Date(bestCandidate.T),
-        canchaNumero: bestCandidate.cancha,
+        fechaHora: new Date(startMs),
+        canchaNumero: canchaLibre,
       });
       return true;
     }
     return false;
   }
 
-  // Helper para asignar en cualquier hueco continuo libre de 15 min en las ventanas compartidas
   function tryAssignContinuousWindows(partido, sharedWindows) {
-    for (const win of sharedWindows) {
-      const isFriday = win.dia === 'Viernes';
-      const baseDateMs = isFriday ? baseFriday.getTime() : baseSaturday.getTime();
+    for (const window of sharedWindows) {
+      const isFri = window.dia === 'Viernes';
+      const dayStartMs = isFri ? friDayStartMs : satDayStartMs;
+      const dayEndMs = isFri ? friDayEndMs : satDayEndMs;
+
+      const wStart = Math.max(window.startMs, dayStartMs);
+      const wEnd = Math.min(window.endMs, dayEndMs);
+
       let bestCandidateForWindow = null;
 
       for (let c = 1; c <= cantidadCanchas; c++) {
-        const courtIntervals = courtTimelines.get(c) || [];
-        const gaps = isFriday
-          ? (hasFriday ? computeFreeGaps(courtIntervals, friDayStartMs, friDayEndMs, DURACION_MS) : [])
-          : (hasSaturday ? computeFreeGaps(courtIntervals, satDayStartMs, satDayEndMs, DURACION_MS) : []);
-
-        for (const gap of gaps) {
-          const overlapStart = Math.max(gap.startMs, win.startMs);
-          const overlapEnd = Math.min(gap.endMs, win.endMs);
-          if (overlapEnd - overlapStart < DURACION_MS) continue;
-
-          let T = ceilTo15Min(overlapStart, baseDateMs);
-          while (T + DURACION_MS <= overlapEnd) {
-            if (
-              !parejaTieneColision(parejaAssignments, partido.pareja1Id, T, T + DURACION_MS) &&
-              !parejaTieneColision(parejaAssignments, partido.pareja2Id, T, T + DURACION_MS)
-            ) {
-              if (bestCandidateForWindow === null || T < bestCandidateForWindow.T) {
-                bestCandidateForWindow = { T, cancha: c };
-              }
-              break;
+        let T = wStart;
+        while (T + DURACION_MS <= wEnd) {
+          const tEnd = T + DURACION_MS;
+          if (isCourtFree(c, T, tEnd) && isPairFree(partido.pareja1Id, T, tEnd) && isPairFree(partido.pareja2Id, T, tEnd)) {
+            if (bestCandidateForWindow === null || T < bestCandidateForWindow.T) {
+              bestCandidateForWindow = { T, cancha: c };
             }
-            T += 15 * 60 * 1000;
+            break;
           }
+          T += 15 * 60 * 1000;
         }
       }
 
@@ -832,7 +789,6 @@ async function asignarHorariosAutomatico(organizadorId, torneoIdOrIds, externalT
   }
 
   // ================= PASADA 1 =================
-  // Asignar los partidos más restringidos (1 sola opción día+franja) en horarios de grilla estándar
   for (const { partido, slotsComunes, sharedWindows } of grupo1) {
     const ok = tryAssignSlotWithGap(partido, slotsComunes[0], sharedWindows);
     if (!ok) {
@@ -844,7 +800,6 @@ async function asignarHorariosAutomatico(organizadorId, torneoIdOrIds, externalT
   }
 
   // ================= PASADA 2 =================
-  // Asignar los partidos flexibles (múltiples opciones día+franja), pudiendo usar huecos libres continuos de 15 min
   for (const { partido, slotsComunes, sharedWindows } of grupo2) {
     let asignado = false;
     for (const slotId of slotsComunes) {
@@ -903,14 +858,47 @@ async function asignarHorariosAutomatico(organizadorId, torneoIdOrIds, externalT
 }
 
 /**
- * Limpia todos los resultados de las zonas (sets, estados de partidos y estadísticas)
+ * Obtiene las zonas de una categoría con sus posiciones y partidos
  */
-async function limpiarResultadosZonas(organizadorId, torneoId) {
-  const torneo = await getTorneoById(organizadorId, torneoId);
+async function getZonasByCategoria(organizadorId, categoriaId) {
+  await getCategoriaById(organizadorId, categoriaId);
+
+  return await prisma.zona.findMany({
+    where: { categoriaId },
+    include: {
+      zonaParejas: {
+        include: {
+          pareja: true,
+        },
+        orderBy: [
+          { posicion: 'asc' },
+          { puntos: 'desc' },
+          { pg: 'desc' },
+        ],
+      },
+      partidos: {
+        orderBy: { posicionEnRonda: 'asc' },
+        include: {
+          pareja1: true,
+          pareja2: true,
+          ganador: true,
+          sets: { orderBy: { numero: 'asc' } },
+        },
+      },
+    },
+    orderBy: { nombre: 'asc' },
+  });
+}
+
+/**
+ * Limpia todos los resultados de las zonas de una categoría
+ */
+async function limpiarResultadosZonas(organizadorId, categoriaId) {
+  await getCategoriaById(organizadorId, categoriaId);
 
   await prisma.$transaction(async (tx) => {
     const partidosZonas = await tx.partido.findMany({
-      where: { torneoId, zonaId: { not: null } },
+      where: { categoriaId, zonaId: { not: null } },
     });
     const partidoIds = partidosZonas.map((p) => p.id);
 
@@ -925,7 +913,7 @@ async function limpiarResultadosZonas(organizadorId, torneoId) {
       });
 
       const zonasMiniBracket = await tx.zona.findMany({
-        where: { torneoId, formato: 'MINI_BRACKET' },
+        where: { categoriaId, formato: 'MINI_BRACKET' },
       });
       if (zonasMiniBracket.length > 0) {
         await tx.partido.updateMany({
@@ -939,7 +927,7 @@ async function limpiarResultadosZonas(organizadorId, torneoId) {
       }
     }
 
-    const zonas = await tx.zona.findMany({ where: { torneoId } });
+    const zonas = await tx.zona.findMany({ where: { categoriaId } });
     if (zonas.length > 0) {
       await tx.zonaPareja.updateMany({
         where: { zonaId: { in: zonas.map((z) => z.id) } },
@@ -952,16 +940,17 @@ async function limpiarResultadosZonas(organizadorId, torneoId) {
           gf: 0,
           gc: 0,
           puntos: 0,
+          posicion: 0,
         },
       });
     }
 
-    const faseViejas = await tx.faseEliminatoria.findMany({ where: { torneoId } });
+    const faseViejas = await tx.faseEliminatoria.findMany({ where: { categoriaId } });
     if (faseViejas.length > 0) {
       await tx.partido.deleteMany({
         where: { faseEliminatoriaId: { in: faseViejas.map((f) => f.id) } },
       });
-      await tx.faseEliminatoria.deleteMany({ where: { torneoId } });
+      await tx.faseEliminatoria.deleteMany({ where: { categoriaId } });
     }
   });
 
@@ -969,22 +958,22 @@ async function limpiarResultadosZonas(organizadorId, torneoId) {
 }
 
 /**
- * Reestructura manualmente las zonas del torneo
+ * Reestructura manualmente las zonas de la categoría
  */
-async function reestructurarZonas(organizadorId, torneoId, zonasPayload) {
-  const torneo = await getTorneoById(organizadorId, torneoId);
+async function reestructurarZonas(organizadorId, categoriaId, zonasPayload) {
+  const categoria = await getCategoriaById(organizadorId, categoriaId);
 
-  if (torneo.estado === 'BORRADOR') {
-    throw new Error('El torneo está en borrador. Iniciá el torneo primero.');
+  if (categoria.estado === 'BORRADOR') {
+    throw new Error('La categoría está en borrador. Iniciá la categoría primero.');
   }
 
   await prisma.$transaction(async (tx) => {
-    const fases = await tx.faseEliminatoria.findMany({ where: { torneoId } });
+    const fases = await tx.faseEliminatoria.findMany({ where: { categoriaId } });
     if (fases.length > 0) {
       await tx.partido.deleteMany({
         where: { faseEliminatoriaId: { in: fases.map((f) => f.id) } },
       });
-      await tx.faseEliminatoria.deleteMany({ where: { torneoId } });
+      await tx.faseEliminatoria.deleteMany({ where: { categoriaId } });
     }
 
     for (const zPayload of zonasPayload) {
@@ -1018,7 +1007,7 @@ async function reestructurarZonas(organizadorId, torneoId, zonasPayload) {
         parejasEnEstaZona.push({ id: pId });
       }
 
-      await generarPartidosZonaHelper(tx, torneoId, zona.id, formato, size, parejasEnEstaZona);
+      await generarPartidosZonaHelper(tx, categoriaId, zona.id, formato, size, parejasEnEstaZona);
     }
   });
 
@@ -1026,9 +1015,12 @@ async function reestructurarZonas(organizadorId, torneoId, zonasPayload) {
 }
 
 module.exports = {
-  iniciarTorneo,
+  iniciarCategoria,
+  iniciarCategoriaConDisponibilidad,
+  iniciarTorneo: iniciarCategoria,
+  iniciarTorneoConDisponibilidad: iniciarCategoriaConDisponibilidad,
+  asignarHorariosAutomatico,
+  getZonasByCategoria,
   limpiarResultadosZonas,
   reestructurarZonas,
-  iniciarTorneoConDisponibilidad,
-  asignarHorariosAutomatico,
 };

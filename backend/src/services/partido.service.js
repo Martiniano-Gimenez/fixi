@@ -4,7 +4,11 @@ async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
   const partido = await prisma.partido.findUnique({
     where: { id: partidoId },
     include: {
-      torneo: true,
+      categoria: {
+        include: {
+          torneo: true,
+        },
+      },
       zona: true,
       faseEliminatoria: true,
     },
@@ -16,7 +20,7 @@ async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
     throw error;
   }
 
-  if (partido.torneo.organizadorId !== organizadorId) {
+  if (partido.categoria.torneo.organizadorId !== organizadorId) {
     const error = new Error('No tenés permisos sobre este partido.');
     error.statusCode = 403;
     throw error;
@@ -108,11 +112,6 @@ async function propagarMiniBracket(zonaId) {
     orderBy: { posicionEnRonda: 'asc' },
   });
 
-  // partidos[0] = P1vsP2 (pos 1)
-  // partidos[1] = P3vsP4 (pos 2)
-  // partidos[2] = Ganadores (pos 3)
-  // partidos[3] = Perdedores (pos 4)
-
   const p1 = partidos.find(p => p.posicionEnRonda === 1);
   const p2 = partidos.find(p => p.posicionEnRonda === 2);
   const pGanadores = partidos.find(p => p.posicionEnRonda === 3);
@@ -149,8 +148,7 @@ async function propagarMiniBracket(zonaId) {
     });
   }
 
-  // --- NUEVA LÓGICA DE POSICIONES EXACTAS ---
-  // Resetear posiciones a 0
+  // --- LÓGICA DE POSICIONES EXACTAS ---
   await prisma.zonaPareja.updateMany({
     where: { zonaId },
     data: { posicion: 0 }
@@ -234,9 +232,6 @@ function validarSetPadel(gamesP1, gamesP2, setNum) {
 
 /**
  * Cargar el resultado parcial o total de un partido (sets).
- * - Si los sets enviados no definen un ganador aún, el partido queda EN_CURSO.
- * - Si ya hay ganador (2 sets ganados), el partido pasa a FINALIZADO.
- * - Siempre reemplaza todos los sets guardados con los nuevos.
  */
 async function cargarResultado(organizadorId, partidoId, data) {
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
@@ -360,34 +355,26 @@ async function cargarResultado(organizadorId, partidoId, data) {
  * busca el partido de la siguiente ronda y asigna el ganador en el slot correcto.
  */
 async function propagarEliminatoria(partido, ganadorId) {
-  // Obtener la fase actual para conocer su ronda
   const faseActual = await prisma.faseEliminatoria.findUnique({
     where: { id: partido.faseEliminatoriaId },
   });
 
   if (!faseActual) return;
 
-  // La siguiente ronda tiene la mitad de partidos (ronda / 2)
-  // Si ronda === 2 → siguiente es Final (ronda 1)
-  // Si ronda === 1 → ya es la final, no hay siguiente
   if (faseActual.ronda <= 2) return; // Es la final (ronda=2), no hay siguiente ronda
 
   const siguienteRondaNum = faseActual.ronda / 2;
 
-  // Buscar la fase de la siguiente ronda
+  // Buscar la fase de la siguiente ronda dentro de la misma categoría
   const faseSiguiente = await prisma.faseEliminatoria.findFirst({
     where: {
-      torneoId: partido.torneoId,
+      categoriaId: partido.categoriaId,
       ronda: siguienteRondaNum,
     },
   });
 
   if (!faseSiguiente) return;
 
-  // Determinar qué slot ocupa el ganador en la siguiente ronda:
-  // Los partidos se emparejan de a 2: pos 1 y 2 alimentan partido 1; pos 3 y 4 → partido 2; etc.
-  // posicionEnRonda del partido actual → Math.ceil(pos / 2) = posición en siguiente ronda
-  // Si posición es impar → slot pareja1; si es par → slot pareja2
   const posActual = partido.posicionEnRonda;
   const posSiguiente = Math.ceil(posActual / 2);
   const esSlotP1 = posActual % 2 === 1; // impar → pareja1
@@ -410,8 +397,6 @@ async function propagarEliminatoria(partido, ganadorId) {
     if (ganadorId === partido.pareja1Id) origenGanador = partido.origenPareja1;
     else if (ganadorId === partido.pareja2Id) origenGanador = partido.origenPareja2;
   } else if (partido.estado === 'FINALIZADO') {
-    // Si el partido es un BYE y los grupos no están finalizados (no hay ganadorId)
-    // Extraemos el origen de la pareja que no es el BYE
     if (partido.origenPareja1 && !partido.origenPareja2) {
       origenGanador = partido.origenPareja1;
       parejaGanadoraId = partido.pareja1Id;
@@ -421,7 +406,6 @@ async function propagarEliminatoria(partido, ganadorId) {
     }
   }
 
-  // Asignar el ganador en el slot correcto (puede ser null si se borra el resultado)
   await prisma.partido.update({
     where: { id: partidoDestino.id },
     data: esSlotP1
@@ -441,10 +425,8 @@ async function borrarResultado(organizadorId, partidoId) {
   }
 
   await prisma.$transaction(async (tx) => {
-    // Borrar sets
     await tx.setPartido.deleteMany({ where: { partidoId } });
 
-    // Actualizar partido
     await tx.partido.update({
       where: { id: partidoId },
       data: {
@@ -514,10 +496,34 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
   return updated;
 }
 
+async function getPartidosByCategoria(organizadorId, categoriaId, filters = {}) {
+  const { zonaId, faseId } = filters;
+
+  const where = { categoriaId };
+  if (zonaId) where.zonaId = zonaId;
+  if (faseId) where.faseEliminatoriaId = faseId;
+
+  return await prisma.partido.findMany({
+    where,
+    include: {
+      pareja1: true,
+      pareja2: true,
+      ganador: true,
+      sets: { orderBy: { numero: 'asc' } },
+    },
+    orderBy: [
+      { zonaId: 'asc' },
+      { faseEliminatoriaId: 'asc' },
+      { posicionEnRonda: 'asc' }
+    ]
+  });
+}
+
 module.exports = {
   cargarResultado,
   borrarResultado,
   updateFechaHora,
   updateBracketMatch,
   propagarEliminatoria,
+  getPartidosByCategoria,
 };

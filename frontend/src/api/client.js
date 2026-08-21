@@ -21,6 +21,13 @@ async function apiClient(endpoint, options = {}) {
     headers,
   });
 
+  if (response.status === 401 && !endpoint.startsWith('/auth')) {
+    localStorage.removeItem('token');
+    if (window.location.pathname.startsWith('/admin')) {
+      window.location.href = '/login';
+    }
+  }
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Error desconocido' }));
     const err = new Error(error.error || `Error ${response.status}`);

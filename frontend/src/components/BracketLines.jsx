@@ -1,25 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
 
 /**
- * Draws SVG connector lines between bracket rounds.
- * 
- * It reads the actual DOM positions of `.match-card` elements
- * inside `.bracket-section` columns and draws curved paths
- * connecting each pair of matches to their next-round match.
- * 
- * Props:
- *   containerRef - ref to the .bracket-scroll element
- *   fases        - array of fases (to re-render when data changes)
+ * Dibuja líneas SVG conectoras entre rondas del bracket eliminatorio.
  */
-export default function BracketLines({ containerRef, fases }) {
+export default function BracketLines({ containerRef, scrollContainerRef, fases = [] }) {
   const [lines, setLines] = useState([]);
+  const activeRef = containerRef || scrollContainerRef;
 
   const computeLines = useCallback(() => {
-    const container = containerRef.current;
+    const container = activeRef?.current;
     if (!container) return;
 
     const sections = container.querySelectorAll('.bracket-section');
-    if (sections.length < 2) return;
+    if (sections.length < 2) {
+      setLines([]);
+      return;
+    }
 
     const containerRect = container.getBoundingClientRect();
     const scrollLeft = container.scrollLeft;
@@ -36,7 +32,6 @@ export default function BracketLines({ containerRef, fases }) {
 
       if (currentCards.length === 0 || nextCards.length === 0) continue;
 
-      // Each pair of matches in currentCards feeds into one match in nextCards
       for (let j = 0; j < nextCards.length; j++) {
         const topIdx = j * 2;
         const botIdx = j * 2 + 1;
@@ -44,11 +39,9 @@ export default function BracketLines({ containerRef, fases }) {
         const nextCard = nextCards[j];
         const nextRect = nextCard.getBoundingClientRect();
 
-        // Target point: left-center of next card
         const targetX = nextRect.left - containerRect.left + scrollLeft;
         const targetY = nextRect.top + nextRect.height / 2 - containerRect.top + scrollTop;
 
-        // Helper to get right-center of a card
         const getRightCenter = (card) => {
           const r = card.getBoundingClientRect();
           return {
@@ -60,11 +53,7 @@ export default function BracketLines({ containerRef, fases }) {
         if (topIdx < currentCards.length) {
           const topCard = currentCards[topIdx];
           const from = getRightCenter(topCard);
-
-          // Horizontal gap midpoint
           const midX = (from.x + targetX) / 2;
-
-          // Path: from right of source -> horizontal to midX -> vertical to target Y -> horizontal to target
           const path = `M ${from.x} ${from.y} H ${midX} V ${targetY} H ${targetX}`;
           newLines.push(path);
         }
@@ -72,9 +61,7 @@ export default function BracketLines({ containerRef, fases }) {
         if (botIdx < currentCards.length) {
           const botCard = currentCards[botIdx];
           const from = getRightCenter(botCard);
-
           const midX = (from.x + targetX) / 2;
-
           const path = `M ${from.x} ${from.y} H ${midX} V ${targetY} H ${targetX}`;
           newLines.push(path);
         }
@@ -82,24 +69,19 @@ export default function BracketLines({ containerRef, fases }) {
     }
 
     setLines(newLines);
-  }, [containerRef, fases]);
+  }, [activeRef, fases]);
 
   useEffect(() => {
-    // Compute after DOM paint — give extra time for fixed-size cards to layout
+    const container = activeRef?.current;
+    if (!container) return;
+
     const timer = setTimeout(computeLines, 200);
 
-    // Recompute on window resize
     window.addEventListener('resize', computeLines);
+    container.addEventListener('scroll', computeLines);
 
-    // Recompute on horizontal scroll inside the bracket container
-    const container = containerRef.current;
-    if (container) {
-      container.addEventListener('scroll', computeLines);
-    }
-
-    // Recompute when the container itself resizes (e.g. cards change size)
     let resizeObserver;
-    if (container && typeof ResizeObserver !== 'undefined') {
+    if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => {
         computeLines();
       });
@@ -116,9 +98,8 @@ export default function BracketLines({ containerRef, fases }) {
         resizeObserver.disconnect();
       }
     };
-  }, [computeLines, containerRef]);
+  }, [computeLines, activeRef]);
 
-  // Also recompute when fases data changes
   useEffect(() => {
     const timer = setTimeout(computeLines, 250);
     return () => clearTimeout(timer);
@@ -143,7 +124,7 @@ export default function BracketLines({ containerRef, fases }) {
           key={i}
           d={d}
           fill="none"
-          stroke="var(--color-text-muted)"
+          stroke="var(--color-border)"
           strokeWidth="2"
           strokeLinecap="round"
         />

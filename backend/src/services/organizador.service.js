@@ -2,13 +2,12 @@ const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const { getSlotsValidosSet, generarGrillaOrganizador } = require('./slots.service');
 const {
-  iniciarTorneo,
-  iniciarTorneoConDisponibilidad,
+  iniciarCategoria,
+  iniciarCategoriaConDisponibilidad,
   asignarHorariosAutomatico,
 } = require('./zona.service');
 
 // Cache de planes validados en memoria para inicio determinista
-// NOTE: single-process assumption — move to Redis/DB if scaling horizontally
 const planesCache = new Map();
 const PLAN_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
@@ -19,7 +18,7 @@ setInterval(() => {
   }
 }, 60_000);
 
-function buildFingerprint(organizador, torneosConParejas) {
+function buildFingerprint(organizador, categoriasConParejas) {
   const clubPart = [
     organizador.cantidadCanchas || 1,
     organizador.viernesInicio || '',
@@ -28,11 +27,11 @@ function buildFingerprint(organizador, torneosConParejas) {
     organizador.sabadoFin || '',
   ].join(',');
 
-  const torneosPart = (torneosConParejas || [])
+  const categoriasPart = (categoriasConParejas || [])
     .slice()
     .sort((a, b) => a.id.localeCompare(b.id))
-    .map((t) => {
-      const parejasPart = (t.parejas || [])
+    .map((c) => {
+      const parejasPart = (c.parejas || [])
         .slice()
         .sort((a, b) => a.id.localeCompare(b.id))
         .map((p) => {
@@ -43,10 +42,10 @@ function buildFingerprint(organizador, torneosConParejas) {
           return `${p.id}=${slotsStr}`;
         })
         .join('|');
-      return `${t.id}:${parejasPart}`;
+      return `${c.id}:${parejasPart}`;
     });
 
-  return JSON.stringify([clubPart, ...torneosPart]);
+  return JSON.stringify([clubPart, ...categoriasPart]);
 }
 
 async function getOrganizador(organizadorId) {
@@ -87,11 +86,12 @@ async function simularCambioJornadaOrganizador(organizadorId, nuevaJornada) {
 
   const nuevosSlotsValidos = getSlotsValidosSet(organizadorProyectado);
 
-  // Buscar todos los SlotPareja de todos los torneos de este organizador
   const slotsActuales = await prisma.slotPareja.findMany({
     where: {
       pareja: {
-        torneo: { organizadorId },
+        categoria: {
+          torneo: { organizadorId },
+        },
       },
     },
     select: { id: true, parejaId: true, slotId: true },
@@ -133,12 +133,13 @@ async function updateOrganizador(organizadorId, data) {
       },
     });
 
-    // Limpiar slots de parejas de todos los torneos que ya no caigan en la nueva grilla
     const nuevosSlotsValidos = getSlotsValidosSet(updated);
     const slotsActuales = await tx.slotPareja.findMany({
       where: {
         pareja: {
-          torneo: { organizadorId },
+          categoria: {
+            torneo: { organizadorId },
+          },
         },
       },
       select: { id: true, slotId: true },
@@ -164,29 +165,43 @@ async function getSlotsGrilla(organizadorId) {
 }
 
 /**
- * Valida si todos los torneos en borrador pueden iniciarse y programarse sin conflictos horarios,
- * ejecutando el pipeline completo en una transacción de prueba (dry-run con rollback).
- * Si no hay conflictos, guarda el snapshot lógico del plan en memoria para su aplicación determinista.
+ * Valida si todas las categorías en borrador de un Torneo pueden iniciarse y programarse sin conflictos horarios.
  */
-async function preCheckInicioTodos(organizadorId) {
+async function preCheckInicioTorneo(organizadorId, torneoId) {
   const organizador = await getOrganizador(organizadorId);
 
-  const torneosBorrador = await prisma.torneo.findMany({
-    where: {
-      organizadorId,
-      estado: 'BORRADOR',
-    },
+  const torneo = await prisma.torneo.findUnique({
+    where: { id: torneoId },
     include: {
-      parejas: {
+      categorias: {
+        where: { estado: 'BORRADOR' },
         include: {
-          slotsSeleccionados: true,
+          parejas: {
+            include: {
+              slotsSeleccionados: true,
+            },
+          },
         },
       },
     },
   });
 
-  if (torneosBorrador.length === 0) {
-    const error = new Error('No hay torneos en estado Borrador para iniciar.');
+  if (!torneo) {
+    const error = new Error('Torneo no encontrado.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (torneo.organizadorId !== organizadorId) {
+    const error = new Error('No tenés permisos sobre este torneo.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const categoriasBorrador = torneo.categorias;
+
+  if (categoriasBorrador.length === 0) {
+    const error = new Error('No hay categorías en estado Borrador en este torneo para iniciar.');
     error.statusCode = 400;
     throw error;
   }
@@ -194,69 +209,68 @@ async function preCheckInicioTodos(organizadorId) {
   const validos = [];
   const omitidos = [];
 
-  for (const t of torneosBorrador) {
-    if (t.parejas.length < 2) {
+  for (const c of categoriasBorrador) {
+    if (c.parejas.length < 2) {
       omitidos.push({
-        id: t.id,
-        nombre: t.nombre,
+        id: c.id,
+        nombre: c.nombre,
         motivo: 'Tiene menos de 2 parejas inscriptas.',
       });
     } else {
-      const totalSlots = t.parejas.reduce((acc, p) => acc + p.slotsSeleccionados.length, 0);
-      const parejasConSlots = t.parejas.filter((p) => p.slotsSeleccionados.length > 0).length;
+      const totalSlots = c.parejas.reduce((acc, p) => acc + p.slotsSeleccionados.length, 0);
+      const parejasConSlots = c.parejas.filter((p) => p.slotsSeleccionados.length > 0).length;
       const tieneDisponibilidad = parejasConSlots > 0;
 
       const scoreFlexibilidad = tieneDisponibilidad
-        ? totalSlots / t.parejas.length
+        ? totalSlots / c.parejas.length
         : 999999;
 
       validos.push({
-        torneo: t,
+        categoria: c,
         tieneDisponibilidad,
         scoreFlexibilidad,
-        avgSlots: tieneDisponibilidad ? Number((totalSlots / t.parejas.length).toFixed(1)) : 0,
+        avgSlots: tieneDisponibilidad ? Number((totalSlots / c.parejas.length).toFixed(1)) : 0,
       });
     }
   }
 
   if (validos.length === 0) {
-    const error = new Error('Ninguno de los torneos en borrador cuenta con al menos 2 parejas.');
+    const error = new Error('Ninguna de las categorías en borrador cuenta con al menos 2 parejas.');
     error.statusCode = 400;
     throw error;
   }
 
-  const fingerprint = buildFingerprint(organizador, torneosBorrador);
+  const fingerprint = buildFingerprint(organizador, categoriasBorrador);
 
   const PLANNED_ROLLBACK = Symbol('PLANNED_ROLLBACK');
   let dryRunResult = null;
 
   try {
     await prisma.$transaction(async (tx) => {
-      // 1. Iniciar zonas en cada torneo válido (usando tx)
+      // 1. Iniciar zonas en cada categoría válida (usando tx)
       for (const item of validos) {
         if (item.tieneDisponibilidad) {
-          await iniciarTorneoConDisponibilidad(organizadorId, item.torneo.id, tx);
+          await iniciarCategoriaConDisponibilidad(organizadorId, item.categoria.id, tx);
         } else {
-          await iniciarTorneo(organizadorId, item.torneo.id, tx);
+          await iniciarCategoria(organizadorId, item.categoria.id, tx);
         }
       }
 
-      // 2. Ordenar torneos por restricción (menor score / promedio de slots primero)
+      // 2. Ordenar categorías por restricción (menor score / promedio de slots primero)
       validos.sort((a, b) => a.scoreFlexibilidad - b.scoreFlexibilidad);
 
-      // 3. Asignar horarios y canchas en tx con pool global multi-torneo (MCF Global)
-      const torneosIdsValidos = validos.map((v) => v.torneo.id);
-      await asignarHorariosAutomatico(organizadorId, torneosIdsValidos, tx);
+      // 3. Asignar horarios y canchas en tx con pool global multi-categoría (MCF Global)
+      const categoriasIdsValidos = validos.map((v) => v.categoria.id);
+      await asignarHorariosAutomatico(organizadorId, categoriasIdsValidos, tx);
 
       // 4. Buscar partidos sin horario asignado y zonas manuales por incompatibilidad
-      const torneosIds = validos.map((v) => v.torneo.id);
       const partidosSinHorario = await tx.partido.findMany({
         where: {
-          torneoId: { in: torneosIds },
+          categoriaId: { in: categoriasIdsValidos },
           sinHorarioAsignado: true,
         },
         include: {
-          torneo: { select: { id: true, nombre: true } },
+          categoria: { select: { id: true, nombre: true } },
           pareja1: { select: { id: true, jugador1: true, jugador2: true } },
           pareja2: { select: { id: true, jugador1: true, jugador2: true } },
           zona: { select: { id: true, nombre: true } },
@@ -265,11 +279,11 @@ async function preCheckInicioTodos(organizadorId) {
 
       const zonasManuales = await tx.zona.findMany({
         where: {
-          torneoId: { in: torneosIds },
+          categoriaId: { in: categoriasIdsValidos },
           requiereArmadoManual: true,
         },
         include: {
-          torneo: { select: { id: true, nombre: true } },
+          categoria: { select: { id: true, nombre: true } },
           zonaParejas: {
             include: {
               pareja: { select: { id: true, jugador1: true, jugador2: true } },
@@ -282,15 +296,15 @@ async function preCheckInicioTodos(organizadorId) {
         const conflictosMap = new Map();
 
         for (const p of partidosSinHorario) {
-          const tId = p.torneo.id;
-          if (!conflictosMap.has(tId)) {
-            conflictosMap.set(tId, {
-              torneoId: tId,
-              nombreTorneo: p.torneo.nombre,
+          const cId = p.categoria.id;
+          if (!conflictosMap.has(cId)) {
+            conflictosMap.set(cId, {
+              categoriaId: cId,
+              nombreCategoria: p.categoria.nombre,
               partidosSinHorario: [],
             });
           }
-          conflictosMap.get(tId).partidosSinHorario.push({
+          conflictosMap.get(cId).partidosSinHorario.push({
             partidoId: p.id,
             zona: p.zona?.nombre || 'Zona',
             pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : 'Por definirse',
@@ -299,18 +313,18 @@ async function preCheckInicioTodos(organizadorId) {
         }
 
         for (const zm of zonasManuales) {
-          const tId = zm.torneo.id;
-          if (!conflictosMap.has(tId)) {
-            conflictosMap.set(tId, {
-              torneoId: tId,
-              nombreTorneo: zm.torneo.nombre,
+          const cId = zm.categoria.id;
+          if (!conflictosMap.has(cId)) {
+            conflictosMap.set(cId, {
+              categoriaId: cId,
+              nombreCategoria: zm.categoria.nombre,
               partidosSinHorario: [],
             });
           }
           const parejasNombres = zm.zonaParejas
             .map((zp) => (zp.pareja ? `${zp.pareja.jugador1} / ${zp.pareja.jugador2}` : 'Pareja'))
             .join(' | ');
-          conflictosMap.get(tId).partidosSinHorario.push({
+          conflictosMap.get(cId).partidosSinHorario.push({
             partidoId: zm.id,
             zona: zm.nombre,
             pareja1: 'Incompatibilidad de grupo',
@@ -325,11 +339,11 @@ async function preCheckInicioTodos(organizadorId) {
           omitidos,
         };
       } else {
-        // Todo OK: armar el snapshot LÓGICO para persistirlo al confirmar
-        const torneosPlan = [];
+        // Armar el snapshot LÓGICO para persistirlo al confirmar
+        const categoriasPlan = [];
         for (const v of validos) {
           const zonasTx = await tx.zona.findMany({
-            where: { torneoId: v.torneo.id },
+            where: { categoriaId: v.categoria.id },
             include: {
               zonaParejas: { select: { parejaId: true } },
               partidos: {
@@ -345,9 +359,9 @@ async function preCheckInicioTodos(organizadorId) {
             },
           });
 
-          torneosPlan.push({
-            torneoId: v.torneo.id,
-            nombre: v.torneo.nombre,
+          categoriasPlan.push({
+            categoriaId: v.categoria.id,
+            nombre: v.categoria.nombre,
             avgSlots: v.avgSlots,
             zonas: zonasTx.map((z) => ({
               nombre: z.nombre,
@@ -373,21 +387,22 @@ async function preCheckInicioTodos(organizadorId) {
         planesCache.set(planId, {
           planId,
           organizadorId,
+          torneoId,
           expiresAt,
           fingerprint,
-          torneosPlan,
+          categoriasPlan,
           omitidos,
         });
 
         dryRunResult = {
           bloqueado: false,
           planId,
-          torneosAIniciar: validos.map((v) => ({ id: v.torneo.id, nombre: v.torneo.nombre })),
+          torneoId,
+          categoriasAIniciar: validos.map((v) => ({ id: v.categoria.id, nombre: v.categoria.nombre })),
           omitidos,
         };
       }
 
-      // Forzar rollback para que nada se persista durante la verificación
       throw PLANNED_ROLLBACK;
     });
   } catch (err) {
@@ -400,25 +415,29 @@ async function preCheckInicioTodos(organizadorId) {
 }
 
 /**
- * Inicia todos los torneos en estado BORRADOR y asigna sus horarios automáticamente.
- * Si recibe planId, aplica el snapshot precalculado en preCheckInicioTodos.
+ * Inicia las categorías del Torneo y aplica el plan precalculado.
  */
-async function iniciarTodosLosTorneos(organizadorId, planId = null) {
+async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = null) {
   if (planId) {
     const cached = planesCache.get(planId);
-    if (!cached || cached.expiresAt < Date.now() || cached.organizadorId !== organizadorId) {
+    if (!cached || cached.expiresAt < Date.now() || cached.organizadorId !== organizadorId || cached.torneoId !== torneoId) {
       const error = new Error('El plan de inicio expiró o no es válido. Por favor volvé a verificar.');
       error.statusCode = 400;
       throw error;
     }
 
     const organizador = await getOrganizador(organizadorId);
-    const torneosBorrador = await prisma.torneo.findMany({
-      where: { organizadorId, estado: 'BORRADOR' },
-      include: { parejas: { include: { slotsSeleccionados: true } } },
+    const torneo = await prisma.torneo.findUnique({
+      where: { id: torneoId },
+      include: {
+        categorias: {
+          where: { estado: 'BORRADOR' },
+          include: { parejas: { include: { slotsSeleccionados: true } } },
+        },
+      },
     });
 
-    const currentFingerprint = buildFingerprint(organizador, torneosBorrador);
+    const currentFingerprint = buildFingerprint(organizador, torneo?.categorias || []);
     if (currentFingerprint !== cached.fingerprint) {
       planesCache.delete(planId);
       const error = new Error('Los datos del club o las parejas cambiaron desde la última verificación. Volvé a verificar antes de iniciar.');
@@ -429,19 +448,19 @@ async function iniciarTodosLosTorneos(organizadorId, planId = null) {
     // Aplicar el plan cacheado a la base de datos
     const resumen = [];
     await prisma.$transaction(async (tx) => {
-      for (const tPlan of cached.torneosPlan) {
-        const torneo = await tx.torneo.findUnique({ where: { id: tPlan.torneoId } });
-        if (!torneo || torneo.estado !== 'BORRADOR') {
-          throw new Error(`El torneo "${tPlan.nombre}" ya no está en estado Borrador.`);
+      for (const cPlan of cached.categoriasPlan) {
+        const categoria = await tx.categoria.findUnique({ where: { id: cPlan.categoriaId } });
+        if (!categoria || categoria.estado !== 'BORRADOR') {
+          throw new Error(`La categoría "${cPlan.nombre}" ya no está en estado Borrador.`);
         }
 
         let asignadosCount = 0;
         let sinHorarioCount = 0;
 
-        for (const zData of tPlan.zonas) {
+        for (const zData of cPlan.zonas) {
           const zona = await tx.zona.create({
             data: {
-              torneoId: tPlan.torneoId,
+              categoriaId: cPlan.categoriaId,
               nombre: zData.nombre,
               clasifican: zData.clasifican,
               formato: zData.formato,
@@ -449,161 +468,79 @@ async function iniciarTodosLosTorneos(organizadorId, planId = null) {
             },
           });
 
-          for (const parejaId of zData.parejaIds) {
+          for (const pId of zData.parejaIds) {
             await tx.zonaPareja.create({
-              data: {
-                zonaId: zona.id,
-                parejaId,
-              },
+              data: { zonaId: zona.id, parejaId: pId },
             });
           }
 
           for (const pData of zData.partidos) {
             await tx.partido.create({
               data: {
-                torneoId: tPlan.torneoId,
+                categoriaId: cPlan.categoriaId,
                 zonaId: zona.id,
                 posicionEnRonda: pData.posicionEnRonda,
                 pareja1Id: pData.pareja1Id,
                 pareja2Id: pData.pareja2Id,
-                fechaHora: pData.fechaHora,
+                fechaHora: pData.fechaHora ? new Date(pData.fechaHora) : null,
                 canchaNumero: pData.canchaNumero,
-                sinHorarioAsignado: pData.sinHorarioAsignado || false,
+                sinHorarioAsignado: pData.sinHorarioAsignado,
+                estado: 'PENDIENTE',
               },
             });
 
-            if (pData.fechaHora && pData.canchaNumero) {
-              asignadosCount++;
-            } else if (pData.sinHorarioAsignado) {
-              sinHorarioCount++;
-            }
+            if (pData.sinHorarioAsignado) sinHorarioCount++;
+            else if (pData.fechaHora) asignadosCount++;
           }
         }
 
-        await tx.torneo.update({
-          where: { id: tPlan.torneoId },
+        await tx.categoria.update({
+          where: { id: cPlan.categoriaId },
           data: { estado: 'EN_CURSO' },
         });
 
         resumen.push({
-          torneoId: tPlan.torneoId,
-          nombre: tPlan.nombre,
+          categoriaId: cPlan.categoriaId,
+          nombre: cPlan.nombre,
+          zonas: cPlan.zonas.length,
           asignados: asignadosCount,
           sinHorario: sinHorarioCount,
-          total: asignadosCount + sinHorarioCount,
-          promedioSlots: tPlan.avgSlots,
         });
       }
+
+      await tx.torneo.update({
+        where: { id: torneoId },
+        data: { estado: 'EN_CURSO' },
+      });
     });
 
     planesCache.delete(planId);
 
     return {
-      message: 'Torneos iniciados y programados con éxito.',
-      iniciados: resumen,
+      message: 'Torneo iniciado y horarios asignados exitosamente.',
+      categoriasIniciadas: resumen,
       omitidos: cached.omitidos || [],
     };
   }
 
-  // Fallback sin planId: ejecución legacy directa
-  const torneosBorrador = await prisma.torneo.findMany({
-    where: {
-      organizadorId,
-      estado: 'BORRADOR',
-    },
-    include: {
-      parejas: {
-        include: {
-          slotsSeleccionados: true,
-        },
-      },
-    },
-  });
-
-  if (torneosBorrador.length === 0) {
-    const error = new Error('No hay torneos en estado Borrador para iniciar.');
+  // Si no se proveyó planId, ejecutar preCheck y luego aplicar
+  const preCheck = await preCheckInicioTorneo(organizadorId, torneoId);
+  if (preCheck.bloqueado) {
+    const error = new Error(preCheck.motivo);
     error.statusCode = 400;
+    error.conflictos = preCheck.conflictos;
     throw error;
   }
-
-  const validos = [];
-  const omitidos = [];
-
-  for (const t of torneosBorrador) {
-    if (t.parejas.length < 2) {
-      omitidos.push({
-        id: t.id,
-        nombre: t.nombre,
-        motivo: 'Tiene menos de 2 parejas inscriptas.',
-      });
-    } else {
-      const totalSlots = t.parejas.reduce((acc, p) => acc + p.slotsSeleccionados.length, 0);
-      const parejasConSlots = t.parejas.filter((p) => p.slotsSeleccionados.length > 0).length;
-      const tieneDisponibilidad = parejasConSlots > 0;
-
-      const scoreFlexibilidad = tieneDisponibilidad
-        ? totalSlots / t.parejas.length
-        : 999999;
-
-      validos.push({
-        torneo: t,
-        tieneDisponibilidad,
-        scoreFlexibilidad,
-        avgSlots: tieneDisponibilidad ? Number((totalSlots / t.parejas.length).toFixed(1)) : 0,
-      });
-    }
-  }
-
-  if (validos.length === 0) {
-    const error = new Error('Ninguno de los torneos en borrador cuenta con al menos 2 parejas.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  // 1. Iniciar zonas en cada torneo válido (por disponibilidad o sorteo aleatorio)
-  for (const item of validos) {
-    if (item.tieneDisponibilidad) {
-      await iniciarTorneoConDisponibilidad(organizadorId, item.torneo.id);
-    } else {
-      await iniciarTorneo(organizadorId, item.torneo.id);
-    }
-  }
-
-  // 2. Asignar horarios y canchas con pool global multi-torneo (MCF Global)
-  const torneosIdsValidos = validos.map((v) => v.torneo.id);
-  await asignarHorariosAutomatico(organizadorId, torneosIdsValidos);
-
-  const partidosAsignados = await prisma.partido.findMany({
-    where: { torneoId: { in: torneosIdsValidos } },
-    select: { torneoId: true, sinHorarioAsignado: true, fechaHora: true, canchaNumero: true },
-  });
-
-  const resumen = validos.map((item) => {
-    const pTorneo = partidosAsignados.filter((p) => p.torneoId === item.torneo.id);
-    const asig = pTorneo.filter((p) => !p.sinHorarioAsignado && p.fechaHora && p.canchaNumero).length;
-    const sin = pTorneo.filter((p) => p.sinHorarioAsignado).length;
-    return {
-      torneoId: item.torneo.id,
-      nombre: item.torneo.nombre,
-      asignados: asig,
-      sinHorario: sin,
-      total: pTorneo.length,
-      promedioSlots: item.avgSlots,
-    };
-  });
-
-  return {
-    message: 'Torneos iniciados y programados con éxito.',
-    iniciados: resumen,
-    omitidos,
-  };
+  return await iniciarTorneoMultiCategoria(organizadorId, torneoId, preCheck.planId);
 }
 
 module.exports = {
   getOrganizador,
-  simularCambioJornadaOrganizador,
   updateOrganizador,
+  simularCambioJornadaOrganizador,
   getSlotsGrilla,
-  preCheckInicioTodos,
-  iniciarTodosLosTorneos,
+  preCheckInicioTorneo,
+  iniciarTorneoMultiCategoria,
+  preCheckInicioTodos: preCheckInicioTorneo,
+  iniciarTodosLosTorneos: iniciarTorneoMultiCategoria,
 };

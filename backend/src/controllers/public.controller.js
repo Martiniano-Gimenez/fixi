@@ -2,7 +2,7 @@ const prisma = require('../lib/prisma');
 
 /**
  * GET /api/public/:slug
- * Devuelve toda la data del torneo para la vista pública (sin auth).
+ * Devuelve toda la data del torneo y todas sus categorías para la vista pública (sin auth).
  */
 async function getTorneoPublico(req, res, next) {
   try {
@@ -14,8 +14,50 @@ async function getTorneoPublico(req, res, next) {
         organizador: {
           select: { nombre: true },
         },
-        parejas: {
-          orderBy: { orden: 'asc' },
+        categorias: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            parejas: {
+              orderBy: { orden: 'asc' },
+            },
+            zonas: {
+              orderBy: { nombre: 'asc' },
+              include: {
+                zonaParejas: {
+                  orderBy: [
+                    { posicion: 'asc' },
+                    { puntos: 'desc' },
+                    { pg: 'desc' },
+                  ],
+                  include: { pareja: true },
+                },
+              },
+            },
+            partidos: {
+              where: { zonaId: { not: null } },
+              orderBy: { posicionEnRonda: 'asc' },
+              include: {
+                pareja1: true,
+                pareja2: true,
+                ganador: true,
+                sets: { orderBy: { numero: 'asc' } },
+              },
+            },
+            fasesEliminatorias: {
+              orderBy: { ronda: 'desc' },
+              include: {
+                partidos: {
+                  orderBy: { posicionEnRonda: 'asc' },
+                  include: {
+                    pareja1: true,
+                    pareja2: true,
+                    ganador: true,
+                    sets: { orderBy: { numero: 'asc' } },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     });
@@ -24,70 +66,25 @@ async function getTorneoPublico(req, res, next) {
       return res.status(404).json({ error: 'Torneo no encontrado.' });
     }
 
-    // Obtener zonas con tabla de posiciones
-    const zonas = await prisma.zona.findMany({
-      where: { torneoId: torneo.id },
-      orderBy: { nombre: 'asc' },
-      include: {
-        zonaParejas: {
-          orderBy: [
-            { puntos: 'desc' },
-            { pg: 'desc' },
-          ],
-          include: { pareja: true },
-        },
-      },
-    });
-
-    // Obtener partidos de zona
-    const partidosZona = await prisma.partido.findMany({
-      where: {
-        torneoId: torneo.id,
-        zonaId: { not: null },
-      },
-      orderBy: { posicionEnRonda: 'asc' },
-      include: {
-        pareja1: true,
-        pareja2: true,
-        ganador: true,
-        sets: { orderBy: { numero: 'asc' } },
-      },
-    });
-
-    // Obtener fases eliminatorias
-    const fasesEliminatorias = await prisma.faseEliminatoria.findMany({
-      where: { torneoId: torneo.id },
-      orderBy: { ronda: 'desc' },
-      include: {
-        partidos: {
-          orderBy: { posicionEnRonda: 'asc' },
-          include: {
-            pareja1: true,
-            pareja2: true,
-            ganador: true,
-            sets: { orderBy: { numero: 'asc' } },
-          },
-        },
-      },
-    });
-
-    res.json({
-      torneo: {
-        id: torneo.id,
-        nombre: torneo.nombre,
-        slug: torneo.slug,
-        estado: torneo.estado,
-        fecha: torneo.fecha,
-        organizador: torneo.organizador.nombre,
-        totalParejas: torneo.parejas.length,
-      },
-      zonas: zonas.map((z) => ({
+    const categoriasFormateadas = torneo.categorias.map((c) => ({
+      id: c.id,
+      nombre: c.nombre,
+      estado: c.estado,
+      totalParejas: c.parejas.length,
+      parejas: c.parejas.map((p) => ({
+        id: p.id,
+        jugador1: p.jugador1,
+        jugador2: p.jugador2,
+        orden: p.orden,
+      })),
+      zonas: c.zonas.map((z) => ({
         id: z.id,
         nombre: z.nombre,
         formato: z.formato,
         clasifican: z.clasifican,
         tabla: z.zonaParejas.map((zp) => ({
           pareja: `${zp.pareja.jugador1} / ${zp.pareja.jugador2}`,
+          posicion: zp.posicion,
           puntos: zp.puntos,
           pj: zp.pj,
           pg: zp.pg,
@@ -97,13 +94,17 @@ async function getTorneoPublico(req, res, next) {
           gf: zp.gf,
           gc: zp.gc,
         })),
-        partidos: partidosZona
+        partidos: c.partidos
           .filter((p) => p.zonaId === z.id)
           .map((p) => ({
             id: p.id,
             posicionEnRonda: p.posicionEnRonda,
             estado: p.estado,
             fechaHora: p.fechaHora,
+            canchaNumero: p.canchaNumero,
+            sinHorarioAsignado: p.sinHorarioAsignado,
+            origenPareja1: p.origenPareja1,
+            origenPareja2: p.origenPareja2,
             pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
             pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
             ganador: p.ganador ? `${p.ganador.jugador1} / ${p.ganador.jugador2}` : null,
@@ -113,7 +114,7 @@ async function getTorneoPublico(req, res, next) {
             })),
           })),
       })),
-      eliminatoria: fasesEliminatorias.map((fase) => ({
+      eliminatoria: c.fasesEliminatorias.map((fase) => ({
         id: fase.id,
         nombre: fase.nombre,
         ronda: fase.ronda,
@@ -122,6 +123,7 @@ async function getTorneoPublico(req, res, next) {
           posicion: p.posicionEnRonda,
           estado: p.estado,
           fechaHora: p.fechaHora,
+          canchaNumero: p.canchaNumero,
           origenPareja1: p.origenPareja1,
           origenPareja2: p.origenPareja2,
           pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
@@ -133,6 +135,19 @@ async function getTorneoPublico(req, res, next) {
           })),
         })),
       })),
+    }));
+
+    res.json({
+      torneo: {
+        id: torneo.id,
+        nombre: torneo.nombre,
+        slug: torneo.slug,
+        estado: torneo.estado,
+        fecha: torneo.fecha,
+        organizador: torneo.organizador.nombre,
+        totalCategorias: torneo.categorias.length,
+      },
+      categorias: categoriasFormateadas,
     });
   } catch (err) {
     next(err);

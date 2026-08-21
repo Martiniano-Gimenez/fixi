@@ -13,8 +13,12 @@ async function setDisponibilidad(parejaId, slotIds) {
   const pareja = await prisma.pareja.findUnique({
     where: { id: parejaId },
     include: {
-      torneo: {
-        include: { organizador: true },
+      categoria: {
+        include: {
+          torneo: {
+            include: { organizador: true },
+          },
+        },
       },
     },
   });
@@ -26,7 +30,8 @@ async function setDisponibilidad(parejaId, slotIds) {
   }
 
   // Filtrar solo los slots que pertenezcan a la grilla actual del club (organizador)
-  const slotsValidos = getSlotsValidosSet(pareja.torneo.organizador);
+  const organizador = pareja.categoria.torneo.organizador;
+  const slotsValidos = getSlotsValidosSet(organizador);
   const slotsFiltrados = Array.isArray(slotIds)
     ? [...new Set(slotIds.filter((s) => slotsValidos.has(s)))]
     : [];

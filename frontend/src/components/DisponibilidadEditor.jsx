@@ -8,7 +8,7 @@ function horaAMinutos(hora) {
   return h * 60 + m;
 }
 
-export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, onClose }) {
+export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, onSlotsChanged, onClose }) {
   const [grilla, setGrilla] = useState({ viernes: [], sabado: [] });
   const [selectedSlots, setSelectedSlots] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -69,6 +69,7 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
       });
       setSelectedSlots(new Set(saved));
       if (onChanged) onChanged(saved.length);
+      if (onSlotsChanged) onSlotsChanged(saved.length);
     } catch (err) {
       setError(err.message || 'Error al guardar disponibilidad.');
     } finally {
