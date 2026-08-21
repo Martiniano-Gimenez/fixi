@@ -31,16 +31,16 @@ organizadores que hoy llevan todo en papel.
 - **Duración de Partido:** Fija en **75 minutos** (constante en código, no configurable).
 - **Reglas de Pádel en Resultados:** Mínimo 6 games para ganar set, diferencia de 2 en 6-5 (se permiten 7-5 / 7-6).
 - **Mini-Bracket (Zonas de 4):** 2 partidos iniciales (P1 vs P2, P3 vs P4) y 2 definitorios ("Ganador vs Ganador" para 1°/2° puesto y "Perdedor vs Perdedor" para 3° puesto). El orden se fija mediante el campo explícito `posicion`.
-- **Compatibilidad Horaria:** Se calcula como la intersección de conjuntos de `slotId` entre parejas.
-- **Scheduler Cross-Torneo:** Al programar turnos y canchas, verifica colisiones de intervalos de tiempo (`fechaHora` ± 75 min) contra todos los partidos asignados en los demás torneos del mismo club y en memoria del torneo actual.
-- **Prioridad de Scheduling ("Most Constrained First"):** Al iniciar múltiples categorías a la vez, se ordenan de menor a mayor promedio de disponibilidad por pareja para asignar canchas primero a las más restringidas.
+- **Compatibilidad Horaria:** Las parejas cargan disponibilidad en slots discretos (75 min) que se fusionan en ventanas continuas. La compatibilidad se calcula como la intersección de ventanas continuas entre parejas.
+- **Scheduler Continuo e Independiente por Cancha:** Cada cancha gestiona su propia línea de tiempo ordenada de intervalos ocupados (partidos del club de todos los torneos y del torneo actual). El algoritmo detecta cualquier hueco libre de >= 75 min (tanto en el medio del día como al final) y asigna en la grilla de 15 minutos el horario de inicio más temprano global entre todas las canchas.
+- **Prioridad de Scheduling ("Most Constrained First"):** Al iniciar múltiples categorías o partidos a la vez, se ordenan de menor a mayor disponibilidad compartida para asignar canchas primero a los cruces más restringidos.
 
 ## Funcionalidades ya implementadas
 - CRUD completo de torneos (crear, editar, eliminar con cascada y reiniciar a borrador) y parejas.
 - Gestión de Club / Organizador (`/admin/club`): edición de canchas totales y horarios de apertura con advertencia y modal de impacto ante cambios que invaliden turnos.
 - Carga de disponibilidad por pareja con chips interactivos multi-select por día.
 - Generación de zonas por sorteo aleatorio (Fisher-Yates) o por compatibilidad horaria (greedy con backtracking acotado).
-- Asignación automática inteligente de horarios y canchas por torneo y masiva ("Iniciar todos los torneos") con pre-verificación de compatibilidad (dry-run transaccional, rollback y cache de plan determinista con invalidación por fingerprinting).
+- Asignación automática continua de horarios y canchas por torneo y masiva ("Iniciar todos los torneos") con timeline por cancha, detección de huecos intermedios, pre-verificación de compatibilidad (dry-run transaccional, rollback y cache de plan determinista con invalidación por fingerprinting).
 - Bloqueo de inicio ante partidos sin turno compatible o zonas manuales no resueltas.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.

@@ -408,8 +408,171 @@ function proximaFechaPorDia(dia, fechaBase = new Date()) {
 }
 
 /**
- * Asigna automáticamente horarios (slots) y canchas a los partidos de zonas,
- * respetando las canchas compartidas de TODO el club (cross-tournament).
+ * Convierte un slotId ("Viernes-18:00") a un intervalo { startMs, endMs, dia }
+ */
+function slotIdToInterval(slotId, baseFriday, baseSaturday, organizador) {
+  const [dia, horaStr] = slotId.split('-');
+  const [h, m] = horaStr.split(':').map(Number);
+  const slotMin = h * 60 + m;
+  const isFriday = dia === 'Viernes';
+  const baseDate = isFriday ? baseFriday : baseSaturday;
+  const horaInicioJornada = isFriday ? organizador.viernesInicio : organizador.sabadoInicio;
+  const jornadaInicioMin = horaAMinutos(horaInicioJornada);
+
+  let effectiveMin = slotMin;
+  if (slotMin < jornadaInicioMin) {
+    // Madrugada del día siguiente (+24hs)
+    effectiveMin += 24 * 60;
+  }
+
+  const startMs = baseDate.getTime() + effectiveMin * 60 * 1000;
+  const endMs = startMs + DURACION_PARTIDO_MIN * 60 * 1000;
+  return { startMs, endMs, dia };
+}
+
+/**
+ * Fusiona slots contiguos/solapados de una pareja en ventanas continuas
+ */
+function buildAvailabilityWindows(slotIds, baseFriday, baseSaturday, organizador) {
+  if (!slotIds || slotIds.length === 0) return [];
+  const intervals = slotIds.map((s) => slotIdToInterval(s, baseFriday, baseSaturday, organizador));
+  intervals.sort((a, b) => a.startMs - b.startMs);
+
+  const merged = [];
+  for (const interval of intervals) {
+    if (merged.length === 0) {
+      merged.push({ startMs: interval.startMs, endMs: interval.endMs, dia: interval.dia });
+    } else {
+      const last = merged[merged.length - 1];
+      if (interval.startMs <= last.endMs) {
+        last.endMs = Math.max(last.endMs, interval.endMs);
+      } else {
+        merged.push({ startMs: interval.startMs, endMs: interval.endMs, dia: interval.dia });
+      }
+    }
+  }
+  return merged;
+}
+
+/**
+ * Intersección de dos arrays de ventanas de disponibilidad ordenadas
+ */
+function intersectWindows(windowsA, windowsB) {
+  const result = [];
+  let i = 0;
+  let j = 0;
+  while (i < windowsA.length && j < windowsB.length) {
+    const a = windowsA[i];
+    const b = windowsB[j];
+    const start = Math.max(a.startMs, b.startMs);
+    const end = Math.min(a.endMs, b.endMs);
+    if (start < end) {
+      result.push({ startMs: start, endMs: end });
+    }
+    if (a.endMs < b.endMs) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return result;
+}
+
+/**
+ * Computa huecos libres de duración >= minDuracionMs en una cancha
+ */
+function computeFreeGaps(occupiedIntervals, dayStartMs, dayEndMs, minDuracionMs) {
+  const gaps = [];
+  let currentStart = dayStartMs;
+
+  const relevant = (occupiedIntervals || [])
+    .filter((inv) => inv.endMs > dayStartMs && inv.startMs < dayEndMs)
+    .sort((a, b) => a.startMs - b.startMs);
+
+  for (const inv of relevant) {
+    const occStart = Math.max(inv.startMs, dayStartMs);
+    const occEnd = Math.min(inv.endMs, dayEndMs);
+
+    if (occStart > currentStart) {
+      if (occStart - currentStart >= minDuracionMs) {
+        gaps.push({ startMs: currentStart, endMs: occStart });
+      }
+    }
+    currentStart = Math.max(currentStart, occEnd);
+  }
+
+  if (dayEndMs - currentStart >= minDuracionMs) {
+    gaps.push({ startMs: currentStart, endMs: dayEndMs });
+  }
+
+  return gaps;
+}
+
+/**
+ * Redondea timestampMs al próximo múltiplo de 15 min respecto a baseDateMs
+ */
+function ceilTo15Min(timestampMs, baseDateMs) {
+  const offsetMin = (timestampMs - baseDateMs) / (60 * 1000);
+  const ceiledMin = Math.ceil(offsetMin / 15) * 15;
+  return baseDateMs + ceiledMin * 60 * 1000;
+}
+
+/**
+ * Verifica si una pareja ya tiene un partido asignado en colisión con [startMs, endMs]
+ */
+function parejaTieneColision(parejaAssignments, parejaId, startMs, endMs) {
+  if (!parejaId) return false;
+  const assignments = parejaAssignments.get(parejaId);
+  if (!assignments || assignments.length === 0) return false;
+  return assignments.some((a) => a.startMs < endMs && a.endMs > startMs);
+}
+
+/**
+ * Busca el horario de inicio más temprano (en grilla de 15 min) para una cancha
+ */
+function findEarliestSlotForCourt(
+  freeGaps,
+  sharedWindows,
+  parejaAssignments,
+  p1Id,
+  p2Id,
+  durMs,
+  baseFriday,
+  baseSaturday
+) {
+  let earliestT = null;
+  const saturdayStartMs = baseSaturday.getTime();
+
+  for (const gap of freeGaps) {
+    for (const win of sharedWindows) {
+      const overlapStart = Math.max(gap.startMs, win.startMs);
+      const overlapEnd = Math.min(gap.endMs, win.endMs);
+      if (overlapEnd - overlapStart < durMs) continue;
+
+      const isFriday = overlapStart < saturdayStartMs;
+      const baseDateMs = isFriday ? baseFriday.getTime() : baseSaturday.getTime();
+
+      let T = ceilTo15Min(overlapStart, baseDateMs);
+      while (T + durMs <= overlapEnd) {
+        if (
+          !parejaTieneColision(parejaAssignments, p1Id, T, T + durMs) &&
+          !parejaTieneColision(parejaAssignments, p2Id, T, T + durMs)
+        ) {
+          if (earliestT === null || T < earliestT) {
+            earliestT = T;
+          }
+          break; // Primer T válido para este par (gap, win)
+        }
+        T += 15 * 60 * 1000;
+      }
+    }
+  }
+  return earliestT;
+}
+
+/**
+ * Asigna automáticamente horarios y canchas a los partidos de zonas con línea de tiempo continua e independiente por cancha,
+ * respetando las canchas compartidas de TODO el club (cross-tournament y cruces con horario fijado en este torneo).
  */
 async function asignarHorariosAutomatico(organizadorId, torneoId, externalTx = null) {
   const db = externalTx || prisma;
@@ -425,20 +588,57 @@ async function asignarHorariosAutomatico(organizadorId, torneoId, externalTx = n
     where: { id: organizadorId },
   });
 
-  const cantidadCanchas = organizador?.cantidadCanchas || 1;
+  const cantidadCanchas = Math.max(1, organizador?.cantidadCanchas || 1);
+  const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 
-  // 1. Cargar partidos ya programados de OTROS torneos del mismo organizador (para evitar colisión de canchas)
-  const partidosOtrosTorneos = await db.partido.findMany({
+  // 1. Cargar todos los partidos ya agendados de TODO el club (otros torneos y cruces con horario fijado en este torneo)
+  const partidosYaAgendados = await db.partido.findMany({
     where: {
       torneo: { organizadorId },
-      torneoId: { not: torneoId },
       canchaNumero: { not: null },
       fechaHora: { not: null },
+      sinHorarioAsignado: false,
     },
-    select: { id: true, fechaHora: true, canchaNumero: true },
+    select: {
+      id: true,
+      torneoId: true,
+      fechaHora: true,
+      canchaNumero: true,
+      pareja1Id: true,
+      pareja2Id: true,
+    },
   });
 
-  // 2. Cargar partidos pendientes de zonas del torneo actual
+  const yaAgendadosIds = new Set(partidosYaAgendados.map((p) => p.id));
+
+  // 2. Inicializar timelines de cada cancha y asignaciones de parejas
+  const courtTimelines = new Map();
+  for (let c = 1; c <= cantidadCanchas; c++) {
+    courtTimelines.set(c, []);
+  }
+
+  const parejaAssignments = new Map();
+
+  for (const p of partidosYaAgendados) {
+    const pStart = new Date(p.fechaHora).getTime();
+    const pEnd = pStart + DURACION_MS;
+    const cancha = p.canchaNumero;
+
+    if (cancha && courtTimelines.has(cancha)) {
+      courtTimelines.get(cancha).push({ startMs: pStart, endMs: pEnd });
+    }
+
+    if (p.pareja1Id) {
+      if (!parejaAssignments.has(p.pareja1Id)) parejaAssignments.set(p.pareja1Id, []);
+      parejaAssignments.get(p.pareja1Id).push({ startMs: pStart, endMs: pEnd });
+    }
+    if (p.pareja2Id) {
+      if (!parejaAssignments.has(p.pareja2Id)) parejaAssignments.set(p.pareja2Id, []);
+      parejaAssignments.get(p.pareja2Id).push({ startMs: pStart, endMs: pEnd });
+    }
+  }
+
+  // 3. Cargar partidos pendientes de zonas del torneo actual
   const partidos = await db.partido.findMany({
     where: {
       torneoId,
@@ -453,133 +653,139 @@ async function asignarHorariosAutomatico(organizadorId, torneoId, externalTx = n
     },
   });
 
-  // Calcular slots comunes por partido
-  const partidosConSlots = partidos.map((p) => {
+  // Los partidos a procesar son aquellos que NO tienen horario firme asignado
+  const partidosAAsignar = partidos.filter((p) => !yaAgendadosIds.has(p.id));
+
+  const baseFriday = proximaFechaPorDia('Viernes', torneo.fecha || new Date());
+  const baseSaturday = proximaFechaPorDia('Sabado', torneo.fecha || new Date());
+
+  // Calcular límites de jornada de club para Viernes y Sábado
+  const friInicioMin = horaAMinutos(organizador.viernesInicio);
+  const friFinMin = horaAMinutos(organizador.viernesFin);
+  let friEffectiveFinMin = friFinMin;
+  if (friEffectiveFinMin <= friInicioMin && organizador.viernesFin) {
+    friEffectiveFinMin += 24 * 60;
+  }
+  const friDayStartMs = baseFriday.getTime() + friInicioMin * 60 * 1000;
+  const friDayEndMs = baseFriday.getTime() + friEffectiveFinMin * 60 * 1000;
+  const hasFriday = Boolean(organizador.viernesInicio && organizador.viernesFin && friDayEndMs > friDayStartMs);
+
+  const satInicioMin = horaAMinutos(organizador.sabadoInicio);
+  const satFinMin = horaAMinutos(organizador.sabadoFin);
+  let satEffectiveFinMin = satFinMin;
+  if (satEffectiveFinMin <= satInicioMin && organizador.sabadoFin) {
+    satEffectiveFinMin += 24 * 60;
+  }
+  const satDayStartMs = baseSaturday.getTime() + satInicioMin * 60 * 1000;
+  const satDayEndMs = baseSaturday.getTime() + satEffectiveFinMin * 60 * 1000;
+  const hasSaturday = Boolean(organizador.sabadoInicio && organizador.sabadoFin && satDayEndMs > satDayStartMs);
+
+  // 4. Precomputar ventanas continuas compartidas por partido
+  const partidosConVentanas = partidosAAsignar.map((p) => {
     const slotsP1 = p.pareja1.slotsSeleccionados.map((s) => s.slotId);
-    const slotsP2 = new Set(p.pareja2.slotsSeleccionados.map((s) => s.slotId));
-    const comunes = slotsP1.filter((s) => slotsP2.has(s));
-    return { partido: p, slotsComunes: comunes };
+    const slotsP2 = p.pareja2.slotsSeleccionados.map((s) => s.slotId);
+
+    const winP1 = buildAvailabilityWindows(slotsP1, baseFriday, baseSaturday, organizador);
+    const winP2 = buildAvailabilityWindows(slotsP2, baseFriday, baseSaturday, organizador);
+    const sharedWindows = intersectWindows(winP1, winP2);
+    const totalAvailableMs = sharedWindows.reduce((acc, w) => acc + (w.endMs - w.startMs), 0);
+
+    return { partido: p, sharedWindows, totalAvailableMs };
   });
 
-  // Ordenar por flexibilidad ASC (menos slots en común primero)
-  partidosConSlots.sort((a, b) => a.slotsComunes.length - b.slotsComunes.length);
+  // Ordenar por heurística MCF: menor tiempo disponible compartido primero
+  partidosConVentanas.sort((a, b) => a.totalAvailableMs - b.totalAvailableMs);
 
-  // Registro de asignaciones en memoria del torneo actual:
-  // { slotId, cancha, fechaInicio: Date, fechaFin: Date, parejaIds: [p1, p2] }
-  const asignaciones = [];
   const updates = [];
 
-  const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
-
-  for (const { partido, slotsComunes } of partidosConSlots) {
-    if (slotsComunes.length === 0) {
+  // 5. Asignación de partidos en timeline continuo por cancha
+  for (const { partido, sharedWindows, totalAvailableMs } of partidosConVentanas) {
+    if (sharedWindows.length === 0 || totalAvailableMs < DURACION_MS) {
       updates.push({ id: partido.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
       continue;
     }
 
-    let asignadoExitoso = false;
+    let bestCandidate = null;
 
-    for (const slotId of slotsComunes) {
-      // Calcular fecha y hora de inicio/fin para este slot
-      const [dia, horaStr] = slotId.split('-');
-      const [h, m] = horaStr.split(':').map(Number);
-      const slotMin = h * 60 + m;
-      const slotFechaInicio = proximaFechaPorDia(dia, torneo.fecha || new Date());
+    for (let c = 1; c <= cantidadCanchas; c++) {
+      const courtIntervals = courtTimelines.get(c) || [];
+      const friGaps = hasFriday ? computeFreeGaps(courtIntervals, friDayStartMs, friDayEndMs, DURACION_MS) : [];
+      const satGaps = hasSaturday ? computeFreeGaps(courtIntervals, satDayStartMs, satDayEndMs, DURACION_MS) : [];
+      const courtGaps = [...friGaps, ...satGaps];
 
-      const horaInicioJornada = dia === 'Viernes' ? organizador.viernesInicio : organizador.sabadoInicio;
-      const jornadaInicioMin = horaAMinutos(horaInicioJornada);
-      if (slotMin < jornadaInicioMin) {
-        slotFechaInicio.setDate(slotFechaInicio.getDate() + 1);
-      }
-      slotFechaInicio.setHours(h, m, 0, 0);
-
-      const slotFechaFin = new Date(slotFechaInicio.getTime() + DURACION_MS);
-
-      // Verificar si alguna pareja del partido ya juega en este horario (en este torneo)
-      const colisionPareja = asignaciones.some(
-        (a) =>
-          (a.parejaIds.includes(partido.pareja1Id) || a.parejaIds.includes(partido.pareja2Id)) &&
-          a.fechaInicio.getTime() < slotFechaFin.getTime() &&
-          a.fechaFin.getTime() > slotFechaInicio.getTime()
+      const earliestT = findEarliestSlotForCourt(
+        courtGaps,
+        sharedWindows,
+        parejaAssignments,
+        partido.pareja1Id,
+        partido.pareja2Id,
+        DURACION_MS,
+        baseFriday,
+        baseSaturday
       );
-      if (colisionPareja) continue;
 
-      // Buscar cancha libre disponible en todo el club (1 .. cantidadCanchas)
-      let canchaLibre = null;
-      for (let c = 1; c <= cantidadCanchas; c++) {
-        // A. ¿Cancha ocupada por otro torneo del club?
-        const ocupadaOtroTorneo = partidosOtrosTorneos.some((p) => {
-          if (p.canchaNumero !== c) return false;
-          const pInicio = new Date(p.fechaHora).getTime();
-          const pFin = pInicio + DURACION_MS;
-          return pInicio < slotFechaFin.getTime() && pFin > slotFechaInicio.getTime();
-        });
-        if (ocupadaOtroTorneo) continue;
-
-        // B. ¿Cancha ocupada en este torneo?
-        const ocupadaEsteTorneo = asignaciones.some(
-          (a) =>
-            a.cancha === c &&
-            a.fechaInicio.getTime() < slotFechaFin.getTime() &&
-            a.fechaFin.getTime() > slotFechaInicio.getTime()
-        );
-        if (ocupadaEsteTorneo) continue;
-
-        canchaLibre = c;
-        break;
-      }
-
-      if (canchaLibre !== null) {
-        asignaciones.push({
-          slotId,
-          cancha: canchaLibre,
-          fechaInicio: slotFechaInicio,
-          fechaFin: slotFechaFin,
-          parejaIds: [partido.pareja1Id, partido.pareja2Id],
-        });
-
-        updates.push({
-          id: partido.id,
-          fechaHora: slotFechaInicio,
-          canchaNumero: canchaLibre,
-          sinHorarioAsignado: false,
-        });
-
-        asignadoExitoso = true;
-        break;
+      if (earliestT !== null) {
+        if (bestCandidate === null || earliestT < bestCandidate.T) {
+          bestCandidate = { T: earliestT, cancha: c };
+        }
       }
     }
 
-    if (!asignadoExitoso) {
+    if (bestCandidate !== null) {
+      const fechaHora = new Date(bestCandidate.T);
+      const matchEndMs = bestCandidate.T + DURACION_MS;
+
+      // Actualizar timeline de la cancha elegida
+      courtTimelines.get(bestCandidate.cancha).push({ startMs: bestCandidate.T, endMs: matchEndMs });
+
+      // Actualizar asignaciones de las dos parejas
+      if (partido.pareja1Id) {
+        if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
+        parejaAssignments.get(partido.pareja1Id).push({ startMs: bestCandidate.T, endMs: matchEndMs });
+      }
+      if (partido.pareja2Id) {
+        if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
+        parejaAssignments.get(partido.pareja2Id).push({ startMs: bestCandidate.T, endMs: matchEndMs });
+      }
+
+      updates.push({
+        id: partido.id,
+        fechaHora,
+        canchaNumero: bestCandidate.cancha,
+        sinHorarioAsignado: false,
+      });
+    } else {
       updates.push({ id: partido.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
     }
   }
 
-  // Persistir en base de datos
-  if (externalTx) {
-    for (const u of updates) {
-      await externalTx.partido.update({
-        where: { id: u.id },
-        data: {
-          fechaHora: u.fechaHora,
-          canchaNumero: u.canchaNumero,
-          sinHorarioAsignado: u.sinHorarioAsignado,
-        },
-      });
-    }
-  } else {
-    await prisma.$transaction(
-      updates.map((u) =>
-        prisma.partido.update({
+  // 6. Persistir en base de datos
+  if (updates.length > 0) {
+    if (externalTx) {
+      for (const u of updates) {
+        await externalTx.partido.update({
           where: { id: u.id },
           data: {
             fechaHora: u.fechaHora,
             canchaNumero: u.canchaNumero,
             sinHorarioAsignado: u.sinHorarioAsignado,
           },
-        })
-      )
-    );
+        });
+      }
+    } else {
+      await prisma.$transaction(
+        updates.map((u) =>
+          prisma.partido.update({
+            where: { id: u.id },
+            data: {
+              fechaHora: u.fechaHora,
+              canchaNumero: u.canchaNumero,
+              sinHorarioAsignado: u.sinHorarioAsignado,
+            },
+          })
+        )
+      );
+    }
   }
 
   const asignados = updates.filter((u) => !u.sinHorarioAsignado).length;
