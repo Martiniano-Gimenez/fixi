@@ -244,10 +244,9 @@ async function preCheckInicioTodos(organizadorId) {
       // 2. Ordenar torneos por restricción (menor score / promedio de slots primero)
       validos.sort((a, b) => a.scoreFlexibilidad - b.scoreFlexibilidad);
 
-      // 3. Asignar horarios y canchas en tx
-      for (const item of validos) {
-        await asignarHorariosAutomatico(organizadorId, item.torneo.id, tx);
-      }
+      // 3. Asignar horarios y canchas en tx con pool global multi-torneo (MCF Global)
+      const torneosIdsValidos = validos.map((v) => v.torneo.id);
+      await asignarHorariosAutomatico(organizadorId, torneosIdsValidos, tx);
 
       // 4. Buscar partidos sin horario asignado y zonas manuales por incompatibilidad
       const torneosIds = validos.map((v) => v.torneo.id);
@@ -570,22 +569,28 @@ async function iniciarTodosLosTorneos(organizadorId, planId = null) {
     }
   }
 
-  // 2. Ordenar torneos por restricción (menor score / promedio de slots primero)
-  validos.sort((a, b) => a.scoreFlexibilidad - b.scoreFlexibilidad);
+  // 2. Asignar horarios y canchas con pool global multi-torneo (MCF Global)
+  const torneosIdsValidos = validos.map((v) => v.torneo.id);
+  await asignarHorariosAutomatico(organizadorId, torneosIdsValidos);
 
-  // 3. Asignar horarios y canchas en orden de prioridad cross-torneo
-  const resumen = [];
-  for (const item of validos) {
-    const resultadoHorarios = await asignarHorariosAutomatico(organizadorId, item.torneo.id);
-    resumen.push({
+  const partidosAsignados = await prisma.partido.findMany({
+    where: { torneoId: { in: torneosIdsValidos } },
+    select: { torneoId: true, sinHorarioAsignado: true, fechaHora: true, canchaNumero: true },
+  });
+
+  const resumen = validos.map((item) => {
+    const pTorneo = partidosAsignados.filter((p) => p.torneoId === item.torneo.id);
+    const asig = pTorneo.filter((p) => !p.sinHorarioAsignado && p.fechaHora && p.canchaNumero).length;
+    const sin = pTorneo.filter((p) => p.sinHorarioAsignado).length;
+    return {
       torneoId: item.torneo.id,
       nombre: item.torneo.nombre,
-      asignados: resultadoHorarios.asignados,
-      sinHorario: resultadoHorarios.sinHorario,
-      total: resultadoHorarios.total,
+      asignados: asig,
+      sinHorario: sin,
+      total: pTorneo.length,
       promedioSlots: item.avgSlots,
-    });
-  }
+    };
+  });
 
   return {
     message: 'Torneos iniciados y programados con éxito.',

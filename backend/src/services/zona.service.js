@@ -541,13 +541,25 @@ function parejaTieneColision(parejaAssignments, parejaId, startMs, endMs) {
  * Asigna automáticamente horarios y canchas a los partidos de zonas en dos pasadas
  * con línea de tiempo continua e independiente por cancha, respetando canchas compartidas
  * de TODO el club (cross-tournament y cruces con horario fijado en este torneo).
+ * Soporta recibir un torneoId individual o un array de torneoIds para optimización global (MCF Global).
  */
-async function asignarHorariosAutomatico(organizadorId, torneoId, externalTx = null) {
+async function asignarHorariosAutomatico(organizadorId, torneoIdOrIds, externalTx = null) {
   const db = externalTx || prisma;
-  const torneo = await getTorneoById(organizadorId, torneoId, db);
+  const torneoIds = Array.isArray(torneoIdOrIds) ? torneoIdOrIds : [torneoIdOrIds];
 
-  if (torneo.estado === 'BORRADOR') {
-    const error = new Error('El torneo está en borrador. Iniciá el torneo primero.');
+  const torneos = await db.torneo.findMany({
+    where: { id: { in: torneoIds }, organizadorId },
+  });
+
+  if (torneos.length === 0) {
+    const error = new Error('No se encontraron torneos.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const enBorrador = torneos.find((t) => t.estado === 'BORRADOR');
+  if (enBorrador) {
+    const error = new Error(`El torneo "${enBorrador.nombre}" está en borrador. Iniciá el torneo primero.`);
     error.statusCode = 400;
     throw error;
   }
@@ -559,7 +571,7 @@ async function asignarHorariosAutomatico(organizadorId, torneoId, externalTx = n
   const cantidadCanchas = Math.max(1, organizador?.cantidadCanchas || 1);
   const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 
-  // 1. Cargar todos los partidos ya agendados de TODO el club (otros torneos y cruces con horario fijado en este torneo)
+  // 1. Cargar todos los partidos ya agendados de TODO el club (otros torneos y cruces con horario fijado)
   const partidosYaAgendados = await db.partido.findMany({
     where: {
       torneo: { organizadorId },
@@ -606,16 +618,17 @@ async function asignarHorariosAutomatico(organizadorId, torneoId, externalTx = n
     }
   }
 
-  // 3. Cargar partidos pendientes de zonas del torneo actual
+  // 3. Cargar partidos pendientes de zonas de los torneos especificados
   const partidos = await db.partido.findMany({
     where: {
-      torneoId,
+      torneoId: { in: torneoIds },
       zonaId: { not: null },
       estado: 'PENDIENTE',
       pareja1Id: { not: null },
       pareja2Id: { not: null },
     },
     include: {
+      torneo: true,
       pareja1: { include: { slotsSeleccionados: true } },
       pareja2: { include: { slotsSeleccionados: true } },
     },
@@ -624,8 +637,9 @@ async function asignarHorariosAutomatico(organizadorId, torneoId, externalTx = n
   // Los partidos a procesar son aquellos que NO tienen horario firme asignado
   const partidosAAsignar = partidos.filter((p) => !yaAgendadosIds.has(p.id));
 
-  const baseFriday = proximaFechaPorDia('Viernes', torneo.fecha || new Date());
-  const baseSaturday = proximaFechaPorDia('Sabado', torneo.fecha || new Date());
+  const refFecha = torneos[0]?.fecha || new Date();
+  const baseFriday = proximaFechaPorDia('Viernes', refFecha);
+  const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
 
   // Calcular límites de jornada de club para Viernes y Sábado
   const friInicioMin = horaAMinutos(organizador.viernesInicio);
