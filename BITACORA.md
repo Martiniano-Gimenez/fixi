@@ -231,24 +231,28 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
-## 12. Scheduler Continuo: Línea de Tiempo Independiente por Cancha y Búsqueda de Huecos Libres
+## 12. Scheduler Continuo en Dos Pasadas: Línea de Tiempo Independiente por Cancha y Búsqueda de Huecos Libres
 
-### Reemplazo de Turnos Sincronizados Globales por Timelines Continuas
+### Reemplazo de Turnos Sincronizados Globales por Timelines Continuas sin Canibalización de Franjas Pico
 - **Problema o necesidad que motivó el trabajo:** El scheduler anterior sincronizaba todas las canchas a una grilla fija de turnos globales (ej. 13:00, 14:15, 15:30...). Si una cancha quedaba libre antes que las demás (por ejemplo, a las 14:00 por un partido de otro torneo que terminaba en horario desfasado) o si quedaban huecos libres intermedios entre partidos previamente fijados, el sistema no podía aprovecharlos, desperdiciando capacidad real y dejando partidos innecesariamente "sin horario".
 - **Qué decidí y por qué:** 
   1. Diseñé una representación en memoria de **línea de tiempo independiente por cancha** (`courtTimelines: Map<canchaNum, {startMs, endMs}[]>`), inicializada con todos los partidos firmes de todos los torneos del club (cross-tournament) y del torneo actual.
-  2. Implementé la fusión de slots contiguos de 75 min en **ventanas continuas de disponibilidad** por pareja e intersección continua entre rivales (`intersectWindows`).
-  3. Creé el algoritmo `computeFreeGaps` que detecta cualquier espacio libre `>= 75 min` dentro de la jornada de apertura del club, permitiendo agendar partidos tanto en huecos intermedios (ej. entre 14:15 y 16:30) como al inicio o fin del día.
-  4. La búsqueda evalúa todas las canchas simultáneamente y elige el inicio más temprano global `T` en la **grilla de 15 minutos**, asegurando que ningún partido comience en minutos arbitrarios y preservando la prevención de colisiones de pareja (`parejaAssignments`).
+  2. Implementé la fusión de slots contiguos de 75 min en **ventanas continuas de disponibilidad** por pareja e intersección continua entre rivales (`intersectOrderedWindows`).
+  3. Creé el algoritmo `computeFreeGaps` que detecta cualquier espacio libre `>= 75 min` dentro de la jornada de apertura del club, permitiendo agendar partidos tanto en huecos intermedios (ej. entre 14:15 y 16:30) como al inicio o fin del día en la **grilla de 15 minutos**.
+  4. Para evitar la canibalización de franjas escasas (donde partidos flexibles de torneos prioritarios consumían el viernes pico dejando sin horario a parejas de torneos posteriores que sólo podían viernes), implementé una **asignación en dos pasadas** con heurística MCF basada en la cantidad de combinaciones día+franja:
+     - *Pasada 1:* Asigna primero en horarios de grilla estándar los partidos con una sola opción día+franja posible (hiper-restringidos), protegiendo la capacidad pico.
+     - *Pasada 2:* Asigna los partidos flexibles en orden MCF, pudiendo utilizar tanto turnos estándar como huecos libres continuos de 15 min desfasados.
   5. Mantuve compatibilidad 100% con transacciones externas (`externalTx`), integrándose de forma transparente con el dry-run y fingerprinting de `pre-check-inicio`.
-- **Alternativas que consideré y descarté:** Mantener la grilla fija de 75 min y sólo chequear disponibilidad slot por slot. Descartado porque no permitía arranques desfasados (ej. 14:00) ni detección de gaps intermedios creados por partidos preexistentes.
-- **Resultado final:** Rama `feature/scheduler-continuo` con scheduler continuo de alta eficiencia por cancha, 0 desperdicio de huecos y tests aislados de verificación superados con éxito.
+- **Alternativas que consideré y descarté:** 
+  - *Heurística puramente voraz de menor timestamp global:* Descartada porque favorecía agresivamente al primer día del calendario (Viernes) sobre el segundo (Sábado), saturando el Viernes con parejas flexibles y dejando sin lugar a quienes sólo podían jugar Viernes.
+  - *Mantener grilla fija de 75 min sin timelines continuas:* Descartada porque no permitía arranques desfasados (ej. 14:00) ni detección de gaps intermedios creados por partidos preexistentes.
+- **Resultado final:** Rama `feature/scheduler-continuo` con scheduler continuo de alta eficiencia por cancha, 0 desperdicio de huecos, recuperación del máximo teórico de 72 partidos asignados (10 sin horario inevitables por saturación física) en la base de datos real, y 100% de éxito en todos los escenarios de validación (no-regresión, gaps de 14:00, huecos intermedios de 14:15, partidos pre-asignados y pre-check transaccional con plan cache).
 
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 9 sesiones de trabajo, sumando un aproximado total de entre 19.5 y 23 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 9 sesiones de trabajo, sumando un aproximado total de entre 20.5 y 24 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -260,7 +264,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 9 se
 | **6** | ~3.5 a 4 horas | Módulo de disponibilidad horaria: slots discretos (75m), trasnoche, compatibilidad por intersección de conjuntos, centralización de canchas/jornada en Club y scheduler cross-torneo. |
 | **7** | ~2.5 a 3 horas | Inicio masivo con prioridad *"Most Constrained First"*, eliminación en cascada, rediseño de navegación con `useLocation`, modales con blur y migración total a `lucide-react`. |
 | **8** | ~1.5 a 2 horas | Validación pre-inicio simultáneo: pipeline en dry-run con rollback transaccional, plan cache determinista, fingerprinting de invalidación reactiva y modal de bloqueo. |
-| **9** | ~1.5 a 2 horas | Scheduler continuo por cancha: líneas de tiempo independientes, ventanas fusionadas, detección de huecos intermedios (15m grid) y búsqueda de arranque óptimo global. |
-| **Total** | **~19.5 a 23 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling continuo, multitorneo, validaciones transaccionales y diseño UI/UX premium. |
+| **9** | ~2.5 a 3 horas | Scheduler continuo por cancha en dos pasadas: timelines independientes, ventanas fusionadas, detección de huecos intermedios (15m grid), protección de franjas pico y validación exhaustiva multiescenario. |
+| **Total** | **~20.5 a 24 hrs** | Implementación Full-Stack integral (Frontend + Backend + DB) con sistema de scheduling continuo en dos pasadas, multitorneo, validaciones transaccionales y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
