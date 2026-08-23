@@ -272,11 +272,47 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
      - **Componentes y Modales Pulidos:** Integración de `ConfirmModal` con diseño *Dark Premium* para borrado de resultados, `MiniBracketView` con cruces definitorios ("Ganador vs Ganador", "Perdedor vs Perdedor") y `PartidoCard` con textos de origen claros y selector de horarios inline.
 - **Resultado final:** Modelo de dominio 100% alineado con la operativa real de clubes de pádel, reduciendo la fricción administrativa y centralizando la experiencia para jugadores y espectadores.
 
+### Centralización del Flujo de Sorteo/Inicio a Nivel Torneo (Consistencia de Estado y UX)
+- **Problema o necesidad que motivó el trabajo:** Dentro de la vista de categoría en estado `BORRADOR` (`CategoriaDetail.jsx`), existían botones individuales para "Sortear Zonas" y "Zonas por Disponibilidad". Si el organizador sorteaba una sola categoría desde allí, el torneo quedaba en un estado mixto (`EN_CURSO` en unas categorías y `BORRADOR` en otras), entorpeciendo o bloqueando el flujo centralizado de inicio global del evento.
+- **Qué decidí y por qué:** Decidí remover los botones de sorteo individual dentro del detalle de la categoría, dejando a nivel categoría únicamente la administración de parejas y disponibilidad. En el estado borrador, se incorporó un mensaje guía que explica que el armado de zonas e inicio se realiza para todas las categorías juntas desde la pantalla principal del Torneo, agregando un botón de retorno directo. Esto previene estados híbridos y guía naturalmente al usuario por el flujo correcto.
+- **Alternativas que consideré y descarté:** Mantener los botones con advertencias modales. Se descartó porque añade pasos innecesarios y no resuelve la confusión de flujo en la interfaz.
+- **Resultado final:** Flujo de inicio 100% consistente y centralizado a nivel Torneo, eliminando estados mixtos ambiguos y simplificando la interfaz de administración por categoría.
+
+### Editor Rápido de Disponibilidad Inline en Modal de Bloqueo con Detección de Estrellas (`★`)
+- **Problema o necesidad que motivó el trabajo:** Cuando el pre-check detectaba cruces sin cancha o sin franja común, el organizador tenía que salir del modal, recordar las parejas conflictivas, navegar hasta la categoría y editar la disponibilidad en "Gestionar Parejas", perdiendo contexto y agilidad durante la tarde del jueves previa al inicio.
+- **Qué decidí y por qué:** Diseñé e integré un editor compacto inline (`InlineDisponibilidadEditor.jsx`) dentro de cada tarjeta de conflicto en el modal. El backend identifica automáticamente la pareja más restringida de cada cruce, filtra únicamente los slots viables (donde hay cancha libre en el club y ninguna pareja juega en simultáneo) y destaca con una estrella verde (`★`) aquellos turnos que coinciden directamente con la disponibilidad de la pareja rival, permitiendo destrabar el cruce en una sola llamada telefónica.
+- **Alternativas que consideré y descarté:** Embeber el editor completo de disponibilidad en el modal. Se descartó por sobrecarga visual y porque mostraba turnos saturados que no eran viables.
+- **Resultado final:** Resolución de conflictos en 1 clic directamente desde el modal, persistencia reactiva y recálculo automático del pre-check completo mediante el botón "Volver a verificar".
+
+### Salida de Emergencia Condicional (Iniciar Torneo con Partidos Pendientes)
+- **Problema o necesidad que motivó el trabajo:** Si la saturación física de canchas en franjas pico impide resolver el 100% de los partidos antes del jueves por la noche, el organizador podía quedar completamente bloqueado sin poder arrancar las categorías cuyos partidos ya estaban listos.
+- **Qué decidí y por qué:** Implementé una salida de emergencia controlada que habilita el botón "Iniciar torneo dejando X partidos pendientes" únicamente cuando el organizador ya redujo al menos un conflicto respecto al inicio de la sesión. Esta acción transiciona las categorías y el torneo a `EN_CURSO` y marca los partidos no asignados con `sinHorarioAsignado: true` para su posterior programación manual.
+- **Alternativas que consideré y descarté:** Permitir forzar el inicio desde el primer momento con todos los conflictos abiertos. Se descartó para evitar atajos negligentes que comprometan la calidad del fixture.
+- **Resultado final:** Mecanismo de escape seguro para situaciones límite de saturación de infraestructura física, bloqueando estrictamente zonas manuales incompletas que no tienen partidos formados.
+
+### Filtrado Estricto en AsignarHorarioModal Post-Inicio con Prevención de Colisiones Inter-Categoría
+- **Problema o necesidad que motivó el trabajo:** En el modal de asignación manual de partidos post-inicio, se mostraban turnos donde las canchas ya estaban ocupadas por otras categorías o donde las parejas ya tenían partidos solapados, permitiendo selecciones inválidas que causaban colisiones posteriores en cascada.
+- **Qué decidí y por qué:** Refactoricé el modal para consultar en tiempo real las canchas libres a nivel global del club, ocultando completamente las combinaciones inválidas y mostrando única y exclusivamente los turnos donde: 1) Hay cancha física libre en el torneo, 2) Ninguna de las dos parejas tiene otro partido en esa franja, y 3) Cae dentro de la disponibilidad mutua de ambas parejas.
+- **Alternativas que consideré y descarté:** Mostrar todos los turnos deshabilitados con tooltips. Se descartó por saturación de pantalla en dispositivos móviles.
+- **Resultado final:** Selección 100% segura e inmune a errores humanos, con actualización en vivo de la ocupación del club.
+
+### Validación Matemática Exacta de Estrellas para Zonas Incompletas (`slotDestrabaZonaManual`)
+- **Problema o necesidad que motivó el trabajo:** En categorías con zonas manuales incompletas (ej. 15 parejas en 7ma Damas con 3 parejas huérfanas disjuntas en horarios), aparecían estrellas en parejas intermedias que, al seleccionarse, no resolvían el grupo porque los dos extremos seguían sin compartir horarios entre sí.
+- **Qué decidí y por qué:** Implementé el algoritmo `slotDestrabaZonaManual` en el backend, el cual simula la compatibilidad pairwise de todas las combinaciones del grupo. Un turno recibe estrella (`★`) única y exclusivamente si garantiza que el 100% de las parejas de la zona quedan con compatibilidad mutua. Además, se integró el editor inline para parejas manuales en el modal de bloqueo, permitiendo que el solver global re-optimice y agrupe toda la categoría automáticamente.
+- **Alternativas que consideré y descarté:** Forzar la edición manual de zonas en estado borrador. Se descartó porque en borrador las zonas no existen físicamente en la base de datos hasta que el solver las calcula.
+- **Resultado final:** Garantía matemática del 100% en las sugerencias de destrabe de zonas, eliminando falsos positivos.
+
+### Numeración Correlativa Automática de Parejas Inscriptas
+- **Problema o necesidad que motivó el trabajo:** En la lista de parejas inscriptas por categoría (`ParejasManager.jsx`), al eliminar una pareja intermedia (ej. la `#10`), la numeración visual quedaba con huecos (1... 9, 11, 12...).
+- **Qué decidí y por qué:** Actualicé el frontend para renderizar el badge con el índice correlativo dinámico `#{index + 1}` y agregué en `pareja.service.js` la re-secuenciación automática del campo `orden` en la base de datos tras cada borrado.
+- **Alternativas que consideré y descarté:** Mantener el orden histórico como identificador. Se descartó porque confundía al organizador al contabilizar el total de parejas.
+- **Resultado final:** Secuencia numérica siempre continua y prolija (1 a N) en pantalla y en base de datos.
+
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 10 sesiones de trabajo, sumando un aproximado total de entre 24 y 28 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 11 sesiones de trabajo, sumando un aproximado total de entre 27.5 y 32 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -290,6 +326,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 10 s
 | **8** | ~1.5 a 2 horas | Validación pre-inicio simultáneo: pipeline en dry-run con rollback transaccional, plan cache determinista, fingerprinting de invalidación reactiva y modal de bloqueo. |
 | **9** | ~2.5 a 3 horas | Scheduler continuo por cancha en dos pasadas: timelines independientes, ventanas fusionadas, detección de huecos intermedios (15m grid), protección de franjas pico y validación exhaustiva multiescenario. |
 | **10** | ~3.5 a 4 horas | Reestructuración de Dominio: Jerarquía Club → Torneo (Evento) → Categorías (Cuadros), migración completa de Frontend y Backend, vista pública multicategoría y confirmación estilizada de resultados. |
-| **Total** | **~24 a 28 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, sistema de scheduling continuo en dos pasadas, pre-check transaccional, brackets dinámicos y diseño UI/UX premium. |
+| **11** | ~3.5 a 4 horas | Resilencia Operativa: Editor inline inteligente en modal de bloqueo (`★`), salida de emergencia condicional, asignación manual post-inicio con filtrado estricto, solver exacto de zonas incompletas y numeración correlativa. |
+| **Total** | **~27.5 a 32 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en dos pasadas, pre-check transaccional, editor de resolución rápida, brackets dinámicos y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

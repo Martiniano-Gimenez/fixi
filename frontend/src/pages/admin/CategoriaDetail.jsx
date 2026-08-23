@@ -4,13 +4,9 @@ import {
   ChevronLeft,
   Users,
   GitBranch,
-  Play,
   RotateCcw,
   Settings,
   Trash2,
-  Calendar,
-  Layers,
-  AlertTriangle,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import ZonaTable from '../../components/ZonaTable';
@@ -19,7 +15,6 @@ import MiniBracketView from '../../components/MiniBracketView';
 import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import ZoneEditorModal from '../../components/ZoneEditorModal';
-import InicioDisponibilidadModal from '../../components/InicioDisponibilidadModal';
 
 export default function CategoriaDetail() {
   const { torneoId, id } = useParams();
@@ -41,9 +36,7 @@ export default function CategoriaDetail() {
   const [limpiandoZonas, setLimpiandoZonas] = useState(false);
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
-  const [iniciarModalOpen, setIniciarModalOpen] = useState(false);
   const [zoneEditorOpen, setZoneEditorOpen] = useState(false);
-  const [inicioDisponibilidadOpen, setInicioDisponibilidadOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -94,18 +87,6 @@ export default function CategoriaDetail() {
       setActiveZonaId(null);
     }
   }, [zonas, activeZonaId]);
-
-  const executeIniciar = async () => {
-    setIniciarModalOpen(false);
-    try {
-      setLoading(true);
-      await api.post(`/categorias/${id}/sorteo`, { conDisponibilidad: false });
-      fetchData();
-    } catch (err) {
-      alert(err.message);
-      setLoading(false);
-    }
-  };
 
   const handleLimpiarZonas = async () => {
     setLimpiandoZonas(true);
@@ -208,31 +189,6 @@ export default function CategoriaDetail() {
               <GitBranch size={16} /> Fase Eliminatoria
             </Link>
 
-            {categoria.estado === 'BORRADOR' && (
-              <>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => setIniciarModalOpen(true)}
-                  disabled={parejas.length < 2}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
-                >
-                  <Play size={16} /> Sortear Zonas
-                </button>
-
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setInicioDisponibilidadOpen(true)}
-                  disabled={parejas.length < 2}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
-                  title="Agrupar zonas optimizando disponibilidad horaria"
-                >
-                  <Calendar size={16} /> Zonas por Disponibilidad
-                </button>
-              </>
-            )}
-
             {categoria.estado !== 'BORRADOR' && (
               <>
                 <button
@@ -280,10 +236,10 @@ export default function CategoriaDetail() {
         <div className="card" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
           <Users size={44} style={{ color: 'var(--color-primary)', marginBottom: '1rem', opacity: 0.8 }} />
           <h3 style={{ margin: '0 0 0.5rem 0' }}>Categoría en Borrador</h3>
-          <p style={{ color: 'var(--color-text-secondary)', maxWidth: '500px', margin: '0 auto 1.5rem auto' }}>
+          <p style={{ color: 'var(--color-text-secondary)', maxWidth: '540px', margin: '0 auto 1.5rem auto', lineHeight: '1.5' }}>
             {parejas.length < 2
-              ? 'Cargá al menos 2 parejas para poder sortear o armar las zonas de esta categoría.'
-              : `Hay ${parejas.length} parejas inscriptas listas para iniciar.`}
+              ? 'Cargá al menos 2 parejas con su disponibilidad para que esta categoría esté lista para el inicio del torneo.'
+              : `Hay ${parejas.length} parejas inscriptas listas. El armado de zonas y la asignación global de turnos se realiza para todas las categorías juntas desde la pantalla principal del torneo.`}
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <Link
@@ -292,6 +248,13 @@ export default function CategoriaDetail() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', textDecoration: 'none' }}
             >
               <Users size={16} /> Cargar Parejas y Disponibilidad
+            </Link>
+            <Link
+              to={`/admin/torneos/${torneoId || categoria.torneoId}`}
+              className="btn-secondary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', textDecoration: 'none' }}
+            >
+              <ChevronLeft size={16} /> Volver al Torneo para Iniciar
             </Link>
           </div>
         </div>
@@ -375,6 +338,7 @@ export default function CategoriaDetail() {
           isOpen={zoneEditorOpen}
           categoriaId={id}
           zonas={zonas}
+          parejas={parejas}
           onClose={() => setZoneEditorOpen(false)}
           onSuccess={() => {
             setZoneEditorOpen(false);
@@ -382,37 +346,6 @@ export default function CategoriaDetail() {
           }}
         />
       )}
-
-      {/* Modal de Inicio por Disponibilidad */}
-      {inicioDisponibilidadOpen && (
-        <InicioDisponibilidadModal
-          isOpen={inicioDisponibilidadOpen}
-          categoriaId={id}
-          parejas={parejas}
-          onClose={() => setInicioDisponibilidadOpen(false)}
-          onSuccess={() => {
-            setInicioDisponibilidadOpen(false);
-            fetchData();
-          }}
-        />
-      )}
-
-      {/* Modal de confirmación para sortear zonas */}
-      <ConfirmModal
-        isOpen={iniciarModalOpen}
-        title="Sortear Zonas"
-        message={
-          <>
-            Se generarán las zonas aleatoriamente para las {parejas.length} parejas inscriptas.
-            <br />
-            <br />
-            ¿Deseas continuar?
-          </>
-        }
-        confirmText="Sortear y Crear Zonas"
-        onConfirm={executeIniciar}
-        onCancel={() => setIniciarModalOpen(false)}
-      />
 
       {/* Modal de confirmación para limpiar resultados */}
       <ConfirmModal
@@ -440,3 +373,4 @@ export default function CategoriaDetail() {
     </div>
   );
 }
+

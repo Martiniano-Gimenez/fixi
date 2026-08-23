@@ -57,10 +57,20 @@ async function updateBracketMatch(req, res, next) {
   }
 }
 
+async function asignarHorarioManual(req, res, next) {
+  try {
+    const result = await partidoService.asignarHorarioManual(getOrgId(req), req.params.id, req.body);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   cargarResultado,
   borrarResultado,
   updateFechaHora,
   getPartidosByCategoria,
   updateBracketMatch,
+  asignarHorarioManual,
 };

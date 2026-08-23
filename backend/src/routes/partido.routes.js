@@ -11,8 +11,9 @@ router.delete('/:id/resultado', partidoController.borrarResultado);
 
 // Update match time
 router.put('/:id/fecha-hora', partidoController.updateFechaHora);
+router.put('/:id/asignar-horario-manual', partidoController.asignarHorarioManual);
 
-// Ticket 4.3 — editar bracket
+// Edición de brackets eliminatorios bracket
 router.patch('/:id/bracket', partidoController.updateBracketMatch);
 
 module.exports = router;

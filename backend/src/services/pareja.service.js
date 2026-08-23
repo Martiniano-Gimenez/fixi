@@ -78,10 +78,28 @@ async function updatePareja(organizadorId, parejaId, data) {
 
 async function deletePareja(organizadorId, parejaId) {
   const pareja = await getParejaAndVerifyPermisos(organizadorId, parejaId);
+  const categoriaId = pareja.categoriaId;
 
-  return await prisma.pareja.delete({
+  await prisma.pareja.delete({
     where: { id: pareja.id },
   });
+
+  // Re-secuenciar el orden de las parejas restantes de la categoría
+  const restantes = await prisma.pareja.findMany({
+    where: { categoriaId },
+    orderBy: { orden: 'asc' },
+  });
+
+  for (let i = 0; i < restantes.length; i++) {
+    if (restantes[i].orden !== i + 1) {
+      await prisma.pareja.update({
+        where: { id: restantes[i].id },
+        data: { orden: i + 1 },
+      });
+    }
+  }
+
+  return { message: 'Pareja eliminada correctamente.' };
 }
 
 module.exports = {

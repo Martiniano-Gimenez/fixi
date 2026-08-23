@@ -353,7 +353,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
       const nombreZona = `Zona ${letras[letraIndex] || letraIndex}`;
       letraIndex++;
 
-      await tx.zona.create({
+      const zona = await tx.zona.create({
         data: {
           categoriaId,
           nombre: nombreZona,
@@ -363,15 +363,24 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
         },
       });
 
-      const parejasSinGrupo = sinGrupo.map((idx) => ({
-        id: parejas[idx].id,
-        jugador1: parejas[idx].jugador1,
-        jugador2: parejas[idx].jugador2,
-      }));
+      const parejasSinGrupo = sinGrupo.map((idx) => parejas[idx]);
+
+      for (const p of parejasSinGrupo) {
+        await tx.zonaPareja.create({
+          data: {
+            zonaId: zona.id,
+            parejaId: p.id,
+          },
+        });
+      }
 
       resumenZonasManual.push({
         nombre: nombreZona,
-        parejas: parejasSinGrupo,
+        parejas: parejasSinGrupo.map((p) => ({
+          id: p.id,
+          jugador1: p.jugador1,
+          jugador2: p.jugador2,
+        })),
       });
     }
 
@@ -988,7 +997,7 @@ async function reestructurarZonas(organizadorId, categoriaId, zonasPayload) {
 
       await tx.zona.update({
         where: { id: zona.id },
-        data: { formato, clasifican },
+        data: { formato, clasifican, requiereArmadoManual: false },
       });
 
       const partidosViejos = await tx.partido.findMany({ where: { zonaId: zona.id } });
@@ -1023,4 +1032,7 @@ module.exports = {
   getZonasByCategoria,
   limpiarResultadosZonas,
   reestructurarZonas,
+  fusionarSlotsEnVentanas,
+  interseccionVentanas,
+  parseSlotToDate,
 };

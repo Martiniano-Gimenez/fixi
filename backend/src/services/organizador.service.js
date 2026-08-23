@@ -5,6 +5,9 @@ const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
   asignarHorariosAutomatico,
+  fusionarSlotsEnVentanas,
+  interseccionVentanas,
+  parseSlotToDate,
 } = require('./zona.service');
 
 // Cache de planes validados en memoria para inicio determinista
@@ -271,8 +274,22 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
         },
         include: {
           categoria: { select: { id: true, nombre: true } },
-          pareja1: { select: { id: true, jugador1: true, jugador2: true } },
-          pareja2: { select: { id: true, jugador1: true, jugador2: true } },
+          pareja1: {
+            select: {
+              id: true,
+              jugador1: true,
+              jugador2: true,
+              slotsSeleccionados: { select: { slotId: true } },
+            },
+          },
+          pareja2: {
+            select: {
+              id: true,
+              jugador1: true,
+              jugador2: true,
+              slotsSeleccionados: { select: { slotId: true } },
+            },
+          },
           zona: { select: { id: true, nombre: true } },
         },
       });
@@ -286,13 +303,92 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
           categoria: { select: { id: true, nombre: true } },
           zonaParejas: {
             include: {
-              pareja: { select: { id: true, jugador1: true, jugador2: true } },
+              pareja: {
+                select: {
+                  id: true,
+                  jugador1: true,
+                  jugador2: true,
+                  slotsSeleccionados: { select: { slotId: true } },
+                },
+              },
             },
           },
         },
       });
 
       if (partidosSinHorario.length > 0 || zonasManuales.length > 0) {
+        // Conteo de frecuencia de apariciones de cada pareja
+        const parejaFreqMap = new Map();
+        for (const p of partidosSinHorario) {
+          if (p.pareja1Id) parejaFreqMap.set(p.pareja1Id, (parejaFreqMap.get(p.pareja1Id) || 0) + 1);
+          if (p.pareja2Id) parejaFreqMap.set(p.pareja2Id, (parejaFreqMap.get(p.pareja2Id) || 0) + 1);
+        }
+        for (const zm of zonasManuales) {
+          for (const zp of zm.zonaParejas) {
+            if (zp.pareja?.id) {
+              parejaFreqMap.set(zp.pareja.id, (parejaFreqMap.get(zp.pareja.id) || 0) + 1);
+            }
+          }
+        }
+
+        const refFecha = torneo.fecha || new Date();
+
+        // Obtener partidos que sí pudieron agendarse en la simulación
+        const partidosConHorario = await tx.partido.findMany({
+          where: {
+            categoriaId: { in: categoriasIdsValidos },
+            fechaHora: { not: null },
+            canchaNumero: { not: null },
+          },
+          select: {
+            fechaHora: true,
+            canchaNumero: true,
+            pareja1Id: true,
+            pareja2Id: true,
+          },
+        });
+
+        const partidosIntervalos = partidosConHorario.map((p) => {
+          const startMs = new Date(p.fechaHora).getTime();
+          const endMs = startMs + 75 * 60 * 1000;
+          return {
+            canchaNumero: p.canchaNumero,
+            startMs,
+            endMs,
+            pareja1Id: p.pareja1Id,
+            pareja2Id: p.pareja2Id,
+          };
+        });
+
+        const cantCanchas = organizador.cantidadCanchas || 1;
+        const grilla = generarGrillaOrganizador(organizador);
+        const allSlotIds = [...grilla.viernes, ...grilla.sabado];
+        const slotsEvaluadosMap = new Map();
+
+        for (const sId of allSlotIds) {
+          const sDate = parseSlotToDate(sId, refFecha);
+          if (!sDate) continue;
+          const sStartMs = sDate.getTime();
+          const sEndMs = sStartMs + 75 * 60 * 1000;
+
+          const canchasOcupadas = new Set();
+          const parejasOcupadas = new Set();
+
+          for (const p of partidosIntervalos) {
+            if (Math.max(sStartMs, p.startMs) < Math.min(sEndMs, p.endMs)) {
+              if (p.canchaNumero) canchasOcupadas.add(p.canchaNumero);
+              if (p.pareja1Id) parejasOcupadas.add(p.pareja1Id);
+              if (p.pareja2Id) parejasOcupadas.add(p.pareja2Id);
+            }
+          }
+
+          const canchasLibres = cantCanchas - canchasOcupadas.size;
+          slotsEvaluadosMap.set(sId, {
+            canchasLibres,
+            parejasOcupadas: Array.from(parejasOcupadas),
+          });
+        }
+
         const conflictosMap = new Map();
 
         for (const p of partidosSinHorario) {
@@ -304,11 +400,72 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
               partidosSinHorario: [],
             });
           }
+
+          const slotsP1 = (p.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
+          const slotsP2 = (p.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
+
+          const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
+          const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
+          const shared = interseccionVentanas(win1, win2);
+
+          const tieneFranjaComun = shared.length > 0;
+          const motivo = tieneFranjaComun ? 'SIN_CANCHA_DISPONIBLE' : 'SIN_FRANJA_COMUN';
+
+          // Criterio MCF de pareja más restringida: menor cantidad de opciones día+franja (ventanas continuas),
+          // y como desempate menor cantidad total de slots.
+          let p1Score = win1.length * 1000 + slotsP1.length;
+          let p2Score = win2.length * 1000 + slotsP2.length;
+          const p1IsMoreConstrained = p1Score <= p2Score;
+
+          const parejaMasRestringida = p1IsMoreConstrained ? p.pareja1 : p.pareja2;
+          const parejaMasRestringidaSlots = p1IsMoreConstrained ? slotsP1.length : slotsP2.length;
+          const parejaMasRestringidaOpciones = p1IsMoreConstrained ? win1.length : win2.length;
+          const parejaMasRestringidaSlotIds = p1IsMoreConstrained ? slotsP1 : slotsP2;
+          const slotsRival = p1IsMoreConstrained ? slotsP2 : slotsP1;
+
+          // Filtrar ÚNICAMENTE slots donde:
+          // 1. Hay cancha libre en el club a esa hora
+          // 2. Ninguna de las 2 parejas del cruce tiene otro partido asignado a esa hora
+          const slotsViables = allSlotIds.filter((sId) => {
+            const info = slotsEvaluadosMap.get(sId);
+            if (!info || info.canchasLibres <= 0) return false;
+            if (p.pareja1Id && info.parejasOcupadas.includes(p.pareja1Id)) return false;
+            if (p.pareja2Id && info.parejasOcupadas.includes(p.pareja2Id)) return false;
+            return true;
+          });
+
+          // Slots que el rival ya tiene marcados (destraban directamente el partido)
+          const slotsQueDestraban = slotsViables.filter((sId) => slotsRival.includes(sId));
+
+          const maxApariciones = Math.max(
+            parejaFreqMap.get(p.pareja1Id) || 0,
+            parejaFreqMap.get(p.pareja2Id) || 0
+          );
+
           conflictosMap.get(cId).partidosSinHorario.push({
             partidoId: p.id,
+            zonaId: p.zona?.id,
             zona: p.zona?.nombre || 'Zona',
+            categoriaId: cId,
+            pareja1Id: p.pareja1?.id,
             pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : 'Por definirse',
+            pareja1SlotsCount: slotsP1.length,
+            pareja1OpcionesCount: win1.length,
+            pareja2Id: p.pareja2?.id,
             pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : 'Por definirse',
+            pareja2SlotsCount: slotsP2.length,
+            pareja2OpcionesCount: win2.length,
+            motivo,
+            parejaMasRestringidaId: parejaMasRestringida?.id || null,
+            parejaMasRestringidaNombre: parejaMasRestringida
+              ? `${parejaMasRestringida.jugador1} / ${parejaMasRestringida.jugador2}`
+              : '',
+            parejaMasRestringidaSlots: parejaMasRestringidaSlots,
+            parejaMasRestringidaOpciones: parejaMasRestringidaOpciones,
+            parejaMasRestringidaSlotIds: parejaMasRestringidaSlotIds,
+            slotsViables,
+            slotsQueDestraban,
+            aparicionesMaximas: maxApariciones,
           });
         }
 
@@ -324,11 +481,131 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
           const parejasNombres = zm.zonaParejas
             .map((zp) => (zp.pareja ? `${zp.pareja.jugador1} / ${zp.pareja.jugador2}` : 'Pareja'))
             .join(' | ');
+
+          // Estructurar las parejas de la zona manual
+          const rawZonaParejas = zm.zonaParejas.map((zp) => ({
+            id: zp.pareja?.id,
+            nombre: zp.pareja ? `${zp.pareja.jugador1} / ${zp.pareja.jugador2}` : 'Pareja',
+            slotIds: (zp.pareja?.slotsSeleccionados || []).map((s) => s.slotId),
+          }));
+
+          // Para cada pareja de la zona incompleta, calcular qué slots destraban genuinamente el grupo
+          const parejasManuales = rawZonaParejas.map((p) => {
+            const mySlots = p.slotIds;
+
+            // Slots viables con cancha libre y sin pareja ocupada
+            const slotsViables = allSlotIds.filter((sId) => {
+              const info = slotsEvaluadosMap.get(sId);
+              if (!info || info.canchasLibres <= 0) return false;
+              if (p.id && info.parejasOcupadas.includes(p.id)) return false;
+              return true;
+            });
+
+            // Los slots que destraban: aquellos donde, si esta pareja agrega ese slot,
+            // TODAS las parejas de la zona quedan con compatibilidad mutua (100% resuelto)
+            const slotsQueDestraban = slotsViables.filter((sId) => {
+              // Simular la zona con este slot agregado a esta pareja
+              const simulated = rawZonaParejas.map((item) => {
+                if (item.id === p.id) {
+                  return Array.from(new Set([...item.slotIds, sId]));
+                }
+                return item.slotIds;
+              });
+
+              for (let i = 0; i < simulated.length; i++) {
+                for (let j = i + 1; j < simulated.length; j++) {
+                  const s1 = simulated[i];
+                  const s2 = simulated[j];
+                  const shared = s1.filter((slot) => s2.includes(slot));
+                  if (shared.length === 0) return false;
+                }
+              }
+              return true;
+            });
+
+            return {
+              id: p.id,
+              nombre: p.nombre,
+              slotsCount: mySlots.length,
+              slotIds: mySlots,
+              slotsViables,
+              slotsQueDestraban,
+            };
+          });
+
           conflictosMap.get(cId).partidosSinHorario.push({
             partidoId: zm.id,
+            zonaId: zm.id,
             zona: zm.nombre,
+            categoriaId: cId,
+            motivo: 'ZONA_MANUAL_INCOMPLETA',
             pareja1: 'Incompatibilidad de grupo',
             pareja2: parejasNombres,
+            parejasManuales,
+            aparicionesMaximas: 999, // Alta prioridad
+          });
+        }
+
+        // Ordenar conflictos de cada categoría: primero zonas manuales y parejas con más conflictos (frecuencia)
+        for (const catConflicto of conflictosMap.values()) {
+          catConflicto.partidosSinHorario.sort((a, b) => b.aparicionesMaximas - a.aparicionesMaximas);
+        }
+
+        let planEmergenciaId = null;
+        if (zonasManuales.length === 0) {
+          const categoriasPlan = [];
+          for (const v of validos) {
+            const zonasTx = await tx.zona.findMany({
+              where: { categoriaId: v.categoria.id },
+              include: {
+                zonaParejas: { select: { parejaId: true } },
+                partidos: {
+                  select: {
+                    posicionEnRonda: true,
+                    pareja1Id: true,
+                    pareja2Id: true,
+                    fechaHora: true,
+                    canchaNumero: true,
+                    sinHorarioAsignado: true,
+                  },
+                },
+              },
+            });
+
+            categoriasPlan.push({
+              categoriaId: v.categoria.id,
+              nombre: v.categoria.nombre,
+              avgSlots: v.avgSlots,
+              zonas: zonasTx.map((z) => ({
+                nombre: z.nombre,
+                clasifican: z.clasifican,
+                formato: z.formato,
+                requiereArmadoManual: z.requiereArmadoManual || false,
+                parejaIds: z.zonaParejas.map((zp) => zp.parejaId),
+                partidos: z.partidos.map((p) => ({
+                  posicionEnRonda: p.posicionEnRonda,
+                  pareja1Id: p.pareja1Id,
+                  pareja2Id: p.pareja2Id,
+                  fechaHora: p.fechaHora,
+                  canchaNumero: p.canchaNumero,
+                  sinHorarioAsignado: p.sinHorarioAsignado || false,
+                })),
+              })),
+            });
+          }
+
+          planEmergenciaId = crypto.randomUUID();
+          const expiresAt = Date.now() + PLAN_TTL_MS;
+
+          planesCache.set(planEmergenciaId, {
+            planId: planEmergenciaId,
+            organizadorId,
+            torneoId,
+            expiresAt,
+            fingerprint,
+            categoriasPlan,
+            omitidos,
+            esEmergencia: true,
           });
         }
 
@@ -336,6 +613,9 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
           bloqueado: true,
           motivo: 'Existen partidos o zonas sin horario compatible asignado.',
           conflictos: Array.from(conflictosMap.values()),
+          grillaOrganizador: generarGrillaOrganizador(organizador),
+          permiteInicioEmergencia: zonasManuales.length === 0,
+          planEmergenciaId,
           omitidos,
         };
       } else {
@@ -534,6 +814,166 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
   return await iniciarTorneoMultiCategoria(organizadorId, torneoId, preCheck.planId);
 }
 
+/**
+ * Obtiene los partidos sin horario asignado de un torneo
+ */
+async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
+  const torneo = await prisma.torneo.findUnique({
+    where: { id: torneoId },
+  });
+
+  if (!torneo) {
+    const error = new Error('Torneo no encontrado.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (torneo.organizadorId !== organizadorId) {
+    const error = new Error('No tenés permisos sobre este torneo.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const partidos = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId },
+      sinHorarioAsignado: true,
+      estado: { not: 'FINALIZADO' },
+    },
+    include: {
+      categoria: { select: { id: true, nombre: true } },
+      zona: { select: { id: true, nombre: true } },
+      faseEliminatoria: { select: { id: true, nombre: true, ronda: true } },
+      pareja1: {
+        select: {
+          id: true,
+          jugador1: true,
+          jugador2: true,
+          slotsSeleccionados: { select: { slotId: true } },
+        },
+      },
+      pareja2: {
+        select: {
+          id: true,
+          jugador1: true,
+          jugador2: true,
+          slotsSeleccionados: { select: { slotId: true } },
+        },
+      },
+    },
+    orderBy: [
+      { categoria: { nombre: 'asc' } },
+      { zona: { nombre: 'asc' } },
+      { posicionEnRonda: 'asc' },
+    ],
+  });
+
+  return partidos;
+}
+
+/**
+ * Obtiene el estado de ocupación de canchas y slots libres en tiempo real para un torneo
+ */
+async function getCanchasDisponiblesTorneo(organizadorId, torneoId) {
+  const organizador = await getOrganizador(organizadorId);
+  const torneo = await prisma.torneo.findUnique({ where: { id: torneoId } });
+  if (!torneo) {
+    const error = new Error('Torneo no encontrado.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (torneo.organizadorId !== organizadorId) {
+    const error = new Error('No tenés permisos sobre este torneo.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const grilla = generarGrillaOrganizador(organizador);
+  const cantCanchas = organizador.cantidadCanchas || 1;
+  const refFecha = torneo.fecha || new Date();
+
+  // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
+  const partidosAsignados = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId },
+      fechaHora: { not: null },
+      canchaNumero: { not: null },
+    },
+    select: {
+      id: true,
+      fechaHora: true,
+      canchaNumero: true,
+      pareja1Id: true,
+      pareja2Id: true,
+      categoria: { select: { nombre: true } },
+      pareja1: { select: { jugador1: true, jugador2: true } },
+      pareja2: { select: { jugador1: true, jugador2: true } },
+    },
+  });
+
+  const partidosIntervalos = partidosAsignados.map((p) => {
+    const startMs = new Date(p.fechaHora).getTime();
+    const endMs = startMs + 75 * 60 * 1000;
+    return {
+      partidoId: p.id,
+      canchaNumero: p.canchaNumero,
+      startMs,
+      endMs,
+      pareja1Id: p.pareja1Id,
+      pareja2Id: p.pareja2Id,
+    };
+  });
+
+  const slotsEvaluados = [];
+  const allSlotIds = [...grilla.viernes, ...grilla.sabado];
+
+  for (const slotId of allSlotIds) {
+    const [dia, hora] = slotId.split('-');
+    const slotDate = parseSlotToDate(slotId, refFecha);
+    if (!slotDate) continue;
+
+    const slotStartMs = slotDate.getTime();
+    const slotEndMs = slotStartMs + 75 * 60 * 1000;
+
+    const canchasOcupadas = [];
+    const parejasJugandoEnSlot = new Set();
+
+    for (const p of partidosIntervalos) {
+      if (Math.max(slotStartMs, p.startMs) < Math.min(slotEndMs, p.endMs)) {
+        if (p.canchaNumero) canchasOcupadas.push(p.canchaNumero);
+        if (p.pareja1Id) parejasJugandoEnSlot.add(p.pareja1Id);
+        if (p.pareja2Id) parejasJugandoEnSlot.add(p.pareja2Id);
+      }
+    }
+
+    const canchasLibres = [];
+    for (let c = 1; c <= cantCanchas; c++) {
+      if (!canchasOcupadas.includes(c)) {
+        canchasLibres.push(c);
+      }
+    }
+
+    slotsEvaluados.push({
+      slotId,
+      dia,
+      hora,
+      fechaIso: slotDate.toISOString(),
+      canchasLibres,
+      canchasOcupadas,
+      totalCanchas: cantCanchas,
+      parejasOcupadasIds: Array.from(parejasJugandoEnSlot),
+    });
+  }
+
+  return {
+    cantidadCanchas: cantCanchas,
+    grilla,
+    slots: slotsEvaluados,
+    totalPartidosAsignados: partidosAsignados.length,
+  };
+}
+
 module.exports = {
   getOrganizador,
   updateOrganizador,
@@ -543,4 +983,6 @@ module.exports = {
   iniciarTorneoMultiCategoria,
   preCheckInicioTodos: preCheckInicioTorneo,
   iniciarTodosLosTorneos: iniciarTorneoMultiCategoria,
+  getPartidosSinHorarioTorneo,
+  getCanchasDisponiblesTorneo,
 };

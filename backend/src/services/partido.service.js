@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma');
+const { parseSlotToDate } = require('./zona.service');
 
 async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
   const partido = await prisma.partido.findUnique({
@@ -519,6 +520,101 @@ async function getPartidosByCategoria(organizadorId, categoriaId, filters = {}) 
   });
 }
 
+async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
+  const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  const { slotId, canchaNumero, fechaHora } = data;
+
+  const torneo = await prisma.torneo.findUnique({
+    where: { id: partido.categoria.torneoId },
+  });
+  const organizador = await prisma.organizador.findUnique({
+    where: { id: organizadorId },
+  });
+
+  const refFecha = torneo.fecha || new Date();
+  let targetDate = null;
+
+  if (fechaHora) {
+    targetDate = new Date(fechaHora);
+  } else if (slotId) {
+    targetDate = parseSlotToDate(slotId, refFecha);
+  }
+
+  if (!targetDate || isNaN(targetDate.getTime())) {
+    const error = new Error('Fecha/horario inválido o no especificado.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const canchaNum = parseInt(canchaNumero, 10);
+  if (isNaN(canchaNum) || canchaNum < 1 || canchaNum > (organizador.cantidadCanchas || 1)) {
+    const error = new Error(`El número de cancha debe ser entre 1 y ${organizador.cantidadCanchas || 1}.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const targetStartMs = targetDate.getTime();
+  const targetEndMs = targetStartMs + 75 * 60 * 1000;
+
+  // Validar colisión de cancha con otros partidos del torneo
+  const otrosPartidos = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId: torneo.id },
+      id: { not: partidoId },
+      fechaHora: { not: null },
+    },
+    include: {
+      pareja1: true,
+      pareja2: true,
+    },
+  });
+
+  for (const otro of otrosPartidos) {
+    const oStartMs = new Date(otro.fechaHora).getTime();
+    const oEndMs = oStartMs + 75 * 60 * 1000;
+
+    const haySolapamiento = Math.max(targetStartMs, oStartMs) < Math.min(targetEndMs, oEndMs);
+    if (haySolapamiento) {
+      if (otro.canchaNumero === canchaNum) {
+        const error = new Error(`La cancha ${canchaNum} ya está ocupada en ese horario por otro partido.`);
+        error.statusCode = 409;
+        throw error;
+      }
+
+      if (partido.pareja1Id && (otro.pareja1Id === partido.pareja1Id || otro.pareja2Id === partido.pareja1Id)) {
+        const error = new Error(`La pareja "${partido.pareja1?.jugador1} / ${partido.pareja1?.jugador2}" ya tiene otro partido en ese horario.`);
+        error.statusCode = 409;
+        throw error;
+      }
+      if (partido.pareja2Id && (otro.pareja1Id === partido.pareja2Id || otro.pareja2Id === partido.pareja2Id)) {
+        const error = new Error(`La pareja "${partido.pareja2?.jugador1} / ${partido.pareja2?.jugador2}" ya tiene otro partido en ese horario.`);
+        error.statusCode = 409;
+        throw error;
+      }
+    }
+  }
+
+  const updated = await prisma.partido.update({
+    where: { id: partidoId },
+    data: {
+      fechaHora: targetDate,
+      canchaNumero: canchaNum,
+      sinHorarioAsignado: false,
+    },
+    include: {
+      categoria: { select: { id: true, nombre: true } },
+      zona: { select: { id: true, nombre: true } },
+      pareja1: true,
+      pareja2: true,
+    },
+  });
+
+  return {
+    message: 'Horario y cancha asignados correctamente.',
+    partido: updated,
+  };
+}
+
 module.exports = {
   cargarResultado,
   borrarResultado,
@@ -526,4 +622,5 @@ module.exports = {
   updateBracketMatch,
   propagarEliminatoria,
   getPartidosByCategoria,
+  asignarHorarioManual,
 };

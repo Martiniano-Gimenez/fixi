@@ -82,6 +82,28 @@ async function reiniciarTorneo(req, res, next) {
   }
 }
 
+async function getPartidosSinHorarioTorneo(req, res, next) {
+  try {
+    const organizadorId = getOrgId(req);
+    const torneoId = req.params.id;
+    const result = await organizadorService.getPartidosSinHorarioTorneo(organizadorId, torneoId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getCanchasDisponiblesTorneo(req, res, next) {
+  try {
+    const organizadorId = getOrgId(req);
+    const torneoId = req.params.id;
+    const result = await organizadorService.getCanchasDisponiblesTorneo(organizadorId, torneoId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   createTorneo,
   getTorneos,
@@ -91,4 +113,6 @@ module.exports = {
   preCheckInicioTorneo,
   iniciarTorneo,
   reiniciarTorneo,
+  getPartidosSinHorarioTorneo,
+  getCanchasDisponiblesTorneo,
 };

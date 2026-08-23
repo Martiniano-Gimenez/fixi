@@ -45,6 +45,10 @@ organizadores que hoy llevan todo en papel.
 - Carga de disponibilidad por pareja con chips interactivos multi-select por día.
 - Generación de zonas por sorteo aleatorio (Fisher-Yates) o por compatibilidad horaria por categoría.
 - Asignación automática continua de horarios y canchas a nivel Torneo ("Iniciar Torneo y Asignar Horarios") con pool multi-categoría, detección de huecos, pre-verificación de compatibilidad (dry-run transaccional) y bloqueo ante solapamientos.
+- Editor rápido de disponibilidad inline en modal de bloqueo (`InlineDisponibilidadEditor`): detección automática de la pareja más restringida, cálculo en tiempo real de slots viables (cancha libre y sin solapamiento) y resaltado con estrella (`★`) de turnos que destraban directamente el cruce o la zona manual incompleta con recálculo transaccional reactivo.
+- Salida de emergencia condicional: permite iniciar el torneo dejando partidos con `sinHorarioAsignado: true` únicamente tras haber reducido conflictos en la sesión (excluyendo zonas manuales incompletas que siempre bloquean).
+- Asignación manual post-inicio estricta (`AsignarHorarioModal`): filtrado en tiempo real que muestra únicamente combinaciones válidas (cancha libre real a nivel torneo + parejas libres + franja compartida) con prevención total de colisiones inter-categoría.
+- Numeración correlativa automática de parejas inscriptas: índice visual continuo (`#{index + 1}`) y re-secuenciación en base de datos al eliminar registros.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.
 - Fase eliminatoria por categoría con bracket SVG dinámico, manejo de BYEs, edición manual de cruces y propagación dinámica de orígenes.

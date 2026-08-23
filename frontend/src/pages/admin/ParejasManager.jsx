@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import DisponibilidadEditor from '../../components/DisponibilidadEditor';
@@ -7,6 +7,9 @@ import { ChevronLeft, Plus, Clock, Trash2, Users } from 'lucide-react';
 
 export default function ParejasManager() {
   const { torneoId, id } = useParams();
+  const [searchParams] = useSearchParams();
+  const queryParejaId = searchParams.get('parejaId');
+
   const [categoria, setCategoria] = useState(null);
   const [parejas, setParejas] = useState([]);
   const [jugador1, setJugador1] = useState('');
@@ -14,7 +17,13 @@ export default function ParejasManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [parejaToDelete, setParejaToDelete] = useState(null);
-  const [expandedParejaId, setExpandedParejaId] = useState(null);
+  const [expandedParejaId, setExpandedParejaId] = useState(queryParejaId || null);
+
+  useEffect(() => {
+    if (queryParejaId) {
+      setExpandedParejaId(queryParejaId);
+    }
+  }, [queryParejaId]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -170,7 +179,7 @@ export default function ParejasManager() {
               </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {parejas.map((pareja) => {
+                {parejas.map((pareja, index) => {
                   const isExpanded = expandedParejaId === pareja.id;
                   const cantSlots = pareja._cantSlots || 0;
 
@@ -207,7 +216,7 @@ export default function ParejasManager() {
                               flexShrink: 0,
                             }}
                           >
-                            #{pareja.orden}
+                            #{index + 1}
                           </span>
                           <span
                             style={{
