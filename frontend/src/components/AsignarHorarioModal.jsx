@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { Clock, Calendar, Check, AlertTriangle, X } from 'lucide-react';
+import { Clock, Calendar, Check, AlertTriangle, X, Star } from 'lucide-react';
 
 export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose, onAssigned }) {
   const [loadingCanchas, setLoadingCanchas] = useState(false);
@@ -9,6 +10,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   const [selectedCancha, setSelectedCancha] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [mostrarOtrosTurnos, setMostrarOtrosTurnos] = useState(false);
 
   useEffect(() => {
     if (isOpen && torneoId) {
@@ -23,8 +25,13 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     setLoadingCanchas(true);
     setError('');
     try {
-      const res = await api.get(`/torneos/${torneoId}/canchas-disponibles`);
+      const url = partido?.fechaHora
+        ? `/torneos/${torneoId}/canchas-disponibles?ignorePartidoId=${partido.id}`
+        : `/torneos/${torneoId}/canchas-disponibles`;
+      const res = await api.get(url);
       setDataCanchas(res);
+      // Ocultar toggle por defecto si hay opciones con estrella
+      setMostrarOtrosTurnos(false);
     } catch (err) {
       setError(err.message || 'Error al cargar canchas disponibles.');
     } finally {
@@ -46,19 +53,21 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   // 1. Hay al menos una cancha libre (sin otro partido asignado)
   // 2. Ninguna de las 2 parejas afectadas tiene otro partido asignado a esa hora
   const slotsValidos = rawSlots.filter((s) => {
-    // 1. Hay al menos una cancha libre
     if (!s.canchasLibres || s.canchasLibres.length === 0) return false;
-
-    // 2. Ninguna de las dos parejas tiene partido asignado en este turno
     const p1Ocupada = partido.pareja1Id && (s.parejasOcupadasIds || []).includes(partido.pareja1Id);
     const p2Ocupada = partido.pareja2Id && (s.parejasOcupadasIds || []).includes(partido.pareja2Id);
     if (p1Ocupada || p2Ocupada) return false;
-
     return true;
   });
 
-  const slotsViernesValidos = slotsValidos.filter((s) => s.dia === 'Viernes');
-  const slotsSabadoValidos = slotsValidos.filter((s) => s.dia === 'Sabado');
+  const validosConEstrella = slotsValidos.filter((s) => slotsEnComunOriginales.includes(s.slotId));
+  const autoMostrarOtros = validosConEstrella.length === 0 && slotsValidos.length > 0;
+  const mostrarTodos = mostrarOtrosTurnos || autoMostrarOtros;
+
+  const slotsAMostrar = mostrarTodos ? slotsValidos : validosConEstrella;
+
+  const slotsViernesValidos = slotsAMostrar.filter((s) => s.dia === 'Viernes');
+  const slotsSabadoValidos = slotsAMostrar.filter((s) => s.dia === 'Sabado');
 
   const slotActualSeleccionado = slotsValidos.find((s) => s.slotId === selectedSlotId);
   const canchasDisponibles = slotActualSeleccionado?.canchasLibres || [];
@@ -92,7 +101,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.6rem' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-text)' }}>
-              Asignar horario y cancha libre
+              {partido.fechaHora ? 'Reprogramar horario y cancha' : 'Asignar horario y cancha libre'}
             </h3>
             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
               {partido.categoria?.nombre} · {partido.zona?.nombre || 'Zona'}
@@ -110,9 +119,18 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             {partido.pareja2 ? `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}` : 'Pareja 2'}
           </div>
           {slotsEnComunOriginales.length > 0 ? (
-            <div style={{ marginTop: '0.35rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-              <Check size={12} style={{ color: 'var(--color-success)' }} /> Disponibilidad original compartida: {slotsEnComunOriginales.join(', ')}
-            </div>
+            validosConEstrella.length > 0 ? (
+              <div style={{ marginTop: '0.35rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Check size={12} /> {validosConEstrella.length} {validosConEstrella.length === 1 ? 'turno coincide' : 'turnos coinciden'} con su disponibilidad original y tiene cancha libre (resaltados con ★)
+              </div>
+            ) : (
+              <div style={{ marginTop: '0.35rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-warning)', display: 'flex', alignItems: 'flex-start', gap: '0.35rem', lineHeight: 1.35 }}>
+                <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  Las parejas coincidían en {slotsEnComunOriginales.length} turnos originales, pero <strong>todas las canchas del club ya están 100% ocupadas</strong> en esas franjas. Los turnos que se muestran a continuación son alternativas libres que debés acordar con ellas.
+                </div>
+              </div>
+            )
           ) : (
             <div style={{ marginTop: '0.35rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
               <AlertTriangle size={12} /> Sin franjas coincidentes en la inscripción original (coordinar telefónicamente)
@@ -150,14 +168,42 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                 <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
                   En todos los turnos del torneo las canchas están 100% ocupadas por otros partidos o alguna de las dos parejas ya tiene un partido asignado en simultáneo.
                 </p>
+                <div style={{ marginTop: '0.6rem' }}>
+                  <Link
+                    to={`/admin/torneos/${torneoId}/categorias/${partido.categoriaId || partido.categoria?.id}/parejas`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      fontSize: 'var(--font-size-xs)',
+                      color: 'var(--color-primary)',
+                      textDecoration: 'none',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Ir a Gestionar Parejas de {partido.categoria?.nombre || 'la Categoría'} →
+                  </Link>
+                </div>
               </div>
             </div>
           ) : (
             <>
               <div>
-                <label style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '0.4rem' }}>
-                  1. SELECCIONÁ UN HORARIO CON CANCHA LIBRE Y AMBAS PAREJAS DISPONIBLES:
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', margin: 0 }}>
+                    1. SELECCIONÁ UN HORARIO CON CANCHA LIBRE Y AMBAS PAREJAS DISPONIBLES:
+                  </label>
+                  {!autoMostrarOtros && slotsValidos.length > validosConEstrella.length && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '11px', cursor: 'pointer', color: 'var(--color-text)' }}>
+                      <input
+                        type="checkbox"
+                        checked={mostrarOtrosTurnos}
+                        onChange={(e) => setMostrarOtrosTurnos(e.target.checked)}
+                      />
+                      Ver otros turnos disponibles (sin estrella)
+                    </label>
+                  )}
+                </div>
 
                 {slotsViernesValidos.length > 0 && (
                   <div style={{ marginBottom: '0.75rem' }}>
@@ -184,7 +230,11 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                             title={esOriginalComun ? 'Coincide con disponibilidad original' : 'Horario con cancha libre'}
                           >
                             {s.hora} ({s.canchasLibres.length} {s.canchasLibres.length === 1 ? 'lib.' : 'lib.'})
-                            {esOriginalComun && <span style={{ marginLeft: '4px', color: 'var(--color-success)', fontSize: '10px' }}>★</span>}
+                            {esOriginalComun && (
+                              <span style={{ marginLeft: '4px', color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center' }}>
+                                <Star size={10} fill="currentColor" />
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -217,7 +267,11 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                             title={esOriginalComun ? 'Coincide con disponibilidad original' : 'Horario con cancha libre'}
                           >
                             {s.hora} ({s.canchasLibres.length} {s.canchasLibres.length === 1 ? 'lib.' : 'lib.'})
-                            {esOriginalComun && <span style={{ marginLeft: '4px', color: 'var(--color-success)', fontSize: '10px' }}>★</span>}
+                            {esOriginalComun && (
+                              <span style={{ marginLeft: '4px', color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center' }}>
+                                <Star size={10} fill="currentColor" />
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -233,21 +287,24 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                     2. SELECCIONÁ LA CANCHA LIBRE PARA EL {selectedSlotId.toUpperCase()}:
                   </label>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {canchasDisponibles.map((cNum) => (
-                      <button
-                        key={cNum}
-                        type="button"
-                        className={`btn-secondary ${selectedCancha === cNum ? 'btn-primary' : ''}`}
-                        style={{
-                          padding: '0.4rem 0.9rem',
-                          fontWeight: 600,
-                          fontSize: 'var(--font-size-sm)',
-                        }}
-                        onClick={() => setSelectedCancha(cNum)}
-                      >
-                        Cancha {cNum}
-                      </button>
-                    ))}
+                    {canchasDisponibles.map((cNum) => {
+                      const isSelected = selectedCancha === cNum;
+                      return (
+                        <button
+                          key={cNum}
+                          type="button"
+                          className={`slot-chip ${isSelected ? 'selected' : ''}`}
+                          style={{
+                            padding: '0.45rem 1rem',
+                            minWidth: '95px',
+                            textAlign: 'center',
+                          }}
+                          onClick={() => setSelectedCancha(cNum)}
+                        >
+                          Cancha {cNum}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

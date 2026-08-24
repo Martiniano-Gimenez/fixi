@@ -21,7 +21,7 @@ organizadores que hoy llevan todo en papel.
 - **Torneo (Evento):** nombre (ej. "Pares Agosto"), fecha, slug único (`slug`), estado (`BORRADOR` | `EN_CURSO` | `FINALIZADO`), organizadorId → tiene múltiples `Categorías`.
 - **Categoría (Cuadro de juego):** nombre (ej. "4ta", "6ta", "8va", "5ta Damas"), estado (`BORRADOR` | `EN_CURSO` | `FINALIZADO`), torneoId → tiene múltiples `Parejas`, `Zonas`, `FasesEliminatorias` y `Partidos`.
 - **Pareja:** jugador1, jugador2, orden, categoriaId → tiene múltiples `SlotPareja` seleccionados.
-- **SlotPareja:** relación única `(parejaId, slotId)` donde `slotId` es un string plano (ej. `"Viernes-18:00"`, `"Viernes-00:15"`).
+- **SlotPareja:** relación única `(parejaId, slotId)` donde `slotId` es un string plano a intervalos de 15 minutos (ej. `"Viernes-18:00"`, `"Viernes-18:15"`, `"Viernes-00:15"`).
 - **Zona:** categoriaId, nombre ("Zona A", "Zona B"), clasifican (int), formato (`ROUND_ROBIN` | `MINI_BRACKET`), requiereArmadoManual (boolean).
 - **ZonaPareja:** tabla estadística por pareja en zona (posicion, pj, pg, pp, sf, sc, gf, gc, puntos).
 - **FaseEliminatoria:** categoriaId, nombre ("Cuartos de Final", "Semifinal", "Final"), ronda (1=final, 2=semis, 4=cuartos, 8=octavos).
@@ -29,10 +29,11 @@ organizadores que hoy llevan todo en papel.
 - **SetPartido:** partidoId, numero (1, 2, 3), gamesPareja1, gamesPareja2.
 
 ## Constantes y Reglas del Dominio
-- **Duración de Partido:** Fija en **75 minutos** (constante en código, no configurable).
+- **Duración de Partido:** Fija en **75 minutos** (`DURACION_PARTIDO_MIN = 75`, constante en código, no configurable).
+- **Granularidad de Disponibilidad:** Grilla a intervalos de **15 minutos** (`SLOT_GRANULARIDAD_MIN = 15`) para máxima precisión horaria sin pérdida de disponibilidad en la carga.
 - **Reglas de Pádel en Resultados:** Mínimo 6 games para ganar set, diferencia de 2 en 6-5 (se permiten 7-5 / 7-6).
 - **Mini-Bracket (Zonas de 4):** 2 partidos iniciales (P1 vs P2, P3 vs P4) y 2 definitorios ("Ganador vs Ganador" para 1°/2° puesto y "Perdedor vs Perdedor" para 3° puesto). El orden se fija mediante el campo explícito `posicion`.
-- **Compatibilidad Horaria:** Las parejas cargan disponibilidad en slots discretos (75 min) que se fusionan en ventanas continuas. La compatibilidad se calcula como la intersección de ventanas continuas entre parejas.
+- **Compatibilidad Horaria:** Las parejas cargan disponibilidad en rangos horarios (slots de 15 min) que se fusionan en ventanas continuas. La compatibilidad se calcula como la intersección de ventanas continuas entre parejas.
 - **Scheduler Continuo en Dos Pasadas con Pool Multi-Categoría a nivel Torneo:** Cada cancha gestiona su propia línea de tiempo ordenada de intervalos ocupados (partidos del club de todas las categorías). La asignación masiva se realiza en dos fases para optimizar turnos:
   - *Pasada 1 Global:* Asigna primero en horarios de grilla estándar todos los partidos hiper-restringidos de todas las categorías juntas (1 sola opción día+franja válida).
   - *Pasada 2 Global:* Asigna todos los partidos flexibles de todas las categorías en una sola cola ordenada por escasez de opciones (MCF Global), pudiendo usar tanto turnos estándar como huecos irregulares de 15 min en cualquier cancha.
@@ -42,12 +43,13 @@ organizadores que hoy llevan todo en papel.
 - Jerarquía completa: Club $\rightarrow$ Torneo (Evento) $\rightarrow$ Categorías $\rightarrow$ Parejas/Zonas/Partidos/Eliminatorias.
 - CRUD completo de torneos y categorías (crear, editar, eliminar y reiniciar a borrador).
 - Gestión de Club / Organizador (`/admin/club`): edición de canchas totales y horarios de apertura con advertencia de impacto.
-- Carga de disponibilidad por pareja con chips interactivos multi-select por día.
+- Carga de disponibilidad por pareja mediante **Slider de Rango Horario dual (15 min)** (`RangeSliderDia`, `RangeSliderGroup` y `DisponibilidadEditor`): selectores de manijas desde-hasta con snap de 15 min, soporte para múltiples rangos independientes por día (gaps/huecos en el medio), indicador de trasnoche y algoritmo de reconstrucción con expansión de slots de 75 min previos a ventanas continuas completas.
 - Generación de zonas por sorteo aleatorio (Fisher-Yates) o por compatibilidad horaria por categoría.
 - Asignación automática continua de horarios y canchas a nivel Torneo ("Iniciar Torneo y Asignar Horarios") con pool multi-categoría, detección de huecos, pre-verificación de compatibilidad (dry-run transaccional) y bloqueo ante solapamientos.
 - Editor rápido de disponibilidad inline en modal de bloqueo (`InlineDisponibilidadEditor`): detección automática de la pareja más restringida, cálculo en tiempo real de slots viables (cancha libre y sin solapamiento) y resaltado con estrella (`★`) de turnos que destraban directamente el cruce o la zona manual incompleta con recálculo transaccional reactivo.
-- Salida de emergencia condicional: permite iniciar el torneo dejando partidos con `sinHorarioAsignado: true` únicamente tras haber reducido conflictos en la sesión (excluyendo zonas manuales incompletas que siempre bloquean).
-- Asignación manual post-inicio estricta (`AsignarHorarioModal`): filtrado en tiempo real que muestra únicamente combinaciones válidas (cancha libre real a nivel torneo + parejas libres + franja compartida) con prevención total de colisiones inter-categoría.
+- Salida de emergencia condicional y gestión de partidos sin horario (`PartidosPendientesSection`): acordeón categorizado (inicia colapsado para evitar saturación visual) con filtrado determinista en tiempo real que evalúa canchas libres antes de renderizar insignias de estrella (`★`), diferenciando cruces con turnos compatibles libres de cruces con horarios originales saturados.
+- Asignar manual post-inicio estricta (`AsignarHorarioModal`): filtrado en tiempo real que muestra únicamente combinaciones válidas (cancha libre real a nivel torneo + parejas libres + franja compartida) con prevención total de colisiones inter-categoría.
+- Reprogramación de horarios de partidos asignados (`AsignarHorarioModal`): escritura atómica segura que excluye la ocupación anterior del propio partido al validar disponibilidad, permitiendo reasignaciones de cancha y hora limpias sin riesgo de condición de carrera.
 - Numeración correlativa automática de parejas inscriptas: índice visual continuo (`#{index + 1}`) y re-secuenciación en base de datos al eliminar registros.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.

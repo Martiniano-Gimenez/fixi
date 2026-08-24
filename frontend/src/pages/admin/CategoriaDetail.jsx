@@ -15,6 +15,7 @@ import MiniBracketView from '../../components/MiniBracketView';
 import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import ZoneEditorModal from '../../components/ZoneEditorModal';
+import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 
 export default function CategoriaDetail() {
   const { torneoId, id } = useParams();
@@ -29,6 +30,7 @@ export default function CategoriaDetail() {
   const [error, setError] = useState('');
 
   const [partidoSeleccionado, setPartidoSeleccionado] = useState(null);
+  const [partidoReprogramar, setPartidoReprogramar] = useState(null);
   const [activeZonaId, setActiveZonaId] = useState(null);
 
   // Modales
@@ -309,6 +311,7 @@ export default function CategoriaDetail() {
                         onClick={() => setPartidoSeleccionado(partido)}
                         onCargarResultado={(p) => setPartidoSeleccionado(p)}
                         onUpdateFechaHora={handleUpdateFechaHora}
+                        onReprogramar={setPartidoReprogramar}
                       />
                     ))}
                   </div>
@@ -327,6 +330,20 @@ export default function CategoriaDetail() {
           onClose={() => setPartidoSeleccionado(null)}
           onSuccess={() => {
             setPartidoSeleccionado(null);
+            fetchData();
+          }}
+        />
+      )}
+
+      {/* Modal para Reprogramar Horario */}
+      {partidoReprogramar && (
+        <AsignarHorarioModal
+          isOpen={!!partidoReprogramar}
+          partido={partidoReprogramar}
+          torneoId={torneoId}
+          onClose={() => setPartidoReprogramar(null)}
+          onAssigned={() => {
+            setPartidoReprogramar(null);
             fetchData();
           }}
         />

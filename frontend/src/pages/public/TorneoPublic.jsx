@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
-import { Award, AlertTriangle, Users, Trophy, Calendar, RefreshCw, Layers } from 'lucide-react';
+import { Award, AlertTriangle, Users, Trophy, Calendar, RefreshCw, Layers, Clock } from 'lucide-react';
+import { formatDiaHorario } from '../../utils/dateUtils';
 
 const POLL_INTERVAL = 15000; // 15 seconds
 
@@ -371,12 +372,8 @@ export default function TorneoPublic() {
                                     gap: '4px',
                                   }}
                                 >
-                                  <Calendar size={11} strokeWidth={2} />
-                                  {new Date(p.fechaHora).toLocaleString([], {
-                                    weekday: 'short',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
+                                  <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
+                                  {formatDiaHorario(p.fechaHora)}
                                   {p.canchaNumero && ` · Cancha ${p.canchaNumero}`}
                                 </div>
                               )}
@@ -551,12 +548,9 @@ export default function TorneoPublic() {
                                         gap: '4px',
                                       }}
                                     >
-                                      <Calendar size={11} strokeWidth={2} />
-                                      {new Date(partido.fechaHora).toLocaleString([], {
-                                        weekday: 'short',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}
+                                      <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
+                                      {formatDiaHorario(partido.fechaHora)}
+                                      {partido.canchaNumero && ` · Cancha ${partido.canchaNumero}`}
                                     </div>
                                   )}
 

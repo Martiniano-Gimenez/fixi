@@ -1,7 +1,7 @@
-import { Edit2, Play, Plus, Clock, Trophy } from 'lucide-react';
-import DateTimeInput from './DateTimeInput';
+import { Edit2, Play, Plus, Clock, Trophy, AlertTriangle } from 'lucide-react';
+import { formatDiaHorario } from '../utils/dateUtils';
 
-export default function PartidoCard({ partido, onClick, onCargarResultado, onUpdateFechaHora }) {
+export default function PartidoCard({ partido, onClick, onCargarResultado, onUpdateFechaHora, onReprogramar }) {
   if (!partido) return null;
 
   const isFinalizado = partido.estado === 'FINALIZADO';
@@ -128,38 +128,12 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onUpd
             {isFinalizado ? 'Finalizado' : isEnCurso ? 'En juego' : isJugable ? 'Pendiente' : 'Esperando'}
           </span>
 
-          {onUpdateFechaHora ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
-              <DateTimeInput
-                value={
-                  partido.fechaHora
-                    ? new Date(new Date(partido.fechaHora).getTime() - new Date().getTimezoneOffset() * 60000)
-                        .toISOString()
-                        .slice(0, 16)
-                    : ''
-                }
-                onUpdate={(val) => onUpdateFechaHora(partido.id, val)}
-                title="Establecer horario"
-                style={{
-                  fontSize: '9px',
-                  padding: '2px 4px',
-                  background: 'var(--color-bg-input)',
-                  border: '1px solid var(--color-border)',
-                  color: 'var(--color-text)',
-                  borderRadius: '4px',
-                }}
-              />
+          {partido.fechaHora ? (
+            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Clock size={12} style={{ color: 'var(--color-primary)' }} />
+              {formatDiaHorario(partido.fechaHora)}
               {partido.canchaNumero ? (
-                <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                  C{partido.canchaNumero}
-                </span>
-              ) : null}
-            </div>
-          ) : partido.fechaHora ? (
-            <span style={{ fontSize: '10px', color: 'var(--color-text-tertiary)', fontWeight: 'bold' }}>
-              {new Date(partido.fechaHora).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
-              {partido.canchaNumero ? (
-                <span style={{ marginLeft: '4px', color: 'var(--color-text-secondary)' }}>
+                <span style={{ color: 'var(--color-text-tertiary)' }}>
                   · Cancha {partido.canchaNumero}
                 </span>
               ) : null}
@@ -169,51 +143,77 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onUpd
           {partido.sinHorarioAsignado && (
             <span
               style={{
-                fontSize: '9px',
+                fontSize: '9.5px',
                 color: 'var(--color-warning)',
-                fontWeight: 'bold',
-                background: 'rgba(234,179,8,0.1)',
+                fontWeight: 600,
+                background: 'rgba(245, 158, 11, 0.1)',
                 padding: '1px 5px',
                 borderRadius: '4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
               }}
             >
-              ⚠️ Sin horario
+              <AlertTriangle size={10} /> Sin horario
             </span>
           )}
         </div>
 
         {handleClick ? (
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleClick();
-            }}
-            style={{
-              padding: '0.2rem 0.55rem',
-              fontSize: '11px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.3rem',
-              width: 'auto',
-              borderRadius: 'var(--radius-sm)',
-            }}
-          >
-            {isFinalizado ? (
-              <>
-                <Edit2 size={11} /> Editar
-              </>
-            ) : isEnCurso ? (
-              <>
-                <Plus size={11} /> Cargar Set
-              </>
-            ) : (
-              <>
-                <Play size={11} /> Cargar Resultado
-              </>
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+            {isJugable && partido.estado === 'PENDIENTE' && partido.fechaHora && onReprogramar && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReprogramar(partido);
+                }}
+                title="Reprogramar horario y cancha"
+                style={{
+                  padding: '0.2rem 0.4rem',
+                  fontSize: '11px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.2rem',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Clock size={11} /> Reprogramar
+              </button>
             )}
-          </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClick();
+              }}
+              style={{
+                padding: '0.2rem 0.55rem',
+                fontSize: '11px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                width: 'auto',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              {isFinalizado ? (
+                <>
+                  <Edit2 size={11} /> Editar
+                </>
+              ) : isEnCurso ? (
+                <>
+                  <Plus size={11} /> Cargar Set
+                </>
+              ) : (
+                <>
+                  <Play size={11} /> Cargar Resultado
+                </>
+              )}
+            </button>
+          </div>
         ) : !isJugable ? (
           <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
             Esperando cruces

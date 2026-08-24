@@ -533,6 +533,24 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
             };
           });
 
+          // Calcular qué pares de parejas dentro de la zona manual no tienen horarios en común
+          const crucesIncompatibles = [];
+          for (let i = 0; i < rawZonaParejas.length; i++) {
+            for (let j = i + 1; j < rawZonaParejas.length; j++) {
+              const p1 = rawZonaParejas[i];
+              const p2 = rawZonaParejas[j];
+              const shared = p1.slotIds.filter((slot) => p2.slotIds.includes(slot));
+              if (shared.length === 0) {
+                crucesIncompatibles.push({
+                  p1: p1.nombre,
+                  p2: p2.nombre,
+                  p1Id: p1.id,
+                  p2Id: p2.id,
+                });
+              }
+            }
+          }
+
           conflictosMap.get(cId).partidosSinHorario.push({
             partidoId: zm.id,
             zonaId: zm.id,
@@ -542,6 +560,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
             pareja1: 'Incompatibilidad de grupo',
             pareja2: parejasNombres,
             parejasManuales,
+            crucesIncompatibles,
             aparicionesMaximas: 999, // Alta prioridad
           });
         }
@@ -868,13 +887,128 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
     ],
   });
 
-  return partidos;
+  const organizador = await getOrganizador(organizadorId);
+  const grilla = generarGrillaOrganizador(organizador);
+  const cantCanchas = organizador.cantidadCanchas || 1;
+  const refFecha = torneo.fecha || new Date();
+
+  // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
+  const partidosAsignados = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId },
+      fechaHora: { not: null },
+      canchaNumero: { not: null },
+    },
+    select: {
+      id: true,
+      fechaHora: true,
+      canchaNumero: true,
+      pareja1Id: true,
+      pareja2Id: true,
+    },
+  });
+
+  const partidosIntervalos = partidosAsignados.map((p) => {
+    const startMs = new Date(p.fechaHora).getTime();
+    const endMs = startMs + 75 * 60 * 1000;
+    return {
+      partidoId: p.id,
+      canchaNumero: p.canchaNumero,
+      startMs,
+      endMs,
+      pareja1Id: p.pareja1Id,
+      pareja2Id: p.pareja2Id,
+    };
+  });
+
+  const allSlotIds = [...grilla.viernes, ...grilla.sabado];
+  const slotsEvaluados = [];
+
+  for (const slotId of allSlotIds) {
+    const slotDate = parseSlotToDate(slotId, refFecha);
+    if (!slotDate) continue;
+
+    const slotStartMs = slotDate.getTime();
+    const slotEndMs = slotStartMs + 75 * 60 * 1000;
+
+    let canchasOcupadasCount = 0;
+    const parejasJugandoEnSlot = new Set();
+
+    for (const p of partidosIntervalos) {
+      if (Math.max(slotStartMs, p.startMs) < Math.min(slotEndMs, p.endMs)) {
+        if (p.canchaNumero) canchasOcupadasCount++;
+        if (p.pareja1Id) parejasJugandoEnSlot.add(p.pareja1Id);
+        if (p.pareja2Id) parejasJugandoEnSlot.add(p.pareja2Id);
+      }
+    }
+
+    const canchasLibres = cantCanchas - canchasOcupadasCount;
+    slotsEvaluados.push({
+      slotId,
+      canchasLibres,
+      parejasJugando: Array.from(parejasJugandoEnSlot),
+    });
+  }
+
+  // Para cada partido sin horario calculamos slotsViables y nivel de urgencia
+  const partidosConUrgencia = partidos.map((p) => {
+    const p1Slots = (p.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
+    const p2Slots = (p.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
+    const slotsEnComunOriginales = p1Slots.filter((s) => p2Slots.includes(s));
+
+    const slotsViables = slotsEvaluados
+      .filter((s) => {
+        if (s.canchasLibres <= 0) return false;
+        if (p.pareja1Id && s.parejasJugando.includes(p.pareja1Id)) return false;
+        if (p.pareja2Id && s.parejasJugando.includes(p.pareja2Id)) return false;
+        return true;
+      })
+      .map((s) => s.slotId);
+
+    const slotsViablesCount = slotsViables.length;
+    const slotsValidosConEstrella = slotsViables.filter((sId) => slotsEnComunOriginales.includes(sId));
+    const slotsValidosConEstrellaCount = slotsValidosConEstrella.length;
+
+    let urgencia = 'BAJA';
+    if (slotsViablesCount <= 1) {
+      urgencia = 'ALTA';
+    } else if (slotsViablesCount <= 3) {
+      urgencia = 'MEDIA';
+    }
+
+    return {
+      ...p,
+      slotsViables,
+      slotsViablesCount,
+      slotsEnComunOriginales,
+      slotsEnComunCount: slotsEnComunOriginales.length,
+      slotsValidosConEstrella,
+      slotsValidosConEstrellaCount,
+      urgencia,
+    };
+  });
+
+  // Ordenar Most Constrained First (los más restringidos primero)
+  partidosConUrgencia.sort((a, b) => {
+    if (a.slotsViablesCount !== b.slotsViablesCount) {
+      return a.slotsViablesCount - b.slotsViablesCount;
+    }
+    const catA = a.categoria?.nombre || '';
+    const catB = b.categoria?.nombre || '';
+    if (catA !== catB) return catA.localeCompare(catB);
+    const zonaA = a.zona?.nombre || '';
+    const zonaB = b.zona?.nombre || '';
+    if (zonaA !== zonaB) return zonaA.localeCompare(zonaB);
+    return (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
+  });
+
+  return partidosConUrgencia;
 }
 
 /**
  * Obtiene el estado de ocupación de canchas y slots libres en tiempo real para un torneo
  */
-async function getCanchasDisponiblesTorneo(organizadorId, torneoId) {
+async function getCanchasDisponiblesTorneo(organizadorId, torneoId, ignorePartidoId = null) {
   const organizador = await getOrganizador(organizadorId);
   const torneo = await prisma.torneo.findUnique({ where: { id: torneoId } });
   if (!torneo) {
@@ -899,6 +1033,7 @@ async function getCanchasDisponiblesTorneo(organizadorId, torneoId) {
       categoria: { torneoId },
       fechaHora: { not: null },
       canchaNumero: { not: null },
+      ...(ignorePartidoId ? { id: { not: ignorePartidoId } } : {}),
     },
     select: {
       id: true,

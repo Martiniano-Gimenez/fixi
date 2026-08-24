@@ -1,4 +1,5 @@
 const DURACION_PARTIDO_MIN = 75;
+const SLOT_GRANULARIDAD_MIN = 15;
 
 function horaAMinutos(hora) {
   if (!hora || typeof hora !== 'string') return 0;
@@ -13,7 +14,8 @@ function minutosAHora(minutos) {
 }
 
 /**
- * Genera array de slots ["Viernes-18:00", "Viernes-19:15", ..., "Viernes-00:15"]
+ * Genera array de slots ["Viernes-18:00", "Viernes-18:15", ..., "Viernes-00:45"]
+ * con granularidad de 15 minutos.
  * Soporta jornadas que pasan de la medianoche (ej. 18:00 a 02:00).
  */
 function generarSlotsDia(dia, horaInicio, horaFin) {
@@ -31,7 +33,7 @@ function generarSlotsDia(dia, horaInicio, horaFin) {
   }
 
   const slots = [];
-  for (let m = inicioMin; m + DURACION_PARTIDO_MIN <= effectiveFinMin; m += DURACION_PARTIDO_MIN) {
+  for (let m = inicioMin; m + DURACION_PARTIDO_MIN <= effectiveFinMin; m += SLOT_GRANULARIDAD_MIN) {
     const clockMin = m % (24 * 60);
     slots.push(`${dia}-${minutosAHora(clockMin)}`);
   }
@@ -67,6 +69,7 @@ function calcularCompatibilidad(slotsA, slotsB) {
 
 module.exports = {
   DURACION_PARTIDO_MIN,
+  SLOT_GRANULARIDAD_MIN,
   horaAMinutos,
   minutosAHora,
   generarSlotsDia,
@@ -74,3 +77,4 @@ module.exports = {
   getSlotsValidosSet,
   calcularCompatibilidad,
 };
+

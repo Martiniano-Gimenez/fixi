@@ -148,7 +148,7 @@ export default function TorneoDetail() {
     }
   };
 
-  const handleSlotSaved = (categoriaId, partidoId, parejaId, newSlots) => {
+  const handleSlotSaved = async (categoriaId, partidoId, parejaId, newSlots) => {
     setHayCambiosGuardados(true);
     setConflictosBloqueo((prev) => {
       if (!prev) return prev;
@@ -167,6 +167,9 @@ export default function TorneoDetail() {
         };
       });
     });
+
+    // Re-verificación reactiva automática en background
+    await handlePreCheckInicio(true);
   };
 
   const executeIniciarTorneo = async () => {
@@ -355,24 +358,6 @@ export default function TorneoDetail() {
         </div>
       </div>
 
-      {/* Banner de resultado tras iniciar */}
-      {resultadoInicio && (
-        <div
-          className="card"
-          style={{
-            marginBottom: '1.5rem',
-            background: 'rgba(34, 197, 94, 0.1)',
-            borderColor: 'rgba(34, 197, 94, 0.3)',
-          }}
-        >
-          <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--color-primary)' }}>
-            🎉 ¡Torneo iniciado exitosamente!
-          </h3>
-          <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Se crearon las zonas y se asignaron automáticamente los turnos y canchas para todas las categorías.
-          </p>
-        </div>
-      )}
 
       {/* Sección de partidos pendientes de horario si el torneo está en curso */}
       {torneo.estado === 'EN_CURSO' && (
@@ -390,9 +375,6 @@ export default function TorneoDetail() {
             <Layers size={22} style={{ color: 'var(--color-primary)' }} />
             Categorías del Torneo
           </h2>
-          <p style={{ margin: '0.2rem 0 0 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Cada categoría cuenta con su propio cuadro de parejas, zonas, fixture y eliminatorias.
-          </p>
         </div>
 
         <button
@@ -690,34 +672,23 @@ export default function TorneoDetail() {
           ) : (
             <div className="modal-content" style={{ maxWidth: '680px', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                <h3 style={{ margin: 0, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.2rem' }}>
-                  <AlertTriangle size={22} /> No se puede iniciar el torneo
-                </h3>
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.2rem' }}>
+                    <AlertTriangle size={22} /> Incompatibilidades detectadas
+                  </h3>
+                  {conteoInicialConflictos !== null &&
+                    conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) < conteoInicialConflictos && (
+                      <span style={{ fontSize: '11.5px', color: 'var(--color-success)', fontWeight: 600, marginTop: '2px', display: 'block' }}>
+                        ✓ ¡Resolviste {conteoInicialConflictos - conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)} {conteoInicialConflictos - conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'conflicto' : 'conflictos'}!
+                      </span>
+                    )}
+                </div>
                 <span className="badge badge-danger" style={{ fontSize: 'var(--font-size-xs)' }}>
-                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)} conflictos
+                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
+                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'pendiente' : 'pendientes'}
                 </span>
               </div>
 
-              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
-                Existen incompatibilidades horarias o saturación de canchas que impiden asignar todos los partidos sin colisión.
-                Podés ampliar la disponibilidad de las parejas más restringidas directamente desde aquí:
-              </p>
-
-              {/* Leyenda de motivos */}
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.5rem 0.75rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-size-xs)' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }}></span>
-                  <strong>Sin franja común:</strong> Parejas sin coincidencia
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }}></span>
-                  <strong>Canchas saturadas:</strong> Coinciden pero no hay cancha libre
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#eab308' }}></span>
-                  <strong>Armado manual:</strong> Zona incompleta
-                </span>
-              </div>
 
               <div style={{ flex: 1, overflowY: 'auto', marginBottom: '1.25rem', paddingRight: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {conflictosBloqueo.map((c) => (
@@ -788,11 +759,24 @@ export default function TorneoDetail() {
                           {p.motivo === 'ZONA_MANUAL_INCOMPLETA' ? (
                             <div>
                               <div style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.35rem', color: 'var(--color-text)' }}>
-                                <strong>Incompatibilidad para formar grupo:</strong> Las parejas restantes de la categoría no coinciden en horarios para jugar entre sí la zona todos contra todos.
+                                <strong>Incompatibilidad para formar grupo:</strong> Las parejas de la zona no tienen horarios comunes para completar el fixture.
                               </div>
 
+                              {p.crucesIncompatibles && p.crucesIncompatibles.length > 0 && (
+                                <div style={{ marginBottom: '0.5rem', padding: '0.4rem 0.6rem', background: 'rgba(234, 179, 8, 0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#eab308', marginBottom: '0.2rem' }}>
+                                    Incompatibilidad directa en el grupo:
+                                  </div>
+                                  {p.crucesIncompatibles.map((ci, idx) => (
+                                    <div key={idx} style={{ fontSize: '11.5px', color: 'var(--color-text)', marginBottom: '0.15rem' }}>
+                                      • <strong>{ci.p1}</strong> no coincide en ningún turno con <strong>{ci.p2}</strong>.
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
                               <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
-                                Podés llamar y ampliar la disponibilidad de alguna de estas parejas para que se agrupen solas, o bien reestructurar las zonas manualmente:
+                                Podés ampliar la disponibilidad de alguna de estas parejas con turnos libres o reestructurar la zona:
                               </div>
 
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.6rem' }}>
@@ -815,8 +799,12 @@ export default function TorneoDetail() {
                                       initialSlotIds={pm.slotIds || []}
                                       slotsViables={pm.slotsViables || []}
                                       slotsQueDestraban={pm.slotsQueDestraban || []}
+                                      esZonaManual={true}
                                       grilla={grillaOrganizador}
-                                      onSaved={() => setHayCambiosGuardados(true)}
+                                      onSaved={async () => {
+                                        setHayCambiosGuardados(true);
+                                        await handlePreCheckInicio(true);
+                                      }}
                                     />
                                   </div>
                                 ))}
@@ -922,10 +910,8 @@ export default function TorneoDetail() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {/* Botón de salida de emergencia (solo si ya se redujeron conflictos y no hay zonas manuales) */}
-                  {conteoInicialConflictos !== null &&
-                    conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) < conteoInicialConflictos &&
-                    !conflictosBloqueo.some((c) => c.partidosSinHorario.some((p) => p.motivo === 'ZONA_MANUAL_INCOMPLETA')) &&
+                  {/* Botón de salida de emergencia (disponible siempre que haya plan de emergencia y no haya zonas manuales) */}
+                  {!conflictosBloqueo.some((c) => c.partidosSinHorario.some((p) => p.motivo === 'ZONA_MANUAL_INCOMPLETA')) &&
                     Boolean(planEmergenciaId) && (
                       <button
                         type="button"
@@ -978,19 +964,19 @@ export default function TorneoDetail() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem', color: 'var(--color-warning)' }}>
               <AlertTriangle size={24} />
               <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-text)' }}>
-                ¿Iniciar torneo dejando partidos pendientes?
+                ¿Iniciar torneo con partidos pendientes?
               </h3>
             </div>
 
             <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '0.85rem', lineHeight: 1.4 }}>
-              <strong>
+              Estás por iniciar el torneo dejando{' '}
+              <strong style={{ color: 'var(--color-warning)' }}>
                 {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
                 {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1
-                  ? 'partido quedará'
-                  : 'partidos quedarán'}{' '}
-                sin horario asignado
+                  ? 'partido sin cancha ni horario asignado'
+                  : 'partidos sin cancha ni horario asignado'}
               </strong>{' '}
-              (a coordinar) en las siguientes categorías:
+              en las siguientes categorías:
             </p>
 
             <div

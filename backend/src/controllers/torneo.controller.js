@@ -97,7 +97,8 @@ async function getCanchasDisponiblesTorneo(req, res, next) {
   try {
     const organizadorId = getOrgId(req);
     const torneoId = req.params.id;
-    const result = await organizadorService.getCanchasDisponiblesTorneo(organizadorId, torneoId);
+    const ignorePartidoId = req.query.ignorePartidoId;
+    const result = await organizadorService.getCanchasDisponiblesTorneo(organizadorId, torneoId, ignorePartidoId);
     res.json(result);
   } catch (error) {
     next(error);

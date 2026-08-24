@@ -3,10 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ResultadoModal from '../../components/ResultadoModal';
 import EditBracketMatchModal from '../../components/EditBracketMatchModal';
-import DateTimeInput from '../../components/DateTimeInput';
 import ConfirmModal from '../../components/ConfirmModal';
+import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import BracketLines from '../../components/BracketLines';
-import { ChevronLeft, GitBranch, UserCheck, Trash2, Settings, Trophy, Edit2, Plus } from 'lucide-react';
+import { ChevronLeft, GitBranch, UserCheck, Trash2, Settings, Trophy, Edit2, Plus, Clock } from 'lucide-react';
+import { formatDiaHorario } from '../../utils/dateUtils';
 import './EliminatoriaView.css';
 
 export default function EliminatoriaView() {
@@ -19,6 +20,7 @@ export default function EliminatoriaView() {
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState(null);
   const [partidoModal, setPartidoModal] = useState(null);
+  const [partidoReprogramar, setPartidoReprogramar] = useState(null);
   const [editBracketModal, setEditBracketModal] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null });
   const bracketScrollRef = useRef(null);
@@ -257,12 +259,28 @@ export default function EliminatoriaView() {
                               <span className="match-position">#{partido.posicionEnRonda}</span>
                             </div>
 
-                            <div className="match-time-row" onClick={(e) => e.stopPropagation()}>
-                              <DateTimeInput
-                                value={partido.fechaHora}
-                                onChange={(val) => handleUpdateFechaHora(partido.id, val)}
-                              />
-                            </div>
+                            {partido.fechaHora ? (
+                              <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                                  <Clock size={11} style={{ color: 'var(--color-primary)' }} />
+                                  {formatDiaHorario(partido.fechaHora)}
+                                  {partido.canchaNumero ? ` · Cancha ${partido.canchaNumero}` : ''}
+                                </div>
+                                {isJugable && partido.estado === 'PENDIENTE' && (
+                                  <button
+                                    className="btn-icon"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPartidoReprogramar(partido);
+                                    }}
+                                    title="Reprogramar horario"
+                                    style={{ padding: '0.2rem', color: 'var(--color-text-secondary)' }}
+                                  >
+                                    <Clock size={11} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : null}
 
                             <div className="parejas-list">
                               <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
@@ -362,6 +380,19 @@ export default function EliminatoriaView() {
         onConfirm={executeConfirmAction}
         onCancel={() => setConfirmModal({ isOpen: false, type: null })}
       />
+
+      {partidoReprogramar && (
+        <AsignarHorarioModal
+          isOpen={!!partidoReprogramar}
+          partido={partidoReprogramar}
+          torneoId={torneoId}
+          onClose={() => setPartidoReprogramar(null)}
+          onAssigned={() => {
+            setPartidoReprogramar(null);
+            cargarDatos();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -308,11 +308,38 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 - **Alternativas que consideré y descarté:** Mantener el orden histórico como identificador. Se descartó porque confundía al organizador al contabilizar el total de parejas.
 - **Resultado final:** Secuencia numérica siempre continua y prolija (1 a N) en pantalla y en base de datos.
 
+### Reprogramación de Partidos Asignados con Escritura Atómica
+- **Problema o necesidad que motivó el trabajo:** Una vez que un partido tenía un horario asignado (automática o manualmente), el organizador no podía reasignar el partido a otro turno o cancha si surgía un imprevisto sin colisionar con la propia reserva previa del partido.
+- **Qué decidí y por qué:** Reutilicé el endpoint `PUT /api/partidos/:id/asignar-horario-manual` e implementé un botón de "Reprogramar". Modifiqué la lectura de disponibilidad global para que reciba un parámetro opcional `ignorePartidoId`, lo que permite que el sistema evalúe la disponibilidad del club *excluyendo* el horario anterior de ese mismo partido. El guardado se realiza de forma 100% atómica mediante Prisma (`id: { not: partidoId }`), reescribiendo los valores sin pasar por estados intermedios vulnerables.
+- **Alternativas que consideré y descarté:** Hacer un flujo de dos pasos (liberar el partido -> reasignarlo). Se descartó por riesgo de condición de carrera, donde otra categoría podría "robar" el turno liberado durante esos segundos intermedios.
+- **Resultado final:** Reprogramación fluida desde el mismo modal de turnos, manteniendo la integridad referencial y detectando turnos óptimos (con estrella) incluso durante la reprogramación.
+
+### Slider de Rango Horario (15 min) para Carga de Disponibilidad y Expansión de Datos Antiguos
+- **Problema o necesidad que motivó el trabajo:** La carga de disponibilidad con chips rígidos de 75 min producía pérdida real de disponibilidad si una pareja podía jugar desde las 16:00 pero el chip más cercano era 16:45. Además, la grilla de chips requería demasiados clics individuales y no se sentía ergonómica en celulares.
+- **Qué decidí y por qué:**
+  1. Reduje la granularidad de generación de slots a **15 minutos** (`SLOT_GRANULARIDAD_MIN = 15`) manteniendo fija la duración del partido en 75 min (`DURACION_PARTIDO_MIN = 75`), permitiendo que el motor de fusión continua (`fusionarSlotsEnVentanas`) absorba la nueva precisión sin requerir cambios de esquema en la base de datos.
+  2. Implementé componentes de UI dedicados (`RangeSliderDia`, `RangeSliderGroup` y actualización de `DisponibilidadEditor`): selectores de rango duales ("desde–hasta") con snap de 15 min, botón para agregar múltiples franjas independientes por día (gaps/huecos en el medio) y detección de trasnoche.
+  3. **Protección de Retrocompatibilidad:** Al cargar parejas con slots viejos de 75 min aislados (ej. `"Viernes-16:45"`), el sistema los expande automáticamente a su ventana real de 5 slots de 15 min (`16:45` a `17:45`, o `16:45` a `19:00` si había contiguos) para evitar achicar accidentalmente la disponibilidad al reabrir el editor.
+- **Alternativas que consideré y descarté:**
+  - Slider multi-manija en una sola barra: se descartó por mala ergonomía táctil en pantallas móviles pequeñas.
+  - Reconstruir slots viejos como ticks aislados de 15 min: se descartó porque causaba una reducción silenciosa de disponibilidad de 75 min a 15 min al guardar sin editar.
+- **Resultado final:** Carga mucho más rápida, precisa e intuitiva (UI móvil premium), con verificación End-to-End en base de datos que confirmó pre-checks en ~60ms, asignación masiva sin colisiones, cálculo de estrellas pairwise en ~19ms y consultas de reprogramación en ~4ms.
+
+### Coherencia en Tiempo Real de Sugerencias de Horario (Estrellas ★) y Acordeón Limpio de Partidos Pendientes
+- **Problema o necesidad que motivó el trabajo:**
+  1. En la lista de partidos pendientes tras iniciar un torneo con salida de emergencia (`PartidosPendientesSection`), la tarjeta mostraba una insignia verde con estrella (ej. `★ 16 turnos en común previos`) basada en la coincidencia teórica de inscripción, pero al abrir el modal de asignación no había ninguna estrella disponible porque todas las canchas de esa franja pico estaban 100% ocupadas por otros partidos. Esto resultaba contradictorio y engañoso para el organizador.
+  2. Al ingresar a un torneo en curso, el acordeón de partidos pendientes abría automáticamente la primera categoría, generando desorden visual y obligando a hacer scroll innecesario.
+- **Qué decidí y por qué:**
+  1. Actualicé `getPartidosSinHorarioTorneo` en el backend para calcular `slotsValidosConEstrellaCount` en tiempo real (intersección entre slots viables con cancha libre real y los turnos originales de las parejas). En el frontend, la estrella verde (`★`) se renderiza única y exclusivamente si existen turnos compatibles con cancha libre disponible. Si las parejas coincidían pero las canchas están llenas, se muestra una advertencia explícita en amarillo (`⚠️ Turnos originales saturados`) tanto en la tarjeta como en el encabezado de `AsignarHorarioModal`.
+  2. Modifiqué `PartidosPendientesSection.jsx` para que todas las categorías inicien colapsadas por defecto, permitiendo al organizador expandir solo la categoría que le interesa o usar el botón "Expandir todas".
+- **Alternativas que consideré y descarté:** Mantener la estrella basada en la inscripción histórica. Se descartó porque inducía al error al prometer opciones que no existían físicamente en la grilla.
+- **Resultado final:** Interfaz 100% honesta y libre de contradicciones, donde lo que promete la tarjeta exterior coincide exactamente con las opciones disponibles dentro del modal.
+
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 11 sesiones de trabajo, sumando un aproximado total de entre 27.5 y 32 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 12 sesiones de trabajo, sumando un aproximado total de entre 30 y 35 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -327,6 +354,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 11 s
 | **9** | ~2.5 a 3 horas | Scheduler continuo por cancha en dos pasadas: timelines independientes, ventanas fusionadas, detección de huecos intermedios (15m grid), protección de franjas pico y validación exhaustiva multiescenario. |
 | **10** | ~3.5 a 4 horas | Reestructuración de Dominio: Jerarquía Club → Torneo (Evento) → Categorías (Cuadros), migración completa de Frontend y Backend, vista pública multicategoría y confirmación estilizada de resultados. |
 | **11** | ~3.5 a 4 horas | Resilencia Operativa: Editor inline inteligente en modal de bloqueo (`★`), salida de emergencia condicional, asignación manual post-inicio con filtrado estricto, solver exacto de zonas incompletas y numeración correlativa. |
-| **Total** | **~27.5 a 32 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en dos pasadas, pre-check transaccional, editor de resolución rápida, brackets dinámicos y diseño UI/UX premium. |
+| **12** | ~2.5 a 3 horas | Carga de disponibilidad de alta precisión: Sliders de rango horario duales (15 min), retrocompatibilidad de datos, testeo End-to-End, acordeón colapsado y consistencia en tiempo real de sugerencias de horario (`★`). |
+| **Total** | **~30 a 35 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en dos pasadas, pre-check transaccional, editor de resolución rápida, brackets dinámicos, disponibilidad granular por sliders y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
