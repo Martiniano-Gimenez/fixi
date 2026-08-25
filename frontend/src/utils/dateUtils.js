@@ -16,3 +16,35 @@ export function formatDiaHorario(fechaHora) {
 
   return `${diaNombre} ${horas}:${minutos}`;
 }
+
+/**
+ * Formatea un ajuste de tiempo en minutos con signo (+/-) y formato de horas si es >= 60m.
+ * Ejemplos:
+ *  45 -> "+45m"
+ * -45 -> "-45m"
+ *  60 -> "+1h"
+ * -60 -> "-1h"
+ *  95 -> "+1h 35m"
+ * -120 -> "-2h"
+ * @param {number} minutos
+ * @returns {string}
+ */
+export function formatAjusteTiempo(minutos) {
+  if (minutos === 0 || minutos === undefined || minutos === null) return '0m';
+
+  const sign = minutos > 0 ? '+' : '-';
+  const absMin = Math.abs(minutos);
+
+  if (absMin < 60) {
+    return `${sign}${absMin}m`;
+  }
+
+  const h = Math.floor(absMin / 60);
+  const m = absMin % 60;
+
+  if (m === 0) {
+    return `${sign}${h}h`;
+  }
+
+  return `${sign}${h}h ${m}m`;
+}

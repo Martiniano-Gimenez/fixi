@@ -18,9 +18,235 @@ import {
   RefreshCw,
   Eye,
   Settings,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
+import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
+
+function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [showOtrosViables, setShowOtrosViables] = useState(false);
+  const [applyingSlotId, setApplyingSlotId] = useState(null);
+  const [error, setError] = useState('');
+  const p = partido;
+
+  const slotsViables = p.slotsViables || [];
+  const viernesViables = slotsViables.filter((s) => s.startsWith('Viernes'));
+  const sabadoViables = slotsViables.filter((s) => s.startsWith('Sabado'));
+
+  const handleApplySlot = async (slotId) => {
+    if (!p.pareja1Id || !p.pareja2Id || applyingSlotId) return;
+    setApplyingSlotId(slotId);
+    setError('');
+
+    const [dia, hora] = slotId.split('-');
+    const p1AlreadyHas = (p.pareja1SlotIds || []).includes(slotId);
+    const p2AlreadyHas = (p.pareja2SlotIds || []).includes(slotId);
+
+    const slotsToAdd1 = p1AlreadyHas ? [] : [slotId];
+    const slotsToAdd2 = p2AlreadyHas ? [] : [slotId];
+
+    try {
+      await api.put('/parejas/disponibilidad-doble', {
+        parejaId1: p.pareja1Id,
+        slotsToAdd1,
+        parejaId2: p.pareja2Id,
+        slotsToAdd2,
+      });
+
+      if (onApplied) {
+        await onApplied({
+          pareja1Id: p.pareja1Id,
+          pareja2Id: p.pareja2Id,
+          slotId,
+          distP1: p1AlreadyHas ? 0 : 999,
+          distP2: p2AlreadyHas ? 0 : 999,
+          addToP1: !p1AlreadyHas,
+          addToP2: !p2AlreadyHas,
+          label: `${dia} ${hora}`,
+        });
+      }
+    } catch (err) {
+      setError(err.message || 'Error al asignar horario.');
+    } finally {
+      setApplyingSlotId(null);
+    }
+  };
+
+  const renderSlotChip = (slotId) => {
+    const isThisApplying = applyingSlotId === slotId;
+    const hora = slotId.split('-')[1];
+    return (
+      <button
+        key={slotId}
+        type="button"
+        disabled={Boolean(applyingSlotId)}
+        className="slot-chip"
+        style={{
+          padding: '0.2rem 0.45rem',
+          fontSize: '11px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.25rem',
+        }}
+        onClick={() => handleApplySlot(slotId)}
+        title={`Asignar ${slotId} a ambas parejas y resolver cruce (1 click)`}
+      >
+        {isThisApplying ? (
+          <>
+            <Loader2 size={10} className="spin" /> {hora}
+          </>
+        ) : (
+          hora
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <div style={{ marginTop: '0.35rem' }}>
+      <button
+        type="button"
+        className="btn-link-action"
+        style={{
+          padding: '0.15rem 0',
+          fontSize: '11px',
+          color: 'var(--color-text-secondary)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.3rem',
+        }}
+        onClick={() => setIsOpen((prev) => !prev)}
+      >
+        <Info size={12} />
+        <span>{isOpen ? 'Ocultar detalles' : 'Detalles y opciones manuales'}</span>
+        {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            marginTop: '0.4rem',
+            padding: '0.5rem 0.65rem',
+            background: 'var(--color-surface)',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--color-border)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.4rem',
+          }}
+        >
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+            {p.motivo === 'SIN_FRANJA_COMUN'
+              ? 'Ambas parejas no tienen ninguna ventana horaria en común.'
+              : 'Coinciden en disponibilidad pero las canchas están 100% ocupadas en esa franja.'}
+          </div>
+
+          {p.parejaMasRestringidaNombre && (
+            <div style={{ fontSize: 'var(--font-size-xs)' }}>
+              <span style={{ color: 'var(--color-text-secondary)' }}>Pareja más restringida a contactar: </span>
+              <strong style={{ color: 'var(--color-text)' }}>{p.parejaMasRestringidaNombre}</strong>{' '}
+              <span style={{ color: 'var(--color-text-secondary)' }}>
+                ({p.parejaMasRestringidaSlots} turnos, {p.parejaMasRestringidaOpciones}{' '}
+                {p.parejaMasRestringidaOpciones === 1 ? 'franja' : 'franjas'})
+              </span>
+            </div>
+          )}
+
+          {slotsViables.length > 0 && (
+            <div style={{ marginTop: '0.2rem' }}>
+              <button
+                type="button"
+                className="btn-link-action"
+                style={{
+                  padding: 0,
+                  fontSize: '11px',
+                  color: 'var(--color-text-secondary)',
+                  textDecoration: 'underline',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                }}
+                onClick={() => setShowOtrosViables((prev) => !prev)}
+              >
+                {showOtrosViables
+                  ? 'Ocultar otros turnos viables del club'
+                  : `+ Ver otros turnos viables con cancha libre (${slotsViables.length})`}
+              </button>
+
+              {showOtrosViables && (
+                <div
+                  style={{
+                    marginTop: '0.35rem',
+                    padding: '0.45rem',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                  }}
+                >
+                  <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', marginBottom: '0.35rem', fontStyle: 'italic' }}>
+                    Hacé clic en cualquier turno para asignarlo a ambas parejas y resolver el cruce:
+                  </div>
+
+                  {error && (
+                    <div className="error-message" style={{ fontSize: '11px', margin: '0.2rem 0' }}>
+                      {error}
+                    </div>
+                  )}
+
+                  {viernesViables.length > 0 && (
+                    <div style={{ marginBottom: '0.3rem' }}>
+                      <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
+                        Viernes:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {viernesViables.map(renderSlotChip)}
+                      </div>
+                    </div>
+                  )}
+
+                  {sabadoViables.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
+                        Sábado:
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {sabadoViables.map(renderSlotChip)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {p.parejaMasRestringidaId && (
+            <div style={{ marginTop: '0.2rem' }}>
+              <Link
+                to={`/admin/torneos/${torneoId}/categorias/${categoriaId}/parejas?parejaId=${p.parejaMasRestringidaId}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  fontSize: '11px',
+                  color: 'var(--color-primary)',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                }}
+              >
+                Ver disponibilidad completa en Gestionar Parejas →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TorneoDetail() {
   const { id } = useParams();
@@ -56,6 +282,7 @@ export default function TorneoDetail() {
   const [preCheckAprobado, setPreCheckAprobado] = useState(false);
   const [hayCambiosGuardados, setHayCambiosGuardados] = useState(false);
   const [resultadoInicio, setResultadoInicio] = useState(null);
+  const [undoAction, setUndoAction] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -170,6 +397,52 @@ export default function TorneoDetail() {
 
     // Re-verificación reactiva automática en background
     await handlePreCheckInicio(true);
+  };
+
+  const handleCasiEstrellaApplied = async ({ pareja1Id, pareja2Id, slotId, distP1, distP2, addToP1, addToP2, label }) => {
+    setHayCambiosGuardados(true);
+
+    const slotsToRemove1 = addToP1 ? [slotId] : (Math.abs(distP1 || 0) > 0 ? [slotId] : []);
+    const slotsToRemove2 = addToP2 ? [slotId] : (Math.abs(distP2 || 0) > 0 ? [slotId] : []);
+
+    if (undoAction?.timeoutId) {
+      clearTimeout(undoAction.timeoutId);
+    }
+
+    const timeoutId = setTimeout(() => {
+      setUndoAction(null);
+    }, 7000);
+
+    setUndoAction({
+      pareja1Id,
+      pareja2Id,
+      slotsToRemove1,
+      slotsToRemove2,
+      label,
+      timeoutId,
+    });
+
+    // Re-verificación reactiva automática en background
+    await handlePreCheckInicio(true);
+  };
+
+  const handleUndo = async () => {
+    if (!undoAction) return;
+    const { pareja1Id, pareja2Id, slotsToRemove1, slotsToRemove2, timeoutId } = undoAction;
+    if (timeoutId) clearTimeout(timeoutId);
+    setUndoAction(null);
+
+    try {
+      await api.post('/parejas/disponibilidad-doble/remover', {
+        parejaId1: pareja1Id,
+        slotsToRemove1,
+        parejaId2: pareja2Id,
+        slotsToRemove2,
+      });
+      await handlePreCheckInicio(true);
+    } catch (err) {
+      alert(err.message || 'Error al deshacer la acción.');
+    }
   };
 
   const executeIniciarTorneo = async () => {
@@ -829,58 +1102,28 @@ export default function TorneoDetail() {
                             </div>
                           ) : (
                             <div>
+                              {/* Título del cruce */}
                               <div style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.25rem' }}>
                                 <strong>{p.pareja1}</strong> vs <strong>{p.pareja2}</strong>
                               </div>
 
-                              <div style={{ marginTop: '0.25rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                                {p.motivo === 'SIN_FRANJA_COMUN' ? (
-                                  'Ambas parejas no tienen ninguna ventana horaria en común.'
-                                ) : (
-                                  'Coinciden en disponibilidad pero las canchas están 100% ocupadas en esa franja.'
-                                )}
-                              </div>
+                              {/* Opción hero con [Resolver] y toggle de alternativas */}
+                              <CruceResolver
+                                opcionesResolucion={p.opcionesResolucion || []}
+                                pareja1Id={p.pareja1Id}
+                                pareja2Id={p.pareja2Id}
+                                pareja1Nombre={p.pareja1}
+                                pareja2Nombre={p.pareja2}
+                                onApplied={handleCasiEstrellaApplied}
+                              />
 
-                              {p.parejaMasRestringidaNombre && (
-                                <div style={{ marginTop: '0.35rem', fontSize: 'var(--font-size-xs)' }}>
-                                  <span style={{ color: 'var(--color-text-secondary)' }}>Pareja más restringida a contactar: </span>
-                                  <strong style={{ color: 'var(--color-text)' }}>{p.parejaMasRestringidaNombre}</strong>{' '}
-                                  <span style={{ color: 'var(--color-text-secondary)' }}>
-                                    ({p.parejaMasRestringidaSlots} turnos, {p.parejaMasRestringidaOpciones} {p.parejaMasRestringidaOpciones === 1 ? 'franja' : 'franjas'})
-                                  </span>
-                                </div>
-                              )}
-
-                              {/* Editor compacto de disponibilidad inline */}
-                              {p.parejaMasRestringidaId && (
-                                <InlineDisponibilidadEditor
-                                  parejaId={p.parejaMasRestringidaId}
-                                  parejaNombre={p.parejaMasRestringidaNombre}
-                                  initialSlotIds={p.parejaMasRestringidaSlotIds || []}
-                                  slotsViables={p.slotsViables || []}
-                                  slotsQueDestraban={p.slotsQueDestraban || []}
-                                  grilla={grillaOrganizador}
-                                  onSaved={(pId, newSlots) => handleSlotSaved(c.categoriaId, p.partidoId, pId, newSlots)}
-                                />
-                              )}
-
-                              {p.parejaMasRestringidaId && (
-                                <div style={{ marginTop: '0.35rem' }}>
-                                  <Link
-                                    to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas?parejaId=${p.parejaMasRestringidaId}`}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '0.25rem',
-                                      fontSize: '11px',
-                                      color: 'var(--color-text-secondary)',
-                                      textDecoration: 'none',
-                                    }}
-                                  >
-                                    Ver disponibilidad completa en Gestionar Parejas →
-                                  </Link>
-                                </div>
-                              )}
+                              {/* Toggle: Detalles y opciones manuales */}
+                              <CruceDetalles
+                                partido={p}
+                                categoriaId={c.categoriaId}
+                                torneoId={id}
+                                onApplied={handleCasiEstrellaApplied}
+                              />
                             </div>
                           )}
                         </div>
@@ -889,6 +1132,65 @@ export default function TorneoDetail() {
                   </div>
                 ))}
               </div>
+
+              {/* Toast flotante de Deshacer (Undo) */}
+              {undoAction && (
+                <div
+                  style={{
+                    position: 'sticky',
+                    bottom: '0.5rem',
+                    zIndex: 20,
+                    margin: '0.5rem 0',
+                    padding: '0.6rem 0.85rem',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-success)',
+                    borderRadius: 'var(--radius-sm)',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text)' }}>
+                    <CheckCircle size={15} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+                    <span>
+                      Se aplicó <strong>{undoAction.label}</strong> a ambas parejas.
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{
+                        padding: '0.25rem 0.6rem',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                        color: 'var(--color-warning)',
+                        borderColor: 'rgba(245, 158, 11, 0.4)',
+                      }}
+                      onClick={handleUndo}
+                    >
+                      <RotateCcw size={12} /> Deshacer
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-link-action"
+                      style={{ padding: '0.2rem', color: 'var(--color-text-secondary)' }}
+                      onClick={() => {
+                        if (undoAction.timeoutId) clearTimeout(undoAction.timeoutId);
+                        setUndoAction(null);
+                      }}
+                      title="Cerrar aviso"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--color-border)' }}>
                 <div>

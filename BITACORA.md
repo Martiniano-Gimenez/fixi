@@ -333,13 +333,38 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   1. Actualicé `getPartidosSinHorarioTorneo` en el backend para calcular `slotsValidosConEstrellaCount` en tiempo real (intersección entre slots viables con cancha libre real y los turnos originales de las parejas). En el frontend, la estrella verde (`★`) se renderiza única y exclusivamente si existen turnos compatibles con cancha libre disponible. Si las parejas coincidían pero las canchas están llenas, se muestra una advertencia explícita en amarillo (`⚠️ Turnos originales saturados`) tanto en la tarjeta como en el encabezado de `AsignarHorarioModal`.
   2. Modifiqué `PartidosPendientesSection.jsx` para que todas las categorías inicien colapsadas por defecto, permitiendo al organizador expandir solo la categoría que le interesa o usar el botón "Expandir todas".
 - **Alternativas que consideré y descarté:** Mantener la estrella basada en la inscripción histórica. Se descartó porque inducía al error al prometer opciones que no existían físicamente en la grilla.
-- **Resultado final:** Interfaz 100% honesta y libre de contradicciones, donde lo que promete la tarjeta exterior coincide exactamente con las opciones disponibles dentro del modal.
+### Asistente Inteligente de Resolución de Cruces (CruceResolver), Jerarquía de Certeza y Deshacer Delta Atómico
+- **Problema o necesidad que motivó el trabajo:**
+  1. En el modal de bloqueo previo al inicio, todas las opciones que requerían estirar disponibilidad se mostraban genéricamente con "(+N min)" sin distinguir si una sola pareja debía estirar (estrella clásica, 1 sola llamada confirmatoria con certeza total) o si ambas debían estirar (casi-estrella doble, 2 llamadas simultáneas).
+  2. El ordenamiento original priorizaba el esfuerzo total por sobre la certeza de resolución (mostrando opciones dobles de 40 min antes que clásicas de 45 min).
+  3. No se indicaba si la pareja debía adelantar su inicio ($-Nm$) o extenderse después ($+Nm$), y los tiempos grandes en minutos (ej. $+120m$) resultaban poco legibles para el organizador al llamar por teléfono.
+- **Qué decidí y por qué:**
+  1. Refactoricé el motor de resolución (`calcularOpcionesResolucion` en `slots.service.js` y componente `CruceResolver.jsx`) invirtiendo la jerarquía de ordenamiento para priorizar **Certeza antes que Esfuerzo**: `cantidadPartesQueEstiran` (0 mutua > 1 clásica > 2 doble) $\rightarrow$ menor `distTotal` $\rightarrow$ balance.
+  2. Implementé cálculo de distancia con **signo de dirección** ($+/-$) relativo al bloque más cercano declarado y una función utilitaria `formatAjusteTiempo` que convierte minutos $\ge 60$ a horas legibles (ej. `+1h`, `+1h 35m`, `-2h`).
+  3. Integré resolución en **1 click** con actualización atómica doble (`PUT /api/parejas/disponibilidad-doble`) y un toast flotante de **Deshacer (Undo)** por 7 segundos con reversión precisa de delta (`removerDisponibilidadDoble`), garantizando que solo se remuevan los slots agregados sin alterar la disponibilidad previa de las parejas.
+  4. Habilité acción en 1 click para los turnos viables libres del club en la sección "Detalles y opciones manuales".
+- **Alternativas que consideré y descarté:**
+  - Ordenar por menor distancia absoluta combinada en primer término: se descartó porque priorizaba casi-estrellas dobles inciertas sobre resoluciones de 1 sola parte ya confirmada.
+  - Modificar snapshots completos de disponibilidad al deshacer: se descartó para evitar condiciones de carrera o sobreescritura accidental de cambios concurrentes.
+- **Resultado final:** Asistente visual nítido y preciso para destrabar cruces en pre-check, con trazabilidad telefónica exacta y red de seguridad instantánea mediante Undo.
+
+### Unificación de Asignar Horario Post-Inicio con Ranking de Cercanía y Asignación Directa a Partido
+- **Problema o necesidad que motivó el trabajo:** Tras iniciar el torneo con salida de emergencia, el modal de asignación manual para partidos pendientes (`AsignarHorarioModal`) volvía al esquema antiguo de mostrar más de 60 botones planos desordenados sin ranking de cercanía ni sugerencia Hero, obligando al organizador a buscar a mano entre todas las canchas.
+- **Qué decidí y por qué:**
+  1. **Separación estricta de responsabilidades:** A diferencia del pre-check (que modifica `SlotPareja`), en el flujo post-inicio el partido ya existe con sus dos parejas fijas, por lo que resolver significa asignar `fechaHora` + `canchaNumero` directamente al `Partido` vía `PUT /api/partidos/:id/asignar-horario-manual` en una sola transacción atómica, sin tocar `SlotPareja`.
+  2. Reutilicé la lógica de cálculo de distancias y jerarquía de certeza (`rankingSlots.js`) para rankear en tiempo real los turnos físicos devueltos por `getCanchasDisponiblesTorneo`.
+  3. Rediseñé `AsignarHorarioModal` incorporando la opción **Hero destacada** (#1 del ranking), alternativas colapsadas (*"Ver X opciones más cercanas"*) y la grilla completa del club, todas **100% accionables en 1 click**.
+  4. Criterio de cancha determinístico: el sistema adjudica automáticamente la primera cancha libre en orden numérico ascendente (`canchasLibres[0]`), eliminando selectores intermedios y manteniendo el badge `(N lib.)` puramente como dato informativo de contexto.
+- **Alternativas que consideré y descarté:**
+  - Reutilizar el endpoint `disponibilidad-doble` post-inicio: se descartó explícitamente porque hubiera fabricado disponibilidad artificial en `SlotPareja` que contaminaría otros cruces futuros de la misma pareja.
+  - Mantener un selector manual de cancha: se descartó para optimizar la velocidad operativa del organizador (1 solo clic asigna horario y la primera cancha libre).
+- **Resultado final:** Consistencia UX/UI total en toda la aplicación (antes y después de iniciar), reduciendo el tiempo de programación manual de minutos a un solo clic.
 
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 12 sesiones de trabajo, sumando un aproximado total de entre 30 y 35 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 13 sesiones de trabajo, sumando un aproximado total de entre 33 y 38 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -355,6 +380,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 12 s
 | **10** | ~3.5 a 4 horas | Reestructuración de Dominio: Jerarquía Club → Torneo (Evento) → Categorías (Cuadros), migración completa de Frontend y Backend, vista pública multicategoría y confirmación estilizada de resultados. |
 | **11** | ~3.5 a 4 horas | Resilencia Operativa: Editor inline inteligente en modal de bloqueo (`★`), salida de emergencia condicional, asignación manual post-inicio con filtrado estricto, solver exacto de zonas incompletas y numeración correlativa. |
 | **12** | ~2.5 a 3 horas | Carga de disponibilidad de alta precisión: Sliders de rango horario duales (15 min), retrocompatibilidad de datos, testeo End-to-End, acordeón colapsado y consistencia en tiempo real de sugerencias de horario (`★`). |
-| **Total** | **~30 a 35 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en dos pasadas, pre-check transaccional, editor de resolución rápida, brackets dinámicos, disponibilidad granular por sliders y diseño UI/UX premium. |
+| **13** | ~3 a 3.5 horas | Asistente de resolución en pre-check (`CruceResolver`): jerarquía por certeza, dirección (+/-), formato en horas ($\ge 60\text{m}$) y Deshacer atómico. Unificación post-inicio (`AsignarHorarioModal` + `rankingSlots`): Hero óptimo y 1-click directo a `Partido`. |
+| **Total** | **~33 a 38.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en dos pasadas, pre-check transaccional, asistente de resolución de cruces, brackets dinámicos, disponibilidad granular por sliders, asignación 1-click y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

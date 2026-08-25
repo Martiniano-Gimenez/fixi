@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
-const { getSlotsValidosSet, generarGrillaOrganizador } = require('./slots.service');
+const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion } = require('./slots.service');
 const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -434,8 +434,8 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
             return true;
           });
 
-          // Slots que el rival ya tiene marcados (destraban directamente el partido)
-          const slotsQueDestraban = slotsViables.filter((sId) => slotsRival.includes(sId));
+          // Lista unificada de opciones de resolución (estrellas reales + casi-estrellas ordenadas por esfuerzo)
+          const opcionesResolucion = calcularOpcionesResolucion(slotsP1, slotsP2, slotsViables, 6);
 
           const maxApariciones = Math.max(
             parejaFreqMap.get(p.pareja1Id) || 0,
@@ -451,10 +451,12 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
             pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : 'Por definirse',
             pareja1SlotsCount: slotsP1.length,
             pareja1OpcionesCount: win1.length,
+            pareja1SlotIds: slotsP1,
             pareja2Id: p.pareja2?.id,
             pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : 'Por definirse',
             pareja2SlotsCount: slotsP2.length,
             pareja2OpcionesCount: win2.length,
+            pareja2SlotIds: slotsP2,
             motivo,
             parejaMasRestringidaId: parejaMasRestringida?.id || null,
             parejaMasRestringidaNombre: parejaMasRestringida
@@ -464,7 +466,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
             parejaMasRestringidaOpciones: parejaMasRestringidaOpciones,
             parejaMasRestringidaSlotIds: parejaMasRestringidaSlotIds,
             slotsViables,
-            slotsQueDestraban,
+            opcionesResolucion,
             aparicionesMaximas: maxApariciones,
           });
         }
