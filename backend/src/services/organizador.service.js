@@ -1179,6 +1179,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   const partidosEnCursoList = [];
   const partidosEnCanchaFantasmaList = [];
   const proximosPartidosList = [];
+  const partidosFinalizadosList = [];
 
   let finalizadosCount = 0;
   let enCursoCount = 0;
@@ -1200,8 +1201,11 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       fase: p.faseEliminatoria?.nombre || null,
       pareja1Id: p.pareja1Id,
       pareja1: p1Nombre,
+      // Objeto raw para ResultadoModal (espera { jugador1, jugador2 })
+      pareja1Obj: p.pareja1 || null,
       pareja2Id: p.pareja2Id,
       pareja2: p2Nombre,
+      pareja2Obj: p.pareja2 || null,
       fechaHora: p.fechaHora,
       canchaNumero: p.canchaNumero,
       sinHorarioAsignado: p.sinHorarioAsignado,
@@ -1211,6 +1215,11 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
 
     if (p.estado === 'FINALIZADO') {
       finalizadosCount++;
+      partidosFinalizadosList.push({
+        ...formatted,
+        ganadorId: p.ganadorId,
+        ganador: p.ganador ? `${p.ganador.jugador1} / ${p.ganador.jugador2}` : null,
+      });
     } else if (p.estado === 'EN_CURSO') {
       enCursoCount++;
       const horaInicio = p.fechaHora || new Date();
@@ -1278,6 +1287,12 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     partidosEnCurso: partidosEnCursoList,
     partidosEnCanchaFantasma: partidosEnCanchaFantasmaList,
     proximosPartidos: proximosPartidosList,
+    // Ordenados más reciente primero para que el último resultado cargado aparezca arriba
+    partidosFinalizados: [...partidosFinalizadosList].sort((a, b) => {
+      const tA = a.fechaHora ? new Date(a.fechaHora).getTime() : 0;
+      const tB = b.fechaHora ? new Date(b.fechaHora).getTime() : 0;
+      return tB - tA;
+    }),
     resumenEstado: {
       totalPartidos: partidos.length,
       finalizados: finalizadosCount,
