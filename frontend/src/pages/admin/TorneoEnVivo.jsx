@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -14,9 +14,12 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  ClipboardList,
+  Trophy,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
+import ResultadoModal from '../../components/ResultadoModal';
 import { formatDiaHorario } from '../../utils/dateUtils';
 
 export default function TorneoEnVivo() {
@@ -44,6 +47,21 @@ export default function TorneoEnVivo() {
   // Toggle de canchas fantasma
   const [fantasmaExpanded, setFantasmaExpanded] = useState(true);
 
+  // ResultadoModal
+  const [partidoParaResultado, setPartidoParaResultado] = useState(null);
+
+  // Sección de finalizados colapsada por default
+  const [finalizadosExpanded, setFinalizadosExpanded] = useState(false);
+
+  // Referencia al interval de polling — permite resetearlo tras un fetch manual
+  const intervalRef = useRef(null);
+  const POLLING_MS = 30000;
+
+  const startPolling = useCallback((fetchFn) => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => fetchFn(true), POLLING_MS);
+  }, []);
+
   // Cargar estado en vivo
   const fetchEnVivoData = useCallback(
     async (isSilent = false) => {
@@ -69,12 +87,16 @@ export default function TorneoEnVivo() {
 
   useEffect(() => {
     fetchEnVivoData();
-    const interval = setInterval(() => {
-      fetchEnVivoData(true);
-    }, 30000); // Polling cada 30s
+    startPolling(fetchEnVivoData);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [fetchEnVivoData, startPolling]);
 
-    return () => clearInterval(interval);
-  }, [fetchEnVivoData]);
+  // Fetch manual que resetea el timer para evitar doble disparo
+  const fetchAndResetPolling = useCallback(async () => {
+    await fetchEnVivoData(true);
+    startPolling(fetchEnVivoData);
+  }, [fetchEnVivoData, startPolling]);
+
 
   // Manejar reducción de canchas
   const handleReducir = async () => {
@@ -92,6 +114,7 @@ export default function TorneoEnVivo() {
         setFeedbackExpanded(true);
       }
       await fetchEnVivoData(true);
+      startPolling(fetchEnVivoData);
     } catch (err) {
       setError(err.message || 'Error al reprogramar por reducción de canchas');
       setConfirmReducirOpen(false);
@@ -113,6 +136,7 @@ export default function TorneoEnVivo() {
       setUserTouchedTarget(false);
       setFeedbackReprogramacion(null);
       await fetchEnVivoData(true);
+      startPolling(fetchEnVivoData);
     } catch (err) {
       setError(err.message || 'Error al restaurar las canchas');
       setConfirmRestaurarOpen(false);
@@ -120,6 +144,7 @@ export default function TorneoEnVivo() {
       setActionLoading(false);
     }
   };
+
 
   if (loading && !data) {
     return (
@@ -154,8 +179,20 @@ export default function TorneoEnVivo() {
     );
   }
 
-  const { torneo, canchasActivas, canchasClub, canchas, partidosEnCurso, partidosEnCanchaFantasma, proximosPartidos, resumenEstado } = data;
+  const { torneo, canchasActivas, canchasClub, canchas, partidosEnCurso, partidosEnCanchaFantasma, proximosPartidos, partidosFinalizados, resumenEstado } = data;
   const isLluviaActive = torneo.canchasDisponiblesOverride !== null && torneo.canchasDisponiblesOverride !== undefined;
+
+  // Construye el objeto partido que espera ResultadoModal a partir de los datos del en-vivo
+  function buildPartidoParaModal(p) {
+    return {
+      id: p.id,
+      estado: p.estado,
+      pareja1: p.pareja1Obj,
+      pareja2: p.pareja2Obj,
+      sets: p.sets || [],
+    };
+  }
+
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '4rem' }}>
@@ -1082,8 +1119,8 @@ export default function TorneoEnVivo() {
                     gap: '0.5rem',
                   }}
                 >
-                  <div>
-                    <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.pareja1} <span style={{ color: 'var(--color-text-muted)' }}>vs</span> {p.pareja2}
                     </div>
                     <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
@@ -1091,24 +1128,47 @@ export default function TorneoEnVivo() {
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div
+                        style={{
+                          fontSize: 'var(--font-size-xs)',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          color: 'var(--color-text)',
+                          display: 'inline-block',
+                          marginBottom: '0.2rem',
+                        }}
+                      >
+                        Cancha {p.canchaNumero}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: '#60a5fa', fontWeight: 600 }}>
+                        {formatDiaHorario(p.fechaHora)}
+                      </div>
+                    </div>
+
+                    {/* Botón cargar resultado inline */}
+                    <button
+                      type="button"
+                      onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
+                      title="Cargar resultado"
                       style={{
-                        fontSize: 'var(--font-size-xs)',
-                        fontWeight: 700,
-                        padding: '0.15rem 0.45rem',
+                        background: 'rgba(0, 208, 132, 0.12)',
+                        border: '1px solid rgba(0, 208, 132, 0.3)',
                         borderRadius: 'var(--radius-sm)',
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        color: 'var(--color-text)',
-                        display: 'inline-block',
-                        marginBottom: '0.2rem',
+                        color: 'var(--color-primary)',
+                        cursor: 'pointer',
+                        padding: '0.4rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'var(--transition-fast)',
                       }}
                     >
-                      Cancha {p.canchaNumero}
-                    </div>
-                    <div style={{ fontSize: 'var(--font-size-xs)', color: '#60a5fa', fontWeight: 600 }}>
-                      {formatDiaHorario(p.fechaHora)}
-                    </div>
+                      <ClipboardList size={16} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1116,6 +1176,117 @@ export default function TorneoEnVivo() {
           )}
         </div>
       </div>
+
+      {/* ─── 8. Partidos Finalizados (acordeón, colapsado por default) ─── */}
+      {partidosFinalizados && partidosFinalizados.length > 0 && (
+        <div style={{ marginTop: '1.75rem' }}>
+          <button
+            type="button"
+            onClick={() => setFinalizadosExpanded((prev) => !prev)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'var(--bg-card-start)',
+              border: '1px solid var(--color-border)',
+              borderRadius: finalizadosExpanded ? 'var(--radius-md) var(--radius-md) 0 0' : 'var(--radius-md)',
+              padding: '0.85rem 1rem',
+              cursor: 'pointer',
+              color: 'var(--color-text)',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem' }}>
+              <Trophy size={18} style={{ color: 'var(--color-text-secondary)' }} />
+              Partidos Finalizados ({partidosFinalizados.length})
+            </span>
+            {finalizadosExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+
+          {finalizadosExpanded && (
+            <div
+              style={{
+                border: '1px solid var(--color-border)',
+                borderTop: 'none',
+                borderRadius: '0 0 var(--radius-md) var(--radius-md)',
+                overflow: 'hidden',
+                maxHeight: '420px',
+                overflowY: 'auto',
+              }}
+            >
+              {partidosFinalizados.map((p, idx) => {
+                const sets = p.sets || [];
+                const resultadoStr = sets.length > 0
+                  ? sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')
+                  : '—';
+
+                return (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.75rem 1rem',
+                      background: idx % 2 === 0 ? 'var(--bg-card-start)' : 'rgba(255,255,255,0.02)',
+                      borderBottom: idx < partidosFinalizados.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.pareja1} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs</span> {p.pareja2}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                        {p.categoria}{p.zona ? ` • ${p.zona}` : p.fase ? ` • ${p.fase}` : ''}
+                        {p.canchaNumero && ` • C${p.canchaNumero}`}
+                        {p.fechaHora && ` • ${formatDiaHorario(p.fechaHora)}`}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 'var(--font-size-xs)',
+                          fontWeight: 700,
+                          color: 'var(--color-primary)',
+                          background: 'rgba(0, 208, 132, 0.1)',
+                          border: '1px solid rgba(0, 208, 132, 0.2)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '0.15rem 0.5rem',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {resultadoStr}
+                      </div>
+
+                      {/* Editar resultado finalizado */}
+                      <button
+                        type="button"
+                        onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
+                        title="Editar resultado"
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--color-text-secondary)',
+                          cursor: 'pointer',
+                          padding: '0.3rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <ClipboardList size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─── Modal de Confirmación: Reducir Canchas (Modo Lluvia) ───── */}
       <ConfirmModal
@@ -1138,6 +1309,18 @@ export default function TorneoEnVivo() {
         onCancel={() => setConfirmRestaurarOpen(false)}
         isDanger={false}
       />
+
+      {/* ─── ResultadoModal (Próximos y Finalizados) ─────────────────── */}
+      {partidoParaResultado && (
+        <ResultadoModal
+          partido={partidoParaResultado}
+          onClose={() => setPartidoParaResultado(null)}
+          onSuccess={() => {
+            setPartidoParaResultado(null);
+            fetchAndResetPolling();
+          }}
+        />
+      )}
     </div>
   );
 }
