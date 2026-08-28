@@ -21,6 +21,13 @@ setInterval(() => {
   }
 }, 60_000);
 
+function getCanchasEfectivas(torneo, organizador) {
+  if (torneo && torneo.canchasDisponiblesOverride != null) {
+    return Math.min(torneo.canchasDisponiblesOverride, organizador?.cantidadCanchas || 1);
+  }
+  return organizador?.cantidadCanchas || 1;
+}
+
 function buildFingerprint(organizador, categoriasConParejas) {
   const clubPart = [
     organizador.cantidadCanchas || 1,
@@ -891,7 +898,7 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
 
   const organizador = await getOrganizador(organizadorId);
   const grilla = generarGrillaOrganizador(organizador);
-  const cantCanchas = organizador.cantidadCanchas || 1;
+  const cantCanchas = getCanchasEfectivas(torneo, organizador);
   const refFecha = torneo.fecha || new Date();
 
   // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
@@ -1026,7 +1033,7 @@ async function getCanchasDisponiblesTorneo(organizadorId, torneoId, ignorePartid
   }
 
   const grilla = generarGrillaOrganizador(organizador);
-  const cantCanchas = organizador.cantidadCanchas || 1;
+  const cantCanchas = getCanchasEfectivas(torneo, organizador);
   const refFecha = torneo.fecha || new Date();
 
   // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
