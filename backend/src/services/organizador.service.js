@@ -1289,6 +1289,341 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   };
 }
 
+/**
+ * Reprograma automáticamente los partidos pendientes ante una reducción de canchas activas (Modo Lluvia).
+ */
+async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanchasOverride) {
+  const torneo = await prisma.torneo.findUnique({
+    where: { id: torneoId },
+  });
+
+  if (!torneo) {
+    const error = new Error('Torneo no encontrado.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (torneo.organizadorId !== organizadorId) {
+    const error = new Error('No tenés permisos sobre este torneo.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (torneo.estado !== 'EN_CURSO') {
+    const error = new Error('El modo Día de Torneo solo está disponible para torneos en curso.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const organizador = await getOrganizador(organizadorId);
+  const canchasClub = organizador.cantidadCanchas || 1;
+  const canchasEfectivasActuales = getCanchasEfectivas(torneo, organizador);
+
+  // 1. Caso: Desactivar override (volver al techo total del club)
+  if (nuevoCanchasOverride === null || nuevoCanchasOverride === undefined) {
+    await prisma.torneo.update({
+      where: { id: torneoId },
+      data: {
+        canchasDisponiblesOverride: null,
+        overrideActivoDesde: null,
+      },
+    });
+
+    return {
+      message: 'Override desactivado. Todas las canchas del club están disponibles.',
+      canchasActivas: canchasClub,
+      overrideActivoDesde: null,
+      reprogramacion: { ejecutada: false },
+    };
+  }
+
+  const overrideNum = Number(nuevoCanchasOverride);
+  if (isNaN(overrideNum) || overrideNum < 1) {
+    const error = new Error('La cantidad de canchas activas debe ser un número mayor o igual a 1.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (overrideNum > canchasClub) {
+    const error = new Error(`La cantidad de canchas activas (${overrideNum}) no puede superar el total del club (${canchasClub}).`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // 2. Caso: Si es igual o subida de canchas, NO se reprograma automáticamente
+  if (overrideNum >= canchasEfectivasActuales) {
+    const updated = await prisma.torneo.update({
+      where: { id: torneoId },
+      data: {
+        canchasDisponiblesOverride: overrideNum === canchasClub ? null : overrideNum,
+        overrideActivoDesde: overrideNum === canchasClub ? null : (torneo.overrideActivoDesde || new Date()),
+      },
+    });
+
+    return {
+      message: `Canchas activas actualizadas a ${overrideNum}.`,
+      canchasActivas: overrideNum,
+      overrideActivoDesde: updated.overrideActivoDesde,
+      reprogramacion: { ejecutada: false },
+    };
+  }
+
+  // 3. Caso: Reducción de canchas -> Validar que no haya partidos EN_CURSO en canchas a inhabilitar
+  const partidosEnCursoAfectados = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId },
+      estado: 'EN_CURSO',
+      canchaNumero: { gt: overrideNum },
+    },
+    include: {
+      pareja1: { select: { jugador1: true, jugador2: true } },
+      pareja2: { select: { jugador1: true, jugador2: true } },
+    },
+  });
+
+  if (partidosEnCursoAfectados.length > 0) {
+    const p = partidosEnCursoAfectados[0];
+    const p1 = p.pareja1 ? `${p.pareja1.jugador1}/${p.pareja1.jugador2}` : 'P1';
+    const p2 = p.pareja2 ? `${p.pareja2.jugador1}/${p.pareja2.jugador2}` : 'P2';
+    const error = new Error(
+      `No podés reducir a ${overrideNum} canchas porque hay un partido en curso en la Cancha ${p.canchaNumero} (${p1} vs ${p2}). Esperá a que termine o finalizalo antes de reducir.`
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const ahora = new Date();
+  const DURACION_MS = 75 * 60 * 1000;
+
+  // 4. Cargar todos los partidos del torneo para armar las timelines
+  const todosLosPartidos = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId },
+    },
+    include: {
+      categoria: { select: { id: true, nombre: true } },
+      pareja1: { select: { id: true, jugador1: true, jugador2: true } },
+      pareja2: { select: { id: true, jugador1: true, jugador2: true } },
+    },
+  });
+
+  const courtTimelines = new Map();
+  for (let c = 1; c <= overrideNum; c++) {
+    courtTimelines.set(c, []);
+  }
+
+  const parejaAssignments = new Map();
+
+  function addInterval(cancha, pareja1Id, pareja2Id, startMs, endMs) {
+    if (cancha && cancha <= overrideNum && courtTimelines.has(cancha)) {
+      courtTimelines.get(cancha).push({ startMs, endMs });
+    }
+    if (pareja1Id) {
+      if (!parejaAssignments.has(pareja1Id)) parejaAssignments.set(pareja1Id, []);
+      parejaAssignments.get(pareja1Id).push({ startMs, endMs });
+    }
+    if (pareja2Id) {
+      if (!parejaAssignments.has(pareja2Id)) parejaAssignments.set(pareja2Id, []);
+      parejaAssignments.get(pareja2Id).push({ startMs, endMs });
+    }
+  }
+
+  function isCourtFree(cancha, startMs, endMs) {
+    const timeline = courtTimelines.get(cancha) || [];
+    for (const interval of timeline) {
+      if (startMs < interval.endMs && endMs > interval.startMs) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function isPairFree(parejaId, startMs, endMs) {
+    if (!parejaId) return true;
+    const intervals = parejaAssignments.get(parejaId) || [];
+    for (const interval of intervals) {
+      if (startMs < interval.endMs && endMs > interval.startMs) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  const partidosAReprogramar = [];
+
+  for (const p of todosLosPartidos) {
+    if (p.estado === 'EN_CURSO' || p.estado === 'FINALIZADO') {
+      if (p.fechaHora) {
+        const startMs = new Date(p.fechaHora).getTime();
+        addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, startMs + DURACION_MS);
+      }
+    } else if (p.estado === 'PENDIENTE') {
+      if (p.fechaHora && p.canchaNumero && !p.sinHorarioAsignado) {
+        const pDate = new Date(p.fechaHora);
+        if (pDate.getTime() < ahora.getTime()) {
+          // Partido pendiente pasado (anterior al override): Ocupación fija (no se reprograma)
+          const startMs = pDate.getTime();
+          addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, startMs + DURACION_MS);
+        } else {
+          // Partido pendiente futuro: A reprogramar
+          partidosAReprogramar.push(p);
+        }
+      }
+    }
+  }
+
+  // 5. Ordenar partidos a reprogramar preservando orden relativo original
+  partidosAReprogramar.sort((a, b) => {
+    const tA = new Date(a.fechaHora).getTime();
+    const tB = new Date(b.fechaHora).getTime();
+    if (tA !== tB) return tA - tB;
+    if ((a.canchaNumero || 0) !== (b.canchaNumero || 0)) {
+      return (a.canchaNumero || 0) - (b.canchaNumero || 0);
+    }
+    return a.id.localeCompare(b.id);
+  });
+
+  const cambios = [];
+  let partidosReprogramados = 0;
+  let partidosSinCambio = 0;
+  let partidosSinHorarioNuevo = 0;
+  const updates = [];
+
+  function formatParejaNombre(p, origen) {
+    if (p) return `${p.jugador1} / ${p.jugador2}`;
+    if (origen) return origen;
+    return 'Por definirse';
+  }
+
+  // 6. Reprogramar secuencialmente cada partido
+  for (const partido of partidosAReprogramar) {
+    const origDate = new Date(partido.fechaHora);
+    const origStartMs = origDate.getTime();
+    const origCancha = partido.canchaNumero;
+
+    // Calcular rango del día calendario de este partido
+    // Permitir extensión nocturna hasta las 04:00 AM del día siguiente
+    const dayStart = new Date(origDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayLimit = new Date(dayStart.getTime() + 28 * 60 * 60 * 1000); // 04:00 del día siguiente
+
+    // Punto de partida: el mayor entre ahora (alineado a 15min) y el horario original
+    let startSearchMs = Math.max(ahora.getTime(), origStartMs);
+    // Snap al próximo intervalo de 15 minutos
+    const remainder = startSearchMs % (15 * 60 * 1000);
+    if (remainder !== 0) {
+      startSearchMs += 15 * 60 * 1000 - remainder;
+    }
+
+    let asignado = false;
+    let candidateT = startSearchMs;
+
+    while (candidateT + DURACION_MS <= dayLimit.getTime()) {
+      const candidateEnd = candidateT + DURACION_MS;
+      let freeCourt = null;
+
+      for (let c = 1; c <= overrideNum; c++) {
+        if (
+          isCourtFree(c, candidateT, candidateEnd) &&
+          isPairFree(partido.pareja1Id, candidateT, candidateEnd) &&
+          isPairFree(partido.pareja2Id, candidateT, candidateEnd)
+        ) {
+          freeCourt = c;
+          break;
+        }
+      }
+
+      if (freeCourt !== null) {
+        // Asignar en este slot y cancha
+        addInterval(freeCourt, partido.pareja1Id, partido.pareja2Id, candidateT, candidateEnd);
+        const newFechaHora = new Date(candidateT);
+
+        const cambioHorario = newFechaHora.getTime() !== origStartMs || freeCourt !== origCancha;
+        if (cambioHorario) {
+          partidosReprogramados++;
+          cambios.push({
+            partidoId: partido.id,
+            pareja1: formatParejaNombre(partido.pareja1, partido.origenPareja1),
+            pareja2: formatParejaNombre(partido.pareja2, partido.origenPareja2),
+            categoria: partido.categoria?.nombre || '',
+            antes: { fechaHora: origDate.toISOString(), canchaNumero: origCancha },
+            despues: { fechaHora: newFechaHora.toISOString(), canchaNumero: freeCourt },
+          });
+        } else {
+          partidosSinCambio++;
+        }
+
+        updates.push({
+          id: partido.id,
+          fechaHora: newFechaHora,
+          canchaNumero: freeCourt,
+          sinHorarioAsignado: false,
+        });
+
+        asignado = true;
+        break;
+      }
+
+      candidateT += 15 * 60 * 1000;
+    }
+
+    if (!asignado) {
+      partidosSinHorarioNuevo++;
+      partidosReprogramados++;
+      cambios.push({
+        partidoId: partido.id,
+        pareja1: formatParejaNombre(partido.pareja1, partido.origenPareja1),
+        pareja2: formatParejaNombre(partido.pareja2, partido.origenPareja2),
+        categoria: partido.categoria?.nombre || '',
+        antes: { fechaHora: origDate.toISOString(), canchaNumero: origCancha },
+        despues: { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true },
+      });
+
+      updates.push({
+        id: partido.id,
+        fechaHora: null,
+        canchaNumero: null,
+        sinHorarioAsignado: true,
+      });
+    }
+  }
+
+  // 7. Persistir atómicamente en base de datos
+  await prisma.$transaction(async (tx) => {
+    await tx.torneo.update({
+      where: { id: torneoId },
+      data: {
+        canchasDisponiblesOverride: overrideNum,
+        overrideActivoDesde: ahora,
+      },
+    });
+
+    for (const u of updates) {
+      await tx.partido.update({
+        where: { id: u.id },
+        data: {
+          fechaHora: u.fechaHora,
+          canchaNumero: u.canchaNumero,
+          sinHorarioAsignado: u.sinHorarioAsignado,
+        },
+      });
+    }
+  });
+
+  return {
+    message: `Canchas reducidas a ${overrideNum}. Se reprogramaron ${partidosReprogramados} partidos.`,
+    canchasActivas: overrideNum,
+    overrideActivoDesde: ahora.toISOString(),
+    reprogramacion: {
+      ejecutada: true,
+      partidosReprogramados,
+      partidosSinCambio,
+      partidosSinHorarioNuevo,
+      cambios,
+    },
+  };
+}
+
 module.exports = {
   getOrganizador,
   updateOrganizador,
@@ -1301,4 +1636,5 @@ module.exports = {
   getPartidosSinHorarioTorneo,
   getCanchasDisponiblesTorneo,
   getEstadoEnVivo,
+  reprogramarPorReduccionCanchas,
 };
