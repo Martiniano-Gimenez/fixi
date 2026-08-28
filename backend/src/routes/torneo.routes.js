@@ -25,4 +25,8 @@ router.post('/:id/reiniciar', torneoController.reiniciarTorneo);
 router.get('/:id/partidos-sin-horario', torneoController.getPartidosSinHorarioTorneo);
 router.get('/:id/canchas-disponibles', torneoController.getCanchasDisponiblesTorneo);
 
+// Modo Día de Torneo
+router.get('/:id/en-vivo', torneoController.getEnVivo);
+router.post('/:id/canchas-override', torneoController.setCanchasOverride);
+
 module.exports = router;

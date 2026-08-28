@@ -105,6 +105,33 @@ async function getCanchasDisponiblesTorneo(req, res, next) {
   }
 }
 
+async function getEnVivo(req, res, next) {
+  try {
+    const organizadorId = getOrgId(req);
+    const torneoId = req.params.id;
+    const result = await organizadorService.getEstadoEnVivo(organizadorId, torneoId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function setCanchasOverride(req, res, next) {
+  try {
+    const organizadorId = getOrgId(req);
+    const torneoId = req.params.id;
+    const { canchasDisponiblesOverride } = req.body;
+    const result = await organizadorService.reprogramarPorReduccionCanchas(
+      organizadorId,
+      torneoId,
+      canchasDisponiblesOverride
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   createTorneo,
   getTorneos,
@@ -116,4 +143,6 @@ module.exports = {
   reiniciarTorneo,
   getPartidosSinHorarioTorneo,
   getCanchasDisponiblesTorneo,
+  getEnVivo,
+  setCanchasOverride,
 };
