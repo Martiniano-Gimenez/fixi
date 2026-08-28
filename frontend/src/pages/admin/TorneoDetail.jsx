@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -22,6 +22,7 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Activity,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
 import CruceResolver from '../../components/CruceResolver';
@@ -248,6 +249,59 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
   );
 }
 
+function calcularMetricasCategoria(c) {
+  const partidos = c.partidosSinHorario || [];
+  let minOpciones = 999;
+  let criticosCount = 0;
+
+  for (const p of partidos) {
+    let opcionesCount = 999;
+    if (p.motivo === 'ZONA_MANUAL_INCOMPLETA') {
+      opcionesCount = 0;
+    } else if (Array.isArray(p.opcionesResolucion)) {
+      opcionesCount = p.opcionesResolucion.length;
+    } else if (Array.isArray(p.slotsViables)) {
+      opcionesCount = p.slotsViables.length;
+    }
+
+    if (opcionesCount < minOpciones) {
+      minOpciones = opcionesCount;
+    }
+    if (opcionesCount <= 1 || p.motivo === 'ZONA_MANUAL_INCOMPLETA') {
+      criticosCount++;
+    }
+  }
+
+  return {
+    ...c,
+    minOpciones,
+    criticosCount,
+    tieneCriticos: criticosCount > 0,
+    totalConflictos: partidos.length,
+  };
+}
+
+function ordenarCategoriasPorUrgencia(conflictos) {
+  const procesados = (conflictos || []).map(calcularMetricasCategoria);
+
+  return procesados.sort((a, b) => {
+    // 1. Menor cantidad de opciones mínimas (más restringido primero)
+    if (a.minOpciones !== b.minOpciones) {
+      return a.minOpciones - b.minOpciones;
+    }
+    // 2. Mayor cantidad de partidos críticos (<=1 opción o manual)
+    if (a.criticosCount !== b.criticosCount) {
+      return b.criticosCount - a.criticosCount;
+    }
+    // 3. Mayor cantidad total de conflictos pendientes
+    if (a.totalConflictos !== b.totalConflictos) {
+      return b.totalConflictos - a.totalConflictos;
+    }
+    // 4. Orden alfabético
+    return (a.nombreCategoria || '').localeCompare(b.nombreCategoria || '');
+  });
+}
+
 export default function TorneoDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -278,11 +332,41 @@ export default function TorneoDetail() {
   const [conteoInicialConflictos, setConteoInicialConflictos] = useState(null);
   const [confirmarEmergenciaModalOpen, setConfirmarEmergenciaModalOpen] = useState(false);
   const [conflictosBloqueo, setConflictosBloqueo] = useState(null);
+  const [expandedCategoriasConflictos, setExpandedCategoriasConflictos] = useState(new Set());
   const [grillaOrganizador, setGrillaOrganizador] = useState({ viernes: [], sabado: [] });
   const [preCheckAprobado, setPreCheckAprobado] = useState(false);
   const [hayCambiosGuardados, setHayCambiosGuardados] = useState(false);
   const [resultadoInicio, setResultadoInicio] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
+
+  const categoriasConflictosOrdenadas = useMemo(() => {
+    if (!conflictosBloqueo || conflictosBloqueo.length === 0) return [];
+    return ordenarCategoriasPorUrgencia(conflictosBloqueo);
+  }, [conflictosBloqueo]);
+
+  const allConflictosExpanded =
+    categoriasConflictosOrdenadas.length > 0 &&
+    expandedCategoriasConflictos.size === categoriasConflictosOrdenadas.length;
+
+  const toggleCategoriaConflicto = (categoriaId) => {
+    setExpandedCategoriasConflictos((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoriaId)) {
+        next.delete(categoriaId);
+      } else {
+        next.add(categoriaId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleAllConflictos = () => {
+    if (allConflictosExpanded) {
+      setExpandedCategoriasConflictos(new Set());
+    } else {
+      setExpandedCategoriasConflictos(new Set(categoriasConflictosOrdenadas.map((c) => c.categoriaId)));
+    }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -356,9 +440,24 @@ export default function TorneoDetail() {
         if (conteoInicialConflictos === null || !isReCheck) {
           setConteoInicialConflictos(total);
         }
+
+        // Actualizar acordeón de categorías con preservación de estado
+        const ordenadas = ordenarCategoriasPorUrgencia(conflictos);
+        setExpandedCategoriasConflictos((prev) => {
+          const categoriasRestantesIds = new Set(ordenadas.map((c) => c.categoriaId));
+          const activas = new Set(Array.from(prev).filter((id) => categoriasRestantesIds.has(id)));
+          if (activas.size > 0) {
+            return activas;
+          }
+          if (ordenadas.length > 0) {
+            return new Set([ordenadas[0].categoriaId]);
+          }
+          return new Set();
+        });
       } else {
         setPlanId(res.planId);
         setPlanEmergenciaId(null);
+        setExpandedCategoriasConflictos(new Set());
         if (conflictosBloqueo !== null || isReCheck) {
           setConflictosBloqueo([]);
           setPreCheckAprobado(true);
@@ -589,6 +688,26 @@ export default function TorneoDetail() {
             >
               <Eye size={16} /> Ver Público
             </a>
+
+            {torneo.estado === 'EN_CURSO' && (
+              <Link
+                to={`/admin/torneos/${torneo.id}/en-vivo`}
+                className="btn-primary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  width: 'auto',
+                  textDecoration: 'none',
+                  background: 'linear-gradient(135deg, var(--color-primary), #00b372)',
+                  boxShadow: '0 2px 8px rgba(0, 208, 132, 0.3)',
+                  fontWeight: 700,
+                }}
+                title="Abrir panel de control en vivo y reprogramación por lluvia"
+              >
+                <Activity size={16} /> Día de Torneo (En Vivo)
+              </Link>
+            )}
 
             {puedeIniciar && (
               <button
@@ -943,8 +1062,23 @@ export default function TorneoDetail() {
               </div>
             </div>
           ) : (
-            <div className="modal-content" style={{ maxWidth: '680px', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+            <div
+              className="modal-content"
+              style={{
+                maxWidth: '720px',
+                maxHeight: '88vh',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '1rem',
+                  paddingBottom: '0.6rem',
+                  borderBottom: '1px solid var(--color-border)',
+                }}
+              >
                 <div>
                   <h3 style={{ margin: 0, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.2rem' }}>
                     <AlertTriangle size={22} /> Incompatibilidades detectadas
@@ -956,181 +1090,266 @@ export default function TorneoDetail() {
                       </span>
                     )}
                 </div>
-                <span className="badge badge-danger" style={{ fontSize: 'var(--font-size-xs)' }}>
-                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
-                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'pendiente' : 'pendientes'}
-                </span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  {categoriasConflictosOrdenadas.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn-link-action"
+                      style={{
+                        fontSize: 'var(--font-size-xs)',
+                        color: 'var(--color-text-secondary)',
+                        whiteSpace: 'nowrap',
+                        padding: '0.2rem 0.4rem',
+                      }}
+                      onClick={handleToggleAllConflictos}
+                    >
+                      {allConflictosExpanded ? 'Colapsar todas' : 'Expandir todas'}
+                    </button>
+                  )}
+                  <span className="badge badge-danger" style={{ fontSize: 'var(--font-size-xs)' }}>
+                    {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
+                    {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'pendiente' : 'pendientes'}
+                  </span>
+                </div>
               </div>
 
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem',
+                  marginBottom: '0.75rem',
+                }}
+              >
+                {categoriasConflictosOrdenadas.map((c) => {
+                  const isExpanded = expandedCategoriasConflictos.has(c.categoriaId);
 
-              <div style={{ flex: 1, overflowY: 'auto', marginBottom: '1.25rem', paddingRight: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {conflictosBloqueo.map((c) => (
-                  <div
-                    key={c.categoriaId}
-                    style={{
-                      padding: '0.85rem',
-                      background: 'var(--color-surface-elevated)',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--color-border)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.4rem' }}>
-                      <strong style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>{c.nombreCategoria}</strong>
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                        {c.partidosSinHorario.length} {c.partidosSinHorario.length === 1 ? 'conflicto' : 'conflictos'}
-                      </span>
-                    </div>
+                  return (
+                    <div
+                      key={c.categoriaId}
+                      style={{
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--color-border)',
+                        background: 'var(--color-surface)',
+                        overflow: 'hidden',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                      }}
+                    >
+                      {/* Header del acordeón */}
+                      <div
+                        style={{
+                          padding: '0.65rem 0.85rem',
+                          background: 'var(--color-surface-elevated)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                          borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none',
+                          transition: 'background 150ms ease',
+                        }}
+                        onClick={() => toggleCategoriaConflicto(c.categoriaId)}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <Layers size={16} style={{ color: 'var(--color-primary)' }} />
+                          <strong style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
+                            {c.nombreCategoria}
+                          </strong>
+                          <span
+                            className="badge"
+                            style={{
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              fontSize: '11px',
+                              padding: '2px 6px',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {c.partidosSinHorario.length} {c.partidosSinHorario.length === 1 ? 'conflicto' : 'conflictos'}
+                          </span>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                      {c.partidosSinHorario.map((p, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            padding: '0.65rem 0.75rem',
-                            background: 'var(--color-bg-input)',
-                            borderRadius: 'var(--radius-sm)',
-                            borderLeft: `3px solid ${
-                              p.motivo === 'SIN_FRANJA_COMUN'
-                                ? '#ef4444'
-                                : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                ? '#eab308'
-                                : '#f59e0b'
-                            }`,
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                            <span style={{ fontWeight: 600, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                              {p.zona}
-                            </span>
+                          {c.tieneCriticos && (
                             <span
-                              className="badge"
                               style={{
-                                fontSize: '11px',
-                                padding: '2px 6px',
-                                background:
-                                  p.motivo === 'SIN_FRANJA_COMUN'
-                                    ? 'rgba(239, 68, 68, 0.15)'
-                                    : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                    ? 'rgba(234, 179, 8, 0.15)'
-                                    : 'rgba(245, 158, 11, 0.15)',
-                                color:
+                                fontSize: '10.5px',
+                                background: 'rgba(239, 68, 68, 0.15)',
+                                color: '#ef4444',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                              }}
+                            >
+                              <AlertTriangle size={11} /> Muy restringido
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                            {isExpanded ? 'Ocultar' : 'Ver conflictos'}
+                          </span>
+                          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </div>
+                      </div>
+
+                      {/* Cuerpo expandido */}
+                      {isExpanded && (
+                        <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          {c.partidosSinHorario.map((p, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                padding: '0.65rem 0.75rem',
+                                background: 'var(--color-bg-input)',
+                                borderRadius: 'var(--radius-sm)',
+                                border: '1px solid var(--color-border)',
+                                borderLeft: `3px solid ${
                                   p.motivo === 'SIN_FRANJA_COMUN'
                                     ? '#ef4444'
                                     : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
                                     ? '#eab308'
-                                    : '#f59e0b',
+                                    : '#f59e0b'
+                                }`,
                               }}
                             >
-                              {p.motivo === 'SIN_FRANJA_COMUN'
-                                ? 'Sin franja común'
-                                : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                ? 'Armado manual requerido'
-                                : 'Canchas saturadas'}
-                            </span>
-                          </div>
-
-                          {p.motivo === 'ZONA_MANUAL_INCOMPLETA' ? (
-                            <div>
-                              <div style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.35rem', color: 'var(--color-text)' }}>
-                                <strong>Incompatibilidad para formar grupo:</strong> Las parejas de la zona no tienen horarios comunes para completar el fixture.
-                              </div>
-
-                              {p.crucesIncompatibles && p.crucesIncompatibles.length > 0 && (
-                                <div style={{ marginBottom: '0.5rem', padding: '0.4rem 0.6rem', background: 'rgba(234, 179, 8, 0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#eab308', marginBottom: '0.2rem' }}>
-                                    Incompatibilidad directa en el grupo:
-                                  </div>
-                                  {p.crucesIncompatibles.map((ci, idx) => (
-                                    <div key={idx} style={{ fontSize: '11.5px', color: 'var(--color-text)', marginBottom: '0.15rem' }}>
-                                      • <strong>{ci.p1}</strong> no coincide en ningún turno con <strong>{ci.p2}</strong>.
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
-                                Podés ampliar la disponibilidad de alguna de estas parejas con turnos libres o reestructurar la zona:
-                              </div>
-
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.6rem' }}>
-                                {(p.parejasManuales || []).map((pm) => (
-                                  <div
-                                    key={pm.id}
-                                    style={{
-                                      padding: '0.35rem 0.5rem',
-                                      background: 'var(--color-surface)',
-                                      borderRadius: 'var(--radius-sm)',
-                                      border: '1px solid var(--color-border)',
-                                    }}
-                                  >
-                                    <div style={{ fontSize: 'var(--font-size-xs)', marginBottom: '0.2rem' }}>
-                                      <strong>{pm.nombre}</strong> ({pm.slotsCount} {pm.slotsCount === 1 ? 'turno cargado' : 'turnos cargados'})
-                                    </div>
-                                    <InlineDisponibilidadEditor
-                                      parejaId={pm.id}
-                                      parejaNombre={pm.nombre}
-                                      initialSlotIds={pm.slotIds || []}
-                                      slotsViables={pm.slotsViables || []}
-                                      slotsQueDestraban={pm.slotsQueDestraban || []}
-                                      esZonaManual={true}
-                                      grilla={grillaOrganizador}
-                                      onSaved={async () => {
-                                        setHayCambiosGuardados(true);
-                                        await handlePreCheckInicio(true);
-                                      }}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                <Link
-                                  to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas`}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                                <span style={{ fontWeight: 600, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                                  {p.zona}
+                                </span>
+                                <span
+                                  className="badge"
                                   style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.3rem',
-                                    fontSize: 'var(--font-size-xs)',
-                                    color: 'var(--color-primary)',
-                                    textDecoration: 'none',
-                                    fontWeight: 600,
+                                    fontSize: '11px',
+                                    padding: '2px 6px',
+                                    background:
+                                      p.motivo === 'SIN_FRANJA_COMUN'
+                                        ? 'rgba(239, 68, 68, 0.15)'
+                                        : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
+                                        ? 'rgba(234, 179, 8, 0.15)'
+                                        : 'rgba(245, 158, 11, 0.15)',
+                                    color:
+                                      p.motivo === 'SIN_FRANJA_COMUN'
+                                        ? '#ef4444'
+                                        : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
+                                        ? '#eab308'
+                                        : '#f59e0b',
                                   }}
                                 >
-                                  Ir a Gestionar Parejas de {c.nombreCategoria} →
-                                </Link>
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              {/* Título del cruce */}
-                              <div style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.25rem' }}>
-                                <strong>{p.pareja1}</strong> vs <strong>{p.pareja2}</strong>
+                                  {p.motivo === 'SIN_FRANJA_COMUN'
+                                    ? 'Sin franja común'
+                                    : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
+                                    ? 'Armado manual requerido'
+                                    : 'Canchas saturadas'}
+                                </span>
                               </div>
 
-                              {/* Opción hero con [Resolver] y toggle de alternativas */}
-                              <CruceResolver
-                                opcionesResolucion={p.opcionesResolucion || []}
-                                pareja1Id={p.pareja1Id}
-                                pareja2Id={p.pareja2Id}
-                                pareja1Nombre={p.pareja1}
-                                pareja2Nombre={p.pareja2}
-                                onApplied={handleCasiEstrellaApplied}
-                              />
+                              {p.motivo === 'ZONA_MANUAL_INCOMPLETA' ? (
+                                <div>
+                                  <div style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.35rem', color: 'var(--color-text)' }}>
+                                    <strong>Incompatibilidad para formar grupo:</strong> Las parejas de la zona no tienen horarios comunes para completar el fixture.
+                                  </div>
 
-                              {/* Toggle: Detalles y opciones manuales */}
-                              <CruceDetalles
-                                partido={p}
-                                categoriaId={c.categoriaId}
-                                torneoId={id}
-                                onApplied={handleCasiEstrellaApplied}
-                              />
+                                  {p.crucesIncompatibles && p.crucesIncompatibles.length > 0 && (
+                                    <div style={{ marginBottom: '0.5rem', padding: '0.4rem 0.6rem', background: 'rgba(234, 179, 8, 0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#eab308', marginBottom: '0.2rem' }}>
+                                        Incompatibilidad directa en el grupo:
+                                      </div>
+                                      {p.crucesIncompatibles.map((ci, idx) => (
+                                        <div key={idx} style={{ fontSize: '11.5px', color: 'var(--color-text)', marginBottom: '0.15rem' }}>
+                                          • <strong>{ci.p1}</strong> no coincide en ningún turno con <strong>{ci.p2}</strong>.
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
+                                    Podés ampliar la disponibilidad de alguna de estas parejas con turnos libres o reestructurar la zona:
+                                  </div>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                                    {(p.parejasManuales || []).map((pm) => (
+                                      <div
+                                        key={pm.id}
+                                        style={{
+                                          padding: '0.35rem 0.5rem',
+                                          background: 'var(--color-surface)',
+                                          borderRadius: 'var(--radius-sm)',
+                                          border: '1px solid var(--color-border)',
+                                        }}
+                                      >
+                                        <div style={{ fontSize: 'var(--font-size-xs)', marginBottom: '0.2rem' }}>
+                                          <strong>{pm.nombre}</strong> ({pm.slotsCount} {pm.slotsCount === 1 ? 'turno cargado' : 'turnos cargados'})
+                                        </div>
+                                        <InlineDisponibilidadEditor
+                                          parejaId={pm.id}
+                                          parejaNombre={pm.nombre}
+                                          initialSlotIds={pm.slotIds || []}
+                                          slotsViables={pm.slotsViables || []}
+                                          slotsQueDestraban={pm.slotsQueDestraban || []}
+                                          esZonaManual={true}
+                                          grilla={grillaOrganizador}
+                                          onSaved={async () => {
+                                            setHayCambiosGuardados(true);
+                                            await handlePreCheckInicio(true);
+                                          }}
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                    <Link
+                                      to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas`}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.3rem',
+                                        fontSize: 'var(--font-size-xs)',
+                                        color: 'var(--color-primary)',
+                                        textDecoration: 'none',
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      Ir a Gestionar Parejas de {c.nombreCategoria} →
+                                    </Link>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  {/* Título del cruce */}
+                                  <div style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.25rem' }}>
+                                    <strong>{p.pareja1}</strong> vs <strong>{p.pareja2}</strong>
+                                  </div>
+
+                                  {/* Opción hero con [Resolver] y toggle de alternativas */}
+                                  <CruceResolver
+                                    opcionesResolucion={p.opcionesResolucion || []}
+                                    pareja1Id={p.pareja1Id}
+                                    pareja2Id={p.pareja2Id}
+                                    pareja1Nombre={p.pareja1}
+                                    pareja2Nombre={p.pareja2}
+                                    onApplied={handleCasiEstrellaApplied}
+                                  />
+
+                                  {/* Toggle: Detalles y opciones manuales */}
+                                  <CruceDetalles
+                                    partido={p}
+                                    categoriaId={c.categoriaId}
+                                    torneoId={id}
+                                    onApplied={handleCasiEstrellaApplied}
+                                  />
+                                </div>
+                              )}
                             </div>
-                          )}
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Toast flotante de Deshacer (Undo) */}
@@ -1192,7 +1411,16 @@ export default function TorneoDetail() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--color-border)' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  paddingTop: '0.75rem',
+                  borderTop: '1px solid var(--color-border)',
+                }}
+              >
                 <div>
                   {hayCambiosGuardados && (
                     <span
@@ -1211,7 +1439,7 @@ export default function TorneoDetail() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   {/* Botón de salida de emergencia (disponible siempre que haya plan de emergencia y no haya zonas manuales) */}
                   {!conflictosBloqueo.some((c) => c.partidosSinHorario.some((p) => p.motivo === 'ZONA_MANUAL_INCOMPLETA')) &&
                     Boolean(planEmergenciaId) && (
@@ -1223,6 +1451,8 @@ export default function TorneoDetail() {
                           borderColor: 'rgba(245, 158, 11, 0.5)',
                           fontSize: 'var(--font-size-xs)',
                           fontWeight: 600,
+                          padding: '0.4rem 0.75rem',
+                          whiteSpace: 'nowrap',
                         }}
                         onClick={() => setConfirmarEmergenciaModalOpen(true)}
                         disabled={verificandoInicio || iniciandoTorneo}
@@ -1234,6 +1464,7 @@ export default function TorneoDetail() {
                   <button
                     type="button"
                     className="btn-secondary"
+                    style={{ fontSize: 'var(--font-size-xs)', padding: '0.4rem 0.8rem', whiteSpace: 'nowrap' }}
                     onClick={() => {
                       setConflictosBloqueo(null);
                       setPreCheckAprobado(false);
@@ -1247,9 +1478,17 @@ export default function TorneoDetail() {
                     className="btn-primary"
                     onClick={() => handlePreCheckInicio(true)}
                     disabled={verificandoInicio || iniciandoTorneo}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      fontSize: 'var(--font-size-xs)',
+                      padding: '0.4rem 0.85rem',
+                      whiteSpace: 'nowrap',
+                      fontWeight: 600,
+                    }}
                   >
-                    <RefreshCw size={15} className={verificandoInicio ? 'animate-spin' : ''} />
+                    <RefreshCw size={14} className={verificandoInicio ? 'animate-spin' : ''} />
                     {verificandoInicio ? 'Verificando...' : 'Volver a verificar'}
                   </button>
                 </div>
