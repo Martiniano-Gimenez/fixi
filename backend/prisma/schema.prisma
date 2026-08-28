@@ -35,9 +35,11 @@ model Torneo {
   nombre         String
   fecha          DateTime?
   slug           String    @unique
-  estado         String    @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  estado                     String    @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
+  canchasDisponiblesOverride Int? // null = usar club.cantidadCanchas
+  overrideActivoDesde        DateTime? // timestamp de activación del override actual
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   organizador    Organizador @relation(fields: [organizadorId], references: [id])
   categorias     Categoria[]
