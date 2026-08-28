@@ -1118,6 +1118,177 @@ async function getCanchasDisponiblesTorneo(organizadorId, torneoId, ignorePartid
   };
 }
 
+/**
+ * Obtiene el estado consolidado en vivo de un torneo en curso para el dashboard Día de Torneo
+ */
+async function getEstadoEnVivo(organizadorId, torneoId) {
+  const torneo = await prisma.torneo.findUnique({
+    where: { id: torneoId },
+  });
+
+  if (!torneo) {
+    const error = new Error('Torneo no encontrado.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (torneo.organizadorId !== organizadorId) {
+    const error = new Error('No tenés permisos sobre este torneo.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (torneo.estado !== 'EN_CURSO') {
+    const error = new Error('El modo Día de Torneo solo está disponible para torneos en curso.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const organizador = await getOrganizador(organizadorId);
+  const canchasClub = organizador.cantidadCanchas || 1;
+  const canchasActivas = getCanchasEfectivas(torneo, organizador);
+
+  const partidos = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId },
+    },
+    include: {
+      categoria: { select: { id: true, nombre: true } },
+      zona: { select: { id: true, nombre: true } },
+      faseEliminatoria: { select: { id: true, nombre: true, ronda: true } },
+      pareja1: { select: { id: true, jugador1: true, jugador2: true } },
+      pareja2: { select: { id: true, jugador1: true, jugador2: true } },
+      ganador: { select: { id: true, jugador1: true, jugador2: true } },
+      sets: { orderBy: { numero: 'asc' } },
+    },
+    orderBy: [
+      { fechaHora: 'asc' },
+      { canchaNumero: 'asc' },
+    ],
+  });
+
+  function formatPareja(p, origen) {
+    if (p) return `${p.jugador1} / ${p.jugador2}`;
+    if (origen) return origen;
+    return 'Por definirse';
+  }
+
+  const DURACION_MS = (organizador.duracionPartidoMin || 75) * 60 * 1000;
+
+  // Clasificar partidos
+  const partidosEnCursoList = [];
+  const partidosEnCanchaFantasmaList = [];
+  const proximosPartidosList = [];
+
+  let finalizadosCount = 0;
+  let enCursoCount = 0;
+  let pendientesConHorarioCount = 0;
+  let pendientesSinHorarioCount = 0;
+
+  const canchaOcupadaPorPartido = new Map();
+
+  for (const p of partidos) {
+    const p1Nombre = formatPareja(p.pareja1, p.origenPareja1);
+    const p2Nombre = formatPareja(p.pareja2, p.origenPareja2);
+    const formatted = {
+      id: p.id,
+      categoriaId: p.categoriaId,
+      categoria: p.categoria?.nombre || '',
+      zonaId: p.zonaId,
+      zona: p.zona?.nombre || null,
+      faseEliminatoriaId: p.faseEliminatoriaId,
+      fase: p.faseEliminatoria?.nombre || null,
+      pareja1Id: p.pareja1Id,
+      pareja1: p1Nombre,
+      pareja2Id: p.pareja2Id,
+      pareja2: p2Nombre,
+      fechaHora: p.fechaHora,
+      canchaNumero: p.canchaNumero,
+      sinHorarioAsignado: p.sinHorarioAsignado,
+      estado: p.estado,
+      sets: p.sets || [],
+    };
+
+    if (p.estado === 'FINALIZADO') {
+      finalizadosCount++;
+    } else if (p.estado === 'EN_CURSO') {
+      enCursoCount++;
+      const horaInicio = p.fechaHora || new Date();
+      const horaEstimadaFin = new Date(new Date(horaInicio).getTime() + DURACION_MS);
+      const enCursoObj = {
+        ...formatted,
+        horaInicio,
+        horaEstimadaFin,
+      };
+      partidosEnCursoList.push(enCursoObj);
+      if (p.canchaNumero) {
+        canchaOcupadaPorPartido.set(p.canchaNumero, enCursoObj);
+      }
+    } else if (p.estado === 'PENDIENTE') {
+      if (p.sinHorarioAsignado || !p.fechaHora) {
+        pendientesSinHorarioCount++;
+      } else {
+        pendientesConHorarioCount++;
+        // Verificar si quedó en cancha fantasma (cancha > canchasActivas)
+        if (p.canchaNumero && p.canchaNumero > canchasActivas) {
+          partidosEnCanchaFantasmaList.push({
+            ...formatted,
+            motivo: 'Partido anterior al override en cancha inhabilitada',
+          });
+        } else {
+          proximosPartidosList.push(formatted);
+        }
+      }
+    }
+  }
+
+  // Grilla de canchas
+  const canchas = [];
+  for (let c = 1; c <= canchasClub; c++) {
+    if (c > canchasActivas) {
+      canchas.push({
+        numero: c,
+        estado: 'INHABILITADA',
+        partidoActual: null,
+      });
+    } else {
+      const partidoEnCancha = canchaOcupadaPorPartido.get(c) || null;
+      canchas.push({
+        numero: c,
+        estado: partidoEnCancha ? 'EN_CURSO' : 'LIBRE',
+        partidoActual: partidoEnCancha,
+      });
+    }
+  }
+
+  return {
+    torneo: {
+      id: torneo.id,
+      nombre: torneo.nombre,
+      fecha: torneo.fecha,
+      estado: torneo.estado,
+      slug: torneo.slug,
+      canchasDisponiblesOverride: torneo.canchasDisponiblesOverride,
+      overrideActivoDesde: torneo.overrideActivoDesde,
+      canchasClub,
+    },
+    canchasActivas,
+    canchasClub,
+    canchas,
+    partidosEnCurso: partidosEnCursoList,
+    partidosEnCanchaFantasma: partidosEnCanchaFantasmaList,
+    proximosPartidos: proximosPartidosList,
+    resumenEstado: {
+      totalPartidos: partidos.length,
+      finalizados: finalizadosCount,
+      enCurso: enCursoCount,
+      pendientesConHorario: pendientesConHorarioCount,
+      pendientesSinHorario: pendientesSinHorarioCount,
+      enCanchaFantasma: partidosEnCanchaFantasmaList.length,
+    },
+  };
+}
+
 module.exports = {
   getOrganizador,
   updateOrganizador,
@@ -1129,4 +1300,5 @@ module.exports = {
   iniciarTodosLosTorneos: iniciarTorneoMultiCategoria,
   getPartidosSinHorarioTorneo,
   getCanchasDisponiblesTorneo,
+  getEstadoEnVivo,
 };
