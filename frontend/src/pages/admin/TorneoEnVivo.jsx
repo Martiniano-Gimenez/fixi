@@ -860,6 +860,23 @@ export default function TorneoEnVivo() {
                         {c.partidoActual.zona && <span>• {c.partidoActual.zona}</span>}
                         {c.partidoActual.fase && <span>• {c.partidoActual.fase}</span>}
                       </div>
+                      {c.partidoActual.sets && c.partidoActual.sets.length > 0 && (
+                        <div
+                          style={{
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 700,
+                            color: 'var(--color-primary)',
+                            marginTop: '0.4rem',
+                            display: 'inline-block',
+                            background: 'rgba(0, 208, 132, 0.15)',
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid rgba(0, 208, 132, 0.3)',
+                          }}
+                        >
+                          Parcial: {c.partidoActual.sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1019,65 +1036,104 @@ export default function TorneoEnVivo() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {partidosEnCurso.map((p) => (
-                <div
-                  key={p.id}
-                  style={{
-                    background: 'var(--bg-card-start)',
-                    border: '1px solid rgba(0, 208, 132, 0.35)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '1rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <span
-                      style={{
-                        fontSize: 'var(--font-size-xs)',
-                        fontWeight: 700,
-                        padding: '0.15rem 0.5rem',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'rgba(0, 208, 132, 0.15)',
-                        color: 'var(--color-primary)',
-                      }}
-                    >
-                      Cancha {p.canchaNumero}
-                    </span>
-                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                      {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''}
-                    </span>
-                  </div>
+              {partidosEnCurso.map((p) => {
+                const sets = p.sets || [];
+                const resultadoStr = sets.length > 0
+                  ? sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')
+                  : null;
 
-                  <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.2rem' }}>
-                    {p.pareja1}
-                  </div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>vs</div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                    {p.pareja2}
-                  </div>
-
+                return (
                   <div
+                    key={p.id}
                     style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      fontSize: 'var(--font-size-xs)',
-                      color: 'var(--color-text-secondary)',
-                      paddingTop: '0.5rem',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                      background: 'var(--bg-card-start)',
+                      border: '1px solid rgba(0, 208, 132, 0.35)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '1rem',
                     }}
                   >
-                    <span>
-                      Inicio: {new Date(p.horaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    <Link
-                      to={`/admin/torneos/${id}/categorias/${p.categoriaId}`}
-                      style={{ color: 'var(--color-primary)', fontWeight: 600 }}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span
+                          style={{
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 700,
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'rgba(0, 208, 132, 0.15)',
+                            color: 'var(--color-primary)',
+                          }}
+                        >
+                          Cancha {p.canchaNumero}
+                        </span>
+                        {resultadoStr && (
+                          <span
+                            style={{
+                              fontSize: 'var(--font-size-xs)',
+                              fontWeight: 700,
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: 'var(--radius-sm)',
+                              background: 'rgba(0, 208, 132, 0.2)',
+                              color: 'var(--color-primary)',
+                              border: '1px solid rgba(0, 208, 132, 0.35)',
+                            }}
+                          >
+                            Parcial: {resultadoStr}
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                        {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.2rem' }}>
+                      {p.pareja1}
+                    </div>
+                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>vs</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                      {p.pareja2}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: 'var(--font-size-xs)',
+                        color: 'var(--color-text-secondary)',
+                        paddingTop: '0.5rem',
+                        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                      }}
                     >
-                      Cargar Resultado →
-                    </Link>
+                      <span>
+                        Inicio: {new Date(p.horaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
+                        style={{
+                          background: 'rgba(0, 208, 132, 0.15)',
+                          border: '1px solid rgba(0, 208, 132, 0.35)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--color-primary)',
+                          cursor: 'pointer',
+                          padding: '0.35rem 0.75rem',
+                          fontSize: 'var(--font-size-xs)',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          transition: 'var(--transition-fast)',
+                        }}
+                      >
+                        <ClipboardList size={14} />
+                        {sets.length > 0 ? 'Actualizar Resultado' : 'Cargar Resultado'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1220,6 +1276,9 @@ export default function TorneoEnVivo() {
                   ? sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')
                   : '—';
 
+                const isP1Winner = p.ganadorId && p.pareja1Id && p.ganadorId === p.pareja1Id;
+                const isP2Winner = p.ganadorId && p.pareja2Id && p.ganadorId === p.pareja2Id;
+
                 return (
                   <div
                     key={p.id}
@@ -1234,8 +1293,24 @@ export default function TorneoEnVivo() {
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {p.pareja1} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs</span> {p.pareja2}
+                      <div style={{ fontSize: 'var(--font-size-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span
+                          style={{
+                            color: isP1Winner ? 'var(--color-primary)' : 'var(--color-text)',
+                            fontWeight: isP1Winner ? 700 : 500,
+                          }}
+                        >
+                          {p.pareja1}
+                        </span>
+                        <span style={{ color: 'var(--color-text-muted)', fontWeight: 400, margin: '0 0.35rem' }}>vs</span>
+                        <span
+                          style={{
+                            color: isP2Winner ? 'var(--color-primary)' : 'var(--color-text)',
+                            fontWeight: isP2Winner ? 700 : 500,
+                          }}
+                        >
+                          {p.pareja2}
+                        </span>
                       </div>
                       <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
                         {p.categoria}{p.zona ? ` • ${p.zona}` : p.fase ? ` • ${p.fase}` : ''}
