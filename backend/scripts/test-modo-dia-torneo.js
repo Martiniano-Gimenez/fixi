@@ -10,17 +10,25 @@ const torneoService = require('../src/services/torneo.service');
 async function testModoDiaTorneo() {
   console.log('🧪 Iniciando test automatizado de Modo Día de Torneo...');
 
-  // 1. Limpiar datos de prueba
-  await prisma.setPartido.deleteMany();
-  await prisma.partido.deleteMany();
-  await prisma.faseEliminatoria.deleteMany();
-  await prisma.zonaPareja.deleteMany();
-  await prisma.zona.deleteMany();
-  await prisma.slotPareja.deleteMany();
-  await prisma.pareja.deleteMany();
-  await prisma.categoria.deleteMany();
-  await prisma.torneo.deleteMany();
-  await prisma.organizador.deleteMany();
+  // 1. Limpiar datos previos del test piloto si existieran
+  const existingPiloto = await prisma.organizador.findUnique({ where: { email: 'piloto@padel.com' } });
+  if (existingPiloto) {
+    const torneos = await prisma.torneo.findMany({ where: { organizadorId: existingPiloto.id } });
+    const torneoIds = torneos.map((t) => t.id);
+    const categorias = await prisma.categoria.findMany({ where: { torneoId: { in: torneoIds } } });
+    const categoriaIds = categorias.map((c) => c.id);
+    
+    await prisma.setPartido.deleteMany({ where: { partido: { categoriaId: { in: categoriaIds } } } });
+    await prisma.partido.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
+    await prisma.faseEliminatoria.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
+    await prisma.zonaPareja.deleteMany({ where: { zona: { categoriaId: { in: categoriaIds } } } });
+    await prisma.zona.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
+    await prisma.slotPareja.deleteMany({ where: { pareja: { categoriaId: { in: categoriaIds } } } });
+    await prisma.pareja.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
+    await prisma.categoria.deleteMany({ where: { id: { in: categoriaIds } } });
+    await prisma.torneo.deleteMany({ where: { id: { in: torneoIds } } });
+    await prisma.organizador.delete({ where: { id: existingPiloto.id } });
+  }
 
   // 2. Crear Organizador con 6 canchas (4 techadas, 2 aire libre)
   const passwordHash = await bcrypt.hash('123456', 10);
