@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -20,7 +20,7 @@ import {
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import ResultadoModal from '../../components/ResultadoModal';
-import { formatDiaHorario } from '../../utils/dateUtils';
+import { formatDiaHorario, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
 
 export default function TorneoEnVivo() {
   const { id } = useParams();
@@ -52,6 +52,9 @@ export default function TorneoEnVivo() {
 
   // Sección de finalizados colapsada por default
   const [finalizadosExpanded, setFinalizadosExpanded] = useState(false);
+
+  // Tab activo de Próximos Partidos (por día calendario)
+  const [activeTabDay, setActiveTabDay] = useState(null);
 
   // Referencia al interval de polling — permite resetearlo tras un fetch manual
   const intervalRef = useRef(null);
@@ -145,6 +148,59 @@ export default function TorneoEnVivo() {
     }
   };
 
+  const proximosPartidosList = data?.proximosPartidos || [];
+  const horariosClub = data?.torneo?.horariosClub || null;
+
+  // Derivar días únicos disponibles para los tabs respetando la lógica de trasnoche
+  const diasDisponibles = useMemo(() => {
+    if (!proximosPartidosList || proximosPartidosList.length === 0) return [];
+    const map = new Map();
+    for (const p of proximosPartidosList) {
+      if (!p.fechaHora) continue;
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
+      if (!info) continue;
+      if (!map.has(info.key)) {
+        map.set(info.key, {
+          key: info.key,
+          label: info.label,
+          count: 0,
+        });
+      }
+      map.get(info.key).count++;
+    }
+    return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
+  }, [proximosPartidosList, horariosClub]);
+
+  // Selección por defecto del tab (hoy o primer día con partidos pendientes)
+  useEffect(() => {
+    if (diasDisponibles.length === 0) {
+      if (activeTabDay) setActiveTabDay(null);
+      return;
+    }
+
+    if (activeTabDay && diasDisponibles.some((d) => d.key === activeTabDay)) {
+      return;
+    }
+
+    const hoyInfo = getDiaCalendarioConTrasnoche(new Date(), horariosClub);
+    const matchHoy = hoyInfo ? diasDisponibles.find((d) => d.key === hoyInfo.key) : null;
+
+    if (matchHoy) {
+      setActiveTabDay(matchHoy.key);
+    } else {
+      setActiveTabDay(diasDisponibles[0].key);
+    }
+  }, [diasDisponibles, activeTabDay, horariosClub]);
+
+  // Partidos filtrados por el tab de día seleccionado
+  const proximosFiltrados = useMemo(() => {
+    if (!activeTabDay) return proximosPartidosList;
+    return proximosPartidosList.filter((p) => {
+      if (!p.fechaHora) return false;
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
+      return info?.key === activeTabDay;
+    });
+  }, [proximosPartidosList, activeTabDay, horariosClub]);
 
   if (loading && !data) {
     return (
@@ -1140,10 +1196,66 @@ export default function TorneoEnVivo() {
 
         {/* Próximos Partidos */}
         <div>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Clock size={18} style={{ color: '#60a5fa' }} />
-            Próximos Partidos ({proximosPartidos.length})
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Clock size={18} style={{ color: '#60a5fa' }} />
+              Próximos Partidos ({proximosPartidos.length})
+            </h3>
+          </div>
+
+          {/* Tabs por Día */}
+          {diasDisponibles.length > 1 && (
+            <div
+              style={{
+                display: 'flex',
+                gap: '0.4rem',
+                marginBottom: '0.85rem',
+                overflowX: 'auto',
+                paddingBottom: '0.2rem',
+                scrollbarWidth: 'none',
+              }}
+            >
+              {diasDisponibles.map((dia) => {
+                const isActive = dia.key === activeTabDay;
+                return (
+                  <button
+                    key={dia.key}
+                    type="button"
+                    onClick={() => setActiveTabDay(dia.key)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      padding: '0.35rem 0.8rem',
+                      borderRadius: '999px',
+                      fontSize: 'var(--font-size-xs)',
+                      fontWeight: isActive ? 700 : 500,
+                      background: isActive ? 'var(--color-primary)' : 'var(--bg-card-start)',
+                      color: isActive ? '#0d1117' : 'var(--color-text-secondary)',
+                      border: isActive ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      cursor: 'pointer',
+                      transition: 'var(--transition-fast)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span>{dia.label}</span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '0.1rem 0.4rem',
+                        borderRadius: '999px',
+                        background: isActive ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                        color: isActive ? '#0d1117' : 'var(--color-text-muted)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {dia.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {proximosPartidos.length === 0 ? (
             <div
@@ -1159,9 +1271,23 @@ export default function TorneoEnVivo() {
             >
               No hay partidos pendientes con horario asignado.
             </div>
+          ) : proximosFiltrados.length === 0 ? (
+            <div
+              style={{
+                background: 'var(--bg-card-start)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '2rem 1rem',
+                textAlign: 'center',
+                color: 'var(--color-text-muted)',
+                fontSize: 'var(--font-size-sm)',
+              }}
+            >
+              No hay partidos pendientes para el día seleccionado.
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '480px', overflowY: 'auto' }}>
-              {proximosPartidos.map((p) => (
+              {proximosFiltrados.map((p) => (
                 <div
                   key={p.id}
                   style={{

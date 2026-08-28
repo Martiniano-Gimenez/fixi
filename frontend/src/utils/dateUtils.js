@@ -48,3 +48,66 @@ export function formatAjusteTiempo(minutos) {
 
   return `${sign}${h}h ${m}m`;
 }
+
+/**
+ * Determina el día calendario lógico de un partido considerando turnos de trasnoche
+ * y los horarios configurados del club.
+ * @param {string | Date} fechaHora
+ * @param {Object} [horariosClub] { viernesInicio, viernesFin, sabadoInicio, sabadoFin }
+ * @returns {{ key: string, label: string, diaNombre: string, diaNumero: number, logicalDate: Date } | null}
+ */
+export function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
+  if (!fechaHora) return null;
+  const d = new Date(fechaHora);
+  if (isNaN(d.getTime())) return null;
+
+  const diaSemana = d.getDay(); // 0: Dom, 1: Lun, ..., 5: Vie, 6: Sab
+  const horas = d.getHours();
+  const minutos = d.getMinutes();
+  const timeInMinutes = horas * 60 + minutos;
+
+  let shiftDays = 0;
+
+  // Evaluar trasnoche en madrugada
+  if (diaSemana === 6) {
+    // Sábado de madrugada: si es antes de la apertura del sábado (o antes de las 06:00 AM)
+    const sabInicio = horariosClub?.sabadoInicio || '06:00';
+    const [sh, sm] = sabInicio.split(':').map(Number);
+    const sabInicioMin = (isNaN(sh) ? 6 : sh) * 60 + (isNaN(sm) ? 0 : sm);
+    if (timeInMinutes < sabInicioMin) {
+      shiftDays = -1; // Pertenece al Viernes
+    }
+  } else if (diaSemana === 0) {
+    // Domingo de madrugada: si es antes de las 06:00 AM
+    if (timeInMinutes < 6 * 60) {
+      shiftDays = -1; // Pertenece al Sábado
+    }
+  } else if (timeInMinutes < 6 * 60) {
+    // Cualquier otro día en madrugada antes de las 6 AM
+    shiftDays = -1;
+  }
+
+  const logicalDate = new Date(d);
+  if (shiftDays !== 0) {
+    logicalDate.setDate(logicalDate.getDate() + shiftDays);
+  }
+
+  const yyyy = logicalDate.getFullYear();
+  const mm = String(logicalDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(logicalDate.getDate()).padStart(2, '0');
+  const key = `${yyyy}-${mm}-${dd}`;
+
+  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const diaNombre = dias[logicalDate.getDay()];
+  const diaNumero = logicalDate.getDate();
+  const label = `${diaNombre} ${diaNumero}`;
+
+  return {
+    key,
+    label,
+    diaNombre,
+    diaNumero,
+    logicalDate,
+  };
+}
+

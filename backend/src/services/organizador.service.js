@@ -1280,6 +1280,12 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       canchasDisponiblesOverride: torneo.canchasDisponiblesOverride,
       overrideActivoDesde: torneo.overrideActivoDesde,
       canchasClub,
+      horariosClub: {
+        viernesInicio: organizador.viernesInicio,
+        viernesFin: organizador.viernesFin,
+        sabadoInicio: organizador.sabadoInicio,
+        sabadoFin: organizador.sabadoFin,
+      },
     },
     canchasActivas,
     canchasClub,
@@ -1517,10 +1523,43 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     const origCancha = partido.canchaNumero;
 
     // Calcular rango del día calendario de este partido
-    // Permitir extensión nocturna hasta las 04:00 AM del día siguiente
-    const dayStart = new Date(origDate);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayLimit = new Date(dayStart.getTime() + 28 * 60 * 60 * 1000); // 04:00 del día siguiente
+    // El límite respeta el inicio de la jornada siguiente (ej. sabadoInicio) o 06:00 AM del día siguiente
+    const diaSemana = origDate.getDay();
+    const origHoras = origDate.getHours();
+    const origMinutos = origDate.getMinutes();
+    const origTimeMin = origHoras * 60 + origMinutos;
+
+    let isViernes = false;
+    if (diaSemana === 5) {
+      isViernes = true;
+    } else if (diaSemana === 6) {
+      const [sh, sm] = (organizador.sabadoInicio || '06:00').split(':').map(Number);
+      const sabInicioMin = (isNaN(sh) ? 6 : sh) * 60 + (isNaN(sm) ? 0 : sm);
+      if (origTimeMin < sabInicioMin) {
+        isViernes = true;
+      }
+    }
+
+    let dayLimitMs;
+    if (isViernes) {
+      // El viernes se extiende hasta el inicio de la jornada del sábado
+      const sabInicioStr = organizador.sabadoInicio || '06:00';
+      const [sh, sm] = sabInicioStr.split(':').map(Number);
+      const sabDate = new Date(origDate);
+      if (diaSemana === 5) sabDate.setDate(sabDate.getDate() + 1);
+      sabDate.setHours(isNaN(sh) ? 6 : sh, isNaN(sm) ? 0 : sm, 0, 0);
+      dayLimitMs = sabDate.getTime();
+    } else {
+      // Sábado o cualquier otro día: hasta las 06:00 AM del día siguiente
+      const nextDayDate = new Date(origDate);
+      if (diaSemana === 6 || origHoras >= 6) {
+        nextDayDate.setDate(nextDayDate.getDate() + 1);
+      }
+      nextDayDate.setHours(6, 0, 0, 0);
+      dayLimitMs = nextDayDate.getTime();
+    }
+
+    const dayLimit = new Date(dayLimitMs);
 
     // Punto de partida: el mayor entre ahora (alineado a 15min) y el horario original
     let startSearchMs = Math.max(ahora.getTime(), origStartMs);
