@@ -15,6 +15,7 @@ import ParejasManager from './pages/admin/ParejasManager';
 import TorneoPublic from './pages/public/TorneoPublic';
 import EliminatoriaView from './pages/admin/EliminatoriaView';
 import ConfiguracionClub from './pages/admin/ConfiguracionClub';
+import TorneoEnVivo from './pages/admin/TorneoEnVivo';
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="club" element={<ConfiguracionClub />} />
             <Route path="torneos/nuevo" element={<TorneoCreate />} />
             <Route path="torneos/:id" element={<TorneoDetail />} />
+            <Route path="torneos/:id/en-vivo" element={<TorneoEnVivo />} />
             <Route path="torneos/:torneoId/categorias/:id" element={<CategoriaDetail />} />
             <Route path="torneos/:torneoId/categorias/:id/parejas" element={<ParejasManager />} />
             <Route path="torneos/:torneoId/categorias/:id/eliminatoria" element={<EliminatoriaView />} />
