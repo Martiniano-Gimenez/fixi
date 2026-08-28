@@ -360,11 +360,44 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   - Mantener un selector manual de cancha: se descartó para optimizar la velocidad operativa del organizador (1 solo clic asigna horario y la primera cancha libre).
 - **Resultado final:** Consistencia UX/UI total en toda la aplicación (antes y después de iniciar), reduciendo el tiempo de programación manual de minutos a un solo clic.
 
+### Modo Día de Torneo — Reprogramación Dinámica por Reducción de Canchas ("Modo Lluvia")
+- **Problema o necesidad que motivó el trabajo:** En situaciones climáticas adversas (ej. lluvia sobre canchas al aire libre de un club con 6 canchas donde 2 quedan inutilizadas), el organizador necesitaba reducir la cantidad de canchas activas del torneo en tiempo real. Esto exigía reacomodar automáticamente todos los partidos pendientes futuros dentro de las canchas remanentes (asumiendo fungibilidad total), sin alterar los partidos ya finalizados ni los que están en juego en ese instante, y permitiendo activar/desactivar el modo lluvia múltiples veces durante el fin de semana.
+- **Qué decidí y por qué:**
+  1. **Schema Prisma:** Agregué `canchasDisponiblesOverride Int?` (override temporal, null = usa las canchas del club) y `overrideActivoDesde DateTime?` en `Torneo`. Al activar o ajustar el override, se guarda el timestamp exacto del momento de la decisión.
+  2. **Reglas de Reprogramación:**
+     - Se seleccionan únicamente los partidos `PENDIENTE` con `fechaHora > overrideActivoDesde` (incluyendo eliminatorias pendientes asignadas).
+     - **Extensión de jornada en modo lluvia:** Durante la reprogramación de emergencia, la búsqueda de slots en las canchas activas no se corta al llegar al horario formal de cierre del club (permite extender partidos de madrugada para no suspender el torneo), pero sí corta al cambiar la fecha calendario.
+     - **Transaccionalidad:** Se ejecuta en una sola transacción Prisma (`prisma.$transaction`) actualizando tanto el torneo como los partidos reprogramados.
+  3. **Seguridad y Visibilidad de Edge Cases:**
+     - Bloqueo con error 400 si hay partidos `EN_CURSO` en canchas que quedarían inhabilitadas ($> \text{canchasOverride}$).
+     - Bloqueo si el override excede la capacidad real del club (`cantidadCanchas`).
+     - **Detección de Canchas Fantasma:** Si existen partidos `PENDIENTE` con horario anterior al override que habían quedado en canchas inhabilitadas, se devuelven en `partidosEnCanchaFantasma` y se muestran en una alerta destacada en el frontend para resolución manual con `AsignarHorarioModal`.
+  4. **Vista Dedicada `/admin/torneos/:id/en-vivo` (`TorneoEnVivo.jsx`):**
+     - Grilla visual en tiempo real de canchas (Libres, En Juego con tiempo transcurrido/fin estimado, Inhabilitadas).
+     - Barra de control de modo lluvia con selector, confirmación modal y panel de feedback detallado post-reprogramación (partidos movidos, delta de horario).
+- **Alternativas que consideré y descarté:**
+  - Modificar permanentemente `Club.cantidadCanchas`: se descartó porque contaminaría la configuración base del club y afectaría a otros torneos o futuras fechas normales.
+  - Reutilizar el solver MCF completo: se descartó porque en el fragor operativo del día del torneo lo primordial es la preservación cronológica y el corrimiento mínimo de turnos, no la re-optimización combinatoria global.
+- **Resultado final:** Reprogramación masiva instantánea ante imprevistos climáticos con trazabilidad, seguridad transaccional y visualización en tiempo real.
+
+### Carga Rápida de Resultados en Vivo y Acordeón Colapsable de Partidos Finalizados
+- **Problema o necesidad que motivó el trabajo:**
+  1. Durante la operación del torneo, tener que navegar a la pantalla de detalle de categoría para cargar el resultado de cada partido que finalizaba obligaba a salir de la vista operativa y perder el panorama general del club.
+  2. En torneos grandes (80+ partidos), listar todos los partidos en una única pantalla generaba un scroll excesivo. Hacía falta mantener el foco en "qué sigue" (Próximos Partidos) sin perder la visibilidad para auditar resultados recién cargados.
+- **Qué decidí y por qué:**
+  1. **Acción Rápida de Carga de Resultado:** Reutilicé el componente modal existente `ResultadoModal` integrándolo directamente en la tarjeta de cada "Próximo Partido" mediante un botón de acción (`ClipboardList`). El endpoint `getEstadoEnVivo` expone los objetos crudos `pareja1Obj` y `pareja2Obj` para que el modal opere de forma nativa sin transformaciones frágiles.
+  2. **Recálculo Inmediato y Polling con Reset (`intervalRef`):** Al guardar el resultado desde el modal, se dispara `fetchAndResetPolling()`, el cual ejecuta el re-fetch inmediato y resetea el temporizador de 30s del `setInterval` (`intervalRef`), eliminando solapamientos de peticiones y parpadeos visuales.
+  3. **Sección "Partidos Finalizados" Colapsable:** Agregué un acordeón colapsado por defecto al final de la vista que lista todos los partidos en estado `FINALIZADO` con sus sets/games visibles (`6-3 / 7-5`), ordenados cronológicamente en orden descendente (más reciente arriba) y con botón para editar/corregir resultados con `ResultadoModal`.
+- **Alternativas que consideré y descarté:**
+  - Crear un modal simplificado específico para la vista en vivo: se descartó para mantener consistencia de validaciones de sets de pádel y evitar duplicación de código.
+  - Esperar al ciclo natural de polling de 30s tras guardar: se descartó porque causaba una sensación de demora en el operador que necesitaba verificar que el partido ya no figuraba como pendiente.
+- **Resultado final:** Flujo operativo ágil donde el organizador puede controlar canchas, reprogramar por lluvia, consultar próximos turnos y cargar resultados en 1 clic desde una única pantalla móvil/desktop.
+
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 13 sesiones de trabajo, sumando un aproximado total de entre 33 y 38 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 14 sesiones de trabajo, sumando un aproximado total de entre 37 y 43 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -380,7 +413,8 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 13 s
 | **10** | ~3.5 a 4 horas | Reestructuración de Dominio: Jerarquía Club → Torneo (Evento) → Categorías (Cuadros), migración completa de Frontend y Backend, vista pública multicategoría y confirmación estilizada de resultados. |
 | **11** | ~3.5 a 4 horas | Resilencia Operativa: Editor inline inteligente en modal de bloqueo (`★`), salida de emergencia condicional, asignación manual post-inicio con filtrado estricto, solver exacto de zonas incompletas y numeración correlativa. |
 | **12** | ~2.5 a 3 horas | Carga de disponibilidad de alta precisión: Sliders de rango horario duales (15 min), retrocompatibilidad de datos, testeo End-to-End, acordeón colapsado y consistencia en tiempo real de sugerencias de horario (`★`). |
-| **13** | ~3 a 3.5 horas | Asistente de resolución en pre-check (`CruceResolver`): jerarquía por certeza, dirección (+/-), formato en horas ($\ge 60\text{m}$) y Deshacer atómico. Unificación post-inicio (`AsignarHorarioModal` + `rankingSlots`): Hero óptimo y 1-click directo a `Partido`. |
-| **Total** | **~33 a 38.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en dos pasadas, pre-check transaccional, asistente de resolución de cruces, brackets dinámicos, disponibilidad granular por sliders, asignación 1-click y diseño UI/UX premium. |
+| **13** | ~3.5 a 4 horas | Asistente de resolución en pre-check (`CruceResolver`): jerarquía por certeza, dirección (+/-), formato horas ($\ge 60\text{m}$), Deshacer atómico y acordeón inteligente por urgencia. Unificación post-inicio (`AsignarHorarioModal` + `rankingSlots`): Hero óptimo y 1-click directo a `Partido`. |
+| **14** | ~3.5 a 4 horas | Modo Día de Torneo (`/en-vivo`): reprogramación dinámica por reducción de canchas ("Modo Lluvia") con extensión de jornada, monitoreo visual de canchas, alerta de canchas fantasma, carga rápida de resultados (`ResultadoModal`), acordeón colapsable de partidos finalizados y polling con reset inteligente (`intervalRef`). |
+| **Total** | **~37.5 a 43 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en dos pasadas, pre-check transaccional, asistente de resolución de cruces, modo día de torneo con reprogramación por lluvia, brackets dinámicos, disponibilidad por sliders y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
