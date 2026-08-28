@@ -67,9 +67,9 @@ organizadores que hoy llevan todo en papel.
   - Panel operativo centralizado para el día del evento con grilla visual de canchas en tiempo real (Libre, En Juego, Inhabilitada).
   - Barra de control de Modo Lluvia (reducir/restaurar canchas activas) con feedback descriptivo de partidos corridos y minutos de delta.
   - Alerta destacada para partidos en canchas fantasma con acceso a reprogramación manual.
-  - Tarjetas de "Partidos en Juego" y "Próximos Partidos" cronológicos.
-  - **Carga Rápida de Resultados:** Botón de acción directa (`ClipboardList`) en cada partido próximo para abrir `ResultadoModal` en 1 clic y recalcular tablas sin salir de la vista operativa.
-  - **Acordeón de Partidos Finalizados:** Sección colapsable que lista los partidos finalizados con sets/games visibles, ordenados de más reciente a más antiguo (DESC), con edición/borrado de resultado.
+  - Tarjetas de "Partidos en Juego" con marcador parcial visible y "Próximos Partidos" cronológicos.
+  - **Carga Rápida de Resultados:** Botón de acción directa (`ClipboardList`) en cada partido (en juego o próximo) para abrir `ResultadoModal` en 1 clic y recalcular tablas sin salir de la vista operativa.
+  - **Acordeón de Partidos Finalizados:** Sección colapsable que lista los partidos finalizados con sets/games visibles, pareja ganadora destacada en verde, ordenados de más reciente a más antiguo (DESC), con edición/borrado de resultado.
   - **Polling Inteligente con Reset:** Actualización reactiva cada 30s con reseteo inmediato del timer (`intervalRef`) ante cambios manuales o de override, evitando solapamientos o parpadeos.
 - Numeración correlativa automática de parejas inscriptas: índice visual continuo (`#{index + 1}`) y re-secuenciación en base de datos al eliminar registros.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
