@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const crypto = require('crypto');
+const { parseFechaLocal } = require('../utils/dateUtils');
 
 function generarSlug(nombre) {
   const base = nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
@@ -20,7 +21,7 @@ async function createTorneo(organizadorId, { nombre, fecha }) {
     data: {
       organizadorId,
       nombre: nombre.trim(),
-      fecha: fecha ? new Date(fecha) : null,
+      fecha: fecha ? parseFechaLocal(fecha) : null,
       slug,
     },
   });
@@ -92,7 +93,7 @@ async function updateTorneo(organizadorId, torneoId, data) {
 
   const updateData = {};
   if (data.nombre !== undefined && data.nombre.trim()) updateData.nombre = data.nombre.trim();
-  if (data.fecha !== undefined) updateData.fecha = data.fecha ? new Date(data.fecha) : null;
+  if (data.fecha !== undefined) updateData.fecha = data.fecha ? parseFechaLocal(data.fecha) : null;
   if (data.estado !== undefined) updateData.estado = data.estado;
 
   return await prisma.torneo.update({
