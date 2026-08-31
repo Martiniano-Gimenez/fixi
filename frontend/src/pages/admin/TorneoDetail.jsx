@@ -742,16 +742,6 @@ export default function TorneoDetail() {
             <button
               type="button"
               className="btn-secondary"
-              onClick={handleOpenEditTorneo}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
-              title="Modificar fecha o nombre del torneo"
-            >
-              <Calendar size={16} /> Cambiar Fecha
-            </button>
-
-            <button
-              type="button"
-              className="btn-secondary"
               onClick={handleCopyLink}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
               title="Copiar link público para compartir con jugadores"
