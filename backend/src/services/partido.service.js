@@ -1,6 +1,6 @@
 const prisma = require('../lib/prisma');
 const { parseSlotToDate } = require('./zona.service');
-const { getAhora } = require('../utils/dateUtils');
+const { requireTorneoFecha } = require('../utils/dateUtils');
 
 async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
   const partido = await prisma.partido.findUnique({
@@ -532,7 +532,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
     where: { id: organizadorId },
   });
 
-  const refFecha = torneo.fecha || getAhora();
+  const refFecha = requireTorneoFecha(torneo);
   let targetDate = null;
 
   if (fechaHora) {
