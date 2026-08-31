@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion } = require('./slots.service');
-const { getDiaCalendarioConTrasnoche, getAhora, isDebugNowActive } = require('../utils/dateUtils');
+const { getDiaCalendarioConTrasnoche, requireTorneoFecha } = require('../utils/dateUtils');
 const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -339,7 +339,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
           }
         }
 
-        const refFecha = torneo.fecha || getAhora();
+        const refFecha = requireTorneoFecha(torneo);
 
         // Obtener partidos que sí pudieron agendarse en la simulación
         const partidosConHorario = await tx.partido.findMany({
@@ -900,7 +900,7 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
   const organizador = await getOrganizador(organizadorId);
   const grilla = generarGrillaOrganizador(organizador);
   const cantCanchas = getCanchasEfectivas(torneo, organizador);
-  const refFecha = torneo.fecha || getAhora();
+  const refFecha = requireTorneoFecha(torneo);
 
   // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
   const partidosAsignados = await prisma.partido.findMany({
@@ -1035,7 +1035,7 @@ async function getCanchasDisponiblesTorneo(organizadorId, torneoId, ignorePartid
 
   const grilla = generarGrillaOrganizador(organizador);
   const cantCanchas = getCanchasEfectivas(torneo, organizador);
-  const refFecha = torneo.fecha || getAhora();
+  const refFecha = requireTorneoFecha(torneo);
 
   // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
   const partidosAsignados = await prisma.partido.findMany({
@@ -1223,7 +1223,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       });
     } else if (p.estado === 'EN_CURSO') {
       enCursoCount++;
-      const horaInicio = p.fechaHora || getAhora();
+      const horaInicio = p.fechaHora || new Date();
       const horaEstimadaFin = new Date(new Date(horaInicio).getTime() + DURACION_MS);
       const enCursoObj = {
         ...formatted,
@@ -1287,9 +1287,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         sabadoInicio: organizador.sabadoInicio,
         sabadoFin: organizador.sabadoFin,
       },
-      // simulatedNow es solo para trazabilidad visual en dev.
-      // El frontend NO debe usarlo para lógica condicional.
-      simulatedNow: isDebugNowActive() ? getAhora().toISOString() : null,
     },
     canchasActivas,
     canchasClub,
@@ -1381,7 +1378,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       where: { id: torneoId },
       data: {
         canchasDisponiblesOverride: overrideNum === canchasClub ? null : overrideNum,
-        overrideActivoDesde: overrideNum === canchasClub ? null : (torneo.overrideActivoDesde || getAhora()),
+        overrideActivoDesde: overrideNum === canchasClub ? null : (torneo.overrideActivoDesde || new Date()),
       },
     });
 
@@ -1417,7 +1414,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     throw error;
   }
 
-  const ahora = getAhora();
+  const ahora = new Date();
   const DURACION_MS = 75 * 60 * 1000;
 
   // 4. Cargar todos los partidos del torneo para armar las timelines
