@@ -430,20 +430,22 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 - **Alternativas que consideré y descarté:** Sobrecargar `PUT /api/partidos/:id/resultado` permitiendo enviar arrays vacíos de sets. Se descartó para no mezclar la semántica de carga de score con la operación en vivo de canchas.
 - **Resultado final:** Control de canchas ágil y en 1 clic, con test end-to-end automatizado que valida la transición de estado, el bloqueo de reducción de canchas si la cancha afectada está en juego y la reversión segura.
 
-### Mecanismo de Simulación de Fecha/Hora para Desarrollo (`DEBUG_NOW`) con Blindaje en Producción
-- **Problema o necesidad que motivó el trabajo:** Probar los flujos temporales del día del torneo (ej. viernes a la tarde, sábado a la mañana o trasnoche a la madrugada) dependía de la hora real del reloj de la computadora del desarrollador, dificultando la reproducción de escenarios realistas en horarios de oficina o fuera del fin de semana.
+### Desacople de Fechas y Determinismo: `torneo.fecha` como Única Fuente de Verdad
+- **Problema o necesidad que motivó el trabajo:** El backend utilizaba la fecha/hora actual del sistema (`new Date()` / `getAhora()` / `DEBUG_NOW`) para calcular los días de los slots (ej. "Viernes" o "Sábado"). Esto provocaba cálculos no deterministas que cambiaban según el día en que se ejecutaba el código, requería variables de entorno artificiales para desarrollo (`DEBUG_NOW`) y sufría de desfasajes de zona horaria (UTC vs GMT-3) al parsear fechas `"YYYY-MM-DD"`.
 - **Qué decidí y por qué:**
-  1. **Helper Centralizado `getAhora()`:** Creé `getAhora()` e `isDebugNowActive()` en `backend/src/utils/dateUtils.js`, reemplazando los `new Date()` dispersos en `organizador.service.js`, `zona.service.js` y `partido.service.js`.
-  2. **Blindaje Estricto 100% en Producción:** Se valida obligatoriamente `process.env.NODE_ENV !== 'production'`. Si el entorno es producción, cualquier valor en `DEBUG_NOW` es totalmente ignorado y siempre se retorna la fecha real del sistema.
-  3. **Visibilidad y Seguridad:** Banner de alerta amarillo en la consola durante el arranque (`index.js`) para evitar que el desarrollador olvide la variable encendida, sin spam de logs por invocación individual en runtime.
-- **Alternativas que consideré y descarté:** Modificar el reloj del sistema operativo o usar librerías globales pesadas de monkey-patching en runtime (ej. `timekeeper`). Se descartó para mantener una solución liviana, predecible y nativa sin dependencias externas.
-- **Resultado final:** Simulación instantánea vía `DEBUG_NOW="2026-08-28T15:00:00-03:00"` en `.env`, validada mediante tests automatizados de blindaje (`test-debug-now.js`).
+  1. **`torneo.fecha` como Única Fuente de Verdad:** Establecí que la fecha de inicio del torneo es el único ancla temporal. Los slots de Viernes y Sábado se calculan de forma puramente matemática a partir de `Torneo.fecha`, sin consultar el reloj del sistema.
+  2. **Eliminación Total de `DEBUG_NOW` y `getAhora()`:** Se eliminó la variable de entorno, el helper `getAhora()`, el script de prueba asociado y el banner de inicio de servidor.
+  3. **Helper `parseFechaLocal`:** Parsea strings `"YYYY-MM-DD"` y objetos `Date` al mediodía local (`12:00`), garantizando que `getDay()` devuelva siempre el día de la semana correcto sin importar el huso horario del servidor.
+  4. **Validación Centralizada `requireTorneoFecha`:** Helper único que valida que el torneo tenga fecha antes de operaciones de scheduling (`asignarHorariosAutomatico`, `preCheckInicio`, `asignarHorarioManual`, `getPartidosSinHorarioTorneo`, `getCanchasDisponiblesTorneo`), lanzando error HTTP 400 si falta.
+  5. **Frontend `TorneoEnVivo.jsx`:** Selección por defecto del tab de día simplificada para activar el primer día con partidos pendientes sin consultar `new Date()`.
+- **Alternativas que consideré y descarté:** Mantener `DEBUG_NOW` con soporte para más parámetros temporales. Se descartó porque agregaba complejidad accidental; el modelo de torneos de fin de semana no requiere conocer la hora real del sistema para armar y programar el fixture.
+- **Resultado final:** Fixture 100% reproducible y determinista, código más simple y limpio, tests unitarios automatizados (`test-date-parsing.js`) y suite completa de tests pasando en verde.
 
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 15 sesiones de trabajo, sumando un aproximado total de entre 40.5 y 46.5 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 16 sesiones de trabajo, sumando un aproximado total de entre 42.5 y 48.5 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -461,7 +463,8 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 15 s
 | **12** | ~2.5 a 3 horas | Carga de disponibilidad de alta precisión: Sliders de rango horario duales (15 min), retrocompatibilidad de datos, testeo End-to-End, acordeón colapsado y consistencia en tiempo real de sugerencias de horario (`★`). |
 | **13** | ~3.5 a 4 horas | Asistente de resolución en pre-check (`CruceResolver`): jerarquía por certeza, dirección (+/-), formato horas ($\ge 60\text{m}$), Deshacer atómico y acordeón inteligente por urgencia. Unificación post-inicio (`AsignarHorarioModal` + `rankingSlots`): Hero óptimo y 1-click directo a `Partido`. |
 | **14** | ~3.5 a 4 horas | Modo Día de Torneo (`/en-vivo`): reprogramación dinámica por reducción de canchas ("Modo Lluvia") con extensión de jornada, monitoreo visual de canchas, alerta de canchas fantasma, carga rápida de resultados (`ResultadoModal`), acordeón colapsable de partidos finalizados y polling con reset inteligente (`intervalRef`). |
-| **15** | ~3.5 a 4 horas | Refinamiento Día de Torneo y Resiliencia del Scheduler: Tabs dinámicos por día con trasnoche real, eliminación del efecto *whack-a-mole* en scheduler MCF (Prioridad Grupo 0 y flag `resolucionManual`), aislamiento por día lógico en Modo Lluvia (`dateUtils.js`), cambio rápido de estado a "EN_CURSO"/"PENDIENTE" en 1 clic (`PATCH /api/partidos/:id/estado`), y simulación de fecha/hora para testing en desarrollo (`DEBUG_NOW` y `getAhora()`) con blindaje estricto 100% en producción. |
-| **Total** | **~41 a 47 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual, pre-check transaccional, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día, brackets dinámicos, disponibilidad por sliders y diseño UI/UX premium. |
+| **15** | ~3.5 a 4 horas | Refinamiento Día de Torneo y Resiliencia del Scheduler: Tabs dinámicos por día con trasnoche real, eliminación del efecto *whack-a-mole* en scheduler MCF (Prioridad Grupo 0 y flag `resolucionManual`), aislamiento por día lógico en Modo Lluvia (`dateUtils.js`), y cambio rápido de estado a "EN_CURSO"/"PENDIENTE" en 1 clic (`PATCH /api/partidos/:id/estado`). |
+| **16** | ~2 horas | Desacople de Fechas y Determinismo: `torneo.fecha` como única fuente de verdad para slots, eliminación total de `DEBUG_NOW` y `getAhora()`, nuevo helper `parseFechaLocal` inmune a desfasajes UTC, validación centralizada `requireTorneoFecha` (HTTP 400), y simplificación de pestañas en vivo. |
+| **Total** | **~43 a 49 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual, pre-check transaccional, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día, brackets dinámicos, disponibilidad por sliders y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

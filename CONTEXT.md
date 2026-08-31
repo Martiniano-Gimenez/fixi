@@ -80,8 +80,7 @@ organizadores que hoy llevan todo en papel.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.
 - Fase eliminatoria por categoría con bracket SVG dinámico, manejo de BYEs, edición manual de cruces y propagación dinámica de orígenes.
-- Vista pública (`/torneo/:slug`) con selector interactivo de Categorías y polling en vivo cada 15s.
-- **Simulación de Fecha/Hora en Desarrollo (`DEBUG_NOW` y `getAhora`):** Mecanismo para testear escenarios temporales (ej. viernes 18:00 o trasnoche) en desarrollo local (`NODE_ENV !== 'production'`). Blindado al 100% para ignorarse por completo en producción retornando `new Date()` real, con banner de alerta en arranque del backend (`index.js`).
+- **Modelo de Fechas Determinista (`torneo.fecha` como Única Fuente de Verdad):** Los slots horarios de las parejas (ej. `"Viernes-18:00"`, `"Sabado-09:00"`) se convierten a fechas reales de forma 100% matemática y determinista a partir de `Torneo.fecha` (`parseFechaLocal` y `requireTorneoFecha`), sin depender del reloj del sistema (`new Date()`) ni requerir variables de simulación de fecha/hora.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo
