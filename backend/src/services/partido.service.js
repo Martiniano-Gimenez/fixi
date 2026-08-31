@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const { parseSlotToDate } = require('./zona.service');
+const { getAhora } = require('../utils/dateUtils');
 
 async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
   const partido = await prisma.partido.findUnique({
@@ -531,7 +532,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
     where: { id: organizadorId },
   });
 
-  const refFecha = torneo.fecha || new Date();
+  const refFecha = torneo.fecha || getAhora();
   let targetDate = null;
 
   if (fechaHora) {
@@ -615,6 +616,62 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
   };
 }
 
+/**
+ * Actualiza el estado de un partido entre PENDIENTE y EN_CURSO.
+ * No permite tocar partidos que ya están en FINALIZADO.
+ */
+async function updateEstado(organizadorId, partidoId, nuevoEstado) {
+  if (!['EN_CURSO', 'PENDIENTE'].includes(nuevoEstado)) {
+    const error = new Error('Estado inválido. Solo se permite "EN_CURSO" o "PENDIENTE".');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+
+  if (partido.estado === 'FINALIZADO') {
+    const error = new Error('No se puede modificar el estado de un partido finalizado desde aquí. Editá o borrá el resultado.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (nuevoEstado === 'EN_CURSO' && partido.estado !== 'PENDIENTE') {
+    const error = new Error('Solo se puede pasar a EN_CURSO un partido que esté PENDIENTE.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (nuevoEstado === 'PENDIENTE' && partido.estado !== 'EN_CURSO') {
+    const error = new Error('Solo se puede volver a PENDIENTE un partido que esté EN_CURSO.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let updated;
+  await prisma.$transaction(async (tx) => {
+    // Si se revierte a PENDIENTE, limpiamos cualquier set parcial cargado
+    if (nuevoEstado === 'PENDIENTE') {
+      await tx.setPartido.deleteMany({ where: { partidoId } });
+    }
+
+    updated = await tx.partido.update({
+      where: { id: partidoId },
+      data: { estado: nuevoEstado },
+      include: {
+        categoria: { select: { id: true, nombre: true } },
+        zona: { select: { id: true, nombre: true } },
+        pareja1: true,
+        pareja2: true,
+      },
+    });
+  });
+
+  return {
+    message: nuevoEstado === 'EN_CURSO' ? 'Partido marcado como En Juego.' : 'Partido devuelto a estado Pendiente.',
+    partido: updated,
+  };
+}
+
 module.exports = {
   cargarResultado,
   borrarResultado,
@@ -623,4 +680,5 @@ module.exports = {
   propagarEliminatoria,
   getPartidosByCategoria,
   asignarHorarioManual,
+  updateEstado,
 };

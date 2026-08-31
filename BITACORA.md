@@ -393,11 +393,57 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   - Esperar al ciclo natural de polling de 30s tras guardar: se descartó porque causaba una sensación de demora en el operador que necesitaba verificar que el partido ya no figuraba como pendiente.
 - **Resultado final:** Flujo operativo ágil donde el organizador puede controlar canchas, reprogramar por lluvia, consultar próximos turnos y cargar resultados en 1 clic desde una única pantalla móvil/desktop.
 
+### Tabs Dinámicos por Día Calendario con Trasnoche Real en "Próximos Partidos"
+- **Problema o necesidad que motivó el trabajo:** En torneos de fin de semana, la lista de "Próximos Partidos" mostraba todos los turnos del fin de semana (Viernes y Sábado) en una sola columna continua con scroll vertical excesivo. Además, los turnos de madrugada (ej. Sábado 01:00 AM) se separaban erróneamente en el tab del sábado si se usaba la fecha nativa de JavaScript, rompiendo la continuidad lógica de la jornada del viernes.
+- **Qué decidí y por qué:**
+  1. Diseñé un sistema de tabs dinámicos interactivos (`Viernes 28 | Sábado 29`) en `TorneoEnVivo.jsx`, calculando los días mediante `getDiaCalendarioConTrasnoche` y los horarios reales de apertura y cierre configurados por el club (`horariosClub`).
+  2. Implementé la selección inteligente por defecto: el componente detecta automáticamente el día actual de la jornada; si no hay partidos programados para hoy, activa por defecto el día más próximo con partidos pendientes.
+- **Alternativas que consideré y descarté:** Agrupar con separadores estáticos dentro de la misma lista. Se descartó porque no reducía la longitud de la pantalla en dispositivos móviles.
+- **Resultado final:** Navegación por jornadas limpia y contextual, con badge de conteo por día y soporte exacto para partidos de trasnoche.
+
+### Eliminación del Efecto "Whack-A-Mole" en Scheduler MCF (Prioridad Grupo 0 por Resolución Manual)
+- **Problema o necesidad que motivó el trabajo:** Al resolver un conflicto manualmente en `CruceResolver` (estirando la disponibilidad de una pareja con `setDisponibilidadDoble`), el pre-check global volvía a correr el scheduler completo desde cero. Al tener más slots disponibles, la pareja se volvía "más flexible" y el algoritmo *Most Constrained First* la degradaba a menor prioridad (`Grupo 2`). Otros partidos ocupaban el turno recién liberado, dejando la misma o más cantidad de partidos pendientes (efecto "golpea al topo").
+- **Qué decidí y por qué:**
+  1. **Schema Prisma:** Agregué el campo `resolucionManual Boolean @default(false)` en la entidad `Pareja`.
+  2. **Trazabilidad del Flag:** Al aplicar una resolución en `CruceResolver`, se marca `resolucionManual = true`. Al usar el botón de Deshacer (`removerDisponibilidadDoble`), se resetea a `false`. Al reiniciar una categoría a `BORRADOR` (`reiniciarCategoria`), se limpia en lote a `false`.
+  3. **Scheduler con Grupo 0 (Máxima Prioridad):** En `asignarHorariosAutomatico` (`zona.service.js`), creé el `Grupo 0` que procesa primero todos los partidos con parejas marcadas con `resolucionManual = true`, ordenados por heurística MCF (`numOptions`).
+- **Alternativas que consideré y descarté:** Congelar toda la grilla y hacer re-scheduling incremental. Se descartó por una complejidad algorítmica desproporcionada que impedía optimizar huecos globales.
+- **Resultado final:** Cada conflicto resuelto manualmente queda 100% protegido y garantizado en su slot, reduciendo de forma estrictamente monótona la cantidad de partidos pendientes tras cada acuerdo telefónico.
+
+### Aislamiento por Día Calendario en Modo Lluvia y Helper Centralizado (`dateUtils.js`)
+- **Problema o necesidad que motivó el trabajo:** `reprogramarPorReduccionCanchas` reprogramaba todos los partidos pendientes futuros sin límite superior. Si el modo lluvia se activaba un viernes, comprimía también los partidos del sábado, dejándolos atrapados en el pool reducido aunque el sábado hubiera dejado de llover.
+- **Qué decidí y por qué:**
+  1. Extraje y centralicé la función `getDiaCalendarioConTrasnoche` en `backend/src/utils/dateUtils.js` como única fuente de verdad para backend y frontend.
+  2. Modifiqué `reprogramarPorReduccionCanchas` para que solo reprograme los partidos `PENDIENTE` que pertenezcan al mismo día calendario lógico que `overrideActivoDesde`, tratando a los partidos de otros días como ocupación fija intocable.
+  3. Utilicé `dayLimitMs` provisto por el helper para delimitar la búsqueda de slots durante la trasnoche sin cortar a la medianoche pero sin desbordar al día siguiente.
+- **Alternativas que consideré y descarté:** Mantener cálculos ad-hoc dispersos en `organizador.service.js`. Se descartó para evitar desincronizaciones de reglas de trasnoche entre módulos.
+- **Resultado final:** Un evento de lluvia afecta estricta y únicamente a los partidos del día en que se declaró, con tests automatizados pasando en verde incluso para casos límites de madrugada.
+
+### Cambio Rápido de Estado a "EN_CURSO" y "PENDIENTE" (1-Click en Vivo)
+- **Problema o necesidad que motivó el trabajo:** Para que un partido pasara a estado `EN_CURSO`, el sistema requería obligatoriamente cargar al menos un set parcial desde `ResultadoModal`. En la práctica, los organizadores anotan los resultados al finalizar el partido y necesitaban marcar que una cancha entró en juego con un solo toque al ver entrar a los jugadores.
+- **Qué decidí y por qué:**
+  1. **Endpoint Atómico Dedicado:** Creé `PATCH /api/partidos/:id/estado` en `partido.service.js` que acepta `{ estado: 'EN_CURSO' | 'PENDIENTE' }`, validando estrictamente las transiciones permitidas y bloqueando modificaciones sobre partidos `FINALIZADO`. Si se revierte a `PENDIENTE`, elimina sets parciales residuales.
+  2. **Interactividad en `TorneoEnVivo.jsx`:**
+     - En cada tarjeta de "Próximos Partidos", agregué un botón con ícono de `Play` (`▶`) disponible libremente para iniciar el partido al instante.
+     - En "Partidos en Juego", agregué un botón `Revertir` (`RotateCcw`) para devolverlo a `PENDIENTE` ante clics accidentales.
+     - Disparo inmediato de re-fetch (`fetchAndResetPolling`), actualizando la grilla superior de canchas a `EN JUEGO` y los contadores en tiempo real.
+- **Alternativas que consideré y descarté:** Sobrecargar `PUT /api/partidos/:id/resultado` permitiendo enviar arrays vacíos de sets. Se descartó para no mezclar la semántica de carga de score con la operación en vivo de canchas.
+- **Resultado final:** Control de canchas ágil y en 1 clic, con test end-to-end automatizado que valida la transición de estado, el bloqueo de reducción de canchas si la cancha afectada está en juego y la reversión segura.
+
+### Mecanismo de Simulación de Fecha/Hora para Desarrollo (`DEBUG_NOW`) con Blindaje en Producción
+- **Problema o necesidad que motivó el trabajo:** Probar los flujos temporales del día del torneo (ej. viernes a la tarde, sábado a la mañana o trasnoche a la madrugada) dependía de la hora real del reloj de la computadora del desarrollador, dificultando la reproducción de escenarios realistas en horarios de oficina o fuera del fin de semana.
+- **Qué decidí y por qué:**
+  1. **Helper Centralizado `getAhora()`:** Creé `getAhora()` e `isDebugNowActive()` en `backend/src/utils/dateUtils.js`, reemplazando los `new Date()` dispersos en `organizador.service.js`, `zona.service.js` y `partido.service.js`.
+  2. **Blindaje Estricto 100% en Producción:** Se valida obligatoriamente `process.env.NODE_ENV !== 'production'`. Si el entorno es producción, cualquier valor en `DEBUG_NOW` es totalmente ignorado y siempre se retorna la fecha real del sistema.
+  3. **Visibilidad y Seguridad:** Banner de alerta amarillo en la consola durante el arranque (`index.js`) para evitar que el desarrollador olvide la variable encendida, sin spam de logs por invocación individual en runtime.
+- **Alternativas que consideré y descarté:** Modificar el reloj del sistema operativo o usar librerías globales pesadas de monkey-patching en runtime (ej. `timekeeper`). Se descartó para mantener una solución liviana, predecible y nativa sin dependencias externas.
+- **Resultado final:** Simulación instantánea vía `DEBUG_NOW="2026-08-28T15:00:00-03:00"` en `.env`, validada mediante tests automatizados de blindaje (`test-debug-now.js`).
+
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 14 sesiones de trabajo, sumando un aproximado total de entre 37 y 43 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 15 sesiones de trabajo, sumando un aproximado total de entre 40.5 y 46.5 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -415,6 +461,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 14 s
 | **12** | ~2.5 a 3 horas | Carga de disponibilidad de alta precisión: Sliders de rango horario duales (15 min), retrocompatibilidad de datos, testeo End-to-End, acordeón colapsado y consistencia en tiempo real de sugerencias de horario (`★`). |
 | **13** | ~3.5 a 4 horas | Asistente de resolución en pre-check (`CruceResolver`): jerarquía por certeza, dirección (+/-), formato horas ($\ge 60\text{m}$), Deshacer atómico y acordeón inteligente por urgencia. Unificación post-inicio (`AsignarHorarioModal` + `rankingSlots`): Hero óptimo y 1-click directo a `Partido`. |
 | **14** | ~3.5 a 4 horas | Modo Día de Torneo (`/en-vivo`): reprogramación dinámica por reducción de canchas ("Modo Lluvia") con extensión de jornada, monitoreo visual de canchas, alerta de canchas fantasma, carga rápida de resultados (`ResultadoModal`), acordeón colapsable de partidos finalizados y polling con reset inteligente (`intervalRef`). |
-| **Total** | **~37.5 a 43 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en dos pasadas, pre-check transaccional, asistente de resolución de cruces, modo día de torneo con reprogramación por lluvia, brackets dinámicos, disponibilidad por sliders y diseño UI/UX premium. |
+| **15** | ~3.5 a 4 horas | Refinamiento Día de Torneo y Resiliencia del Scheduler: Tabs dinámicos por día con trasnoche real, eliminación del efecto *whack-a-mole* en scheduler MCF (Prioridad Grupo 0 y flag `resolucionManual`), aislamiento por día lógico en Modo Lluvia (`dateUtils.js`), cambio rápido de estado a "EN_CURSO"/"PENDIENTE" en 1 clic (`PATCH /api/partidos/:id/estado`), y simulación de fecha/hora para testing en desarrollo (`DEBUG_NOW` y `getAhora()`) con blindaje estricto 100% en producción. |
+| **Total** | **~41 a 47 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual, pre-check transaccional, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día, brackets dinámicos, disponibilidad por sliders y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

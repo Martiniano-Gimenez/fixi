@@ -16,6 +16,8 @@ import {
   ExternalLink,
   ClipboardList,
   Trophy,
+  Play,
+  RotateCcw,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -43,6 +45,9 @@ export default function TorneoEnVivo() {
   // Feedback post-reprogramación
   const [feedbackReprogramacion, setFeedbackReprogramacion] = useState(null);
   const [feedbackExpanded, setFeedbackExpanded] = useState(true);
+
+  // Estado de carga por partido al alternar estado
+  const [updatingPartidoId, setUpdatingPartidoId] = useState(null);
 
   // Toggle de canchas fantasma
   const [fantasmaExpanded, setFantasmaExpanded] = useState(true);
@@ -145,6 +150,20 @@ export default function TorneoEnVivo() {
       setConfirmRestaurarOpen(false);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Manejar cambio rápido de estado (PENDIENTE <-> EN_CURSO)
+  const handleCambiarEstado = async (partidoId, nuevoEstado) => {
+    setUpdatingPartidoId(partidoId);
+    setError(null);
+    try {
+      await api.patch(`/partidos/${partidoId}/estado`, { estado: nuevoEstado });
+      await fetchAndResetPolling();
+    } catch (err) {
+      setError(err.message || 'Error al actualizar el estado del partido');
+    } finally {
+      setUpdatingPartidoId(null);
     }
   };
 
@@ -1165,27 +1184,53 @@ export default function TorneoEnVivo() {
                       <span>
                         Inicio: {new Date(p.horaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
-                        style={{
-                          background: 'rgba(0, 208, 132, 0.15)',
-                          border: '1px solid rgba(0, 208, 132, 0.35)',
-                          borderRadius: 'var(--radius-sm)',
-                          color: 'var(--color-primary)',
-                          cursor: 'pointer',
-                          padding: '0.35rem 0.75rem',
-                          fontSize: 'var(--font-size-xs)',
-                          fontWeight: 600,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          transition: 'var(--transition-fast)',
-                        }}
-                      >
-                        <ClipboardList size={14} />
-                        {sets.length > 0 ? 'Actualizar Resultado' : 'Cargar Resultado'}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleCambiarEstado(p.id, 'PENDIENTE')}
+                          disabled={updatingPartidoId === p.id}
+                          title="Revertir a Pendiente (sacar de la cancha)"
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--color-text-secondary)',
+                            cursor: updatingPartidoId === p.id ? 'not-allowed' : 'pointer',
+                            padding: '0.35rem 0.6rem',
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            transition: 'var(--transition-fast)',
+                            opacity: updatingPartidoId === p.id ? 0.6 : 1,
+                          }}
+                        >
+                          <RotateCcw size={13} />
+                          Revertir
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
+                          style={{
+                            background: 'rgba(0, 208, 132, 0.15)',
+                            border: '1px solid rgba(0, 208, 132, 0.35)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: 'var(--color-primary)',
+                            cursor: 'pointer',
+                            padding: '0.35rem 0.75rem',
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            transition: 'var(--transition-fast)',
+                          }}
+                        >
+                          <ClipboardList size={14} />
+                          {sets.length > 0 ? 'Actualizar Resultado' : 'Cargar Resultado'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1331,16 +1376,42 @@ export default function TorneoEnVivo() {
                       </div>
                     </div>
 
+                    {/* Botón iniciar partido (Marcar En Juego) */}
+                    <button
+                      type="button"
+                      onClick={() => handleCambiarEstado(p.id, 'EN_CURSO')}
+                      disabled={updatingPartidoId === p.id}
+                      title="Marcar como En Juego (ingresó a la cancha)"
+                      style={{
+                        background: 'rgba(0, 208, 132, 0.15)',
+                        border: '1px solid rgba(0, 208, 132, 0.4)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--color-primary)',
+                        cursor: updatingPartidoId === p.id ? 'not-allowed' : 'pointer',
+                        padding: '0.4rem 0.55rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.25rem',
+                        fontSize: 'var(--font-size-xs)',
+                        fontWeight: 700,
+                        transition: 'var(--transition-fast)',
+                        opacity: updatingPartidoId === p.id ? 0.6 : 1,
+                      }}
+                    >
+                      <Play size={14} fill="currentColor" />
+                    </button>
+
                     {/* Botón cargar resultado inline */}
                     <button
                       type="button"
                       onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
                       title="Cargar resultado"
                       style={{
-                        background: 'rgba(0, 208, 132, 0.12)',
-                        border: '1px solid rgba(0, 208, 132, 0.3)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid var(--color-border)',
                         borderRadius: 'var(--radius-sm)',
-                        color: 'var(--color-primary)',
+                        color: 'var(--color-text-secondary)',
                         cursor: 'pointer',
                         padding: '0.4rem',
                         display: 'flex',

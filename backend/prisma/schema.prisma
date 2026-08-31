@@ -61,11 +61,12 @@ model Categoria {
 }
 
 model Pareja {
-  id          String @id @default(uuid())
-  categoriaId String
-  jugador1    String
-  jugador2    String
-  orden       Int    @default(0)
+  id               String @id @default(uuid())
+  categoriaId      String
+  jugador1         String
+  jugador2         String
+  orden            Int    @default(0)
+  resolucionManual Boolean @default(false)
 
   categoria          Categoria    @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
   zonaParejas        ZonaPareja[]

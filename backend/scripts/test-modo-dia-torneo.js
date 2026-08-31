@@ -6,6 +6,7 @@ const prisma = new PrismaClient();
 const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
 const torneoService = require('../src/services/torneo.service');
+const partidoService = require('../src/services/partido.service');
 
 async function testModoDiaTorneo() {
   console.log('🧪 Iniciando test automatizado de Modo Día de Torneo...');
@@ -38,16 +39,20 @@ async function testModoDiaTorneo() {
       email: 'piloto@padel.com',
       passwordHash,
       cantidadCanchas: 6,
-      viernesInicio: '13:00',
-      viernesFin: '23:00',
+      viernesInicio: '18:00',
+      viernesFin: '02:00',
       sabadoInicio: '09:00',
       sabadoFin: '22:00',
     },
   });
   console.log('✅ Organizador creado con 6 canchas');
 
-  // 3. Crear Torneo
-  const fechaTorneo = new Date(Date.now() + 24 * 60 * 60 * 1000); // Mañana
+  // 3. Crear Torneo (Próximo viernes desde hoy)
+  const now = new Date();
+  let offsetToFriday = 5 - now.getDay();
+  if (offsetToFriday < 0) offsetToFriday += 7;
+  
+  const fechaTorneo = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetToFriday, 12, 0, 0);
   const torneo = await torneoService.createTorneo(organizador.id, {
     nombre: 'Torneo Piloto Lluvia',
     fecha: fechaTorneo.toISOString(),
@@ -106,17 +111,27 @@ async function testModoDiaTorneo() {
 
   await prisma.partido.update({
     where: { id: pEnCurso.id },
-    data: { estado: 'EN_CURSO', canchaNumero: 1 },
+    data: { canchaNumero: 1 },
   });
+  // Usar el nuevo servicio updateEstado para marcar EN_CURSO
+  await partidoService.updateEstado(organizador.id, pEnCurso.id, 'EN_CURSO');
 
   await prisma.partido.update({
     where: { id: pFinalizado.id },
     data: { estado: 'FINALIZADO', canchaNumero: 2 },
   });
-  console.log('✅ Partidos configurados: 1 EN_CURSO en Cancha 1, 1 FINALIZADO en Cancha 2');
+  console.log('✅ Partidos configurados: 1 EN_CURSO (vía updateEstado) en Cancha 1, 1 FINALIZADO en Cancha 2');
 
   // 8. Test Reducción a 4 canchas (MODO LLUVIA)
   console.log('🌧️ Ejecutando reducción de canchas a 4 (Modo Lluvia)...');
+  
+  // MOCK: Para que el test funcione sin importar la hora real a la que se corre, 
+  // forzamos que el overrideActivoDesde comience exactamente en el día lógico de los partidos.
+  await prisma.torneo.update({
+    where: { id: torneo.id },
+    data: { overrideActivoDesde: pEnCurso.fechaHora },
+  });
+
   const resReduccion = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4);
   console.log(`✅ Resultado reprogramación: ${resReduccion.message}`);
   console.log(`   - Partidos reprogramados: ${resReduccion.reprogramacion.partidosReprogramados}`);
@@ -155,11 +170,12 @@ async function testModoDiaTorneo() {
   }
   console.log('✅ Verificado: Partidos EN_CURSO y FINALIZADO se mantuvieron intactos');
 
-  // 9. Test de Bloqueo: Si ponemos un partido EN_CURSO en Cancha 4 e intentamos reducir a 3
+  // 9. Test de Bloqueo: Si ponemos un partido EN_CURSO en Cancha 4 (vía updateEstado) e intentamos reducir a 3
   await prisma.partido.update({
     where: { id: partidosCat4ta[2].id },
-    data: { estado: 'EN_CURSO', canchaNumero: 4 },
+    data: { canchaNumero: 4 },
   });
+  await partidoService.updateEstado(organizador.id, partidosCat4ta[2].id, 'EN_CURSO');
 
   console.log('🔒 Probando bloqueo al reducir cuando hay partido EN_CURSO en cancha afectada...');
   try {
@@ -173,11 +189,25 @@ async function testModoDiaTorneo() {
     }
   }
 
-  // Liberar el partido para seguir
-  await prisma.partido.update({
-    where: { id: partidosCat4ta[2].id },
-    data: { estado: 'PENDIENTE', canchaNumero: 4 },
-  });
+  // 9b. Test de Revertir a PENDIENTE (vía updateEstado)
+  console.log('🔄 Probando reversión de estado EN_CURSO a PENDIENTE...');
+  const resRevertir = await partidoService.updateEstado(organizador.id, partidosCat4ta[2].id, 'PENDIENTE');
+  if (resRevertir.partido.estado !== 'PENDIENTE') {
+    throw new Error('FALLÓ EL TEST: No se pudo revertir el partido a PENDIENTE');
+  }
+  console.log(`✅ Reversión exitosa: ${resRevertir.message}`);
+
+  // 9c. Test Validación: No permitir updateEstado en partido FINALIZADO
+  try {
+    await partidoService.updateEstado(organizador.id, pFinalizado.id, 'EN_CURSO');
+    throw new Error('FALLÓ EL TEST: Debería haber bloqueado modificar un partido FINALIZADO');
+  } catch (err) {
+    if (err.statusCode === 400 && err.message.includes('No se puede modificar el estado de un partido finalizado')) {
+      console.log(`✅ Validación partido FINALIZADO verificada: "${err.message}"`);
+    } else {
+      throw err;
+    }
+  }
 
   // 10. Test Validaciones: Override 0 y Override > 6
   try {
@@ -201,6 +231,50 @@ async function testModoDiaTorneo() {
     throw new Error('Error al restaurar canchas');
   }
   console.log(`✅ Restauración exitosa: ${resRestaurar.message}`);
+
+  // =======================================================================
+  // 12. Test Límite Real: Activar Modo Lluvia en ventana de trasnoche
+  // =======================================================================
+  console.log('\n🌙 Probando Modo Lluvia en horario de trasnoche...');
+  // Tomamos un partido pendiente cualquiera y lo forzamos a estar en horario de trasnoche (ej. Sábado 01:00 AM, lógicamente Viernes)
+  const pTrasnoche = partidosCat4ta[3]; 
+  const dTrasnoche = new Date(fechaTorneo);
+  dTrasnoche.setDate(dTrasnoche.getDate() + 1); // Sábado
+  dTrasnoche.setHours(1, 0, 0, 0); // 01:00 AM del Sábado
+
+  await prisma.partido.update({
+    where: { id: pTrasnoche.id },
+    data: { 
+      estado: 'PENDIENTE', 
+      canchaNumero: 5, 
+      fechaHora: dTrasnoche,
+      sinHorarioAsignado: false
+    },
+  });
+
+  // Simulamos activar lluvia a las 23:30 del Viernes
+  const dLluviaTrasnoche = new Date(fechaTorneo);
+  dLluviaTrasnoche.setHours(23, 30, 0, 0);
+
+  await prisma.torneo.update({
+    where: { id: torneo.id },
+    data: { overrideActivoDesde: dLluviaTrasnoche },
+  });
+
+  console.log('🌧️ Ejecutando reducción de canchas a 4 (Modo Lluvia en Trasnoche)...');
+  const resTrasnoche = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4);
+  console.log(`✅ Resultado reprogramación trasnoche: ${resTrasnoche.message}`);
+  
+  if (resTrasnoche.reprogramacion.partidosReprogramados === 0) {
+    throw new Error('FALLÓ EL TEST: El partido de trasnoche (Sábado 01:00 AM) no fue reprogramado a pesar de pertenecer lógicamente al Viernes.');
+  }
+
+  const pTrasnochePost = await prisma.partido.findUnique({ where: { id: pTrasnoche.id } });
+  if (pTrasnochePost.canchaNumero > 4) {
+    throw new Error(`FALLÓ EL TEST: El partido de trasnoche quedó en cancha inhabilitada: ${pTrasnochePost.canchaNumero}`);
+  }
+  console.log('✅ Partido de trasnoche (Sábado 01:00) fue correctamente reprogramado al reducir canchas!');
+
 
   console.log('\n🎉 TODOS LOS TESTS DE MODO DÍA DE TORNEO PASARON EXITOSAMENTE!');
 }

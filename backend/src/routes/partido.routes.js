@@ -16,4 +16,7 @@ router.put('/:id/asignar-horario-manual', partidoController.asignarHorarioManual
 // Edición de brackets eliminatorios bracket
 router.patch('/:id/bracket', partidoController.updateBracketMatch);
 
+// Cambio rápido de estado (PENDIENTE <-> EN_CURSO)
+router.patch('/:id/estado', partidoController.updateEstado);
+
 module.exports = router;

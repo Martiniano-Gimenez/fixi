@@ -140,6 +140,12 @@ async function setDisponibilidadDoble(parejaId1, slotsToAdd1 = [], parejaId2, sl
         })),
       });
     }
+
+    // Set resolucionManual = true
+    await tx.pareja.updateMany({
+      where: { id: { in: [parejaId1, parejaId2] } },
+      data: { resolucionManual: true },
+    });
   });
 
   return {
@@ -175,6 +181,12 @@ async function removerDisponibilidadDoble(parejaId1, slotsToRemove1 = [], pareja
         },
       });
     }
+
+    // Unset resolucionManual
+    await tx.pareja.updateMany({
+      where: { id: { in: [parejaId1, parejaId2] } },
+      data: { resolucionManual: false },
+    });
   });
 
   return { success: true };

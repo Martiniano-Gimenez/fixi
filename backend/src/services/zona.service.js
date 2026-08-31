@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 const { calcularCompatibilidad, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
+const { getAhora } = require('../utils/dateUtils');
 
 // Fisher-Yates shuffle
 function shuffleArray(array) {
@@ -409,7 +410,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
 /**
  * Calcula la próxima fecha de un día ("Viernes" o "Sabado") a partir de una fecha base
  */
-function proximaFechaPorDia(dia, fechaBase = new Date()) {
+function proximaFechaPorDia(dia, fechaBase = getAhora()) {
   const targetDia = dia === 'Viernes' ? 5 : 6;
   const hoy = new Date(fechaBase);
   const diaActual = hoy.getDay();
@@ -424,7 +425,7 @@ function proximaFechaPorDia(dia, fechaBase = new Date()) {
 /**
  * Convierte un slotId ("Viernes-18:00") a una fecha completa DateTime
  */
-function parseSlotToDate(slotId, fechaBase = new Date()) {
+function parseSlotToDate(slotId, fechaBase = getAhora()) {
   if (!slotId) return null;
   const [dia, horaStr] = slotId.split('-');
   if (!dia || !horaStr) return null;
@@ -604,7 +605,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
   const partidosAAsignar = partidos.filter((p) => !yaAgendadosIds.has(p.id));
 
-  const refFecha = categorias[0]?.torneo?.fecha || new Date();
+  const refFecha = categorias[0]?.torneo?.fecha || getAhora();
   const baseFriday = proximaFechaPorDia('Viernes', refFecha);
   const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
 
@@ -629,6 +630,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   const hasSaturday = Boolean(organizador.sabadoInicio && organizador.sabadoFin && satDayEndMs > satDayStartMs);
 
   // 4. Preprocesar y clasificar partidos en grupos de prioridad (MCF Global)
+  const grupo0 = []; // Máxima prioridad (resolución manual)
   const grupo1 = [];
   const grupo2 = [];
 
@@ -663,14 +665,17 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
     const item = { partido, slotsComunes, sharedWindows, numOptions: sharedWindows.length };
 
-    if (slotsComunes.length === 1 || (slotsComunes.length === 0 && sharedWindows.length === 1)) {
+    if (partido.pareja1?.resolucionManual || partido.pareja2?.resolucionManual) {
+      grupo0.push(item);
+    } else if (slotsComunes.length === 1 || (slotsComunes.length === 0 && sharedWindows.length === 1)) {
       grupo1.push(item);
     } else {
       grupo2.push(item);
     }
   }
 
-  // Ordenar grupo2 por menor cantidad de opciones
+  // Ordenar grupo0 y grupo2 por menor cantidad de opciones (Most Constrained First)
+  grupo0.sort((a, b) => a.numOptions - b.numOptions);
   grupo2.sort((a, b) => a.numOptions - b.numOptions);
 
   const updatesMap = new Map();
@@ -795,6 +800,22 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
       }
     }
     return false;
+  }
+
+  // ================= PASADA 0 (Alta Prioridad - Resolución Manual) =================
+  for (const { partido, slotsComunes, sharedWindows } of grupo0) {
+    let asignado = false;
+    for (const slotId of slotsComunes) {
+      if (tryAssignSlotWithGap(partido, slotId, sharedWindows)) {
+        asignado = true;
+        break;
+      }
+    }
+    if (!asignado) {
+      if (!tryAssignContinuousWindows(partido, sharedWindows)) {
+        updatesMap.set(partido.id, { id: partido.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
+      }
+    }
   }
 
   // ================= PASADA 1 =================

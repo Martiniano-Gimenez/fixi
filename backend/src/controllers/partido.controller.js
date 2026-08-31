@@ -66,6 +66,16 @@ async function asignarHorarioManual(req, res, next) {
   }
 }
 
+async function updateEstado(req, res, next) {
+  try {
+    const { estado } = req.body;
+    const result = await partidoService.updateEstado(getOrgId(req), req.params.id, estado);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   cargarResultado,
   borrarResultado,
@@ -73,4 +83,5 @@ module.exports = {
   getPartidosByCategoria,
   updateBracketMatch,
   asignarHorarioManual,
+  updateEstado,
 };

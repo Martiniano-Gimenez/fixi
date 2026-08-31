@@ -161,6 +161,11 @@ async function reiniciarCategoria(organizadorId, categoriaId) {
       where: { id: categoria.id },
       data: { estado: 'BORRADOR' },
     });
+
+    await tx.pareja.updateMany({
+      where: { categoriaId: categoria.id },
+      data: { resolucionManual: false },
+    });
   });
 
   return { message: 'Categoría reiniciada con éxito' };

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion } = require('./slots.service');
+const { getDiaCalendarioConTrasnoche, getAhora, isDebugNowActive } = require('../utils/dateUtils');
 const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -338,7 +339,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
           }
         }
 
-        const refFecha = torneo.fecha || new Date();
+        const refFecha = torneo.fecha || getAhora();
 
         // Obtener partidos que sí pudieron agendarse en la simulación
         const partidosConHorario = await tx.partido.findMany({
@@ -899,7 +900,7 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
   const organizador = await getOrganizador(organizadorId);
   const grilla = generarGrillaOrganizador(organizador);
   const cantCanchas = getCanchasEfectivas(torneo, organizador);
-  const refFecha = torneo.fecha || new Date();
+  const refFecha = torneo.fecha || getAhora();
 
   // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
   const partidosAsignados = await prisma.partido.findMany({
@@ -1034,7 +1035,7 @@ async function getCanchasDisponiblesTorneo(organizadorId, torneoId, ignorePartid
 
   const grilla = generarGrillaOrganizador(organizador);
   const cantCanchas = getCanchasEfectivas(torneo, organizador);
-  const refFecha = torneo.fecha || new Date();
+  const refFecha = torneo.fecha || getAhora();
 
   // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
   const partidosAsignados = await prisma.partido.findMany({
@@ -1222,7 +1223,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       });
     } else if (p.estado === 'EN_CURSO') {
       enCursoCount++;
-      const horaInicio = p.fechaHora || new Date();
+      const horaInicio = p.fechaHora || getAhora();
       const horaEstimadaFin = new Date(new Date(horaInicio).getTime() + DURACION_MS);
       const enCursoObj = {
         ...formatted,
@@ -1286,6 +1287,9 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         sabadoInicio: organizador.sabadoInicio,
         sabadoFin: organizador.sabadoFin,
       },
+      // simulatedNow es solo para trazabilidad visual en dev.
+      // El frontend NO debe usarlo para lógica condicional.
+      simulatedNow: isDebugNowActive() ? getAhora().toISOString() : null,
     },
     canchasActivas,
     canchasClub,
@@ -1377,7 +1381,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       where: { id: torneoId },
       data: {
         canchasDisponiblesOverride: overrideNum === canchasClub ? null : overrideNum,
-        overrideActivoDesde: overrideNum === canchasClub ? null : (torneo.overrideActivoDesde || new Date()),
+        overrideActivoDesde: overrideNum === canchasClub ? null : (torneo.overrideActivoDesde || getAhora()),
       },
     });
 
@@ -1413,7 +1417,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     throw error;
   }
 
-  const ahora = new Date();
+  const ahora = getAhora();
   const DURACION_MS = 75 * 60 * 1000;
 
   // 4. Cargar todos los partidos del torneo para armar las timelines
@@ -1471,6 +1475,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   }
 
   const partidosAReprogramar = [];
+  const fechaBaseLluvia = torneo.overrideActivoDesde || ahora;
+  const diaLluviaInfo = getDiaCalendarioConTrasnoche(fechaBaseLluvia, organizador);
 
   for (const p of todosLosPartidos) {
     if (p.estado === 'EN_CURSO' || p.estado === 'FINALIZADO') {
@@ -1481,13 +1487,19 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     } else if (p.estado === 'PENDIENTE') {
       if (p.fechaHora && p.canchaNumero && !p.sinHorarioAsignado) {
         const pDate = new Date(p.fechaHora);
+        const pDiaInfo = getDiaCalendarioConTrasnoche(pDate, organizador);
+
         if (pDate.getTime() < ahora.getTime()) {
           // Partido pendiente pasado (anterior al override): Ocupación fija (no se reprograma)
           const startMs = pDate.getTime();
           addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, startMs + DURACION_MS);
-        } else {
-          // Partido pendiente futuro: A reprogramar
+        } else if (pDiaInfo && diaLluviaInfo && pDiaInfo.key === diaLluviaInfo.key) {
+          // Partido pendiente futuro del mismo día calendario: A reprogramar
           partidosAReprogramar.push(p);
+        } else {
+          // Partido futuro pero de OTRO día calendario: Ocupación fija (no se toca)
+          const startMs = pDate.getTime();
+          addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, startMs + DURACION_MS);
         }
       }
     }
@@ -1518,48 +1530,13 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
 
   // 6. Reprogramar secuencialmente cada partido
   for (const partido of partidosAReprogramar) {
-    const origDate = new Date(partido.fechaHora);
-    const origStartMs = origDate.getTime();
+    const origStartMs = new Date(partido.fechaHora).getTime();
     const origCancha = partido.canchaNumero;
 
     // Calcular rango del día calendario de este partido
-    // El límite respeta el inicio de la jornada siguiente (ej. sabadoInicio) o 06:00 AM del día siguiente
-    const diaSemana = origDate.getDay();
-    const origHoras = origDate.getHours();
-    const origMinutos = origDate.getMinutes();
-    const origTimeMin = origHoras * 60 + origMinutos;
-
-    let isViernes = false;
-    if (diaSemana === 5) {
-      isViernes = true;
-    } else if (diaSemana === 6) {
-      const [sh, sm] = (organizador.sabadoInicio || '06:00').split(':').map(Number);
-      const sabInicioMin = (isNaN(sh) ? 6 : sh) * 60 + (isNaN(sm) ? 0 : sm);
-      if (origTimeMin < sabInicioMin) {
-        isViernes = true;
-      }
-    }
-
-    let dayLimitMs;
-    if (isViernes) {
-      // El viernes se extiende hasta el inicio de la jornada del sábado
-      const sabInicioStr = organizador.sabadoInicio || '06:00';
-      const [sh, sm] = sabInicioStr.split(':').map(Number);
-      const sabDate = new Date(origDate);
-      if (diaSemana === 5) sabDate.setDate(sabDate.getDate() + 1);
-      sabDate.setHours(isNaN(sh) ? 6 : sh, isNaN(sm) ? 0 : sm, 0, 0);
-      dayLimitMs = sabDate.getTime();
-    } else {
-      // Sábado o cualquier otro día: hasta las 06:00 AM del día siguiente
-      const nextDayDate = new Date(origDate);
-      if (diaSemana === 6 || origHoras >= 6) {
-        nextDayDate.setDate(nextDayDate.getDate() + 1);
-      }
-      nextDayDate.setHours(6, 0, 0, 0);
-      dayLimitMs = nextDayDate.getTime();
-    }
-
-    const dayLimit = new Date(dayLimitMs);
+    const origDate = new Date(origStartMs);
+    const origDiaInfo = getDiaCalendarioConTrasnoche(origDate, organizador);
+    const dayLimit = new Date(origDiaInfo.dayLimitMs);
 
     // Punto de partida: el mayor entre ahora (alineado a 15min) y el horario original
     let startSearchMs = Math.max(ahora.getTime(), origStartMs);

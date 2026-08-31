@@ -56,7 +56,15 @@ if (process.env.NODE_ENV === 'production') {
 // ─── Error handler (siempre al final) ────────────────────
 app.use(errorHandler);
 
+const { isDebugNowActive, getAhora } = require('./utils/dateUtils');
+
 // ─── Iniciar servidor ────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🏸 Backend corriendo en http://localhost:${PORT}`);
+  if (isDebugNowActive()) {
+    console.log('\x1b[43m\x1b[30m%s\x1b[0m', '                                                                 ');
+    console.log('\x1b[43m\x1b[30m%s\x1b[0m', ` ⚠️  [DEBUG_NOW ACTIVO] Simulando fecha/hora: ${getAhora().toISOString()} `);
+    console.log('\x1b[43m\x1b[30m%s\x1b[0m', `     (Definida en .env como "${process.env.DEBUG_NOW}")                   `);
+    console.log('\x1b[43m\x1b[30m%s\x1b[0m', '                                                                 ');
+  }
 });
