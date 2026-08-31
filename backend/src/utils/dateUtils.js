@@ -1,4 +1,61 @@
 /**
+ * Parsea una fecha (string 'YYYY-MM-DD', ISO string o Date) asegurando
+ * que se interprete en el horario local (mediodía) sin desfasaje por zona horaria UTC.
+ * @param {string | Date} fecha
+ * @returns {Date | null}
+ */
+function parseFechaLocal(fecha) {
+  if (!fecha) return null;
+  if (fecha instanceof Date) {
+    if (isNaN(fecha.getTime())) return null;
+    const y = fecha.getFullYear();
+    const m = fecha.getMonth();
+    const d = fecha.getDate();
+    return new Date(y, m, d, 12, 0, 0);
+  }
+  if (typeof fecha === 'string') {
+    const trimmed = fecha.trim();
+    if (!trimmed) return null;
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const y = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10) - 1;
+      const d = parseInt(match[3], 10);
+      return new Date(y, m, d, 12, 0, 0);
+    }
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      const y = parsed.getFullYear();
+      const m = parsed.getMonth();
+      const d = parsed.getDate();
+      return new Date(y, m, d, 12, 0, 0);
+    }
+  }
+  return null;
+}
+
+/**
+ * Valida que el torneo tenga una fecha definida y la devuelve parseada en hora local.
+ * Lanza un error HTTP 400 si la fecha no está presente.
+ * @param {Object} torneo
+ * @returns {Date}
+ */
+function requireTorneoFecha(torneo) {
+  if (!torneo || !torneo.fecha) {
+    const error = new Error('El torneo debe tener una fecha definida para asignar horarios.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const parsed = parseFechaLocal(torneo.fecha);
+  if (!parsed) {
+    const error = new Error('La fecha del torneo no es válida.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed;
+}
+
+/**
  * Determina el dia calendario logico de una fecha considerando la trasnoche
  * y los horarios configurados del club.
  * Tambien devuelve el limite (timestamp) donde termina ese dia logico.
@@ -61,34 +118,8 @@ function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
   };
 }
 
-/**
- * Retorna true si DEBUG_NOW está activo y el entorno NO es producción.
- */
-function isDebugNowActive() {
-  return process.env.NODE_ENV !== 'production' && Boolean(process.env.DEBUG_NOW);
-}
-
-/**
- * Helper centralizado para obtener la fecha/hora actual ("ahora").
- * Permite simular una fecha/hora específica mediante la variable de entorno DEBUG_NOW
- * EXCLUSIVAMENTE en entornos de desarrollo/test (NODE_ENV !== 'production').
- * 
- * En producción (NODE_ENV === 'production') SIEMPRE retorna new Date() real del sistema.
- * 
- * @returns {Date}
- */
-function getAhora() {
-  if (isDebugNowActive()) {
-    const parsed = new Date(process.env.DEBUG_NOW);
-    if (!isNaN(parsed.getTime()) && parsed.getFullYear() >= 2000) {
-      return new Date(parsed.getTime());
-    }
-  }
-  return new Date();
-}
-
 module.exports = {
+  parseFechaLocal,
+  requireTorneoFecha,
   getDiaCalendarioConTrasnoche,
-  getAhora,
-  isDebugNowActive,
 };
