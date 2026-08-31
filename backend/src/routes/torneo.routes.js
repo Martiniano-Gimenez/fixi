@@ -11,6 +11,7 @@ router.use(auth);
 router.post('/', torneoController.createTorneo);
 router.get('/', torneoController.getTorneos);
 router.get('/:id', torneoController.getTorneoById);
+router.put('/:id', torneoController.updateTorneo);
 router.patch('/:id', torneoController.updateTorneo);
 router.delete('/:id', torneoController.deleteTorneo);
 
