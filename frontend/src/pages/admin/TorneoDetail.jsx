@@ -23,6 +23,7 @@ import {
   ChevronUp,
   Loader2,
   Activity,
+  Edit2,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
 import CruceResolver from '../../components/CruceResolver';
@@ -322,6 +323,13 @@ export default function TorneoDetail() {
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
 
+  // Editar Torneo y Fecha
+  const [editTorneoModalOpen, setEditTorneoModalOpen] = useState(false);
+  const [editNombre, setEditNombre] = useState('');
+  const [editFecha, setEditFecha] = useState('');
+  const [guardandoTorneo, setGuardandoTorneo] = useState(false);
+  const [editTorneoError, setEditTorneoError] = useState('');
+
   // Iniciar Torneo Multi-categoría
   const [verificandoInicio, setVerificandoInicio] = useState(false);
   const [iniciarModalOpen, setIniciarModalOpen] = useState(false);
@@ -389,6 +397,48 @@ export default function TorneoDetail() {
     navigator.clipboard.writeText(url);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
+  };
+
+  const handleOpenEditTorneo = () => {
+    if (!torneo) return;
+    setEditNombre(torneo.nombre || '');
+    if (torneo.fecha) {
+      const d = new Date(torneo.fecha);
+      if (!isNaN(d.getTime())) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        setEditFecha(`${yyyy}-${mm}-${dd}`);
+      } else {
+        setEditFecha('');
+      }
+    } else {
+      setEditFecha('');
+    }
+    setEditTorneoError('');
+    setEditTorneoModalOpen(true);
+  };
+
+  const handleGuardarTorneo = async (e) => {
+    e.preventDefault();
+    if (!editNombre.trim()) {
+      setEditTorneoError('El nombre del torneo es obligatorio.');
+      return;
+    }
+    setGuardandoTorneo(true);
+    setEditTorneoError('');
+    try {
+      const updated = await api.put(`/torneos/${torneo.id}`, {
+        nombre: editNombre.trim(),
+        fecha: editFecha || null,
+      });
+      setTorneo((prev) => ({ ...prev, ...updated }));
+      setEditTorneoModalOpen(false);
+    } catch (err) {
+      setEditTorneoError(err.message || 'Error al actualizar el torneo.');
+    } finally {
+      setGuardandoTorneo(false);
+    }
   };
 
   const handleCrearCategoria = async (e) => {
@@ -648,25 +698,57 @@ export default function TorneoDetail() {
                 flexWrap: 'wrap',
               }}
             >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <Calendar size={15} />
-                {torneo.fecha
-                  ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
-                      day: '2-digit',
-                      month: 'long',
-                      year: 'numeric',
-                    })
-                  : 'Fecha a confirmar'}
-              </span>
+              <button
+                type="button"
+                onClick={handleOpenEditTorneo}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  background: 'transparent',
+                  border: '1px dashed var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.2rem 0.5rem',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                  fontSize: 'inherit',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.15s ease',
+                }}
+                className="hover-card"
+                title="Click para cambiar fecha o nombre del torneo"
+              >
+                <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
+                <span>
+                  {torneo.fecha
+                    ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
+                        day: '2-digit',
+                        month: 'long',
+                        year: 'numeric',
+                      })
+                    : 'Fecha a confirmar'}
+                </span>
+                <Edit2 size={12} style={{ opacity: 0.7, marginLeft: '0.2rem' }} />
+              </button>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <Layers size={15} />
-                {torneo.categorias?.length || 0} {(torneo.categorias?.length === 1) ? 'categoría' : 'categorías'}
+                {torneo.categorias?.length || 0} {torneo.categorias?.length === 1 ? 'categoría' : 'categorías'}
               </span>
             </div>
           </div>
 
           {/* Acciones principales */}
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleOpenEditTorneo}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+              title="Modificar fecha o nombre del torneo"
+            >
+              <Calendar size={16} /> Cambiar Fecha
+            </button>
+
             <button
               type="button"
               className="btn-secondary"
@@ -893,6 +975,72 @@ export default function TorneoDetail() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal para editar torneo y fecha */}
+      {editTorneoModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '440px' }}>
+            <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Calendar size={20} style={{ color: 'var(--color-primary)' }} /> Editar Torneo y Fecha
+            </h3>
+
+            {editTorneoError && (
+              <div className="error-message" style={{ marginBottom: '1rem' }}>
+                {editTorneoError}
+              </div>
+            )}
+
+            <form onSubmit={handleGuardarTorneo}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                  Nombre del torneo:
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Pares Agosto 2026"
+                  value={editNombre}
+                  onChange={(e) => setEditNombre(e.target.value)}
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                  Fecha de inicio (Viernes):
+                </label>
+                <input
+                  type="date"
+                  value={editFecha}
+                  onChange={(e) => setEditFecha(e.target.value)}
+                  style={{ width: '100%' }}
+                />
+                <p style={{ margin: '0.4rem 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                  Seleccioná el día viernes en que inicia el torneo. Los partidos de Viernes y Sábado se programarán de acuerdo a esta fecha.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setEditTorneoModalOpen(false)}
+                  disabled={guardandoTorneo}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={guardandoTorneo || !editNombre.trim()}
+                >
+                  {guardandoTorneo ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
