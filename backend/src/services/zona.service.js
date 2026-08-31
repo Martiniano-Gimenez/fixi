@@ -423,7 +423,9 @@ function proximaFechaPorDia(dia, fechaBase) {
 }
 
 /**
- * Convierte un slotId ("Viernes-18:00") a una fecha completa DateTime
+ * Convierte un slotId ("Viernes-18:00" o "Viernes-00:00") a una fecha completa DateTime.
+ * Los slots de madrugada (00:00 a 05:59) corresponden a la trasnoche del día y por lo tanto
+ * se ubican en la madrugada del día calendario siguiente.
  */
 function parseSlotToDate(slotId, fechaBase) {
   if (!slotId || !fechaBase) return null;
@@ -433,6 +435,10 @@ function parseSlotToDate(slotId, fechaBase) {
   if (isNaN(hh) || isNaN(mm)) return null;
 
   const baseDate = proximaFechaPorDia(dia, fechaBase);
+  // Si la hora es de trasnoche (00:00 a 05:59), pertenece a la madrugada del día siguiente
+  if (hh < 6) {
+    baseDate.setDate(baseDate.getDate() + 1);
+  }
   baseDate.setHours(hh, mm, 0, 0);
   return baseDate;
 }

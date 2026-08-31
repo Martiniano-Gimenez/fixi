@@ -71,4 +71,20 @@ assert.strictEqual(diaTrasnocheInfo.key, '2026-08-28', 'Sábado 01:00 AM debe ma
 assert.strictEqual(diaTrasnocheInfo.logicalDate.getDay(), 5, 'El día lógico debe ser Viernes (5)');
 console.log('✅ Test 7: getDiaCalendarioConTrasnoche mapea Sábado 01:00 AM al Viernes lógico del torneo.');
 
+// Test 8: parseSlotToDate con trasnoche ("Viernes-00:00" es posterior a "Viernes-23:45" y pertenece al Viernes lógico)
+const { parseSlotToDate } = require('../src/services/zona.service');
+const refTorneo = '2026-09-04'; // Viernes 4 de Septiembre
+const tVie20 = parseSlotToDate('Viernes-20:00', refTorneo);
+const tVie00 = parseSlotToDate('Viernes-00:00', refTorneo);
+const tVie01 = parseSlotToDate('Viernes-01:30', refTorneo);
+
+assert(tVie00.getTime() > tVie20.getTime(), '"Viernes-00:00" debe ser cronológicamente posterior a "Viernes-20:00"');
+assert(tVie01.getTime() > tVie00.getTime(), '"Viernes-01:30" debe ser cronológicamente posterior a "Viernes-00:00"');
+
+// Al evaluar Viernes-00:00 en getDiaCalendarioConTrasnoche debe mapear a Viernes 4 de Septiembre (NUNCA Jueves 3)
+const infoVie00 = getDiaCalendarioConTrasnoche(tVie00, clubHorarios);
+assert.strictEqual(infoVie00.key, '2026-09-04', '"Viernes-00:00" debe pertenecer al Viernes 2026-09-04');
+assert.strictEqual(infoVie00.logicalDate.getDay(), 5, '"Viernes-00:00" debe tener día lógico Viernes');
+console.log('✅ Test 8: parseSlotToDate("Viernes-00:00") ubica la trasnoche en la madrugada correcta y mapea al Viernes lógico.');
+
 console.log('\n🎉 TODOS LOS TESTS DE PARSEO Y VALIDACIÓN DE FECHAS PASARON EXITOSAMENTE!');
