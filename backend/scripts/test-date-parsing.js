@@ -63,4 +63,12 @@ assert.strictEqual(dSabado.getDay(), 6, 'Día debe ser Sábado (6)');
 assert.strictEqual(dSabado.getDate(), 29, 'Día debe ser 29');
 console.log('✅ Test 6: parseFechaLocal("2026-08-29") da Sábado 29 correctamente.');
 
+// Test 7: Trasnoche (Sábado 01:00 AM pertenece al Viernes lógico de torneo)
+const clubHorarios = { viernesInicio: '18:00', viernesFin: '02:00', sabadoInicio: '09:00', sabadoFin: '22:00' };
+const fechaTrasnoche = new Date(2026, 7, 29, 1, 0, 0); // Sábado 01:00 AM
+const diaTrasnocheInfo = getDiaCalendarioConTrasnoche(fechaTrasnoche, clubHorarios);
+assert.strictEqual(diaTrasnocheInfo.key, '2026-08-28', 'Sábado 01:00 AM debe mapear al Viernes lógico 2026-08-28');
+assert.strictEqual(diaTrasnocheInfo.logicalDate.getDay(), 5, 'El día lógico debe ser Viernes (5)');
+console.log('✅ Test 7: getDiaCalendarioConTrasnoche mapea Sábado 01:00 AM al Viernes lógico del torneo.');
+
 console.log('\n🎉 TODOS LOS TESTS DE PARSEO Y VALIDACIÓN DE FECHAS PASARON EXITOSAMENTE!');
