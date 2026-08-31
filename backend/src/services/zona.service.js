@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 const { calcularCompatibilidad, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
-const { getAhora } = require('../utils/dateUtils');
+const { parseFechaLocal, requireTorneoFecha } = require('../utils/dateUtils');
 
 // Fisher-Yates shuffle
 function shuffleArray(array) {
@@ -410,9 +410,9 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
 /**
  * Calcula la próxima fecha de un día ("Viernes" o "Sabado") a partir de una fecha base
  */
-function proximaFechaPorDia(dia, fechaBase = getAhora()) {
+function proximaFechaPorDia(dia, fechaBase) {
   const targetDia = dia === 'Viernes' ? 5 : 6;
-  const hoy = new Date(fechaBase);
+  const hoy = parseFechaLocal(fechaBase);
   const diaActual = hoy.getDay();
   let diff = targetDia - diaActual;
   if (diff < 0) diff += 7;
@@ -425,8 +425,8 @@ function proximaFechaPorDia(dia, fechaBase = getAhora()) {
 /**
  * Convierte un slotId ("Viernes-18:00") a una fecha completa DateTime
  */
-function parseSlotToDate(slotId, fechaBase = getAhora()) {
-  if (!slotId) return null;
+function parseSlotToDate(slotId, fechaBase) {
+  if (!slotId || !fechaBase) return null;
   const [dia, horaStr] = slotId.split('-');
   if (!dia || !horaStr) return null;
   const [hh, mm] = horaStr.split(':').map(Number);
@@ -605,7 +605,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
   const partidosAAsignar = partidos.filter((p) => !yaAgendadosIds.has(p.id));
 
-  const refFecha = categorias[0]?.torneo?.fecha || getAhora();
+  const refFecha = requireTorneoFecha(categorias[0]?.torneo);
   const baseFriday = proximaFechaPorDia('Viernes', refFecha);
   const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
 
