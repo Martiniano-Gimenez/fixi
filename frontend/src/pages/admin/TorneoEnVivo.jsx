@@ -190,7 +190,7 @@ export default function TorneoEnVivo() {
     return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
   }, [proximosPartidosList, horariosClub]);
 
-  // Selección por defecto del tab (hoy o primer día con partidos pendientes)
+  // Selección por defecto del tab (primer día con partidos pendientes)
   useEffect(() => {
     if (diasDisponibles.length === 0) {
       if (activeTabDay) setActiveTabDay(null);
@@ -201,15 +201,8 @@ export default function TorneoEnVivo() {
       return;
     }
 
-    const hoyInfo = getDiaCalendarioConTrasnoche(new Date(), horariosClub);
-    const matchHoy = hoyInfo ? diasDisponibles.find((d) => d.key === hoyInfo.key) : null;
-
-    if (matchHoy) {
-      setActiveTabDay(matchHoy.key);
-    } else {
-      setActiveTabDay(diasDisponibles[0].key);
-    }
-  }, [diasDisponibles, activeTabDay, horariosClub]);
+    setActiveTabDay(diasDisponibles[0].key);
+  }, [diasDisponibles, activeTabDay]);
 
   // Partidos filtrados por el tab de día seleccionado
   const proximosFiltrados = useMemo(() => {
