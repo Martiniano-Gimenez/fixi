@@ -158,8 +158,8 @@ async function runBenchmark() {
     },
   });
 
-  // 3 Categorías (4ta, 6ta, 7ma) con 12 parejas cada una = 36 parejas = 36 partidos
-  const catNames = ['4ta', '6ta', '7ma'];
+  // 2 Categorías (4ta, 6ta) con 12 parejas cada una = 24 partidos
+  const catNames = ['4ta', '6ta'];
   const catIds = [];
   const todasLasParejas = [];
 

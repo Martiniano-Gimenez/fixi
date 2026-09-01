@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 const { calcularCompatibilidad, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
-const { parseFechaLocal, requireTorneoFecha } = require('../utils/dateUtils');
+const { parseFechaLocal, requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
 
 // Fisher-Yates shuffle
 function shuffleArray(array) {
@@ -895,8 +895,10 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
 /**
  * Reubica los partidos PENDIENTE de un torneo durante Modo Lluvia (reducción o restauración de canchas)
- * utilizando el Scheduler continuo MCF de 3 Pasadas (resolución manual, hiper-restringidos, y más restringidos primero).
+ * aplicando Compactación Continua Earliest-Fit ordenada cronológicamente por horario original.
  * Garantiza que los partidos FINALIZADO y EN_CURSO queden 100% fijos como ocupación inmutable en sus canchas y horarios originales.
+ * En situación de emergencia (lluvia), no bloquea por disponibilidad de pareja, permitiendo jugar en cualquier horario
+ * dentro del día lógico hasta el límite de trasnoche (dayLimitMs).
  */
 async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null) {
   const db = externalTx || prisma;
@@ -925,24 +927,10 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
 
   const friInicioMin = horaAMinutos(organizador.viernesInicio);
-  const friFinMin = horaAMinutos(organizador.viernesFin);
-  let friEffectiveFinMin = friFinMin;
-  if (friEffectiveFinMin <= friInicioMin && organizador.viernesFin) {
-    friEffectiveFinMin += 24 * 60;
-  }
   const friDayStartMs = baseFriday.getTime() + friInicioMin * 60 * 1000;
-  const friDayEndMs = baseFriday.getTime() + friEffectiveFinMin * 60 * 1000;
-  const hasFriday = Boolean(organizador.viernesInicio && organizador.viernesFin && friDayEndMs > friDayStartMs);
 
   const satInicioMin = horaAMinutos(organizador.sabadoInicio);
-  const satFinMin = horaAMinutos(organizador.sabadoFin);
-  let satEffectiveFinMin = satFinMin;
-  if (satEffectiveFinMin <= satInicioMin && organizador.sabadoFin) {
-    satEffectiveFinMin += 24 * 60;
-  }
   const satDayStartMs = baseSaturday.getTime() + satInicioMin * 60 * 1000;
-  const satDayEndMs = baseSaturday.getTime() + satEffectiveFinMin * 60 * 1000;
-  const hasSaturday = Boolean(organizador.sabadoInicio && organizador.sabadoFin && satDayEndMs > satDayStartMs);
 
   // 1. Cargar todos los partidos del torneo
   const todosLosPartidos = await db.partido.findMany({
@@ -951,8 +939,8 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     },
     include: {
       categoria: { select: { id: true, nombre: true } },
-      pareja1: { include: { slotsSeleccionados: true } },
-      pareja2: { include: { slotsSeleccionados: true } },
+      pareja1: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true } },
+      pareja2: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true } },
     },
   });
 
@@ -989,61 +977,22 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
         addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, endMs);
       }
     } else if (p.estado === 'PENDIENTE') {
-      // Solo consideramos partidos que tengan ambas parejas definidas
       if (p.pareja1Id && p.pareja2Id) {
         partidosAAsignar.push(p);
       }
     }
   }
 
-  // 3. Preprocesar y clasificar partidos pendientes en 3 grupos MCF
-  const grupo0 = []; // Resolución manual
-  const grupo1 = []; // Hiper-restringidos
-  const grupo2 = []; // Flexibles
-
-  for (const partido of partidosAAsignar) {
-    const slotsP1 = (partido.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
-    const slotsP2 = (partido.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
-
-    const conSlotsP1 = slotsP1.length > 0;
-    const conSlotsP2 = slotsP2.length > 0;
-
-    let slotsComunes = [];
-    let sharedWindows = [];
-
-    if (conSlotsP1 && conSlotsP2) {
-      const set2 = new Set(slotsP2);
-      slotsComunes = slotsP1.filter((s) => set2.has(s));
-
-      const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
-      const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
-      sharedWindows = interseccionVentanas(win1, win2);
-    } else if (conSlotsP1 || conSlotsP2) {
-      slotsComunes = conSlotsP1 ? slotsP1 : slotsP2;
-      sharedWindows = fusionarSlotsEnVentanas(slotsComunes, refFecha);
-    } else {
-      if (hasFriday) {
-        sharedWindows.push({ dia: 'Viernes', startMs: friDayStartMs, endMs: friDayEndMs });
-      }
-      if (hasSaturday) {
-        sharedWindows.push({ dia: 'Sabado', startMs: satDayStartMs, endMs: satDayEndMs });
-      }
+  // 3. Ordenar partidos pendientes cronológicamente por horario original (preservando antigüedad de turno)
+  partidosAAsignar.sort((a, b) => {
+    const tA = a.fechaHora ? new Date(a.fechaHora).getTime() : 0;
+    const tB = b.fechaHora ? new Date(b.fechaHora).getTime() : 0;
+    if (tA !== tB) return tA - tB;
+    if ((a.canchaNumero || 0) !== (b.canchaNumero || 0)) {
+      return (a.canchaNumero || 0) - (b.canchaNumero || 0);
     }
-
-    const item = { partido, slotsComunes, sharedWindows, numOptions: sharedWindows.length };
-
-    if (partido.pareja1?.resolucionManual || partido.pareja2?.resolucionManual) {
-      grupo0.push(item);
-    } else if (slotsComunes.length === 1 || (slotsComunes.length === 0 && sharedWindows.length === 1)) {
-      grupo1.push(item);
-    } else {
-      grupo2.push(item);
-    }
-  }
-
-  // Ordenar grupo0 y grupo2 por menor cantidad de opciones (Most Constrained First)
-  grupo0.sort((a, b) => a.numOptions - b.numOptions);
-  grupo2.sort((a, b) => a.numOptions - b.numOptions);
+    return a.id.localeCompare(b.id);
+  });
 
   const updatesMap = new Map();
 
@@ -1068,151 +1017,53 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     return true;
   }
 
-  function findFreeCourtAt(startMs, endMs) {
-    for (let c = 1; c <= cantidadCanchas; c++) {
-      if (isCourtFree(c, startMs, endMs)) {
-        return c;
+  // 4. Asignación Global Earliest-Fit para cada partido
+  for (const partido of partidosAAsignar) {
+    const origStartMs = partido.fechaHora ? new Date(partido.fechaHora).getTime() : null;
+    const origDate = origStartMs ? new Date(origStartMs) : baseFriday;
+    const origDiaInfo = getDiaCalendarioConTrasnoche(origDate, organizador);
+    const dayLimitMs = origDiaInfo.dayLimitMs;
+    const isFriday = origDiaInfo.logicalDate.getDay() === 5;
+    const sessionDayStartMs = isFriday ? friDayStartMs : satDayStartMs;
+
+    let bestCandidate = null;
+    let T = sessionDayStartMs;
+
+    while (T + DURACION_MS <= dayLimitMs) {
+      const tEnd = T + DURACION_MS;
+      for (let c = 1; c <= cantidadCanchas; c++) {
+        if (
+          isCourtFree(c, T, tEnd) &&
+          isPairFree(partido.pareja1Id, T, tEnd) &&
+          isPairFree(partido.pareja2Id, T, tEnd)
+        ) {
+          bestCandidate = { T, cancha: c };
+          break;
+        }
       }
-    }
-    return null;
-  }
-
-  function tryAssignSlotWithGap(partido, slotId, sharedWindows) {
-    const slotWin = slotIdToMsWindow(slotId, refFecha);
-    if (!slotWin) return false;
-
-    const startMs = slotWin.startMs;
-    const endMs = slotWin.endMs;
-
-    let withinShared = false;
-    for (const w of sharedWindows) {
-      if (w.dia === slotWin.dia && startMs >= w.startMs && endMs <= w.endMs) {
-        withinShared = true;
-        break;
-      }
-    }
-    if (!withinShared) return false;
-
-    if (!isPairFree(partido.pareja1Id, startMs, endMs) || !isPairFree(partido.pareja2Id, startMs, endMs)) {
-      return false;
+      if (bestCandidate !== null) break;
+      T += 15 * 60 * 1000;
     }
 
-    const canchaLibre = findFreeCourtAt(startMs, endMs);
-    if (canchaLibre !== null) {
-      courtTimelines.get(canchaLibre).push({ startMs, endMs });
-      if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
-      parejaAssignments.get(partido.pareja1Id).push({ startMs, endMs });
-      if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
-      parejaAssignments.get(partido.pareja2Id).push({ startMs, endMs });
-
+    if (bestCandidate !== null) {
+      addInterval(bestCandidate.cancha, partido.pareja1Id, partido.pareja2Id, bestCandidate.T, bestCandidate.T + DURACION_MS);
       updatesMap.set(partido.id, {
         id: partido.id,
         sinHorarioAsignado: false,
-        fechaHora: new Date(startMs),
-        canchaNumero: canchaLibre,
+        fechaHora: new Date(bestCandidate.T),
+        canchaNumero: bestCandidate.cancha,
       });
-      return true;
-    }
-    return false;
-  }
-
-  function tryAssignContinuousWindows(partido, sharedWindows) {
-    for (const window of sharedWindows) {
-      const isFri = window.dia === 'Viernes';
-      const dayStartMs = isFri ? friDayStartMs : satDayStartMs;
-      const dayEndMs = isFri ? friDayEndMs : satDayEndMs;
-
-      const wStart = Math.max(window.startMs, dayStartMs);
-      const wEnd = Math.min(window.endMs, dayEndMs);
-
-      let bestCandidateForWindow = null;
-
-      for (let c = 1; c <= cantidadCanchas; c++) {
-        let T = wStart;
-        while (T + DURACION_MS <= wEnd) {
-          const tEnd = T + DURACION_MS;
-          if (isCourtFree(c, T, tEnd) && isPairFree(partido.pareja1Id, T, tEnd) && isPairFree(partido.pareja2Id, T, tEnd)) {
-            if (bestCandidateForWindow === null || T < bestCandidateForWindow.T) {
-              bestCandidateForWindow = { T, cancha: c };
-            }
-            break;
-          }
-          T += 15 * 60 * 1000;
-        }
-      }
-
-      if (bestCandidateForWindow !== null) {
-        courtTimelines.get(bestCandidateForWindow.cancha).push({
-          startMs: bestCandidateForWindow.T,
-          endMs: bestCandidateForWindow.T + DURACION_MS,
-        });
-        if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
-        parejaAssignments.get(partido.pareja1Id).push({
-          startMs: bestCandidateForWindow.T,
-          endMs: bestCandidateForWindow.T + DURACION_MS,
-        });
-        if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
-        parejaAssignments.get(partido.pareja2Id).push({
-          startMs: bestCandidateForWindow.T,
-          endMs: bestCandidateForWindow.T + DURACION_MS,
-        });
-
-        updatesMap.set(partido.id, {
-          id: partido.id,
-          sinHorarioAsignado: false,
-          fechaHora: new Date(bestCandidateForWindow.T),
-          canchaNumero: bestCandidateForWindow.cancha,
-        });
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // PASADA 0: Resolución Manual
-  for (const { partido, slotsComunes, sharedWindows } of grupo0) {
-    let asignado = false;
-    for (const slotId of slotsComunes) {
-      if (tryAssignSlotWithGap(partido, slotId, sharedWindows)) {
-        asignado = true;
-        break;
-      }
-    }
-    if (!asignado) {
-      if (!tryAssignContinuousWindows(partido, sharedWindows)) {
-        updatesMap.set(partido.id, { id: partido.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
-      }
+    } else {
+      updatesMap.set(partido.id, {
+        id: partido.id,
+        sinHorarioAsignado: true,
+        fechaHora: null,
+        canchaNumero: null,
+      });
     }
   }
 
-  // PASADA 1: Hiper-restringidos
-  for (const { partido, slotsComunes, sharedWindows } of grupo1) {
-    const ok = tryAssignSlotWithGap(partido, slotsComunes[0], sharedWindows);
-    if (!ok) {
-      const okContinuous = tryAssignContinuousWindows(partido, sharedWindows);
-      if (!okContinuous) {
-        updatesMap.set(partido.id, { id: partido.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
-      }
-    }
-  }
-
-  // PASADA 2: Flexibles (MCF)
-  for (const { partido, slotsComunes, sharedWindows } of grupo2) {
-    let asignado = false;
-    for (const slotId of slotsComunes) {
-      if (tryAssignSlotWithGap(partido, slotId, sharedWindows)) {
-        asignado = true;
-        break;
-      }
-    }
-    if (!asignado) {
-      if (!tryAssignContinuousWindows(partido, sharedWindows)) {
-        updatesMap.set(partido.id, { id: partido.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
-      }
-    }
-  }
-
-  // 4. Calcular diffs y métricas de cambio
+  // 5. Calcular diffs y métricas de cambio
   const updates = Array.from(updatesMap.values());
   const cambios = [];
   let partidosReprogramados = 0;
@@ -1260,7 +1111,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     }
   }
 
-  // 5. Persistir en base de datos
+  // 6. Persistir en base de datos
   if (updates.length > 0) {
     for (const u of updates) {
       await db.partido.update({
