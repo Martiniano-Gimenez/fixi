@@ -1304,5 +1304,6 @@ module.exports = {
   interseccionVentanas,
   parseSlotToDate,
   proximaFechaPorDia,
+  slotIdToMsWindow,
   asignarHorariosModoLluviaMCF,
 };

@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
-const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion, horaAMinutos } = require('./slots.service');
+const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
 const { getDiaCalendarioConTrasnoche, requireTorneoFecha } = require('../utils/dateUtils');
 const {
   iniciarCategoria,
@@ -10,17 +10,25 @@ const {
   interseccionVentanas,
   parseSlotToDate,
   proximaFechaPorDia,
+  slotIdToMsWindow,
   asignarHorariosModoLluviaMCF,
 } = require('./zona.service');
 
 // Cache de planes validados en memoria para inicio determinista
 const planesCache = new Map();
-const PLAN_TTL_MS = 5 * 60 * 1000; // 5 minutos
+const PLAN_TTL_MS = 60 * 60 * 1000; // 1 hora con sliding TTL
+
+// Cache de sesiones de pre-check en memoria para resolución incremental estable
+const preCheckSessions = new Map();
+const PRECHECK_TTL_MS = 60 * 60 * 1000; // 1 hora con sliding TTL
 
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of planesCache) {
     if (v.expiresAt < now) planesCache.delete(k);
+  }
+  for (const [k, v] of preCheckSessions) {
+    if (v.expiresAt < now) preCheckSessions.delete(k);
   }
 }, 60_000);
 
@@ -178,9 +186,405 @@ async function getSlotsGrilla(organizadorId) {
 }
 
 /**
- * Valida si todas las categorías en borrador de un Torneo pueden iniciarse y programarse sin conflictos horarios.
+ * Evalúa incrementalmente los partidos sin horario de un snapshot sobre los huecos libres del timeline
+ * garantizando que ningún partido previamente asignado sea modificado.
+ * Operación 100% síncrona en memoria (cero riesgo de race conditions).
  */
-async function preCheckInicioTorneo(organizadorId, torneoId) {
+function evaluarAsignacionesIncrementales({
+  categoriasPlan,
+  courtTimelines,
+  parejaAssignments,
+  parejasMap,
+  cantidadCanchas,
+  refFecha,
+  organizador,
+  DURACION_MS,
+}) {
+  const friInicioMin = horaAMinutos(organizador.viernesInicio);
+  const friFinMin = horaAMinutos(organizador.viernesFin);
+  let friEffectiveFinMin = friFinMin;
+  if (friEffectiveFinMin <= friInicioMin && organizador.viernesFin) {
+    friEffectiveFinMin += 24 * 60;
+  }
+  const baseFriday = proximaFechaPorDia('Viernes', refFecha);
+  const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
+  const friDayStartMs = baseFriday.getTime() + friInicioMin * 60 * 1000;
+  const friDayEndMs = baseFriday.getTime() + friEffectiveFinMin * 60 * 1000;
+
+  const satInicioMin = horaAMinutos(organizador.sabadoInicio);
+  const satFinMin = horaAMinutos(organizador.sabadoFin);
+  let satEffectiveFinMin = satFinMin;
+  if (satEffectiveFinMin <= satInicioMin && organizador.sabadoFin) {
+    satEffectiveFinMin += 24 * 60;
+  }
+  const satDayStartMs = baseSaturday.getTime() + satInicioMin * 60 * 1000;
+  const satDayEndMs = baseSaturday.getTime() + satEffectiveFinMin * 60 * 1000;
+
+  function isCourtFree(cancha, startMs, endMs) {
+    const timeline = courtTimelines.get(cancha) || [];
+    for (const interval of timeline) {
+      if (startMs < interval.endMs && endMs > interval.startMs) return false;
+    }
+    return true;
+  }
+
+  function isPairFree(parejaId, startMs, endMs) {
+    if (!parejaId) return true;
+    const intervals = parejaAssignments.get(parejaId) || [];
+    for (const interval of intervals) {
+      if (startMs < interval.endMs && endMs > interval.startMs) return false;
+    }
+    return true;
+  }
+
+  // 1. Intentar asignar partidos que estaban sin horario
+  for (const cPlan of categoriasPlan) {
+    for (const zona of cPlan.zonas) {
+      for (const partido of zona.partidos) {
+        if (!partido.sinHorarioAsignado) continue;
+
+        const par1 = parejasMap.get(partido.pareja1Id);
+        const par2 = parejasMap.get(partido.pareja2Id);
+        const slotsP1 = (par1?.slotsSeleccionados || []).map((s) => s.slotId);
+        const slotsP2 = (par2?.slotsSeleccionados || []).map((s) => s.slotId);
+
+        const conSlotsP1 = slotsP1.length > 0;
+        const conSlotsP2 = slotsP2.length > 0;
+
+        let sharedWindows = [];
+        let slotsComunes = [];
+        if (conSlotsP1 && conSlotsP2) {
+          const set2 = new Set(slotsP2);
+          slotsComunes = slotsP1.filter((s) => set2.has(s));
+          const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
+          const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
+          sharedWindows = interseccionVentanas(win1, win2);
+        } else if (conSlotsP1 || conSlotsP2) {
+          slotsComunes = conSlotsP1 ? slotsP1 : slotsP2;
+          sharedWindows = fusionarSlotsEnVentanas(slotsComunes, refFecha);
+        }
+
+        if (sharedWindows.length === 0) continue;
+
+        let asignado = false;
+        // Probar primero slots comunes exactos
+        for (const sId of slotsComunes) {
+          const sWin = slotIdToMsWindow(sId, refFecha);
+          if (!sWin) continue;
+          const sStart = sWin.startMs;
+          const sEnd = sWin.endMs;
+          if (!isPairFree(partido.pareja1Id, sStart, sEnd) || !isPairFree(partido.pareja2Id, sStart, sEnd)) {
+            continue;
+          }
+          for (let c = 1; c <= cantidadCanchas; c++) {
+            if (isCourtFree(c, sStart, sEnd)) {
+              if (!courtTimelines.has(c)) courtTimelines.set(c, []);
+              courtTimelines.get(c).push({ startMs: sStart, endMs: sEnd });
+              if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
+              parejaAssignments.get(partido.pareja1Id).push({ startMs: sStart, endMs: sEnd });
+              if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
+              parejaAssignments.get(partido.pareja2Id).push({ startMs: sStart, endMs: sEnd });
+
+              partido.fechaHora = new Date(sStart);
+              partido.canchaNumero = c;
+              partido.sinHorarioAsignado = false;
+              asignado = true;
+              break;
+            }
+          }
+          if (asignado) break;
+        }
+
+        // Si no se asignó en slot común, probar en ventanas continuas
+        if (!asignado) {
+          for (const win of sharedWindows) {
+            const isFri = win.dia === 'Viernes';
+            const dayStartMs = isFri ? friDayStartMs : satDayStartMs;
+            const dayEndMs = isFri ? friDayEndMs : satDayEndMs;
+            const wStart = Math.max(win.startMs, dayStartMs);
+            const wEnd = Math.min(win.endMs, dayEndMs);
+
+            let bestCand = null;
+            for (let c = 1; c <= cantidadCanchas; c++) {
+              let T = wStart;
+              while (T + DURACION_MS <= wEnd) {
+                const tEnd = T + DURACION_MS;
+                if (isCourtFree(c, T, tEnd) && isPairFree(partido.pareja1Id, T, tEnd) && isPairFree(partido.pareja2Id, T, tEnd)) {
+                  if (bestCand === null || T < bestCand.T) {
+                    bestCand = { T, cancha: c };
+                  }
+                  break;
+                }
+                T += 15 * 60 * 1000;
+              }
+            }
+
+            if (bestCand !== null) {
+              if (!courtTimelines.has(bestCand.cancha)) courtTimelines.set(bestCand.cancha, []);
+              courtTimelines.get(bestCand.cancha).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
+              if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
+              parejaAssignments.get(partido.pareja1Id).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
+              if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
+              parejaAssignments.get(partido.pareja2Id).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
+
+              partido.fechaHora = new Date(bestCand.T);
+              partido.canchaNumero = bestCand.cancha;
+              partido.sinHorarioAsignado = false;
+              asignado = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Construir slotsEvaluadosMap a partir de los timelines actuales
+  const grilla = generarGrillaOrganizador(organizador);
+  const allSlotIds = [...grilla.viernes, ...grilla.sabado];
+  const slotsEvaluadosMap = new Map();
+
+  for (const sId of allSlotIds) {
+    const sDate = parseSlotToDate(sId, refFecha);
+    if (!sDate) continue;
+    const sStartMs = sDate.getTime();
+    const sEndMs = sStartMs + DURACION_MS;
+
+    const canchasOcupadas = new Set();
+    const parejasOcupadas = new Set();
+
+    for (let c = 1; c <= cantidadCanchas; c++) {
+      for (const item of courtTimelines.get(c) || []) {
+        if (Math.max(sStartMs, item.startMs) < Math.min(sEndMs, item.endMs)) {
+          canchasOcupadas.add(c);
+        }
+      }
+    }
+
+    for (const [parejaId, intervals] of parejaAssignments.entries()) {
+      for (const item of intervals) {
+        if (Math.max(sStartMs, item.startMs) < Math.min(sEndMs, item.endMs)) {
+          parejasOcupadas.add(parejaId);
+        }
+      }
+    }
+
+    const canchasLibres = cantidadCanchas - canchasOcupadas.size;
+    slotsEvaluadosMap.set(sId, {
+      canchasLibres,
+      parejasOcupadas: Array.from(parejasOcupadas),
+    });
+  }
+
+  // 3. Recalcular mapa de conflictos para los partidos y zonas que sigan sin horario
+  const conflictosMap = new Map();
+  const parejaFreqMap = new Map();
+
+  for (const cPlan of categoriasPlan) {
+    for (const z of cPlan.zonas) {
+      for (const p of z.partidos) {
+        if (p.sinHorarioAsignado) {
+          if (p.pareja1Id) parejaFreqMap.set(p.pareja1Id, (parejaFreqMap.get(p.pareja1Id) || 0) + 1);
+          if (p.pareja2Id) parejaFreqMap.set(p.pareja2Id, (parejaFreqMap.get(p.pareja2Id) || 0) + 1);
+        }
+      }
+    }
+  }
+
+  let totalPartidosSinHorario = 0;
+  let totalZonasManuales = 0;
+
+  for (const cPlan of categoriasPlan) {
+    const cId = cPlan.categoriaId;
+
+    for (const z of cPlan.zonas) {
+      if (z.requiereArmadoManual) {
+        totalZonasManuales++;
+        if (!conflictosMap.has(cId)) {
+          conflictosMap.set(cId, {
+            categoriaId: cId,
+            nombreCategoria: cPlan.nombre,
+            partidosSinHorario: [],
+          });
+        }
+
+        const rawZonaParejas = z.parejaIds.map((pId) => {
+          const p = parejasMap.get(pId);
+          return {
+            id: pId,
+            nombre: p ? `${p.jugador1} / ${p.jugador2}` : 'Pareja',
+            slotIds: (p?.slotsSeleccionados || []).map((s) => s.slotId),
+          };
+        });
+
+        const parejasNombres = rawZonaParejas.map((p) => p.nombre).join(' | ');
+
+        const parejasManuales = rawZonaParejas.map((p) => {
+          const mySlots = p.slotIds;
+          const slotsViables = allSlotIds.filter((sId) => {
+            const info = slotsEvaluadosMap.get(sId);
+            if (!info || info.canchasLibres <= 0) return false;
+            if (p.id && info.parejasOcupadas.includes(p.id)) return false;
+            return true;
+          });
+
+          const slotsQueDestraban = slotsViables.filter((sId) => {
+            const simulated = rawZonaParejas.map((item) => {
+              if (item.id === p.id) {
+                return Array.from(new Set([...item.slotIds, sId]));
+              }
+              return item.slotIds;
+            });
+            for (let i = 0; i < simulated.length; i++) {
+              for (let j = i + 1; j < simulated.length; j++) {
+                const s1 = simulated[i];
+                const s2 = simulated[j];
+                const shared = s1.filter((slot) => s2.includes(slot));
+                if (shared.length === 0) return false;
+              }
+            }
+            return true;
+          });
+
+          return {
+            id: p.id,
+            nombre: p.nombre,
+            slotsCount: mySlots.length,
+            slotIds: mySlots,
+            slotsViables,
+            slotsQueDestraban,
+          };
+        });
+
+        const crucesIncompatibles = [];
+        for (let i = 0; i < rawZonaParejas.length; i++) {
+          for (let j = i + 1; j < rawZonaParejas.length; j++) {
+            const p1 = rawZonaParejas[i];
+            const p2 = rawZonaParejas[j];
+            const shared = p1.slotIds.filter((slot) => p2.slotIds.includes(slot));
+            if (shared.length === 0) {
+              crucesIncompatibles.push({
+                p1: p1.nombre,
+                p2: p2.nombre,
+                p1Id: p1.id,
+                p2Id: p2.id,
+              });
+            }
+          }
+        }
+
+        conflictosMap.get(cId).partidosSinHorario.push({
+          partidoId: z.id || z.nombre,
+          zonaId: z.id || z.nombre,
+          zona: z.nombre,
+          categoriaId: cId,
+          motivo: 'ZONA_MANUAL_INCOMPLETA',
+          pareja1: 'Incompatibilidad de grupo',
+          pareja2: parejasNombres,
+          parejasManuales,
+          crucesIncompatibles,
+          aparicionesMaximas: 999,
+        });
+        continue;
+      }
+
+      for (const p of z.partidos) {
+        if (!p.sinHorarioAsignado) continue;
+        totalPartidosSinHorario++;
+
+        if (!conflictosMap.has(cId)) {
+          conflictosMap.set(cId, {
+            categoriaId: cId,
+            nombreCategoria: cPlan.nombre,
+            partidosSinHorario: [],
+          });
+        }
+
+        const par1 = parejasMap.get(p.pareja1Id);
+        const par2 = parejasMap.get(p.pareja2Id);
+        const slotsP1 = (par1?.slotsSeleccionados || []).map((s) => s.slotId);
+        const slotsP2 = (par2?.slotsSeleccionados || []).map((s) => s.slotId);
+
+        const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
+        const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
+        const shared = interseccionVentanas(win1, win2);
+
+        const tieneFranjaComun = shared.length > 0;
+        const motivo = tieneFranjaComun ? 'SIN_CANCHA_DISPONIBLE' : 'SIN_FRANJA_COMUN';
+
+        let p1Score = win1.length * 1000 + slotsP1.length;
+        let p2Score = win2.length * 1000 + slotsP2.length;
+        const p1IsMoreConstrained = p1Score <= p2Score;
+
+        const parejaMasRestringida = p1IsMoreConstrained ? par1 : par2;
+        const parejaMasRestringidaSlots = p1IsMoreConstrained ? slotsP1.length : slotsP2.length;
+        const parejaMasRestringidaOpciones = p1IsMoreConstrained ? win1.length : win2.length;
+        const parejaMasRestringidaSlotIds = p1IsMoreConstrained ? slotsP1 : slotsP2;
+
+        const slotsViables = allSlotIds.filter((sId) => {
+          const info = slotsEvaluadosMap.get(sId);
+          if (!info || info.canchasLibres <= 0) return false;
+          if (p.pareja1Id && info.parejasOcupadas.includes(p.pareja1Id)) return false;
+          if (p.pareja2Id && info.parejasOcupadas.includes(p.pareja2Id)) return false;
+          return true;
+        });
+
+        const opcionesResolucion = calcularOpcionesResolucion(slotsP1, slotsP2, slotsViables, 6);
+
+        const maxApariciones = Math.max(
+          parejaFreqMap.get(p.pareja1Id) || 0,
+          parejaFreqMap.get(p.pareja2Id) || 0
+        );
+
+        conflictosMap.get(cId).partidosSinHorario.push({
+          partidoId: p.id,
+          zonaId: z.id,
+          zona: z.nombre,
+          categoriaId: cId,
+          pareja1Id: p.pareja1Id,
+          pareja1: par1 ? `${par1.jugador1} / ${par1.jugador2}` : 'Por definirse',
+          pareja1SlotsCount: slotsP1.length,
+          pareja1OpcionesCount: win1.length,
+          pareja1SlotIds: slotsP1,
+          pareja2Id: p.pareja2Id,
+          pareja2: par2 ? `${par2.jugador1} / ${par2.jugador2}` : 'Por definirse',
+          pareja2SlotsCount: slotsP2.length,
+          pareja2OpcionesCount: win2.length,
+          pareja2SlotIds: slotsP2,
+          motivo,
+          parejaMasRestringidaId: parejaMasRestringida?.id || null,
+          parejaMasRestringidaNombre: parejaMasRestringida
+            ? `${parejaMasRestringida.jugador1} / ${parejaMasRestringida.jugador2}`
+            : '',
+          parejaMasRestringidaSlots: parejaMasRestringidaSlots,
+          parejaMasRestringidaOpciones: parejaMasRestringidaOpciones,
+          parejaMasRestringidaSlotIds: parejaMasRestringidaSlotIds,
+          slotsViables,
+          opcionesResolucion,
+          aparicionesMaximas: maxApariciones,
+        });
+      }
+    }
+  }
+
+  for (const catConflicto of conflictosMap.values()) {
+    catConflicto.partidosSinHorario.sort((a, b) => b.aparicionesMaximas - a.aparicionesMaximas);
+  }
+
+  return {
+    conflictos: Array.from(conflictosMap.values()),
+    totalConflictos: totalPartidosSinHorario + totalZonasManuales,
+    totalZonasManuales,
+    grillaOrganizador: grilla,
+  };
+}
+
+/**
+ * Valida si todas las categorías en borrador de un Torneo pueden iniciarse y programarse sin conflictos horarios.
+ * Utiliza un Snapshot Estable en memoria para garantizar que durante la sesión de resolución de cruces
+ * las zonas se mantengan congeladas y los partidos asignados permanezcan inmutables.
+ */
+async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = false, isReCheck = false } = {}) {
   const organizador = await getOrganizador(organizadorId);
 
   const torneo = await prisma.torneo.findUnique({
@@ -253,8 +657,96 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
     throw error;
   }
 
-  const fingerprint = buildFingerprint(organizador, categoriasBorrador);
+  const refFecha = requireTorneoFecha(torneo);
+  const cantCanchas = Math.max(1, organizador.cantidadCanchas || 1);
+  const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 
+  // Mapa global de parejas con disponibilidad actualizada
+  const parejasMap = new Map();
+  for (const c of categoriasBorrador) {
+    for (const p of c.parejas) {
+      parejasMap.set(p.id, p);
+    }
+  }
+
+  // =========================================================================
+  // CAMINO 1: RE-EVALUACIÓN SOBRE SNAPSHOT CONGELADO EXISTENTE (Incremental)
+  // =========================================================================
+  const existingSession = preCheckSessions.get(torneoId);
+  const isSessionValid = existingSession && existingSession.organizadorId === organizadorId && existingSession.expiresAt > Date.now();
+
+  if (isSessionValid && !forceReset) {
+    // Sliding TTL: renueva la expiración en cada interacción
+    existingSession.expiresAt = Date.now() + PRECHECK_TTL_MS;
+
+    // Evaluación 100% síncrona en memoria sobre el snapshot congelado
+    const evalRes = evaluarAsignacionesIncrementales({
+      categoriasPlan: existingSession.categoriasPlan,
+      courtTimelines: existingSession.courtTimelines,
+      parejaAssignments: existingSession.parejaAssignments,
+      parejasMap,
+      cantidadCanchas: cantCanchas,
+      refFecha,
+      organizador,
+      DURACION_MS,
+    });
+
+    if (evalRes.totalConflictos > 0) {
+      const planEmergenciaId = crypto.randomUUID();
+      const fingerprint = buildFingerprint(organizador, categoriasBorrador);
+
+      planesCache.set(planEmergenciaId, {
+        planId: planEmergenciaId,
+        organizadorId,
+        torneoId,
+        expiresAt: existingSession.expiresAt,
+        fingerprint,
+        categoriasPlan: existingSession.categoriasPlan,
+        omitidos,
+        esEmergencia: true,
+      });
+
+      return {
+        bloqueado: true,
+        motivo: 'Existen partidos o zonas sin horario compatible asignado.',
+        conflictos: evalRes.conflictos,
+        grillaOrganizador: evalRes.grillaOrganizador,
+        permiteInicioEmergencia: evalRes.totalZonasManuales === 0,
+        planEmergenciaId,
+        omitidos,
+        sesionReiniciada: false,
+      };
+    } else {
+      const planId = crypto.randomUUID();
+      const fingerprint = buildFingerprint(organizador, categoriasBorrador);
+
+      planesCache.set(planId, {
+        planId,
+        organizadorId,
+        torneoId,
+        expiresAt: existingSession.expiresAt,
+        fingerprint,
+        categoriasPlan: existingSession.categoriasPlan,
+        omitidos,
+      });
+
+      return {
+        bloqueado: false,
+        planId,
+        torneoId,
+        categoriasAIniciar: validos.map((v) => ({ id: v.categoria.id, nombre: v.categoria.nombre })),
+        omitidos,
+        sesionReiniciada: false,
+      };
+    }
+  }
+
+  // =========================================================================
+  // CAMINO 2: PRIMER PRE-CHECK O REINICIO EXPLÍCITO (Generar Nuevo Snapshot)
+  // =========================================================================
+  const sesionReiniciada = Boolean(isReCheck && !forceReset && (!existingSession || existingSession.expiresAt <= Date.now()));
+
+  const fingerprint = buildFingerprint(organizador, categoriasBorrador);
   const PLANNED_ROLLBACK = Symbol('PLANNED_ROLLBACK');
   let dryRunResult = null;
 
@@ -276,363 +768,110 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
       const categoriasIdsValidos = validos.map((v) => v.categoria.id);
       await asignarHorariosAutomatico(organizadorId, categoriasIdsValidos, tx);
 
-      // 4. Buscar partidos sin horario asignado y zonas manuales por incompatibilidad
-      const partidosSinHorario = await tx.partido.findMany({
-        where: {
-          categoriaId: { in: categoriasIdsValidos },
-          sinHorarioAsignado: true,
-        },
-        include: {
-          categoria: { select: { id: true, nombre: true } },
-          pareja1: {
-            select: {
-              id: true,
-              jugador1: true,
-              jugador2: true,
-              slotsSeleccionados: { select: { slotId: true } },
-            },
-          },
-          pareja2: {
-            select: {
-              id: true,
-              jugador1: true,
-              jugador2: true,
-              slotsSeleccionados: { select: { slotId: true } },
-            },
-          },
-          zona: { select: { id: true, nombre: true } },
-        },
-      });
+      // 4. Construir categoriasPlan y capturar timelines del snapshot
+      const categoriasPlan = [];
+      const courtTimelines = new Map();
+      for (let c = 1; c <= cantCanchas; c++) courtTimelines.set(c, []);
+      const parejaAssignments = new Map();
 
-      const zonasManuales = await tx.zona.findMany({
-        where: {
-          categoriaId: { in: categoriasIdsValidos },
-          requiereArmadoManual: true,
-        },
-        include: {
-          categoria: { select: { id: true, nombre: true } },
-          zonaParejas: {
-            include: {
-              pareja: {
-                select: {
-                  id: true,
-                  jugador1: true,
-                  jugador2: true,
-                  slotsSeleccionados: { select: { slotId: true } },
-                },
+      for (const v of validos) {
+        const zonasTx = await tx.zona.findMany({
+          where: { categoriaId: v.categoria.id },
+          include: {
+            zonaParejas: { select: { parejaId: true } },
+            partidos: {
+              select: {
+                id: true,
+                posicionEnRonda: true,
+                pareja1Id: true,
+                pareja2Id: true,
+                fechaHora: true,
+                canchaNumero: true,
+                sinHorarioAsignado: true,
               },
             },
           },
-        },
-      });
-
-      if (partidosSinHorario.length > 0 || zonasManuales.length > 0) {
-        // Conteo de frecuencia de apariciones de cada pareja
-        const parejaFreqMap = new Map();
-        for (const p of partidosSinHorario) {
-          if (p.pareja1Id) parejaFreqMap.set(p.pareja1Id, (parejaFreqMap.get(p.pareja1Id) || 0) + 1);
-          if (p.pareja2Id) parejaFreqMap.set(p.pareja2Id, (parejaFreqMap.get(p.pareja2Id) || 0) + 1);
-        }
-        for (const zm of zonasManuales) {
-          for (const zp of zm.zonaParejas) {
-            if (zp.pareja?.id) {
-              parejaFreqMap.set(zp.pareja.id, (parejaFreqMap.get(zp.pareja.id) || 0) + 1);
-            }
-          }
-        }
-
-        const refFecha = requireTorneoFecha(torneo);
-
-        // Obtener partidos que sí pudieron agendarse en la simulación
-        const partidosConHorario = await tx.partido.findMany({
-          where: {
-            categoriaId: { in: categoriasIdsValidos },
-            fechaHora: { not: null },
-            canchaNumero: { not: null },
-          },
-          select: {
-            fechaHora: true,
-            canchaNumero: true,
-            pareja1Id: true,
-            pareja2Id: true,
-          },
         });
 
-        const partidosIntervalos = partidosConHorario.map((p) => {
-          const startMs = new Date(p.fechaHora).getTime();
-          const endMs = startMs + 75 * 60 * 1000;
-          return {
-            canchaNumero: p.canchaNumero,
-            startMs,
-            endMs,
-            pareja1Id: p.pareja1Id,
-            pareja2Id: p.pareja2Id,
-          };
-        });
-
-        const cantCanchas = organizador.cantidadCanchas || 1;
-        const grilla = generarGrillaOrganizador(organizador);
-        const allSlotIds = [...grilla.viernes, ...grilla.sabado];
-        const slotsEvaluadosMap = new Map();
-
-        for (const sId of allSlotIds) {
-          const sDate = parseSlotToDate(sId, refFecha);
-          if (!sDate) continue;
-          const sStartMs = sDate.getTime();
-          const sEndMs = sStartMs + 75 * 60 * 1000;
-
-          const canchasOcupadas = new Set();
-          const parejasOcupadas = new Set();
-
-          for (const p of partidosIntervalos) {
-            if (Math.max(sStartMs, p.startMs) < Math.min(sEndMs, p.endMs)) {
-              if (p.canchaNumero) canchasOcupadas.add(p.canchaNumero);
-              if (p.pareja1Id) parejasOcupadas.add(p.pareja1Id);
-              if (p.pareja2Id) parejasOcupadas.add(p.pareja2Id);
-            }
-          }
-
-          const canchasLibres = cantCanchas - canchasOcupadas.size;
-          slotsEvaluadosMap.set(sId, {
-            canchasLibres,
-            parejasOcupadas: Array.from(parejasOcupadas),
-          });
-        }
-
-        const conflictosMap = new Map();
-
-        for (const p of partidosSinHorario) {
-          const cId = p.categoria.id;
-          if (!conflictosMap.has(cId)) {
-            conflictosMap.set(cId, {
-              categoriaId: cId,
-              nombreCategoria: p.categoria.nombre,
-              partidosSinHorario: [],
-            });
-          }
-
-          const slotsP1 = (p.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
-          const slotsP2 = (p.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
-
-          const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
-          const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
-          const shared = interseccionVentanas(win1, win2);
-
-          const tieneFranjaComun = shared.length > 0;
-          const motivo = tieneFranjaComun ? 'SIN_CANCHA_DISPONIBLE' : 'SIN_FRANJA_COMUN';
-
-          // Criterio MCF de pareja más restringida: menor cantidad de opciones día+franja (ventanas continuas),
-          // y como desempate menor cantidad total de slots.
-          let p1Score = win1.length * 1000 + slotsP1.length;
-          let p2Score = win2.length * 1000 + slotsP2.length;
-          const p1IsMoreConstrained = p1Score <= p2Score;
-
-          const parejaMasRestringida = p1IsMoreConstrained ? p.pareja1 : p.pareja2;
-          const parejaMasRestringidaSlots = p1IsMoreConstrained ? slotsP1.length : slotsP2.length;
-          const parejaMasRestringidaOpciones = p1IsMoreConstrained ? win1.length : win2.length;
-          const parejaMasRestringidaSlotIds = p1IsMoreConstrained ? slotsP1 : slotsP2;
-          const slotsRival = p1IsMoreConstrained ? slotsP2 : slotsP1;
-
-          // Filtrar ÚNICAMENTE slots donde:
-          // 1. Hay cancha libre en el club a esa hora
-          // 2. Ninguna de las 2 parejas del cruce tiene otro partido asignado a esa hora
-          const slotsViables = allSlotIds.filter((sId) => {
-            const info = slotsEvaluadosMap.get(sId);
-            if (!info || info.canchasLibres <= 0) return false;
-            if (p.pareja1Id && info.parejasOcupadas.includes(p.pareja1Id)) return false;
-            if (p.pareja2Id && info.parejasOcupadas.includes(p.pareja2Id)) return false;
-            return true;
-          });
-
-          // Lista unificada de opciones de resolución (estrellas reales + casi-estrellas ordenadas por esfuerzo)
-          const opcionesResolucion = calcularOpcionesResolucion(slotsP1, slotsP2, slotsViables, 6);
-
-          const maxApariciones = Math.max(
-            parejaFreqMap.get(p.pareja1Id) || 0,
-            parejaFreqMap.get(p.pareja2Id) || 0
-          );
-
-          conflictosMap.get(cId).partidosSinHorario.push({
-            partidoId: p.id,
-            zonaId: p.zona?.id,
-            zona: p.zona?.nombre || 'Zona',
-            categoriaId: cId,
-            pareja1Id: p.pareja1?.id,
-            pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : 'Por definirse',
-            pareja1SlotsCount: slotsP1.length,
-            pareja1OpcionesCount: win1.length,
-            pareja1SlotIds: slotsP1,
-            pareja2Id: p.pareja2?.id,
-            pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : 'Por definirse',
-            pareja2SlotsCount: slotsP2.length,
-            pareja2OpcionesCount: win2.length,
-            pareja2SlotIds: slotsP2,
-            motivo,
-            parejaMasRestringidaId: parejaMasRestringida?.id || null,
-            parejaMasRestringidaNombre: parejaMasRestringida
-              ? `${parejaMasRestringida.jugador1} / ${parejaMasRestringida.jugador2}`
-              : '',
-            parejaMasRestringidaSlots: parejaMasRestringidaSlots,
-            parejaMasRestringidaOpciones: parejaMasRestringidaOpciones,
-            parejaMasRestringidaSlotIds: parejaMasRestringidaSlotIds,
-            slotsViables,
-            opcionesResolucion,
-            aparicionesMaximas: maxApariciones,
-          });
-        }
-
-        for (const zm of zonasManuales) {
-          const cId = zm.categoria.id;
-          if (!conflictosMap.has(cId)) {
-            conflictosMap.set(cId, {
-              categoriaId: cId,
-              nombreCategoria: zm.categoria.nombre,
-              partidosSinHorario: [],
-            });
-          }
-          const parejasNombres = zm.zonaParejas
-            .map((zp) => (zp.pareja ? `${zp.pareja.jugador1} / ${zp.pareja.jugador2}` : 'Pareja'))
-            .join(' | ');
-
-          // Estructurar las parejas de la zona manual
-          const rawZonaParejas = zm.zonaParejas.map((zp) => ({
-            id: zp.pareja?.id,
-            nombre: zp.pareja ? `${zp.pareja.jugador1} / ${zp.pareja.jugador2}` : 'Pareja',
-            slotIds: (zp.pareja?.slotsSeleccionados || []).map((s) => s.slotId),
-          }));
-
-          // Para cada pareja de la zona incompleta, calcular qué slots destraban genuinamente el grupo
-          const parejasManuales = rawZonaParejas.map((p) => {
-            const mySlots = p.slotIds;
-
-            // Slots viables con cancha libre y sin pareja ocupada
-            const slotsViables = allSlotIds.filter((sId) => {
-              const info = slotsEvaluadosMap.get(sId);
-              if (!info || info.canchasLibres <= 0) return false;
-              if (p.id && info.parejasOcupadas.includes(p.id)) return false;
-              return true;
-            });
-
-            // Los slots que destraban: aquellos donde, si esta pareja agrega ese slot,
-            // TODAS las parejas de la zona quedan con compatibilidad mutua (100% resuelto)
-            const slotsQueDestraban = slotsViables.filter((sId) => {
-              // Simular la zona con este slot agregado a esta pareja
-              const simulated = rawZonaParejas.map((item) => {
-                if (item.id === p.id) {
-                  return Array.from(new Set([...item.slotIds, sId]));
-                }
-                return item.slotIds;
-              });
-
-              for (let i = 0; i < simulated.length; i++) {
-                for (let j = i + 1; j < simulated.length; j++) {
-                  const s1 = simulated[i];
-                  const s2 = simulated[j];
-                  const shared = s1.filter((slot) => s2.includes(slot));
-                  if (shared.length === 0) return false;
-                }
+        for (const z of zonasTx) {
+          for (const p of z.partidos) {
+            if (!p.sinHorarioAsignado && p.fechaHora && p.canchaNumero) {
+              const s = new Date(p.fechaHora).getTime();
+              const e = s + DURACION_MS;
+              if (courtTimelines.has(p.canchaNumero)) {
+                courtTimelines.get(p.canchaNumero).push({ startMs: s, endMs: e });
               }
-              return true;
-            });
+              if (p.pareja1Id) {
+                if (!parejaAssignments.has(p.pareja1Id)) parejaAssignments.set(p.pareja1Id, []);
+                parejaAssignments.get(p.pareja1Id).push({ startMs: s, endMs: e });
+              }
+              if (p.pareja2Id) {
+                if (!parejaAssignments.has(p.pareja2Id)) parejaAssignments.set(p.pareja2Id, []);
+                parejaAssignments.get(p.pareja2Id).push({ startMs: s, endMs: e });
+              }
+            }
+          }
+        }
 
-            return {
+        categoriasPlan.push({
+          categoriaId: v.categoria.id,
+          nombre: v.categoria.nombre,
+          avgSlots: v.avgSlots,
+          zonas: zonasTx.map((z) => ({
+            id: z.id,
+            nombre: z.nombre,
+            clasifican: z.clasifican,
+            formato: z.formato,
+            requiereArmadoManual: z.requiereArmadoManual || false,
+            parejaIds: z.zonaParejas.map((zp) => zp.parejaId),
+            partidos: z.partidos.map((p) => ({
               id: p.id,
-              nombre: p.nombre,
-              slotsCount: mySlots.length,
-              slotIds: mySlots,
-              slotsViables,
-              slotsQueDestraban,
-            };
-          });
+              posicionEnRonda: p.posicionEnRonda,
+              pareja1Id: p.pareja1Id,
+              pareja2Id: p.pareja2Id,
+              fechaHora: p.fechaHora,
+              canchaNumero: p.canchaNumero,
+              sinHorarioAsignado: p.sinHorarioAsignado || false,
+            })),
+          })),
+        });
+      }
 
-          // Calcular qué pares de parejas dentro de la zona manual no tienen horarios en común
-          const crucesIncompatibles = [];
-          for (let i = 0; i < rawZonaParejas.length; i++) {
-            for (let j = i + 1; j < rawZonaParejas.length; j++) {
-              const p1 = rawZonaParejas[i];
-              const p2 = rawZonaParejas[j];
-              const shared = p1.slotIds.filter((slot) => p2.slotIds.includes(slot));
-              if (shared.length === 0) {
-                crucesIncompatibles.push({
-                  p1: p1.nombre,
-                  p2: p2.nombre,
-                  p1Id: p1.id,
-                  p2Id: p2.id,
-                });
-              }
-            }
-          }
+      // Guardar sesión en memoria para re-checks incrementales estables
+      preCheckSessions.set(torneoId, {
+        torneoId,
+        organizadorId,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + PRECHECK_TTL_MS,
+        validos,
+        omitidos,
+        categoriasPlan,
+        courtTimelines,
+        parejaAssignments,
+        refFecha,
+      });
 
-          conflictosMap.get(cId).partidosSinHorario.push({
-            partidoId: zm.id,
-            zonaId: zm.id,
-            zona: zm.nombre,
-            categoriaId: cId,
-            motivo: 'ZONA_MANUAL_INCOMPLETA',
-            pareja1: 'Incompatibilidad de grupo',
-            pareja2: parejasNombres,
-            parejasManuales,
-            crucesIncompatibles,
-            aparicionesMaximas: 999, // Alta prioridad
-          });
-        }
+      // 5. Evaluar conflictos iniciales
+      const evalRes = evaluarAsignacionesIncrementales({
+        categoriasPlan,
+        courtTimelines,
+        parejaAssignments,
+        parejasMap,
+        cantidadCanchas: cantCanchas,
+        refFecha,
+        organizador,
+        DURACION_MS,
+      });
 
-        // Ordenar conflictos de cada categoría: primero zonas manuales y parejas con más conflictos (frecuencia)
-        for (const catConflicto of conflictosMap.values()) {
-          catConflicto.partidosSinHorario.sort((a, b) => b.aparicionesMaximas - a.aparicionesMaximas);
-        }
-
+      if (evalRes.totalConflictos > 0) {
         let planEmergenciaId = null;
-        if (zonasManuales.length === 0) {
-          const categoriasPlan = [];
-          for (const v of validos) {
-            const zonasTx = await tx.zona.findMany({
-              where: { categoriaId: v.categoria.id },
-              include: {
-                zonaParejas: { select: { parejaId: true } },
-                partidos: {
-                  select: {
-                    posicionEnRonda: true,
-                    pareja1Id: true,
-                    pareja2Id: true,
-                    fechaHora: true,
-                    canchaNumero: true,
-                    sinHorarioAsignado: true,
-                  },
-                },
-              },
-            });
-
-            categoriasPlan.push({
-              categoriaId: v.categoria.id,
-              nombre: v.categoria.nombre,
-              avgSlots: v.avgSlots,
-              zonas: zonasTx.map((z) => ({
-                nombre: z.nombre,
-                clasifican: z.clasifican,
-                formato: z.formato,
-                requiereArmadoManual: z.requiereArmadoManual || false,
-                parejaIds: z.zonaParejas.map((zp) => zp.parejaId),
-                partidos: z.partidos.map((p) => ({
-                  posicionEnRonda: p.posicionEnRonda,
-                  pareja1Id: p.pareja1Id,
-                  pareja2Id: p.pareja2Id,
-                  fechaHora: p.fechaHora,
-                  canchaNumero: p.canchaNumero,
-                  sinHorarioAsignado: p.sinHorarioAsignado || false,
-                })),
-              })),
-            });
-          }
-
+        if (evalRes.totalZonasManuales === 0) {
           planEmergenciaId = crypto.randomUUID();
-          const expiresAt = Date.now() + PLAN_TTL_MS;
-
           planesCache.set(planEmergenciaId, {
             planId: planEmergenciaId,
             organizadorId,
             torneoId,
-            expiresAt,
+            expiresAt: Date.now() + PRECHECK_TTL_MS,
             fingerprint,
             categoriasPlan,
             omitidos,
@@ -643,63 +882,20 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
         dryRunResult = {
           bloqueado: true,
           motivo: 'Existen partidos o zonas sin horario compatible asignado.',
-          conflictos: Array.from(conflictosMap.values()),
-          grillaOrganizador: generarGrillaOrganizador(organizador),
-          permiteInicioEmergencia: zonasManuales.length === 0,
+          conflictos: evalRes.conflictos,
+          grillaOrganizador: evalRes.grillaOrganizador,
+          permiteInicioEmergencia: evalRes.totalZonasManuales === 0,
           planEmergenciaId,
           omitidos,
+          sesionReiniciada,
         };
       } else {
-        // Armar el snapshot LÓGICO para persistirlo al confirmar
-        const categoriasPlan = [];
-        for (const v of validos) {
-          const zonasTx = await tx.zona.findMany({
-            where: { categoriaId: v.categoria.id },
-            include: {
-              zonaParejas: { select: { parejaId: true } },
-              partidos: {
-                select: {
-                  posicionEnRonda: true,
-                  pareja1Id: true,
-                  pareja2Id: true,
-                  fechaHora: true,
-                  canchaNumero: true,
-                  sinHorarioAsignado: true,
-                },
-              },
-            },
-          });
-
-          categoriasPlan.push({
-            categoriaId: v.categoria.id,
-            nombre: v.categoria.nombre,
-            avgSlots: v.avgSlots,
-            zonas: zonasTx.map((z) => ({
-              nombre: z.nombre,
-              clasifican: z.clasifican,
-              formato: z.formato,
-              requiereArmadoManual: z.requiereArmadoManual || false,
-              parejaIds: z.zonaParejas.map((zp) => zp.parejaId),
-              partidos: z.partidos.map((p) => ({
-                posicionEnRonda: p.posicionEnRonda,
-                pareja1Id: p.pareja1Id,
-                pareja2Id: p.pareja2Id,
-                fechaHora: p.fechaHora,
-                canchaNumero: p.canchaNumero,
-                sinHorarioAsignado: p.sinHorarioAsignado || false,
-              })),
-            })),
-          });
-        }
-
         const planId = crypto.randomUUID();
-        const expiresAt = Date.now() + PLAN_TTL_MS;
-
         planesCache.set(planId, {
           planId,
           organizadorId,
           torneoId,
-          expiresAt,
+          expiresAt: Date.now() + PRECHECK_TTL_MS,
           fingerprint,
           categoriasPlan,
           omitidos,
@@ -711,6 +907,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId) {
           torneoId,
           categoriasAIniciar: validos.map((v) => ({ id: v.categoria.id, nombre: v.categoria.nombre })),
           omitidos,
+          sesionReiniciada,
         };
       }
 
@@ -826,6 +1023,7 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
     });
 
     planesCache.delete(planId);
+    preCheckSessions.delete(torneoId);
 
     return {
       message: 'Torneo iniciado y horarios asignados exitosamente.',
@@ -1441,4 +1639,6 @@ module.exports = {
   getCanchasDisponiblesTorneo,
   getEstadoEnVivo,
   reprogramarPorReduccionCanchas,
+  preCheckSessions,
+  planesCache,
 };

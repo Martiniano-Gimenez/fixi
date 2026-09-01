@@ -346,6 +346,8 @@ export default function TorneoDetail() {
   const [hayCambiosGuardados, setHayCambiosGuardados] = useState(false);
   const [resultadoInicio, setResultadoInicio] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
+  const [confirmarResorteoModalOpen, setConfirmarResorteoModalOpen] = useState(false);
+  const [avisoSesionReiniciada, setAvisoSesionReiniciada] = useState(false);
 
   const categoriasConflictosOrdenadas = useMemo(() => {
     if (!conflictosBloqueo || conflictosBloqueo.length === 0) return [];
@@ -471,11 +473,13 @@ export default function TorneoDetail() {
     }
   };
 
-  const handlePreCheckInicio = async (isReCheck = false) => {
+  const handlePreCheckInicio = async (isReCheck = false, forceReset = false) => {
     setVerificandoInicio(true);
     setHayCambiosGuardados(false);
     try {
-      const res = await api.post(`/torneos/${id}/pre-check-inicio`);
+      const res = await api.post(`/torneos/${id}/pre-check-inicio`, { isReCheck, forceReset });
+      setAvisoSesionReiniciada(Boolean(res.sesionReiniciada));
+
       if (res.grillaOrganizador) {
         setGrillaOrganizador(res.grillaOrganizador);
       }
@@ -487,7 +491,7 @@ export default function TorneoDetail() {
         setPlanEmergenciaId(res.planEmergenciaId || null);
         setPreCheckAprobado(false);
         setPlanId(null);
-        if (conteoInicialConflictos === null || !isReCheck) {
+        if (conteoInicialConflictos === null || !isReCheck || forceReset) {
           setConteoInicialConflictos(total);
         }
 
@@ -1252,6 +1256,28 @@ export default function TorneoDetail() {
                 </div>
               </div>
 
+              {avisoSesionReiniciada && (
+                <div
+                  style={{
+                    padding: '0.6rem 0.85rem',
+                    marginBottom: '0.75rem',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(59, 130, 246, 0.12)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    color: '#3b82f6',
+                    fontSize: 'var(--font-size-xs)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <Info size={16} style={{ flexShrink: 0 }} />
+                  <span>
+                    El servidor se reinició o la sesión expiró. Se recalculó la vista previa con los horarios guardados.
+                  </span>
+                </div>
+              )}
+
               <div
                 style={{
                   display: 'flex',
@@ -1563,9 +1589,9 @@ export default function TorneoDetail() {
                   {hayCambiosGuardados && (
                     <span
                       style={{
+                        fontSize: '11.5px',
                         color: 'var(--color-warning)',
-                        fontSize: '11px',
-                        display: 'inline-flex',
+                        display: 'flex',
                         alignItems: 'center',
                         gap: '0.3rem',
                         fontWeight: 600,
@@ -1575,6 +1601,21 @@ export default function TorneoDetail() {
                       Hay cambios guardados. Hacé clic en "Volver a verificar".
                     </span>
                   )}
+                  <button
+                    type="button"
+                    className="btn-link-action"
+                    style={{
+                      fontSize: 'var(--font-size-xs)',
+                      color: 'var(--color-text-muted)',
+                      textDecoration: 'underline',
+                      padding: '0.2rem 0.4rem',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onClick={() => setConfirmarResorteoModalOpen(true)}
+                    disabled={verificandoInicio || iniciandoTorneo}
+                  >
+                    Re-sortear zonas desde cero
+                  </button>
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1701,6 +1742,44 @@ export default function TorneoDetail() {
                 disabled={iniciandoTorneo}
               >
                 {iniciandoTorneo ? 'Iniciando torneo...' : 'Iniciar de todas formas'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de confirmación de Re-sorteo de Zonas desde cero */}
+      {confirmarResorteoModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-content" style={{ maxWidth: '480px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem', color: 'var(--color-danger)' }}>
+              <AlertTriangle size={24} />
+              <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-text)' }}>
+                ¿Re-sortear y mezclar todas las zonas?
+              </h3>
+            </div>
+            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+              Esta acción descartará la distribución actual de parejas y volverá a sortear todas las zonas de las categorías desde cero en base a las disponibilidades actuales. Se reiniciará el avance de los cruces resueltos en esta sesión.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setConfirmarResorteoModalOpen(false)}
+                disabled={verificandoInicio}
+              >
+                Cancelar, mantener zonas
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                onClick={async () => {
+                  setConfirmarResorteoModalOpen(false);
+                  await handlePreCheckInicio(false, true);
+                }}
+                disabled={verificandoInicio}
+              >
+                {verificandoInicio ? 'Re-sorteando...' : 'Sí, re-sortear todo'}
               </button>
             </div>
           </div>
