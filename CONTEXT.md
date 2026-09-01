@@ -46,16 +46,18 @@ organizadores que hoy llevan todo en papel.
   - *Pasada 2 Global:* Asigna todos los partidos flexibles en una cola ordenada por escasez de opciones (MCF Global), utilizando turnos estándar o huecos continuos de 15 min.
 - **Asignación Determinística de Cancha:** La asignación automática de cancha se realiza siempre por orden numérico ascendente (Cancha 1 $\rightarrow$ Cancha 2 $\rightarrow$ ... $\rightarrow$ Cancha N) seleccionando la primera disponible en la franja.
 - **Prioridad de Scheduling ("Most Constrained First"):** Partidos y categorías se ordenan de menor a mayor cantidad de combinaciones día+franja válidas compartidas, reservando los recursos más escasos para los cruces con menos alternativas.
-- **Modo Día de Torneo y Reprogramación Dinámica por Reducción de Canchas ("Modo Lluvia"):**
+- **Modo Día de Torneo y Reprogramación Dinámica por Cambio de Canchas ("Modo Lluvia"):**
   - Permite ajustar temporalmente las canchas activas del torneo (`Torneo.canchasDisponiblesOverride`), manteniendo `Club.cantidadCanchas` como techo físico real (`override <= club.cantidadCanchas`).
-  - **Aislamiento por Día Calendario Lógico:** La reprogramación se restringe única y exclusivamente a los partidos `PENDIENTE` que pertenezcan al mismo día calendario lógico (calculado con `getDiaCalendarioConTrasnoche` y horarios del club) que `overrideActivoDesde`, evitando que un evento de lluvia de un día contamine o comprima partidos de las jornadas subsiguientes.
-  - **Jornada extendida en modo lluvia:** Durante la reprogramación de emergencia por lluvia, el horario formal de cierre del club NO corta la búsqueda (permite extender partidos de madrugada en trasnoche respetando `dayLimitMs`), pero el límite del día lógico interrumpe la búsqueda para no desbordar a otro día.
+  - **Reprogramación Guiada 100% por Estado del Partido:** Los partidos `FINALIZADO` y `EN_CURSO` actúan como ocupación fija e inmutable en sus canchas y horarios. Los partidos `PENDIENTE` con horario asignado se reubican secuencialmente en las canchas activas ($1 \dots N$), sin depender del reloj del sistema.
+  - **Reprogramación Bidireccional:** El algoritmo se ejecuta tanto al reducir canchas (compactando y demorando partidos en las canchas restantes) como al restaurarlas o aumentarlas (adelantando partidos y redistribuyéndolos en las canchas liberadas).
+  - **Aislamiento por Día Calendario Lógico:** Cada partido conoce su día lógico y su límite de jornada (`dayLimitMs`), garantizando que la compactación respete estrictamente los límites del día (Viernes en jornada de Viernes con trasnoche, Sábado en Sábado) sin desbordes inter-jornadas.
+  - **Slots de Trasnoche:** Los turnos de madrugada (`00:00` a `05:59`) se sitúan en la madrugada del día calendario siguiente (+1 día respecto al inicio de la jornada), garantizando una secuencia cronológica natural sin asignaciones erróneas al día anterior (Jueves).
   - **Bloqueo y Canchas Fantasma:** Si existen partidos `EN_CURSO` en canchas que se desean inhabilitar, la reducción se bloquea con error 400. Si existen partidos `PENDIENTE` con horario anterior al override que quedaron asignados en canchas $> \text{canchasActivas}$, se reportan como "Canchas Fantasma" con alerta visible en la vista en vivo para resolución manual.
-  - Al restaurar canchas (`override = null`), se vuelven a habilitar todas las canchas del club sin mover automáticamente los partidos ya jugados o reprogramados.
+  - **Feedback Limpio de Cambios:** El modal de aviso lista y cuenta exclusivamente los partidos que sufrieron una modificación en su horario de inicio o quedaron sin horario, excluyendo los que solo cambiaron de cancha manteniendo su hora.
 
 ## Funcionalidades implementadas
 - Jerarquía completa: Club $\rightarrow$ Torneo (Evento) $\rightarrow$ Categorías $\rightarrow$ Parejas/Zonas/Partidos/Eliminatorias.
-- CRUD completo de torneos y categorías (crear, editar, eliminar y reiniciar a borrador, reseteando flags de `resolucionManual`).
+- CRUD completo de torneos y categorías (crear, editar nombre/fecha vía modal interactivo, eliminar y reiniciar a borrador, reseteando flags de `resolucionManual`).
 - Gestión de Club / Organizador (`/admin/club`): edición de canchas totales y horarios de apertura con advertencia de impacto.
 - Carga de disponibilidad por pareja mediante **Slider de Rango Horario dual (15 min)** (`RangeSliderDia`, `RangeSliderGroup` y `DisponibilidadEditor`): selectores de manijas desde-hasta con snap de 15 min, soporte para múltiples rangos independientes por día (gaps/huecos en el medio), indicador de trasnoche y algoritmo de reconstrucción con expansión de slots de 75 min previos a ventanas continuas completas.
 - Generación de zonas por sorteo aleatorio (Fisher-Yates) o por compatibilidad horaria por categoría.
@@ -66,9 +68,9 @@ organizadores que hoy llevan todo en papel.
 - Reprogramación de horarios de partidos asignados (`AsignarHorarioModal`): escritura atómica segura que excluye la ocupación anterior del propio partido al validar disponibilidad (`ignorePartidoId`), permitiendo reasignaciones limpias sin colisiones.
 - **Modo Día de Torneo — En Vivo (`TorneoEnVivo.jsx`, `/admin/torneos/:id/en-vivo`):**
   - Panel operativo centralizado para el día del evento con grilla visual de canchas en tiempo real (Libre, En Juego, Inhabilitada).
-  - Barra de control de Modo Lluvia (reducir/restaurar canchas activas) con feedback descriptivo de partidos corridos y minutos de delta, aislado por día lógico (`dateUtils.js`).
+  - Barra de control de Modo Lluvia (reducir/restaurar canchas activas) con feedback descriptivo de partidos corridos de horario, aislado por día lógico (`dateUtils.js`).
   - Alerta destacada para partidos en canchas fantasma con acceso a reprogramación manual.
-  - **Próximos Partidos Separados por Tabs de Día:** Pestañas dinámicas (`Viernes 28 | Sábado 29`) calculadas con la lógica de trasnoche real del club, con selección inteligente por defecto del día actual o más próximo.
+  - **Próximos Partidos Separados por Tabs de Día:** Pestañas dinámicas (`Viernes 28 | Sábado 29`) calculadas con la lógica de trasnoche real del club, con selección inteligente por defecto del primer día con partidos disponibles.
   - **Cambio Rápido de Estado a "EN_CURSO" y "PENDIENTE" (1-Click):**
     - Botón `Play` (`▶`) en cada tarjeta de "Próximos Partidos" para iniciar partidos al instante sin necesidad de cargar un set previo (vía `PATCH /api/partidos/:id/estado`).
     - Botón `Revertir` (`RotateCcw`) en "Partidos en Juego" para devolver a `PENDIENTE` ante clics accidentales (limpiando sets parciales).
