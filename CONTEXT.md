@@ -33,7 +33,7 @@ organizadores que hoy llevan todo en papel.
 - **Granularidad de Disponibilidad:** Grilla a intervalos de **15 minutos** (`SLOT_GRANULARIDAD_MIN = 15`) para máxima precisión horaria sin pérdida de disponibilidad en la carga.
 - **Reglas de Pádel en Resultados:** Mínimo 6 games para ganar set, diferencia de 2 en 6-5 (se permiten 7-5 / 7-6).
 - **Mini-Bracket (Zonas de 4):** 2 partidos iniciales (P1 vs P2, P3 vs P4) y 2 definitorios ("Ganador vs Ganador" para 1°/2° puesto y "Perdedor vs Perdedor" para 3° puesto). El orden se fija mediante el campo explícito `posicion`.
-- **Compatibilidad Horaria:** Las parejas cargan disponibilidad en rangos horarios (slots de 15 min) que se fusionan en ventanas continuas. La compatibilidad se calcula como la intersección de ventanas continuas entre parejas.
+- **Compatibilidad Horaria:** Las parejas cargan disponibilidad en rangos horarios (slots de 15 min) que se fusionan en ventanas continuas. La compatibilidad se calcula como la intersección de ventanas continuas entre parejas. *(Nota importante: En Modo Lluvia / contingencia operativa en vivo, esta restricción queda expresamente suspendida para compactar la jornada lo máximo posible con las canchas restantes; ver detalle en Modo Día de Torneo).*
 - **Jerarquía de Certeza y Resolución de Conflictos:** El ranking de opciones de resolución (previo y posterior al inicio) prioriza la certeza por sobre el esfuerzo nominal:
   1. *Certeza:* 0 partes que estiran (Estrella mutua) $\rightarrow$ 1 parte que estira (Estrella clásica / 1 sola llamada confirmatoria) $\rightarrow$ 2 partes que estiran (Casi-estrella doble).
   2. *Esfuerzo:* Menor distancia combinada absoluta en minutos (`distTotal`).
