@@ -1601,13 +1601,15 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     }
   }
 
+  const timestampOverride = new Date();
+
   // 7. Persistir atómicamente en base de datos
   await prisma.$transaction(async (tx) => {
     await tx.torneo.update({
       where: { id: torneoId },
       data: {
         canchasDisponiblesOverride: overrideNum,
-        overrideActivoDesde: ahora,
+        overrideActivoDesde: timestampOverride,
       },
     });
 
@@ -1626,7 +1628,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   return {
     message: `Canchas reducidas a ${overrideNum}. Se reprogramaron ${partidosReprogramados} partidos.`,
     canchasActivas: overrideNum,
-    overrideActivoDesde: ahora.toISOString(),
+    overrideActivoDesde: timestampOverride.toISOString(),
     reprogramacion: {
       ejecutada: true,
       partidosReprogramados,
