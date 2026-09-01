@@ -1414,7 +1414,6 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     throw error;
   }
 
-  const ahora = new Date();
   const DURACION_MS = 75 * 60 * 1000;
 
   // 4. Cargar todos los partidos del torneo para armar las timelines
@@ -1472,32 +1471,18 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   }
 
   const partidosAReprogramar = [];
-  const fechaBaseLluvia = torneo.overrideActivoDesde || ahora;
-  const diaLluviaInfo = getDiaCalendarioConTrasnoche(fechaBaseLluvia, organizador);
 
   for (const p of todosLosPartidos) {
     if (p.estado === 'EN_CURSO' || p.estado === 'FINALIZADO') {
+      // Partidos ya jugados o en curso: Ocupación fija inmutable
       if (p.fechaHora) {
         const startMs = new Date(p.fechaHora).getTime();
         addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, startMs + DURACION_MS);
       }
     } else if (p.estado === 'PENDIENTE') {
+      // Partidos pendientes con horario asignado: Reubicables en canchas activas
       if (p.fechaHora && p.canchaNumero && !p.sinHorarioAsignado) {
-        const pDate = new Date(p.fechaHora);
-        const pDiaInfo = getDiaCalendarioConTrasnoche(pDate, organizador);
-
-        if (pDate.getTime() < ahora.getTime()) {
-          // Partido pendiente pasado (anterior al override): Ocupación fija (no se reprograma)
-          const startMs = pDate.getTime();
-          addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, startMs + DURACION_MS);
-        } else if (pDiaInfo && diaLluviaInfo && pDiaInfo.key === diaLluviaInfo.key) {
-          // Partido pendiente futuro del mismo día calendario: A reprogramar
-          partidosAReprogramar.push(p);
-        } else {
-          // Partido futuro pero de OTRO día calendario: Ocupación fija (no se toca)
-          const startMs = pDate.getTime();
-          addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, startMs + DURACION_MS);
-        }
+        partidosAReprogramar.push(p);
       }
     }
   }
@@ -1525,7 +1510,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     return 'Por definirse';
   }
 
-  // 6. Reprogramar secuencialmente cada partido
+  // 6. Reprogramar secuencialmente cada partido pendiente
   for (const partido of partidosAReprogramar) {
     const origStartMs = new Date(partido.fechaHora).getTime();
     const origCancha = partido.canchaNumero;
@@ -1535,8 +1520,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     const origDiaInfo = getDiaCalendarioConTrasnoche(origDate, organizador);
     const dayLimit = new Date(origDiaInfo.dayLimitMs);
 
-    // Punto de partida: el mayor entre ahora (alineado a 15min) y el horario original
-    let startSearchMs = Math.max(ahora.getTime(), origStartMs);
+    // Punto de partida: el horario original del partido alineado a 15min
+    let startSearchMs = origStartMs;
     // Snap al próximo intervalo de 15 minutos
     const remainder = startSearchMs % (15 * 60 * 1000);
     if (remainder !== 0) {
