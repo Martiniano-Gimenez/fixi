@@ -54,7 +54,8 @@ async function preCheckInicioTorneo(req, res, next) {
   try {
     const organizadorId = getOrgId(req);
     const torneoId = req.params.id;
-    const { forceReset, isReCheck } = req.body || {};
+    const forceReset = req.body?.forceReset === true;
+    const isReCheck = req.body?.isReCheck === true;
     const result = await organizadorService.preCheckInicioTorneo(organizadorId, torneoId, { forceReset, isReCheck });
     res.json(result);
   } catch (error) {

@@ -474,10 +474,15 @@ export default function TorneoDetail() {
   };
 
   const handlePreCheckInicio = async (isReCheck = false, forceReset = false) => {
+    const isReCheckBool = isReCheck === true;
+    const forceResetBool = forceReset === true;
     setVerificandoInicio(true);
     setHayCambiosGuardados(false);
     try {
-      const res = await api.post(`/torneos/${id}/pre-check-inicio`, { isReCheck, forceReset });
+      const res = await api.post(`/torneos/${id}/pre-check-inicio`, {
+        isReCheck: isReCheckBool,
+        forceReset: forceResetBool,
+      });
       setAvisoSesionReiniciada(Boolean(res.sesionReiniciada));
 
       if (res.grillaOrganizador) {
@@ -789,7 +794,7 @@ export default function TorneoDetail() {
               <button
                 type="button"
                 className="btn-primary"
-                onClick={handlePreCheckInicio}
+                onClick={() => handlePreCheckInicio()}
                 disabled={verificandoInicio}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
               >
