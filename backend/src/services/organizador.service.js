@@ -10,6 +10,7 @@ const {
   interseccionVentanas,
   parseSlotToDate,
   proximaFechaPorDia,
+  asignarHorariosModoLluviaMCF,
 } = require('./zona.service');
 
 // Cache de planes validados en memoria para inicio determinista
@@ -1394,247 +1395,24 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     }
   }
 
-  const DURACION_MS = 75 * 60 * 1000;
-  const refFecha = requireTorneoFecha(torneo);
-  const baseFriday = proximaFechaPorDia('Viernes', refFecha);
-  const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
-  const friDayStartMs = baseFriday.getTime() + horaAMinutos(organizador.viernesInicio) * 60 * 1000;
-  const satDayStartMs = baseSaturday.getTime() + horaAMinutos(organizador.sabadoInicio) * 60 * 1000;
-
-  // 4. Cargar todos los partidos del torneo para armar las timelines
-  const todosLosPartidos = await prisma.partido.findMany({
-    where: {
-      categoria: { torneoId },
-    },
-    include: {
-      categoria: { select: { id: true, nombre: true } },
-      pareja1: { select: { id: true, jugador1: true, jugador2: true, slotsSeleccionados: true } },
-      pareja2: { select: { id: true, jugador1: true, jugador2: true, slotsSeleccionados: true } },
-    },
-  });
-
-  const courtTimelines = new Map();
-  for (let c = 1; c <= overrideNum; c++) {
-    courtTimelines.set(c, []);
-  }
-
-  const parejaAssignments = new Map();
-
-  function addInterval(cancha, pareja1Id, pareja2Id, startMs, endMs) {
-    if (cancha && cancha <= overrideNum && courtTimelines.has(cancha)) {
-      courtTimelines.get(cancha).push({ startMs, endMs });
-    }
-    if (pareja1Id) {
-      if (!parejaAssignments.has(pareja1Id)) parejaAssignments.set(pareja1Id, []);
-      parejaAssignments.get(pareja1Id).push({ startMs, endMs });
-    }
-    if (pareja2Id) {
-      if (!parejaAssignments.has(pareja2Id)) parejaAssignments.set(pareja2Id, []);
-      parejaAssignments.get(pareja2Id).push({ startMs, endMs });
-    }
-  }
-
-  function isCourtFree(cancha, startMs, endMs) {
-    const timeline = courtTimelines.get(cancha) || [];
-    for (const interval of timeline) {
-      if (startMs < interval.endMs && endMs > interval.startMs) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  function isPairFree(parejaId, startMs, endMs) {
-    if (!parejaId) return true;
-    const intervals = parejaAssignments.get(parejaId) || [];
-    for (const interval of intervals) {
-      if (startMs < interval.endMs && endMs > interval.startMs) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  const partidosAReprogramar = [];
-
-  for (const p of todosLosPartidos) {
-    if (p.estado === 'EN_CURSO' || p.estado === 'FINALIZADO') {
-      // Partidos ya jugados o en curso: Ocupación fija inmutable
-      if (p.fechaHora) {
-        const startMs = new Date(p.fechaHora).getTime();
-        addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, startMs + DURACION_MS);
-      }
-    } else if (p.estado === 'PENDIENTE') {
-      // Partidos pendientes con horario asignado: Reubicables en canchas activas
-      if (p.fechaHora && p.canchaNumero && !p.sinHorarioAsignado) {
-        partidosAReprogramar.push(p);
-      }
-    }
-  }
-
-  // 5. Ordenar partidos a reprogramar preservando orden relativo original
-  partidosAReprogramar.sort((a, b) => {
-    const tA = new Date(a.fechaHora).getTime();
-    const tB = new Date(b.fechaHora).getTime();
-    if (tA !== tB) return tA - tB;
-    if ((a.canchaNumero || 0) !== (b.canchaNumero || 0)) {
-      return (a.canchaNumero || 0) - (b.canchaNumero || 0);
-    }
-    return a.id.localeCompare(b.id);
-  });
-
-  const cambios = [];
-  let partidosReprogramados = 0;
-  let partidosSinCambio = 0;
-  let partidosSinHorarioNuevo = 0;
-  const updates = [];
-
-  function formatParejaNombre(p, origen) {
-    if (p) return `${p.jugador1} / ${p.jugador2}`;
-    if (origen) return origen;
-    return 'Por definirse';
-  }
-
-  // 6. Reprogramar secuencialmente cada partido pendiente
-  for (const partido of partidosAReprogramar) {
-    const origStartMs = new Date(partido.fechaHora).getTime();
-    const origCancha = partido.canchaNumero;
-
-    // Calcular rango del día calendario de este partido
-    const origDate = new Date(origStartMs);
-    const origDiaInfo = getDiaCalendarioConTrasnoche(origDate, organizador);
-    const dayLimit = new Date(origDiaInfo.dayLimitMs);
-    const isFriday = origDiaInfo.logicalDate.getDay() === 5;
-    const sessionDayStartMs = isFriday ? friDayStartMs : satDayStartMs;
-
-    // Obtener la hora mínima según disponibilidad horaria de las parejas
-    const slotsP1 = (partido.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
-    const slotsP2 = (partido.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
-    const diaPrefix = isFriday ? 'Viernes' : 'Sabado';
-    const daySlotsP1 = slotsP1.filter((s) => s.startsWith(diaPrefix));
-    const daySlotsP2 = slotsP2.filter((s) => s.startsWith(diaPrefix));
-
-    let minSlotMs = null;
-    if (daySlotsP1.length > 0 && daySlotsP2.length > 0) {
-      const set2 = new Set(daySlotsP2);
-      const common = daySlotsP1.filter((s) => set2.has(s));
-      if (common.length > 0) {
-        const times = common.map((s) => parseSlotToDate(s, refFecha).getTime());
-        minSlotMs = Math.min(...times);
-      }
-    } else if (daySlotsP1.length > 0 || daySlotsP2.length > 0) {
-      const single = daySlotsP1.length > 0 ? daySlotsP1 : daySlotsP2;
-      const times = single.map((s) => parseSlotToDate(s, refFecha).getTime());
-      minSlotMs = Math.min(...times);
-    }
-
-    let startSearchMs = minSlotMs !== null ? Math.max(sessionDayStartMs, minSlotMs) : sessionDayStartMs;
-    const remainder = startSearchMs % (15 * 60 * 1000);
-    if (remainder !== 0) {
-      startSearchMs += 15 * 60 * 1000 - remainder;
-    }
-
-    let asignado = false;
-    let candidateT = startSearchMs;
-
-    while (candidateT + DURACION_MS <= dayLimit.getTime()) {
-      const candidateEnd = candidateT + DURACION_MS;
-      let freeCourt = null;
-
-      for (let c = 1; c <= overrideNum; c++) {
-        if (
-          isCourtFree(c, candidateT, candidateEnd) &&
-          isPairFree(partido.pareja1Id, candidateT, candidateEnd) &&
-          isPairFree(partido.pareja2Id, candidateT, candidateEnd)
-        ) {
-          freeCourt = c;
-          break;
-        }
-      }
-
-      if (freeCourt !== null) {
-        // Asignar en este slot y cancha
-        addInterval(freeCourt, partido.pareja1Id, partido.pareja2Id, candidateT, candidateEnd);
-        const newFechaHora = new Date(candidateT);
-
-        const cambioHorario = newFechaHora.getTime() !== origStartMs;
-        if (cambioHorario) {
-          partidosReprogramados++;
-          cambios.push({
-            partidoId: partido.id,
-            pareja1: formatParejaNombre(partido.pareja1, partido.origenPareja1),
-            pareja2: formatParejaNombre(partido.pareja2, partido.origenPareja2),
-            categoria: partido.categoria?.nombre || '',
-            antes: { fechaHora: origDate.toISOString(), canchaNumero: origCancha },
-            despues: { fechaHora: newFechaHora.toISOString(), canchaNumero: freeCourt },
-          });
-        } else {
-          partidosSinCambio++;
-        }
-
-        updates.push({
-          id: partido.id,
-          fechaHora: newFechaHora,
-          canchaNumero: freeCourt,
-          sinHorarioAsignado: false,
-        });
-
-        asignado = true;
-        break;
-      }
-
-      candidateT += 15 * 60 * 1000;
-    }
-
-    if (!asignado) {
-      partidosSinHorarioNuevo++;
-      partidosReprogramados++;
-      cambios.push({
-        partidoId: partido.id,
-        pareja1: formatParejaNombre(partido.pareja1, partido.origenPareja1),
-        pareja2: formatParejaNombre(partido.pareja2, partido.origenPareja2),
-        categoria: partido.categoria?.nombre || '',
-        antes: { fechaHora: origDate.toISOString(), canchaNumero: origCancha },
-        despues: { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true },
-      });
-
-      updates.push({
-        id: partido.id,
-        fechaHora: null,
-        canchaNumero: null,
-        sinHorarioAsignado: true,
-      });
-    }
-  }
-
   const timestampOverride = new Date();
   const esRestauracion = overrideNum === canchasClub;
 
-  // 7. Persistir atómicamente en base de datos
-  await prisma.$transaction(async (tx) => {
-    await tx.torneo.update({
-      where: { id: torneoId },
-      data: {
-        canchasDisponiblesOverride: esRestauracion ? null : overrideNum,
-        overrideActivoDesde: esRestauracion ? null : timestampOverride,
-      },
-    });
+  // 4. Ejecutar el Scheduler Continuo MCF de 3 Pasadas
+  const mcfRes = await asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideNum);
 
-    for (const u of updates) {
-      await tx.partido.update({
-        where: { id: u.id },
-        data: {
-          fechaHora: u.fechaHora,
-          canchaNumero: u.canchaNumero,
-          sinHorarioAsignado: u.sinHorarioAsignado,
-        },
-      });
-    }
+  // 5. Persistir estado de override en Torneo
+  await prisma.torneo.update({
+    where: { id: torneoId },
+    data: {
+      canchasDisponiblesOverride: esRestauracion ? null : overrideNum,
+      overrideActivoDesde: esRestauracion ? null : timestampOverride,
+    },
   });
 
   const message = esRestauracion
-    ? `Todas las canchas (${canchasClub}) fueron restauradas. Se reprogramaron ${partidosReprogramados} partidos.`
-    : `Canchas reducidas a ${overrideNum}. Se reprogramaron ${partidosReprogramados} partidos.`;
+    ? `Todas las canchas (${canchasClub}) fueron restauradas. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`
+    : `Canchas reducidas a ${overrideNum}. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`;
 
   return {
     message,
@@ -1642,10 +1420,10 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     overrideActivoDesde: esRestauracion ? null : timestampOverride.toISOString(),
     reprogramacion: {
       ejecutada: true,
-      partidosReprogramados,
-      partidosSinCambio,
-      partidosSinHorarioNuevo,
-      cambios,
+      partidosReprogramados: mcfRes.partidosReprogramados,
+      partidosSinCambio: mcfRes.partidosSinCambio,
+      partidosSinHorarioNuevo: mcfRes.partidosSinHorarioNuevo,
+      cambios: mcfRes.cambios,
     },
   };
 }
