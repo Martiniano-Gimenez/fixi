@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
-const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion } = require('./slots.service');
+const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion, horaAMinutos } = require('./slots.service');
 const { getDiaCalendarioConTrasnoche, requireTorneoFecha } = require('../utils/dateUtils');
 const {
   iniciarCategoria,
@@ -9,6 +9,7 @@ const {
   fusionarSlotsEnVentanas,
   interseccionVentanas,
   parseSlotToDate,
+  proximaFechaPorDia,
 } = require('./zona.service');
 
 // Cache de planes validados en memoria para inicio determinista
@@ -1341,25 +1342,10 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   const canchasClub = organizador.cantidadCanchas || 1;
   const canchasEfectivasActuales = getCanchasEfectivas(torneo, organizador);
 
-  // 1. Caso: Desactivar override (volver al techo total del club)
-  if (nuevoCanchasOverride === null || nuevoCanchasOverride === undefined) {
-    await prisma.torneo.update({
-      where: { id: torneoId },
-      data: {
-        canchasDisponiblesOverride: null,
-        overrideActivoDesde: null,
-      },
-    });
+  const overrideNum = (nuevoCanchasOverride === null || nuevoCanchasOverride === undefined)
+    ? canchasClub
+    : Number(nuevoCanchasOverride);
 
-    return {
-      message: 'Override desactivado. Todas las canchas del club están disponibles.',
-      canchasActivas: canchasClub,
-      overrideActivoDesde: null,
-      reprogramacion: { ejecutada: false },
-    };
-  }
-
-  const overrideNum = Number(nuevoCanchasOverride);
   if (isNaN(overrideNum) || overrideNum < 1) {
     const error = new Error('La cantidad de canchas activas debe ser un número mayor o igual a 1.');
     error.statusCode = 400;
@@ -1372,49 +1358,48 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     throw error;
   }
 
-  // 2. Caso: Si es igual o subida de canchas, NO se reprograma automáticamente
-  if (overrideNum >= canchasEfectivasActuales) {
-    const updated = await prisma.torneo.update({
-      where: { id: torneoId },
-      data: {
-        canchasDisponiblesOverride: overrideNum === canchasClub ? null : overrideNum,
-        overrideActivoDesde: overrideNum === canchasClub ? null : (torneo.overrideActivoDesde || new Date()),
-      },
-    });
-
+  // 2. Si no hay cambio en la cantidad de canchas activas, no hacer nada
+  if (overrideNum === canchasEfectivasActuales) {
     return {
-      message: `Canchas activas actualizadas a ${overrideNum}.`,
+      message: `La cantidad de canchas activas ya es ${overrideNum}.`,
       canchasActivas: overrideNum,
-      overrideActivoDesde: updated.overrideActivoDesde,
+      overrideActivoDesde: torneo.overrideActivoDesde,
       reprogramacion: { ejecutada: false },
     };
   }
 
   // 3. Caso: Reducción de canchas -> Validar que no haya partidos EN_CURSO en canchas a inhabilitar
-  const partidosEnCursoAfectados = await prisma.partido.findMany({
-    where: {
-      categoria: { torneoId },
-      estado: 'EN_CURSO',
-      canchaNumero: { gt: overrideNum },
-    },
-    include: {
-      pareja1: { select: { jugador1: true, jugador2: true } },
-      pareja2: { select: { jugador1: true, jugador2: true } },
-    },
-  });
+  if (overrideNum < canchasEfectivasActuales) {
+    const partidosEnCursoAfectados = await prisma.partido.findMany({
+      where: {
+        categoria: { torneoId },
+        estado: 'EN_CURSO',
+        canchaNumero: { gt: overrideNum },
+      },
+      include: {
+        pareja1: { select: { jugador1: true, jugador2: true } },
+        pareja2: { select: { jugador1: true, jugador2: true } },
+      },
+    });
 
-  if (partidosEnCursoAfectados.length > 0) {
-    const p = partidosEnCursoAfectados[0];
-    const p1 = p.pareja1 ? `${p.pareja1.jugador1}/${p.pareja1.jugador2}` : 'P1';
-    const p2 = p.pareja2 ? `${p.pareja2.jugador1}/${p.pareja2.jugador2}` : 'P2';
-    const error = new Error(
-      `No podés reducir a ${overrideNum} canchas porque hay un partido en curso en la Cancha ${p.canchaNumero} (${p1} vs ${p2}). Esperá a que termine o finalizalo antes de reducir.`
-    );
-    error.statusCode = 400;
-    throw error;
+    if (partidosEnCursoAfectados.length > 0) {
+      const p = partidosEnCursoAfectados[0];
+      const p1 = p.pareja1 ? `${p.pareja1.jugador1}/${p.pareja1.jugador2}` : 'P1';
+      const p2 = p.pareja2 ? `${p.pareja2.jugador1}/${p.pareja2.jugador2}` : 'P2';
+      const error = new Error(
+        `No podés reducir a ${overrideNum} canchas porque hay un partido en curso en la Cancha ${p.canchaNumero} (${p1} vs ${p2}). Esperá a que termine o finalizalo antes de reducir.`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
   }
 
   const DURACION_MS = 75 * 60 * 1000;
+  const refFecha = requireTorneoFecha(torneo);
+  const baseFriday = proximaFechaPorDia('Viernes', refFecha);
+  const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
+  const friDayStartMs = baseFriday.getTime() + horaAMinutos(organizador.viernesInicio) * 60 * 1000;
+  const satDayStartMs = baseSaturday.getTime() + horaAMinutos(organizador.sabadoInicio) * 60 * 1000;
 
   // 4. Cargar todos los partidos del torneo para armar las timelines
   const todosLosPartidos = await prisma.partido.findMany({
@@ -1423,8 +1408,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     },
     include: {
       categoria: { select: { id: true, nombre: true } },
-      pareja1: { select: { id: true, jugador1: true, jugador2: true } },
-      pareja2: { select: { id: true, jugador1: true, jugador2: true } },
+      pareja1: { select: { id: true, jugador1: true, jugador2: true, slotsSeleccionados: true } },
+      pareja2: { select: { id: true, jugador1: true, jugador2: true, slotsSeleccionados: true } },
     },
   });
 
@@ -1519,10 +1504,31 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     const origDate = new Date(origStartMs);
     const origDiaInfo = getDiaCalendarioConTrasnoche(origDate, organizador);
     const dayLimit = new Date(origDiaInfo.dayLimitMs);
+    const isFriday = origDiaInfo.logicalDate.getDay() === 5;
+    const sessionDayStartMs = isFriday ? friDayStartMs : satDayStartMs;
 
-    // Punto de partida: el horario original del partido alineado a 15min
-    let startSearchMs = origStartMs;
-    // Snap al próximo intervalo de 15 minutos
+    // Obtener la hora mínima según disponibilidad horaria de las parejas
+    const slotsP1 = (partido.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
+    const slotsP2 = (partido.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
+    const diaPrefix = isFriday ? 'Viernes' : 'Sabado';
+    const daySlotsP1 = slotsP1.filter((s) => s.startsWith(diaPrefix));
+    const daySlotsP2 = slotsP2.filter((s) => s.startsWith(diaPrefix));
+
+    let minSlotMs = null;
+    if (daySlotsP1.length > 0 && daySlotsP2.length > 0) {
+      const set2 = new Set(daySlotsP2);
+      const common = daySlotsP1.filter((s) => set2.has(s));
+      if (common.length > 0) {
+        const times = common.map((s) => parseSlotToDate(s, refFecha).getTime());
+        minSlotMs = Math.min(...times);
+      }
+    } else if (daySlotsP1.length > 0 || daySlotsP2.length > 0) {
+      const single = daySlotsP1.length > 0 ? daySlotsP1 : daySlotsP2;
+      const times = single.map((s) => parseSlotToDate(s, refFecha).getTime());
+      minSlotMs = Math.min(...times);
+    }
+
+    let startSearchMs = minSlotMs !== null ? Math.max(sessionDayStartMs, minSlotMs) : sessionDayStartMs;
     const remainder = startSearchMs % (15 * 60 * 1000);
     if (remainder !== 0) {
       startSearchMs += 15 * 60 * 1000 - remainder;
@@ -1602,14 +1608,15 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   }
 
   const timestampOverride = new Date();
+  const esRestauracion = overrideNum === canchasClub;
 
   // 7. Persistir atómicamente en base de datos
   await prisma.$transaction(async (tx) => {
     await tx.torneo.update({
       where: { id: torneoId },
       data: {
-        canchasDisponiblesOverride: overrideNum,
-        overrideActivoDesde: timestampOverride,
+        canchasDisponiblesOverride: esRestauracion ? null : overrideNum,
+        overrideActivoDesde: esRestauracion ? null : timestampOverride,
       },
     });
 
@@ -1625,10 +1632,14 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     }
   });
 
+  const message = esRestauracion
+    ? `Todas las canchas (${canchasClub}) fueron restauradas. Se reprogramaron ${partidosReprogramados} partidos.`
+    : `Canchas reducidas a ${overrideNum}. Se reprogramaron ${partidosReprogramados} partidos.`;
+
   return {
-    message: `Canchas reducidas a ${overrideNum}. Se reprogramaron ${partidosReprogramados} partidos.`,
+    message,
     canchasActivas: overrideNum,
-    overrideActivoDesde: timestampOverride.toISOString(),
+    overrideActivoDesde: esRestauracion ? null : timestampOverride.toISOString(),
     reprogramacion: {
       ejecutada: true,
       partidosReprogramados,

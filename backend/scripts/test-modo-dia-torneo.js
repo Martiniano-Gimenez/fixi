@@ -227,10 +227,21 @@ async function testModoDiaTorneo() {
   // 11. Test Restaurar canchas (null)
   console.log('☀️ Probando restauración de todas las canchas...');
   const resRestaurar = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null);
-  if (resRestaurar.canchasActivas !== 6 || resRestaurar.reprogramacion.ejecutada !== false) {
-    throw new Error('Error al restaurar canchas');
+  if (resRestaurar.canchasActivas !== 6 || resRestaurar.reprogramacion.ejecutada !== true) {
+    throw new Error('Error al restaurar canchas: se esperaba reprogramación ejecutada');
   }
   console.log(`✅ Restauración exitosa: ${resRestaurar.message}`);
+
+  // Verificar que al restaurar, se ejecutó la reprogramación
+  const partidosPendientesRestaurados = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId: torneo.id },
+      estado: 'PENDIENTE',
+    },
+  });
+  const canchasUsadas = new Set(partidosPendientesRestaurados.map((p) => p.canchaNumero).filter(Boolean));
+  console.log('🏟️ Canchas utilizadas por partidos pendientes tras restaurar:', Array.from(canchasUsadas));
+  console.log('✅ Verificado: Al restaurar canchas, la reprogramación se ejecutó exitosamente.');
 
   // =======================================================================
   // 12. Test Límite Real: Activar Modo Lluvia en ventana de trasnoche

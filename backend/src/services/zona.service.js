@@ -1062,4 +1062,5 @@ module.exports = {
   fusionarSlotsEnVentanas,
   interseccionVentanas,
   parseSlotToDate,
+  proximaFechaPorDia,
 };
