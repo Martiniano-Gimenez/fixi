@@ -1020,7 +1020,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   // 4. Asignación Global Earliest-Fit para cada partido
   for (const partido of partidosAAsignar) {
     const origStartMs = partido.fechaHora ? new Date(partido.fechaHora).getTime() : null;
-    const origDate = origStartMs ? new Date(origStartMs) : baseFriday;
+    const origDate = origStartMs ? new Date(origStartMs) : parseFechaLocal(refFecha);
     const origDiaInfo = getDiaCalendarioConTrasnoche(origDate, organizador);
     const dayLimitMs = origDiaInfo.dayLimitMs;
     const isFriday = origDiaInfo.logicalDate.getDay() === 5;

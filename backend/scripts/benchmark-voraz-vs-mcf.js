@@ -4,7 +4,8 @@ const zonaService = require('../src/services/zona.service');
 const { parseFechaLocal, getDiaCalendarioConTrasnoche, requireTorneoFecha } = require('../src/utils/dateUtils');
 const { horaAMinutos } = require('../src/services/slots.service');
 
-function simularBucleVoraz(partidosAReprogramar, overrideNum, friDayStartMs, satDayStartMs, refFecha, organizador, DURACION_MS) {
+// Implementación exacta del bucle voraz anterior que tenía `startSearchMs = minSlotMs`
+function simularBucleVorazAnterior(partidosAReprogramar, overrideNum, friDayStartMs, satDayStartMs, refFecha, organizador, DURACION_MS) {
   const courtTimelines = new Map();
   for (let c = 1; c <= overrideNum; c++) {
     courtTimelines.set(c, []);
@@ -43,8 +44,8 @@ function simularBucleVoraz(partidosAReprogramar, overrideNum, friDayStartMs, sat
   }
 
   const sorted = [...partidosAReprogramar].sort((a, b) => {
-    const tA = new Date(a.fechaHora).getTime();
-    const tB = new Date(b.fechaHora).getTime();
+    const tA = a.fechaHora ? new Date(a.fechaHora).getTime() : 0;
+    const tB = b.fechaHora ? new Date(b.fechaHora).getTime() : 0;
     if (tA !== tB) return tA - tB;
     if ((a.canchaNumero || 0) !== (b.canchaNumero || 0)) {
       return (a.canchaNumero || 0) - (b.canchaNumero || 0);
@@ -54,8 +55,8 @@ function simularBucleVoraz(partidosAReprogramar, overrideNum, friDayStartMs, sat
 
   const results = [];
   for (const partido of sorted) {
-    const origStartMs = new Date(partido.fechaHora).getTime();
-    const origDate = new Date(origStartMs);
+    const origStartMs = partido.fechaHora ? new Date(partido.fechaHora).getTime() : null;
+    const origDate = origStartMs ? new Date(origStartMs) : new Date(friDayStartMs);
     const origDiaInfo = getDiaCalendarioConTrasnoche(origDate, organizador);
     const dayLimit = new Date(origDiaInfo.dayLimitMs);
     const isFriday = origDiaInfo.logicalDate.getDay() === 5;
@@ -67,6 +68,7 @@ function simularBucleVoraz(partidosAReprogramar, overrideNum, friDayStartMs, sat
     const daySlotsP1 = slotsP1.filter((s) => s.startsWith(diaPrefix));
     const daySlotsP2 = slotsP2.filter((s) => s.startsWith(diaPrefix));
 
+    // ESTA ERA LA LÍNEA DEL BUCLE ANTERIOR: Tomaba minSlotMs y arrancaba a buscar desde ahí
     let minSlotMs = null;
     if (daySlotsP1.length > 0 && daySlotsP2.length > 0) {
       const set2 = new Set(daySlotsP2);
@@ -132,12 +134,12 @@ function simularBucleVoraz(partidosAReprogramar, overrideNum, friDayStartMs, sat
 }
 
 async function runBenchmark() {
-  console.log('🏁 Iniciando Benchmark Masivo: 6 → 4 Canchas (Simulación Torneo Completo)...\n');
+  console.log('🏁 Iniciando Benchmark: Escenario con Slots Nocturnos y Huecos Tempranos (6 → 4 Canchas)...\n');
 
   const organizador = await prisma.organizador.create({
     data: {
-      nombre: 'Club Benchmark Masivo',
-      email: `bench-masivo-${Date.now()}@padel.com`,
+      nombre: 'Club Test Causa Raiz',
+      email: `causa-raiz-${Date.now()}@padel.com`,
       passwordHash: 'hash',
       cantidadCanchas: 6,
       viernesInicio: '14:00',
@@ -150,74 +152,69 @@ async function runBenchmark() {
   const fechaTorneo = '2026-09-04';
   const torneo = await prisma.torneo.create({
     data: {
-      nombre: 'Torneo Multi-Categoría Benchmark',
-      slug: `bench-multi-${Date.now()}`,
+      nombre: 'Torneo Causa Raíz',
+      slug: `causa-raiz-${Date.now()}`,
       fecha: parseFechaLocal(fechaTorneo),
       estado: 'BORRADOR',
       organizadorId: organizador.id,
     },
   });
 
-  // 2 Categorías (4ta, 6ta) con 12 parejas cada una = 24 partidos
-  const catNames = ['4ta', '6ta'];
-  const catIds = [];
-  const todasLasParejas = [];
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '5ta', estado: 'BORRADOR' },
+  });
 
-  for (const name of catNames) {
-    const cat = await prisma.categoria.create({
-      data: { torneoId: torneo.id, nombre: name, estado: 'BORRADOR' },
+  // 12 Parejas (6 cruces):
+  // - 4 parejas con disponibilidad solo NOCTURNA (minSlotMs = 21:00)
+  // - 8 parejas con disponibilidad AMPLIA (14:00 a 01:00)
+  const parejas = [];
+  for (let i = 1; i <= 12; i++) {
+    const p = await prisma.pareja.create({
+      data: {
+        categoriaId: cat.id,
+        jugador1: `J1_${i}`,
+        jugador2: `J2_${i}`,
+        orden: i,
+      },
     });
-    catIds.push(cat.id);
+    parejas.push(p);
 
-    for (let i = 1; i <= 12; i++) {
-      const p = await prisma.pareja.create({
-        data: {
-          categoriaId: cat.id,
-          jugador1: `J1_${name}_${i}`,
-          jugador2: `J2_${name}_${i}`,
-          orden: i,
-        },
-      });
-      todasLasParejas.push(p);
-
-      // Disponibilidades variadas:
-      // i = 1..4: Rígidos de tarde (14:00 a 18:00)
-      // i = 5..8: Rígidos de noche (19:00 a 23:00)
-      // i = 9..12: Amplios (14:00 a 01:00)
-      let startMin = 14 * 60;
-      let endMin = 25 * 60;
-      if (i <= 4) {
-        startMin = 14 * 60;
-        endMin = 18 * 60;
-      } else if (i <= 8) {
-        startMin = 19 * 60;
-        endMin = 23 * 60;
+    const isNocturna = i <= 4;
+    const slots = [];
+    if (isNocturna) {
+      // minSlotMs = 21:00
+      const startMin = 21 * 60;
+      const endMin = 24 * 60;
+      for (let m = startMin; m + 75 <= endMin; m += 15) {
+        const hh = Math.floor(m / 60).toString().padStart(2, '0');
+        const mm = (m % 60).toString().padStart(2, '0');
+        slots.push(`Viernes-${hh}:${mm}`);
       }
-
-      const slots = [];
+    } else {
+      // 14:00 a 01:00
+      const startMin = 14 * 60;
+      const endMin = 25 * 60;
       for (let m = startMin; m + 75 <= endMin; m += 15) {
         const clockM = m % (24 * 60);
         const hh = Math.floor(clockM / 60).toString().padStart(2, '0');
         const mm = (clockM % 60).toString().padStart(2, '0');
         slots.push(`Viernes-${hh}:${mm}`);
       }
-
-      for (const s of slots) {
-        await prisma.slotPareja.create({
-          data: { parejaId: p.id, slotId: s },
-        });
-      }
     }
 
-    await zonaService.iniciarCategoriaConDisponibilidad(organizador.id, cat.id);
+    for (const s of slots) {
+      await prisma.slotPareja.create({
+        data: { parejaId: p.id, slotId: s },
+      });
+    }
   }
 
-  // Iniciar asignación global en 6 canchas
-  await zonaService.asignarHorariosAutomatico(organizador.id, catIds);
+  await zonaService.iniciarCategoriaConDisponibilidad(organizador.id, cat.id);
+  await zonaService.asignarHorariosAutomatico(organizador.id, cat.id);
   await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
 
   const partidosIniciales = await prisma.partido.findMany({
-    where: { categoria: { torneoId: torneo.id } },
+    where: { categoriaId: cat.id },
     include: {
       pareja1: { include: { slotsSeleccionados: true } },
       pareja2: { include: { slotsSeleccionados: true } },
@@ -232,31 +229,17 @@ async function runBenchmark() {
   const DURACION_MS = 75 * 60 * 1000;
 
   // ==========================================
-  // Versión A: BUCLE VORAZ ANTERIOR
+  // Versión A: BUCLE VORAZ ANTERIOR (con startSearchMs = minSlotMs)
   // ==========================================
-  const vorazResults = simularBucleVoraz(partidosIniciales, 4, friDayStartMs, satDayStartMs, refFecha, organizador, DURACION_MS);
+  const vorazResults = simularBucleVorazAnterior(partidosIniciales, 4, friDayStartMs, satDayStartMs, refFecha, organizador, DURACION_MS);
 
   // ==========================================
-  // Versión B: SCHEDULER MCF NUEVO
+  // Versión B: GLOBAL EARLIEST-FIT NUEVO (Modo Lluvia Emergencia)
   // ==========================================
   const mcfRes = await zonaService.asignarHorariosModoLluviaMCF(organizador.id, torneo.id, 4);
   const mcfPartidos = await prisma.partido.findMany({
-    where: { categoria: { torneoId: torneo.id } },
+    where: { categoriaId: cat.id },
   });
-
-  // Métricas Voraz
-  const vorazTimes = vorazResults.filter(p => p.fechaHora).map(p => p.fechaHora.getTime());
-  const vorazMaxMs = Math.max(...vorazTimes);
-  const vorazMaxDate = new Date(vorazMaxMs);
-  const vorazSinHorario = vorazResults.filter(p => p.sinHorarioAsignado || !p.fechaHora).length;
-  const vorazAsignados = vorazResults.filter(p => p.fechaHora).length;
-
-  // Métricas MCF
-  const mcfTimes = mcfPartidos.filter(p => p.fechaHora).map(p => new Date(p.fechaHora).getTime());
-  const mcfMaxMs = Math.max(...mcfTimes);
-  const mcfMaxDate = new Date(mcfMaxMs);
-  const mcfSinHorario = mcfPartidos.filter(p => p.sinHorarioAsignado || !p.fechaHora).length;
-  const mcfAsignados = mcfPartidos.filter(p => p.fechaHora).length;
 
   function fmtHora(d) {
     if (!d || isNaN(d.getTime())) return 'N/A';
@@ -269,27 +252,41 @@ async function runBenchmark() {
     return end.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
   }
 
+  const vorazTimes = vorazResults.filter(p => p.fechaHora).map(p => p.fechaHora.getTime());
+  const vorazMaxDate = new Date(Math.max(...vorazTimes));
+
+  const mcfTimes = mcfPartidos.filter(p => p.fechaHora).map(p => new Date(p.fechaHora).getTime());
+  const mcfMaxDate = new Date(Math.max(...mcfTimes));
+
   console.log('================================================================');
-  console.log('📊 RESULTADOS COMPARATIVOS EXACTOS (TORNEO 36 PARTIDOS, 6 → 4 CANCHAS):');
+  console.log('📊 COMPARACIÓN: BUCLE ANTERIOR (minSlotMs) vs GLOBAL EARLIEST-FIT:');
   console.log('================================================================');
-  console.log(`Total Partidos a Programar: ${partidosIniciales.length}`);
+  console.log(`Total Partidos: ${partidosIniciales.length}`);
   console.log('----------------------------------------------------------------');
-  console.log(`🔹 BUCLE VORAZ ANTERIOR:`);
-  console.log(`   - Último partido inicia: ${fmtHora(vorazMaxDate)} (Cierre jornada: ${fmtHoraFin(vorazMaxDate)}) [ISO: ${vorazMaxDate.toISOString()}]`);
-  console.log(`   - Partidos Asignados: ${vorazAsignados}`);
-  console.log(`   - Partidos Sin Horario: ${vorazSinHorario}`);
+  console.log(`🔹 BUCLE VORAZ ANTERIOR (usaba startSearchMs = minSlotMs):`);
+  console.log(`   - Último partido inicia: ${fmtHora(vorazMaxDate)} (Cierre: ${fmtHoraFin(vorazMaxDate)}) [ISO: ${vorazMaxDate.toISOString()}]`);
+  console.log(`   - Partidos asignados: ${vorazResults.filter(p => p.fechaHora).length}`);
+  console.log(`   - Partidos sin horario: ${vorazResults.filter(p => p.sinHorarioAsignado).length}`);
+  console.log(`   - Detalle de horarios asignados:`, vorazResults.filter(p => p.fechaHora).map(p => ({
+    cancha: p.canchaNumero,
+    hora: fmtHora(p.fechaHora)
+  })));
   console.log('----------------------------------------------------------------');
-  console.log(`✨ SCHEDULER MCF (3 PASADAS):`);
-  console.log(`   - Último partido inicia: ${fmtHora(mcfMaxDate)} (Cierre jornada: ${fmtHoraFin(mcfMaxDate)}) [ISO: ${mcfMaxDate.toISOString()}]`);
-  console.log(`   - Partidos Asignados: ${mcfAsignados}`);
-  console.log(`   - Partidos Sin Horario: ${mcfSinHorario}`);
+  console.log(`✨ GLOBAL EARLIEST-FIT (Sin filtro de disponibilidad en emergencia):`);
+  console.log(`   - Último partido inicia: ${fmtHora(mcfMaxDate)} (Cierre: ${fmtHoraFin(mcfMaxDate)}) [ISO: ${mcfMaxDate.toISOString()}]`);
+  console.log(`   - Partidos asignados: ${mcfPartidos.filter(p => p.fechaHora).length}`);
+  console.log(`   - Partidos sin horario: ${mcfPartidos.filter(p => p.sinHorarioAsignado).length}`);
+  console.log(`   - Detalle de horarios asignados:`, mcfPartidos.filter(p => p.fechaHora).map(p => ({
+    cancha: p.canchaNumero,
+    hora: fmtHora(new Date(p.fechaHora))
+  })));
   console.log('================================================================\n');
 
   // Limpieza
-  await prisma.partido.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
-  await prisma.zona.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
-  await prisma.slotPareja.deleteMany({ where: { parejaId: { in: todasLasParejas.map(p => p.id) } } });
-  await prisma.pareja.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
+  await prisma.partido.deleteMany({ where: { categoriaId: cat.id } });
+  await prisma.zona.deleteMany({ where: { categoriaId: cat.id } });
+  await prisma.slotPareja.deleteMany({ where: { parejaId: { in: parejas.map(p => p.id) } } });
+  await prisma.pareja.deleteMany({ where: { categoriaId: cat.id } });
   await prisma.categoria.deleteMany({ where: { torneoId: torneo.id } });
   await prisma.torneo.deleteMany({ where: { id: torneo.id } });
   await prisma.organizador.deleteMany({ where: { id: organizador.id } });
