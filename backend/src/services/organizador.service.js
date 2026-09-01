@@ -1557,7 +1557,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         addInterval(freeCourt, partido.pareja1Id, partido.pareja2Id, candidateT, candidateEnd);
         const newFechaHora = new Date(candidateT);
 
-        const cambioHorario = newFechaHora.getTime() !== origStartMs || freeCourt !== origCancha;
+        const cambioHorario = newFechaHora.getTime() !== origStartMs;
         if (cambioHorario) {
           partidosReprogramados++;
           cambios.push({

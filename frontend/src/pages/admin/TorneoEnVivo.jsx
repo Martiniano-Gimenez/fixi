@@ -603,9 +603,9 @@ export default function TorneoEnVivo() {
             Se ajustaron los partidos pendientes respetando el orden relativo original.
             {' '}
             <strong style={{ color: 'var(--color-text)' }}>
-              {feedbackReprogramacion.partidosReprogramados} partido(s) modificaron su horario/cancha
+              {feedbackReprogramacion.partidosReprogramados} partido(s) modificaron su horario
             </strong>
-            {feedbackReprogramacion.partidosSinCambio > 0 && `, ${feedbackReprogramacion.partidosSinCambio} mantuvieron su slot`}
+            {feedbackReprogramacion.partidosSinCambio > 0 && `, ${feedbackReprogramacion.partidosSinCambio} mantuvieron su horario`}
             {feedbackReprogramacion.partidosSinHorarioNuevo > 0 && (
               <span style={{ color: 'var(--color-danger)' }}>
                 {`, ${feedbackReprogramacion.partidosSinHorarioNuevo} quedaron sin horario disponible`}
@@ -634,7 +634,7 @@ export default function TorneoEnVivo() {
                 }}
               >
                 {feedbackExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                {feedbackExpanded ? 'Ocultar detalle de cambios' : `Ver detalle de ${feedbackReprogramacion.cambios.length} cambios`}
+                {feedbackExpanded ? 'Ocultar detalle de cambios' : `Ver detalle de ${feedbackReprogramacion.cambios.length} cambios de horario`}
               </button>
 
               {feedbackExpanded && (
