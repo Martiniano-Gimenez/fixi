@@ -367,27 +367,15 @@ export default function TorneoEnVivo() {
 
       {/* ─── 2. Barra de Control de Canchas ───────────────────────── */}
       <div
+        className="canchas-control-card"
         style={{
-          background: 'var(--color-surface-elevated)',
           border: isLluviaActive ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '1rem 1.25rem',
-          marginBottom: '1.25rem',
-          boxShadow: 'var(--shadow-md)',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '1rem',
-          }}
-        >
+        <div className="canchas-control-layout">
           {/* Info de canchas activas */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+          <div style={{ flex: '1 1 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)' }}>
                 Canchas activas:
               </span>
@@ -446,20 +434,12 @@ export default function TorneoEnVivo() {
           </div>
 
           {/* Selector y Acciones */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: '0.75rem',
-              flexShrink: 0,
-            }}
-          >
+          <div className="canchas-control-actions">
             {/* Botón Restaurar todas */}
             {isLluviaActive && (
               <button
                 type="button"
-                className="btn-secondary"
+                className="btn-secondary canchas-action-btn"
                 onClick={() => setConfirmRestaurarOpen(true)}
                 disabled={actionLoading}
                 style={{
@@ -480,7 +460,7 @@ export default function TorneoEnVivo() {
             {targetCanchas < canchasActivas && (
               <button
                 type="button"
-                className="btn-primary"
+                className="btn-primary canchas-action-btn"
                 onClick={() => setConfirmReducirOpen(true)}
                 disabled={actionLoading}
                 style={{
