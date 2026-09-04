@@ -774,21 +774,20 @@ export default function TorneoDetail() {
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.3rem',
+                      justifyContent: 'center',
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
                       borderRadius: 'var(--radius-sm)',
-                      padding: '0.2rem 0.45rem',
+                      padding: '0.25rem',
                       color: 'var(--color-text-secondary)',
                       cursor: 'pointer',
-                      fontSize: '0.75rem',
                       transition: 'all 0.15s ease',
                     }}
                     className="hover-card"
                     title="Cambiar nombre del torneo"
+                    aria-label="Cambiar nombre del torneo"
                   >
-                    <Edit2 size={13} style={{ color: 'var(--color-primary)' }} />
-                    <span style={{ fontWeight: 500 }}>Cambiar nombre</span>
+                    <Edit2 size={14} style={{ color: 'var(--color-primary)' }} />
                   </button>
                   <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
                 </div>
