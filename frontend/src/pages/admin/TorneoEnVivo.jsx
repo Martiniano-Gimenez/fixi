@@ -9,7 +9,6 @@ import {
   Clock,
   RefreshCw,
   X,
-  Activity,
   Flame,
   ChevronDown,
   ChevronUp,
@@ -76,7 +75,6 @@ export default function TorneoEnVivo() {
       if (!isSilent) setLoading(true);
       else setRefreshing(true);
       setError(null);
-
       try {
         const res = await api.get(`/torneos/${id}/en-vivo`);
         setData(res);
@@ -247,7 +245,7 @@ export default function TorneoEnVivo() {
     );
   }
 
-  const { torneo, canchasActivas, canchasClub, canchas, partidosEnCurso, partidosEnCanchaFantasma, proximosPartidos, partidosFinalizados, resumenEstado } = data;
+  const { torneo, canchasActivas, canchasClub, partidosEnCurso, partidosEnCanchaFantasma, proximosPartidos, partidosFinalizados, resumenEstado } = data;
   const isLluviaActive = torneo.canchasDisponiblesOverride !== null && torneo.canchasDisponiblesOverride !== undefined;
 
   // Construye el objeto partido que espera ResultadoModal a partir de los datos del en-vivo
@@ -367,14 +365,10 @@ export default function TorneoEnVivo() {
         </div>
       )}
 
-      {/* ─── 2. Barra de Control de Canchas (Sticky) ──────────────── */}
+      {/* ─── 2. Barra de Control de Canchas ───────────────────────── */}
       <div
         style={{
-          position: 'sticky',
-          top: '0.5rem',
-          zIndex: 100,
-          background: 'rgba(18, 21, 28, 0.95)',
-          backdropFilter: 'blur(10px)',
+          background: 'var(--color-surface-elevated)',
           border: isLluviaActive ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid var(--color-border)',
           borderRadius: 'var(--radius-lg)',
           padding: '1rem 1.25rem',
@@ -789,210 +783,7 @@ export default function TorneoEnVivo() {
         </div>
       )}
 
-      {/* ─── 5. Grilla de Canchas ─────────────────────────────────── */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.85rem' }}>
-          Estado de Canchas
-        </h2>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: '1rem',
-          }}
-        >
-          {canchas.map((c) => {
-            const isEnCurso = c.estado === 'EN_CURSO';
-            const isInhabilitada = c.estado === 'INHABILITADA';
-            const isLibre = c.estado === 'LIBRE';
-
-            return (
-              <div
-                key={c.numero}
-                style={{
-                  background: isInhabilitada
-                    ? 'rgba(239, 68, 68, 0.05)'
-                    : isEnCurso
-                    ? 'linear-gradient(145deg, rgba(0, 208, 132, 0.1), var(--bg-card-end))'
-                    : 'var(--bg-card-start)',
-                  border: isInhabilitada
-                    ? '1px dashed rgba(239, 68, 68, 0.3)'
-                    : isEnCurso
-                    ? '1px solid rgba(0, 208, 132, 0.4)'
-                    : '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: '1.15rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  minHeight: '170px',
-                  opacity: isInhabilitada ? 0.65 : 1,
-                  transition: 'var(--transition-base)',
-                }}
-              >
-                {/* Header Cancha */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '0.75rem',
-                  }}
-                >
-                  <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>Cancha {c.numero}</span>
-                  {isEnCurso && (
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        fontSize: 'var(--font-size-xs)',
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '999px',
-                        background: 'rgba(0, 208, 132, 0.2)',
-                        color: 'var(--color-primary)',
-                        fontWeight: 700,
-                      }}
-                    >
-                      <Flame size={13} />
-                      EN JUEGO
-                    </span>
-                  )}
-                  {isLibre && (
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        fontSize: 'var(--font-size-xs)',
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '999px',
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        color: 'var(--color-text-secondary)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      LIBRE
-                    </span>
-                  )}
-                  {isInhabilitada && (
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        fontSize: 'var(--font-size-xs)',
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '999px',
-                        background: 'rgba(239, 68, 68, 0.2)',
-                        color: 'var(--color-danger)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      <CloudRain size={13} />
-                      INHABILITADA
-                    </span>
-                  )}
-                </div>
-
-                {/* Contenido Cancha */}
-                <div>
-                  {isEnCurso && c.partidoActual && (
-                    <div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.2rem' }}>
-                        {c.partidoActual.pareja1}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 'var(--font-size-xs)',
-                          color: 'var(--color-text-muted)',
-                          margin: '0.1rem 0',
-                        }}
-                      >
-                        vs
-                      </div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                        {c.partidoActual.pareja2}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 'var(--font-size-xs)',
-                          color: 'var(--color-text-secondary)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.4rem',
-                        }}
-                      >
-                        <span>{c.partidoActual.categoria}</span>
-                        {c.partidoActual.zona && <span>• {c.partidoActual.zona}</span>}
-                        {c.partidoActual.fase && <span>• {c.partidoActual.fase}</span>}
-                      </div>
-                      {c.partidoActual.sets && c.partidoActual.sets.length > 0 && (
-                        <div
-                          style={{
-                            fontSize: 'var(--font-size-xs)',
-                            fontWeight: 700,
-                            color: 'var(--color-primary)',
-                            marginTop: '0.4rem',
-                            display: 'inline-block',
-                            background: 'rgba(0, 208, 132, 0.15)',
-                            padding: '0.15rem 0.5rem',
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid rgba(0, 208, 132, 0.3)',
-                          }}
-                        >
-                          Parcial: {c.partidoActual.sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {isLibre && (
-                    <div style={{ textAlign: 'center', padding: '1rem 0', color: 'var(--color-text-muted)' }}>
-                      <Activity size={24} style={{ opacity: 0.4, marginBottom: '0.3rem' }} />
-                      <p style={{ fontSize: 'var(--font-size-xs)', margin: 0 }}>Cancha disponible</p>
-                    </div>
-                  )}
-
-                  {isInhabilitada && (
-                    <div style={{ textAlign: 'center', padding: '1rem 0', color: 'var(--color-text-muted)' }}>
-                      <CloudRain size={24} style={{ opacity: 0.4, color: 'var(--color-danger)', marginBottom: '0.3rem' }} />
-                      <p style={{ fontSize: 'var(--font-size-xs)', margin: 0, color: 'rgba(239, 68, 68, 0.8)' }}>
-                        Inhabilitada por reducción de canchas
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer Cancha */}
-                {isEnCurso && c.partidoActual && (
-                  <div
-                    style={{
-                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                      paddingTop: '0.5rem',
-                      marginTop: '0.5rem',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      fontSize: 'var(--font-size-xs)',
-                      color: 'var(--color-text-secondary)',
-                    }}
-                  >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Clock size={12} />
-                      Inicio: {new Date(c.partidoActual.horaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    <span>
-                      Est. fin: {new Date(c.partidoActual.horaEstimadaFin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
       {/* ─── 6. Resumen Estadístico ───────────────────────────────── */}
       <div
