@@ -1254,3 +1254,16 @@ tr:nth-child(1) .pos-number {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ─── Editable Title Hover ───────────────────────────────── */
+.editable-title-hover {
+  border-radius: var(--radius-sm);
+  padding: 0.1rem 0.3rem;
+  margin-left: -0.3rem;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.editable-title-hover:hover {
+  color: var(--color-primary);
+  background: rgba(0, 208, 132, 0.08);
+}
+

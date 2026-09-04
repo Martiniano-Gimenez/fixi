@@ -35,6 +35,14 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 - **Alternativas que consideré y descarté:** Baja lógica (soft delete). Se descartó para mantener el modelo simple y evitar acumulación de datos innecesarios en la etapa actual del producto.
 - **Resultado final:** Eliminación completa y segura de torneos accesible desde la lista y desde el detalle, con redirección y actualización automática del listado.
 
+### Edición Directa del Nombre del Torneo desde el Detalle
+- **Problema o necesidad que motivó el trabajo:** Al entrar a la pantalla/pestaña de un torneo (`TorneoDetail`), el organizador no contaba con una forma directa ni visible para cambiarle el nombre al evento; la opción de edición estaba oculta detrás del selector de fecha en la cabecera sin un indicador claro en el título.
+- **Qué decidí y por qué:** Decidí implementar soporte dual de edición en el frontend:
+  1. **Edición rápida inline directamente en el título:** El título `<h1>` del torneo ahora es interactivo con hover sutil (`editable-title-hover`) y está acompañado de un botón visible `"Cambiar nombre"`. Al hacer click, el título se transforma en un campo de texto con auto-foco y selección automática, con botones de confirmación rápida (`✓ Guardar` / `✕ Cancelar`) y soporte para teclado (`Enter` para guardar, `Escape` para cancelar), actualizando de forma reactiva el estado del torneo tras persistir en `PUT /api/torneos/:id`.
+  2. **Acceso directo en la barra de acciones:** Agregué el botón `"Editar Torneo"` en el grupo de acciones principales de la cabecera para abrir el modal completo de edición de nombre y fecha de inicio, con foco automático en el nombre.
+- **Alternativas que consideré y descarté:** Consideré abrir únicamente el modal al hacer click en el título, pero se priorizó la edición inline por ofrecer una experiencia más fluida, moderna y sin fricción visual para el organizador.
+- **Resultado final:** Experiencia intuitiva y mobile-first para cambiar el nombre del torneo en cualquier momento, con feedback inmediato y sin recargas de página.
+
 ---
 
 ## 3. Fase de Grupos y Generación de Partidos
@@ -465,11 +473,31 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 - **Alternativas que consideré y descarté:** Volver a correr el scheduler completo con flag `resolucionManual: true` en cada re-check. Se descartó porque `armarGruposPorCompatibilidad` seguía reordenando las zonas y cambiando los rivales de los grupos.
 - **Resultado final:** Resolución de conflictos 100% estable, fluida y predecible. Cero efecto dominó, zonas congeladas, tests unitarios y de integración pasando al 100% (`test-precheck-snapshot.js`, `test-modo-dia-torneo.js`, `test-date-parsing.js`).
 
+### Programación Anticipada de Zonas de 4 (Mini-Bracket), Auto-Guardado 1-Click y Refinamiento en Vivo
+- **Problema o necesidad que motivó el trabajo:**
+  1. En zonas de 4 parejas (formato `MINI_BRACKET`), los partidos 1 (P1 vs P2) y 2 (P3 vs P4) se programaban correctamente, pero los partidos 3 (Ganador vs Ganador) y 4 (Perdedor vs Perdedor) quedaban con `fechaHora: null` y sin cancha asignada, reportándose como "Sin Horario" en el dashboard en vivo. En la operativa real del club, los organizadores necesitan fijar y comunicar el horario de estos partidos de antemano para que las parejas conozcan cuándo juegan según ganen o pierdan.
+  2. Al destrabar zonas manuales en el pre-check tocando opciones sugeridas, el flag `requiereArmadoManual` quedaba congelado en el snapshot inicial y nunca se re-evaluaba, impidiendo que la zona se marcara como resuelta.
+  3. En `InlineDisponibilidadEditor.jsx`, al tocar un chip de horario estrella ($\bigstar$) se requería un clic secundario en "Guardar", generando fricción respecto a la experiencia de 1-clic del asistente `CruceResolver`.
+  4. En la vista `TorneoEnVivo.jsx`, la sección "Estado de Canchas" (grilla de cards individuales Cancha 1, Cancha 2...) resultaba redundante dado que las canchas son operativamente intercambiables en vivo, ocupando espacio vertical valioso y empujando los bloques de "Partidos en Juego" y "Próximos Partidos" fuera del primer viewport.
+- **Qué decidí y por qué:**
+  1. **Intersección Cuádruple Simultánea de Disponibilidad:** Para los partidos 3 y 4 de mini-bracket, el cálculo de disponibilidad horaria evalúa la intersección simultánea de las 4 parejas de la zona (`interseccionVentanas(P1, P2, P3, P4)`), garantizando que cualquiera de los clasificados pueda jugar la definición sin incompatibilidades sobre la marcha.
+  2. **Orden de Dependencia Temporal Estricto en Scheduler:** Se estructuró la asignación en 2 fases consecutivas:
+     - *Fase 1:* Se procesan y confirman primero los partidos base (Round Robin y P1/P2 de mini-bracket) mediante el optimizador MCF en 3 pasadas.
+     - *Fase 2:* Los partidos 3 y 4 se programan únicamente después de que P1 y P2 de su misma zona tienen horario confirmado, exigiendo que el inicio de P3/P4 sea estrictamente posterior a $\max(\text{Fin}(P1), \text{Fin}(P2))$.
+  3. **Reserva Fija de Horario y Cancha:** A P3 y P4 se les reserva cancha y franja horaria fija de antemano (pudiendo jugarse en simultáneo en dos canchas o en turnos contiguos), protegiendo la capacidad global del club.
+  4. **Integración con Snapshot Incremental y Pre-Check:** Si la intersección de las 4 parejas no tiene hueco libre post-P1/P2, el pre-check lo reporta limpiamente como `ZONA_MANUAL_INCOMPLETA` con las opciones $\bigstar$ que destraban el grupo. Al agregar disponibilidad, el re-check incremental destraba la zona sin regenerar zonas ni alterar partidos ya asignados.
+  5. **Auto-Guardado en 1-Click para Chips Estrella (`InlineDisponibilidadEditor.jsx`):** Se añadió el handler `handleQuickSaveEstrella` que aplica el slot seleccionado, guarda atómicamente en base de datos y dispara el re-check automático en un solo toque.
+  6. **Re-evaluación Dinámica de Zonas Manuales (`organizador.service.js`):** `evaluarAsignacionesIncrementales` evalúa en memoria la compatibilidad pairwise de todas las parejas de la zona tras cada cambio. Al comprobar que todas comparten slots, desactiva `requiereArmadoManual = false` y asigna sus partidos en los huecos libres.
+  7. **Limpieza Visual de `TorneoEnVivo.jsx`:** Se removió la grilla individual de canchas, manteniendo el contador agregado ("Canchas activas: X/Y") en la barra de control superior y preservando intacta la alerta flotante de Canchas Fantasma.
+  8. **Sincronizador Masivo desde Excel (`actualizar-horarios-parejas.js`):** Script automatizado para importar y actualizar disponibilidades de las 83 parejas del torneo "Pares Agosto" desde `Inscripciones_Padel_Ordenado.xlsx`, reseteando flags de `resolucionManual`.
+  9. **Suite de Regresión Dedicada (`test-mini-bracket-scheduling.js`):** Valida dependencias temporales, simultaneidad, incompatibilidades cuádruples y resolución incremental con 100% de éxito.
+- **Resultado final:** Zonas de 4 parejas 100% programadas con horario y cancha desde el inicio, UI en vivo enfocada en el juego y resolución de pre-check inmediata y fluida.
+
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 17 sesiones de trabajo, sumando un aproximado total de entre 48 y 55 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 18 sesiones de trabajo, sumando un aproximado total de entre 51 y 58 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -490,6 +518,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 17 s
 | **15** | ~3.5 a 4 horas | Refinamiento Día de Torneo y Resiliencia del Scheduler: Tabs dinámicos por día con trasnoche real, eliminación del efecto *whack-a-mole* en scheduler MCF (Prioridad Grupo 0 y flag `resolucionManual`), aislamiento por día lógico en Modo Lluvia (`dateUtils.js`), y cambio rápido de estado a "EN_CURSO"/"PENDIENTE" en 1 clic (`PATCH /api/partidos/:id/estado`). |
 | **16** | ~4.5 horas | Desacople de Fechas y Determinismo (`torneo.fecha` como única fuente de verdad), eliminación total de `DEBUG_NOW` y `getAhora()`, helper `parseFechaLocal`, validación `requireTorneoFecha`, corrección de slots trasnoche (+1 día), Modo Lluvia de emergencia 100% basado en estados (`FINALIZADO`/`EN_CURSO`/`PENDIENTE`), suspensión de disponibilidad de pareja en emergencia, motor Global Earliest-Fit con cola FIFO (cierre hasta 7 horas antes), reprogramación bidireccional al restaurar canchas, filtro de cambios solo de horario y modal interactivo de edición de torneo. |
 | **17** | ~3.5 a 4 horas | Resolución Incremental de Conflictos en Pre-Check con Snapshot Estable de Zonas y Asignaciones Inmutables (`preCheckSessions`), eliminación total del efecto dominó en resolución de cruces, monotonía decreciente estricta ($N \rightarrow N-1 \rightarrow 0$), sliding TTL (60 min), mitigación de reinicio de server (`sesionReiniciada`), concurrencia síncrona segura sin `await` intercalado, botón y modal pedagógico de re-sorteo explícito (`forceReset: true`) y suite de regresión permanente (`test-precheck-snapshot.js`). |
-| **Total** | **~48 a 55 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia de emergencia (Global Earliest-Fit), brackets dinámicos, disponibilidad por sliders y diseño UI/UX premium. |
+| **18** | ~3 a 3.5 horas | Programación anticipada de zonas de 4 (Mini-Bracket: P3 Ganadores y P4 Perdedores) con intersección cuádruple simultánea, orden de dependencia estricto (P1/P2 antes de P3/P4), integración con snapshot incremental y pre-check, 1-click auto-save en chips estrella (`InlineDisponibilidadEditor.jsx`), importador/actualizador desde Excel y suite de regresión dedicada (`test-mini-bracket-scheduling.js`). |
+| **Total** | **~51 a 58 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia de emergencia (Global Earliest-Fit), brackets dinámicos, disponibilidad por sliders y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

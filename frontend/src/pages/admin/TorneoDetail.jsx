@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -24,6 +24,7 @@ import {
   Loader2,
   Activity,
   Edit2,
+  X,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
 import CruceResolver from '../../components/CruceResolver';
@@ -330,6 +331,13 @@ export default function TorneoDetail() {
   const [guardandoTorneo, setGuardandoTorneo] = useState(false);
   const [editTorneoError, setEditTorneoError] = useState('');
 
+  // Edición rápida / inline del nombre del torneo
+  const [isEditingNombre, setIsEditingNombre] = useState(false);
+  const [nombreInline, setNombreInline] = useState('');
+  const [guardandoNombreInline, setGuardandoNombreInline] = useState(false);
+  const [nombreInlineError, setNombreInlineError] = useState('');
+  const inlineNombreInputRef = useRef(null);
+
   // Iniciar Torneo Multi-categoría
   const [verificandoInicio, setVerificandoInicio] = useState(false);
   const [iniciarModalOpen, setIniciarModalOpen] = useState(false);
@@ -401,18 +409,69 @@ export default function TorneoDetail() {
     setTimeout(() => setCopiado(false), 2000);
   };
 
+  useEffect(() => {
+    if (isEditingNombre && inlineNombreInputRef.current) {
+      inlineNombreInputRef.current.focus();
+      inlineNombreInputRef.current.select();
+    }
+  }, [isEditingNombre]);
+
+  const handleStartEditingNombre = () => {
+    if (!torneo) return;
+    setNombreInline(torneo.nombre || '');
+    setNombreInlineError('');
+    setIsEditingNombre(true);
+  };
+
+  const handleCancelEditingNombre = () => {
+    setIsEditingNombre(false);
+    setNombreInline(torneo?.nombre || '');
+    setNombreInlineError('');
+  };
+
+  const handleSaveNombreInline = async (e) => {
+    if (e) e.preventDefault();
+    const trimmed = nombreInline.trim();
+    if (!trimmed) {
+      setNombreInlineError('El nombre no puede estar vacío.');
+      return;
+    }
+    if (trimmed === torneo.nombre) {
+      setIsEditingNombre(false);
+      return;
+    }
+    setGuardandoNombreInline(true);
+    setNombreInlineError('');
+    try {
+      const updated = await api.put(`/torneos/${torneo.id}`, {
+        nombre: trimmed,
+      });
+      setTorneo((prev) => ({ ...prev, ...updated }));
+      setIsEditingNombre(false);
+    } catch (err) {
+      setNombreInlineError(err.message || 'Error al actualizar el nombre.');
+    } finally {
+      setGuardandoNombreInline(false);
+    }
+  };
+
   const handleOpenEditTorneo = () => {
     if (!torneo) return;
     setEditNombre(torneo.nombre || '');
     if (torneo.fecha) {
-      const d = new Date(torneo.fecha);
-      if (!isNaN(d.getTime())) {
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        setEditFecha(`${yyyy}-${mm}-${dd}`);
+      const match = typeof torneo.fecha === 'string' && torneo.fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        setEditFecha(`${match[1]}-${match[2]}-${match[3]}`);
       } else {
-        setEditFecha('');
+        const d = new Date(torneo.fecha);
+        if (!isNaN(d.getTime())) {
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          setEditFecha(`${yyyy}-${mm}-${dd}`);
+        } else {
+          setEditFecha('');
+        }
       }
     } else {
       setEditFecha('');
@@ -692,8 +751,134 @@ export default function TorneoDetail() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <h1 style={{ margin: 0, fontSize: 'var(--font-size-2xl)' }}>{torneo.nombre}</h1>
-              <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
+              {!isEditingNombre ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <h1
+                    style={{
+                      margin: 0,
+                      fontSize: 'var(--font-size-2xl)',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                    }}
+                    onClick={handleStartEditingNombre}
+                    title="Hacé click para cambiar el nombre del torneo"
+                    className="editable-title-hover"
+                  >
+                    <span>{torneo.nombre}</span>
+                  </h1>
+                  <button
+                    type="button"
+                    onClick={handleStartEditingNombre}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '0.2rem 0.45rem',
+                      color: 'var(--color-text-secondary)',
+                      cursor: 'pointer',
+                      fontSize: '0.75rem',
+                      transition: 'all 0.15s ease',
+                    }}
+                    className="hover-card"
+                    title="Cambiar nombre del torneo"
+                  >
+                    <Edit2 size={13} style={{ color: 'var(--color-primary)' }} />
+                    <span style={{ fontWeight: 500 }}>Cambiar nombre</span>
+                  </button>
+                  <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleSaveNombreInline}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    flexWrap: 'wrap',
+                    width: '100%',
+                    maxWidth: '520px',
+                  }}
+                >
+                  <input
+                    ref={inlineNombreInputRef}
+                    type="text"
+                    value={nombreInline}
+                    onChange={(e) => {
+                      setNombreInline(e.target.value);
+                      if (nombreInlineError) setNombreInlineError('');
+                    }}
+                    disabled={guardandoNombreInline}
+                    placeholder="Nombre del torneo..."
+                    style={{
+                      fontSize: 'var(--font-size-xl)',
+                      fontWeight: 700,
+                      padding: '0.35rem 0.65rem',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      border: '1px solid var(--color-primary)',
+                      outline: 'none',
+                      boxShadow: '0 0 0 2px rgba(0, 208, 132, 0.2)',
+                      flex: '1 1 200px',
+                      minWidth: 0,
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        handleCancelEditingNombre();
+                      }
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                    <button
+                      type="submit"
+                      className="btn-primary"
+                      disabled={guardandoNombreInline || !nombreInline.trim() || nombreInline.trim() === torneo.nombre}
+                      title="Guardar nombre (Enter)"
+                      style={{
+                        padding: '0.4rem 0.65rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: 'var(--font-size-sm)',
+                      }}
+                    >
+                      {guardandoNombreInline ? (
+                        <RefreshCw size={14} className="spin" />
+                      ) : (
+                        <Check size={15} strokeWidth={2.5} />
+                      )}
+                      <span>Guardar</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleCancelEditingNombre}
+                      disabled={guardandoNombreInline}
+                      title="Cancelar (Esc)"
+                      style={{
+                        padding: '0.4rem 0.65rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        fontSize: 'var(--font-size-sm)',
+                      }}
+                    >
+                      <X size={15} />
+                      <span>Cancelar</span>
+                    </button>
+                  </div>
+                  {nombreInlineError && (
+                    <div style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-xs)', width: '100%', marginTop: '0.2rem' }}>
+                      {nombreInlineError}
+                    </div>
+                  )}
+                </form>
+              )}
             </div>
 
             <div
@@ -748,6 +933,16 @@ export default function TorneoDetail() {
 
           {/* Acciones principales */}
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleOpenEditTorneo}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+              title="Editar nombre y fecha del torneo"
+            >
+              <Edit2 size={15} /> Editar Torneo
+            </button>
+
             <button
               type="button"
               className="btn-secondary"
@@ -982,7 +1177,7 @@ export default function TorneoDetail() {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '440px' }}>
             <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Calendar size={20} style={{ color: 'var(--color-primary)' }} /> Editar Torneo y Fecha
+              <Edit2 size={20} style={{ color: 'var(--color-primary)' }} /> Editar Nombre y Fecha del Torneo
             </h3>
 
             {editTorneoError && (
@@ -999,6 +1194,7 @@ export default function TorneoDetail() {
                 <input
                   type="text"
                   required
+                  autoFocus
                   placeholder="Ej: Pares Agosto 2026"
                   value={editNombre}
                   onChange={(e) => setEditNombre(e.target.value)}
