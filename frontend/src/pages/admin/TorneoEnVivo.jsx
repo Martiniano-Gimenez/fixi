@@ -446,8 +446,63 @@ export default function TorneoEnVivo() {
           </div>
 
           {/* Selector y Acciones */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {/* Control +/- */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '0.75rem',
+              flexShrink: 0,
+            }}
+          >
+            {/* Botón Restaurar todas */}
+            {isLluviaActive && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setConfirmRestaurarOpen(true)}
+                disabled={actionLoading}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontSize: 'var(--font-size-xs)',
+                  padding: '0.5rem 0.85rem',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Sun size={15} style={{ color: '#f59e0b' }} />
+                Restaurar todas ({canchasClub})
+              </button>
+            )}
+
+            {/* Botón Reducir */}
+            {targetCanchas < canchasActivas && (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => setConfirmReducirOpen(true)}
+                disabled={actionLoading}
+                style={{
+                  background: '#2563eb',
+                  color: 'white',
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: 600,
+                  padding: '0.5rem 0.9rem',
+                  borderRadius: 'var(--radius-md)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <CloudRain size={15} />
+                Reducir a {targetCanchas} {targetCanchas === 1 ? 'cancha' : 'canchas'}
+              </button>
+            )}
+
+            {/* Control +/- (anclado a la derecha para mantener posición estable del cursor) */}
             <div
               style={{
                 display: 'flex',
@@ -456,6 +511,7 @@ export default function TorneoEnVivo() {
                 border: '1px solid var(--color-border)',
                 borderRadius: 'var(--radius-md)',
                 overflow: 'hidden',
+                flexShrink: 0,
               }}
             >
               <button
@@ -509,50 +565,6 @@ export default function TorneoEnVivo() {
                 +
               </button>
             </div>
-
-            {/* Botón Reducir */}
-            {targetCanchas < canchasActivas && (
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => setConfirmReducirOpen(true)}
-                disabled={actionLoading}
-                style={{
-                  background: '#2563eb',
-                  color: 'white',
-                  border: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  fontSize: 'var(--font-size-xs)',
-                  fontWeight: 600,
-                  padding: '0.5rem 0.9rem',
-                }}
-              >
-                <CloudRain size={15} />
-                Reducir a {targetCanchas} {targetCanchas === 1 ? 'cancha' : 'canchas'}
-              </button>
-            )}
-
-            {/* Botón Restaurar todas */}
-            {isLluviaActive && (
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setConfirmRestaurarOpen(true)}
-                disabled={actionLoading}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  fontSize: 'var(--font-size-xs)',
-                  padding: '0.5rem 0.85rem',
-                }}
-              >
-                <Sun size={15} style={{ color: '#f59e0b' }} />
-                Restaurar todas ({canchasClub})
-              </button>
-            )}
           </div>
         </div>
       </div>
