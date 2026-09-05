@@ -339,6 +339,119 @@ function evaluarAsignacionesIncrementales({
     }
   }
 
+  // 1b. Intentar asignar partidos MINI_BRACKET de ronda 2 (P3 y P4) que estaban sin horario
+  for (const cPlan of categoriasPlan) {
+    for (const zona of cPlan.zonas) {
+      if (zona.formato !== 'MINI_BRACKET') continue;
+
+      const p1 = zona.partidos.find((p) => p.posicionEnRonda === 1);
+      const p2 = zona.partidos.find((p) => p.posicionEnRonda === 2);
+      const p3 = zona.partidos.find((p) => p.posicionEnRonda === 3);
+      const p4 = zona.partidos.find((p) => p.posicionEnRonda === 4);
+
+      if (!p1?.fechaHora || !p2?.fechaHora || p1.sinHorarioAsignado || p2.sinHorarioAsignado) continue;
+
+      const minStartMs = Math.max(new Date(p1.fechaHora).getTime(), new Date(p2.fechaHora).getTime()) + DURACION_MS;
+
+      const rawZonaParejas = (zona.parejaIds || []).map((pId) => parejasMap.get(pId)).filter(Boolean);
+      const slotsLists = rawZonaParejas.map((p) => (p.slotsSeleccionados || []).map((s) => s.slotId));
+
+      let shared4 = [];
+      const conSlotsLists = slotsLists.filter((l) => l.length > 0);
+      if (conSlotsLists.length === 0) {
+        if (organizador.viernesInicio && organizador.viernesFin) {
+          shared4.push({ dia: 'Viernes', startMs: friDayStartMs, endMs: friDayEndMs });
+        }
+        if (organizador.sabadoInicio && organizador.sabadoFin) {
+          shared4.push({ dia: 'Sabado', startMs: satDayStartMs, endMs: satDayEndMs });
+        }
+      } else {
+        const windowsList = conSlotsLists.map((l) => fusionarSlotsEnVentanas(l, refFecha));
+        shared4 = windowsList[0];
+        for (let i = 1; i < windowsList.length; i++) {
+          shared4 = interseccionVentanas(shared4, windowsList[i]);
+        }
+      }
+
+      let commonSlots4 = [];
+      if (conSlotsLists.length > 0) {
+        commonSlots4 = conSlotsLists[0];
+        for (let i = 1; i < conSlotsLists.length; i++) {
+          commonSlots4 = commonSlots4.filter((s) => conSlotsLists[i].includes(s));
+        }
+      }
+
+      const matchesToAssign = [p3, p4].filter((p) => p && p.sinHorarioAsignado);
+      for (const m of matchesToAssign) {
+        let asignado = false;
+
+        for (const sId of commonSlots4) {
+          const sWin = slotIdToMsWindow(sId, refFecha);
+          if (!sWin || sWin.startMs < minStartMs) continue;
+
+          let withinShared = false;
+          for (const w of shared4) {
+            if (w.dia === sWin.dia && sWin.startMs >= w.startMs && sWin.endMs <= w.endMs) {
+              withinShared = true;
+              break;
+            }
+          }
+          if (!withinShared) continue;
+
+          for (let c = 1; c <= cantidadCanchas; c++) {
+            if (isCourtFree(c, sWin.startMs, sWin.endMs)) {
+              if (!courtTimelines.has(c)) courtTimelines.set(c, []);
+              courtTimelines.get(c).push({ startMs: sWin.startMs, endMs: sWin.endMs });
+
+              m.fechaHora = new Date(sWin.startMs);
+              m.canchaNumero = c;
+              m.sinHorarioAsignado = false;
+              asignado = true;
+              break;
+            }
+          }
+          if (asignado) break;
+        }
+
+        if (!asignado) {
+          for (const window of shared4) {
+            const isFri = window.dia === 'Viernes';
+            const dayStartMs = isFri ? friDayStartMs : satDayStartMs;
+            const dayEndMs = isFri ? friDayEndMs : satDayEndMs;
+            const wStart = Math.max(window.startMs, dayStartMs, minStartMs);
+            const wEnd = Math.min(window.endMs, dayEndMs);
+
+            let bestCand = null;
+            for (let c = 1; c <= cantidadCanchas; c++) {
+              let T = wStart;
+              while (T + DURACION_MS <= wEnd) {
+                const tEnd = T + DURACION_MS;
+                if (isCourtFree(c, T, tEnd)) {
+                  if (bestCand === null || T < bestCand.T) {
+                    bestCand = { T, cancha: c };
+                  }
+                  break;
+                }
+                T += 15 * 60 * 1000;
+              }
+            }
+
+            if (bestCand !== null) {
+              if (!courtTimelines.has(bestCand.cancha)) courtTimelines.set(bestCand.cancha, []);
+              courtTimelines.get(bestCand.cancha).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
+
+              m.fechaHora = new Date(bestCand.T);
+              m.canchaNumero = bestCand.cancha;
+              m.sinHorarioAsignado = false;
+              asignado = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
   // 2. Construir slotsEvaluadosMap a partir de los timelines actuales
   const grilla = generarGrillaOrganizador(organizador);
   const allSlotIds = [...grilla.viernes, ...grilla.sabado];
@@ -399,15 +512,7 @@ function evaluarAsignacionesIncrementales({
 
     for (const z of cPlan.zonas) {
       if (z.requiereArmadoManual) {
-        totalZonasManuales++;
-        if (!conflictosMap.has(cId)) {
-          conflictosMap.set(cId, {
-            categoriaId: cId,
-            nombreCategoria: cPlan.nombre,
-            partidosSinHorario: [],
-          });
-        }
-
+        // Re-evaluar compatibilidad pairwise con disponibilidad actualizada de parejasMap
         const rawZonaParejas = z.parejaIds.map((pId) => {
           const p = parejasMap.get(pId);
           return {
@@ -416,6 +521,132 @@ function evaluarAsignacionesIncrementales({
             slotIds: (p?.slotsSeleccionados || []).map((s) => s.slotId),
           };
         });
+
+        // Verificar si todas las parejas comparten al menos un slot entre cada par
+        let todaviaIncompatible = false;
+        for (let i = 0; i < rawZonaParejas.length; i++) {
+          for (let j = i + 1; j < rawZonaParejas.length; j++) {
+            const s1 = rawZonaParejas[i].slotIds;
+            const s2 = rawZonaParejas[j].slotIds;
+            const shared = s1.filter((slot) => s2.includes(slot));
+            if (shared.length === 0) {
+              todaviaIncompatible = true;
+              break;
+            }
+          }
+          if (todaviaIncompatible) break;
+        }
+
+        // Si ya son compatibles, marcar zona como resuelta y procesar sus partidos normalmente
+        if (!todaviaIncompatible) {
+          z.requiereArmadoManual = false;
+          // Procesar partidos sin horario de esta zona en el loop normal
+          for (const partido of z.partidos) {
+            if (!partido.sinHorarioAsignado) continue;
+
+            const par1 = parejasMap.get(partido.pareja1Id);
+            const par2 = parejasMap.get(partido.pareja2Id);
+            const slotsP1 = (par1?.slotsSeleccionados || []).map((s) => s.slotId);
+            const slotsP2 = (par2?.slotsSeleccionados || []).map((s) => s.slotId);
+
+            const conSlotsP1 = slotsP1.length > 0;
+            const conSlotsP2 = slotsP2.length > 0;
+
+            let sharedWindows = [];
+            let slotsComunes = [];
+            if (conSlotsP1 && conSlotsP2) {
+              const set2 = new Set(slotsP2);
+              slotsComunes = slotsP1.filter((s) => set2.has(s));
+              const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
+              const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
+              sharedWindows = interseccionVentanas(win1, win2);
+            } else if (conSlotsP1 || conSlotsP2) {
+              slotsComunes = conSlotsP1 ? slotsP1 : slotsP2;
+              sharedWindows = fusionarSlotsEnVentanas(slotsComunes, refFecha);
+            }
+
+            if (sharedWindows.length === 0) continue;
+
+            let asignado = false;
+            for (const sId of slotsComunes) {
+              const sWin = slotIdToMsWindow(sId, refFecha);
+              if (!sWin) continue;
+              const sStart = sWin.startMs;
+              const sEnd = sWin.endMs;
+              if (!isPairFree(partido.pareja1Id, sStart, sEnd) || !isPairFree(partido.pareja2Id, sStart, sEnd)) {
+                continue;
+              }
+              for (let c = 1; c <= cantidadCanchas; c++) {
+                if (isCourtFree(c, sStart, sEnd)) {
+                  if (!courtTimelines.has(c)) courtTimelines.set(c, []);
+                  courtTimelines.get(c).push({ startMs: sStart, endMs: sEnd });
+                  if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
+                  parejaAssignments.get(partido.pareja1Id).push({ startMs: sStart, endMs: sEnd });
+                  if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
+                  parejaAssignments.get(partido.pareja2Id).push({ startMs: sStart, endMs: sEnd });
+
+                  partido.fechaHora = new Date(sStart);
+                  partido.canchaNumero = c;
+                  partido.sinHorarioAsignado = false;
+                  asignado = true;
+                  break;
+                }
+              }
+              if (asignado) break;
+            }
+
+            if (!asignado) {
+              for (const win of sharedWindows) {
+                const isFri = win.dia === 'Viernes';
+                const dayStartMs = isFri ? friDayStartMs : satDayStartMs;
+                const dayEndMs = isFri ? friDayEndMs : satDayEndMs;
+                const wStart = Math.max(win.startMs, dayStartMs);
+                const wEnd = Math.min(win.endMs, dayEndMs);
+
+                let bestCand = null;
+                for (let c = 1; c <= cantidadCanchas; c++) {
+                  let T = wStart;
+                  while (T + DURACION_MS <= wEnd) {
+                    const tEnd = T + DURACION_MS;
+                    if (isCourtFree(c, T, tEnd) && isPairFree(partido.pareja1Id, T, tEnd) && isPairFree(partido.pareja2Id, T, tEnd)) {
+                      if (bestCand === null || T < bestCand.T) {
+                        bestCand = { T, cancha: c };
+                      }
+                      break;
+                    }
+                    T += 15 * 60 * 1000;
+                  }
+                }
+
+                if (bestCand !== null) {
+                  if (!courtTimelines.has(bestCand.cancha)) courtTimelines.set(bestCand.cancha, []);
+                  courtTimelines.get(bestCand.cancha).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
+                  if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
+                  parejaAssignments.get(partido.pareja1Id).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
+                  if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
+                  parejaAssignments.get(partido.pareja2Id).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
+
+                  partido.fechaHora = new Date(bestCand.T);
+                  partido.canchaNumero = bestCand.cancha;
+                  partido.sinHorarioAsignado = false;
+                  asignado = true;
+                  break;
+                }
+              }
+            }
+          }
+          continue; // Zona resuelta, no reportar como conflicto
+        }
+
+        // La zona sigue siendo incompatible — reportar como ZONA_MANUAL_INCOMPLETA
+        totalZonasManuales++;
+        if (!conflictosMap.has(cId)) {
+          conflictosMap.set(cId, {
+            categoriaId: cId,
+            nombreCategoria: cPlan.nombre,
+            partidosSinHorario: [],
+          });
+        }
 
         const parejasNombres = rawZonaParejas.map((p) => p.nombre).join(' | ');
 
@@ -498,6 +729,86 @@ function evaluarAsignacionesIncrementales({
             nombreCategoria: cPlan.nombre,
             partidosSinHorario: [],
           });
+        }
+
+        if (z.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3) {
+          const rawZonaParejas = (z.parejaIds || []).map((pId) => {
+            const par = parejasMap.get(pId);
+            return {
+              id: pId,
+              nombre: par ? `${par.jugador1} / ${par.jugador2}` : 'Pareja',
+              slotIds: (par?.slotsSeleccionados || []).map((s) => s.slotId),
+            };
+          });
+
+          const parejasManuales = rawZonaParejas.map((par) => {
+            const mySlots = par.slotIds;
+            const slotsViables = allSlotIds.filter((sId) => {
+              const info = slotsEvaluadosMap.get(sId);
+              if (!info || info.canchasLibres <= 0) return false;
+              if (par.id && info.parejasOcupadas.includes(par.id)) return false;
+              return true;
+            });
+
+            const slotsQueDestraban = slotsViables.filter((sId) => {
+              const simulated = rawZonaParejas.map((item) => {
+                if (item.id === par.id) {
+                  return Array.from(new Set([...item.slotIds, sId]));
+                }
+                return item.slotIds;
+              });
+              for (let i = 0; i < simulated.length; i++) {
+                for (let j = i + 1; j < simulated.length; j++) {
+                  const s1 = simulated[i];
+                  const s2 = simulated[j];
+                  const shared = s1.filter((slot) => s2.includes(slot));
+                  if (shared.length === 0) return false;
+                }
+              }
+              return true;
+            });
+
+            return {
+              id: par.id,
+              nombre: par.nombre,
+              slotsCount: mySlots.length,
+              slotIds: mySlots,
+              slotsViables,
+              slotsQueDestraban,
+            };
+          });
+
+          const crucesIncompatibles = [];
+          for (let i = 0; i < rawZonaParejas.length; i++) {
+            for (let j = i + 1; j < rawZonaParejas.length; j++) {
+              const p1 = rawZonaParejas[i];
+              const p2 = rawZonaParejas[j];
+              const shared = p1.slotIds.filter((slot) => p2.slotIds.includes(slot));
+              if (shared.length === 0) {
+                crucesIncompatibles.push({
+                  p1: p1.nombre,
+                  p2: p2.nombre,
+                  p1Id: p1.id,
+                  p2Id: p2.id,
+                });
+              }
+            }
+          }
+
+          const desc = p.posicionEnRonda === 3 ? 'Ganador P1 vs Ganador P2' : 'Perdedor P1 vs Perdedor P2';
+          conflictosMap.get(cId).partidosSinHorario.push({
+            partidoId: p.id,
+            zonaId: z.id,
+            zona: z.nombre,
+            categoriaId: cId,
+            motivo: 'ZONA_MANUAL_INCOMPLETA',
+            pareja1: desc,
+            pareja2: rawZonaParejas.map((par) => par.nombre).join(' | '),
+            parejasManuales,
+            crucesIncompatibles,
+            aparicionesMaximas: 999,
+          });
+          continue;
         }
 
         const par1 = parejasMap.get(p.pareja1Id);

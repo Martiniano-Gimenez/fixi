@@ -133,6 +133,9 @@ function parsearRangoHorario(segmento) {
 function parsearHorarios(texto) {
   if (!texto || !String(texto).trim()) return null;
 
+  const textoLower = String(texto).toLowerCase();
+  const sabadoTambien = textoLower.includes('sábado también') || textoLower.includes('sabado tambien');
+
   // Separar por "/"
   const segmentos = String(texto).split('/').map(s => s.trim()).filter(Boolean);
 
@@ -157,6 +160,9 @@ function parsearHorarios(texto) {
 
     if (dia) {
       resultados.push({ dia, ...rango });
+      if (sabadoTambien && dia === 'Viernes') {
+        resultados.push({ dia: 'Sabado', ...rango });
+      }
     } else {
       // Sin referencia de día → aplica a ambos
       resultados.push({ dia: 'Viernes', ...rango });
@@ -173,10 +179,11 @@ function parsearHorarios(texto) {
 /**
  * Dado el organizador del club y un array de rangos horarios parseados,
  * devuelve el array de slotIds (strings) que caen íntegramente dentro.
- * Soporta un margen en minutos (por defecto 60m antes y 60m después) y jornadas trasnoche.
+ * Soporta un margen en minutos (por defecto 30m antes y 30m después) y jornadas trasnoche.
  */
-function calcularSlots(organizador, rangos, margenMinutos = 60) {
-  const DURACION = 75; // minutos
+function calcularSlots(organizador, rangos, margenMinutos = 30) {
+  const DURACION = 75; // minutos por partido
+  const GRANULARIDAD = 15; // granularidad de la grilla
 
   function getSlotsConTiempos(dia, horaInicio, horaFin) {
     if (!horaInicio || !horaFin) return { slots: [], aperturaMin: 0, cierreMin: 0 };
@@ -186,7 +193,7 @@ function calcularSlots(organizador, rangos, margenMinutos = 60) {
       finMin += 24 * 60;
     }
     const slots = [];
-    for (let m = inicioMin; m + DURACION <= finMin; m += DURACION) {
+    for (let m = inicioMin; m + DURACION <= finMin; m += GRANULARIDAD) {
       const clockMin = m % (24 * 60);
       slots.push({
         slotId: `${dia}-${minutosAHora(clockMin)}`,

@@ -21,6 +21,7 @@ export default function InlineDisponibilidadEditor({
   const [error, setError] = useState('');
   const [warning, setWarning] = useState('');
   const [showOtrosViables, setShowOtrosViables] = useState(false);
+  const [applyingEstrellaSlot, setApplyingEstrellaSlot] = useState(null);
 
   useEffect(() => {
     setCurrentSlotIds(initialSlotIds);
@@ -51,7 +52,7 @@ export default function InlineDisponibilidadEditor({
   const totalDisponiblesParaAgregar = slotsNuevosDisponibles.length;
 
   const toggleSlot = (slotId) => {
-    if (saving || isSyncing) return;
+    if (saving || isSyncing || applyingEstrellaSlot) return;
     setSavedSuccess(false);
     setWarning('');
     setError('');
@@ -66,8 +67,46 @@ export default function InlineDisponibilidadEditor({
     });
   };
 
+  // 1-click auto-save para ★ estrella slots (destraban directamente)
+  const handleQuickSaveEstrella = async (slotId) => {
+    if (saving || isSyncing || applyingEstrellaSlot) return;
+    setApplyingEstrellaSlot(slotId);
+    setError('');
+    setWarning('');
+    setSavedSuccess(false);
+    let saved = null;
+    try {
+      const allSlots = Array.from(new Set([...currentSlotIds, slotId]));
+      saved = await api.put(`/parejas/${parejaId}/disponibilidad`, {
+        slots: allSlots,
+      });
+      setCurrentSlotIds(saved);
+      setSelectedNewSlots(new Set());
+      setSavedSuccess(true);
+    } catch (err) {
+      setError(err.message || 'Error al guardar disponibilidad.');
+      setApplyingEstrellaSlot(null);
+      return;
+    }
+
+    // Disparar recálculo automático si el commit fue exitoso
+    if (onSaved && saved) {
+      setIsSyncing(true);
+      try {
+        await onSaved(parejaId, saved);
+      } catch (err) {
+        setWarning('Turno guardado, pero no se pudo re-verificar automáticamente. Hacé clic en "Volver a verificar" abajo.');
+      } finally {
+        setIsSyncing(false);
+        setApplyingEstrellaSlot(null);
+      }
+    } else {
+      setApplyingEstrellaSlot(null);
+    }
+  };
+
   const handleSave = async () => {
-    if (selectedNewSlots.size === 0 || saving || isSyncing) return;
+    if (selectedNewSlots.size === 0 || saving || isSyncing || applyingEstrellaSlot) return;
     setSaving(true);
     setError('');
     setWarning('');
@@ -109,7 +148,7 @@ export default function InlineDisponibilidadEditor({
     );
   }
 
-  const isBusy = saving || isSyncing;
+  const isBusy = saving || isSyncing || Boolean(applyingEstrellaSlot);
 
   return (
     <div
@@ -171,7 +210,7 @@ export default function InlineDisponibilidadEditor({
           <div style={{ margin: '0 0 0.5rem 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
             {estrellaSlots.length > 0 ? (
               <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
-                ★ Con que la pareja acepte al menos 1 turno de abajo, este cruce queda resuelto:
+                ★ Tocá cualquier turno para resolver el cruce en 1 click:
               </span>
             ) : esZonaManual ? (
               <span>
@@ -194,27 +233,32 @@ export default function InlineDisponibilidadEditor({
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                     {viernesEstrella.map((slotId) => {
-                      const isChecked = selectedNewSlots.has(slotId);
+                      const isThisApplying = applyingEstrellaSlot === slotId;
                       const hora = slotId.split('-')[1];
                       return (
                         <button
                           key={slotId}
                           type="button"
                           disabled={isBusy}
-                          className={`slot-chip ${isChecked ? 'selected' : ''}`}
+                          className="slot-chip"
                           style={{
                             padding: '0.25rem 0.5rem',
                             fontSize: '11px',
-                            border: !isChecked ? '1px solid var(--color-success)' : undefined,
-                            background: !isChecked ? 'rgba(34, 197, 94, 0.08)' : undefined,
+                            border: '1px solid var(--color-success)',
+                            background: isThisApplying ? 'var(--color-primary)' : 'rgba(34, 197, 94, 0.08)',
+                            color: isThisApplying ? '#000' : undefined,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
                           }}
-                          onClick={() => toggleSlot(slotId)}
-                          title="¡Este turno destraba directamente el cruce!"
+                          onClick={() => handleQuickSaveEstrella(slotId)}
+                          title="¡Tocá para resolver el cruce con este turno!"
                         >
-                          {hora}
-                          <span style={{ marginLeft: '4px', color: 'var(--color-success)', fontWeight: 'bold' }}>
-                            ★
-                          </span>
+                          {isThisApplying ? (
+                            <><Loader2 size={11} className="spin" /> {hora}</>
+                          ) : (
+                            <>{hora}<span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>★</span></>
+                          )}
                         </button>
                       );
                     })}
@@ -229,27 +273,32 @@ export default function InlineDisponibilidadEditor({
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
                     {sabadoEstrella.map((slotId) => {
-                      const isChecked = selectedNewSlots.has(slotId);
+                      const isThisApplying = applyingEstrellaSlot === slotId;
                       const hora = slotId.split('-')[1];
                       return (
                         <button
                           key={slotId}
                           type="button"
                           disabled={isBusy}
-                          className={`slot-chip ${isChecked ? 'selected' : ''}`}
+                          className="slot-chip"
                           style={{
                             padding: '0.25rem 0.5rem',
                             fontSize: '11px',
-                            border: !isChecked ? '1px solid var(--color-success)' : undefined,
-                            background: !isChecked ? 'rgba(34, 197, 94, 0.08)' : undefined,
+                            border: '1px solid var(--color-success)',
+                            background: isThisApplying ? 'var(--color-primary)' : 'rgba(34, 197, 94, 0.08)',
+                            color: isThisApplying ? '#000' : undefined,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
                           }}
-                          onClick={() => toggleSlot(slotId)}
-                          title="¡Este turno destraba directamente el cruce!"
+                          onClick={() => handleQuickSaveEstrella(slotId)}
+                          title="¡Tocá para resolver el cruce con este turno!"
                         >
-                          {hora}
-                          <span style={{ marginLeft: '4px', color: 'var(--color-success)', fontWeight: 'bold' }}>
-                            ★
-                          </span>
+                          {isThisApplying ? (
+                            <><Loader2 size={11} className="spin" /> {hora}</>
+                          ) : (
+                            <>{hora}<span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>★</span></>
+                          )}
                         </button>
                       );
                     })}

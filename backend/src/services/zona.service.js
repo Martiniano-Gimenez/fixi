@@ -599,17 +599,36 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
       categoriaId: { in: categoriaIds },
       zonaId: { not: null },
       estado: 'PENDIENTE',
-      pareja1Id: { not: null },
-      pareja2Id: { not: null },
     },
     include: {
       categoria: { include: { torneo: true } },
+      zona: {
+        include: {
+          zonaParejas: {
+            include: {
+              pareja: {
+                include: { slotsSeleccionados: true },
+              },
+            },
+          },
+        },
+      },
       pareja1: { include: { slotsSeleccionados: true } },
       pareja2: { include: { slotsSeleccionados: true } },
     },
   });
 
-  const partidosAAsignar = partidos.filter((p) => !yaAgendadosIds.has(p.id));
+  const partidosFase1 = [];
+  const partidosMiniBracketFase2 = [];
+
+  for (const p of partidos) {
+    if (yaAgendadosIds.has(p.id)) continue;
+    if (p.zona?.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3) {
+      partidosMiniBracketFase2.push(p);
+    } else if (p.pareja1Id && p.pareja2Id) {
+      partidosFase1.push(p);
+    }
+  }
 
   const refFecha = requireTorneoFecha(categorias[0]?.torneo);
   const baseFriday = proximaFechaPorDia('Viernes', refFecha);
@@ -635,12 +654,12 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   const satDayEndMs = baseSaturday.getTime() + satEffectiveFinMin * 60 * 1000;
   const hasSaturday = Boolean(organizador.sabadoInicio && organizador.sabadoFin && satDayEndMs > satDayStartMs);
 
-  // 4. Preprocesar y clasificar partidos en grupos de prioridad (MCF Global)
+  // 4. Preprocesar y clasificar partidos Fase 1 en grupos de prioridad (MCF Global)
   const grupo0 = []; // Máxima prioridad (resolución manual)
   const grupo1 = [];
   const grupo2 = [];
 
-  for (const partido of partidosAAsignar) {
+  for (const partido of partidosFase1) {
     const slotsP1 = (partido.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
     const slotsP2 = (partido.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
 
@@ -847,6 +866,145 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
     if (!asignado) {
       if (!tryAssignContinuousWindows(partido, sharedWindows)) {
         updatesMap.set(partido.id, { id: partido.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
+      }
+    }
+  }
+
+  // ================= FASE 2: MINI_BRACKET RONDA 2 (P3: Ganadores y P4: Perdedores) =================
+  // Solo se procesan después de que P1 y P2 de la zona ya tienen horario confirmado (max(fin(P1), fin(P2))).
+  const mbZonasMap = new Map();
+  for (const p of partidosMiniBracketFase2) {
+    if (!mbZonasMap.has(p.zonaId)) mbZonasMap.set(p.zonaId, []);
+    mbZonasMap.get(p.zonaId).push(p);
+  }
+
+  for (const [zId, matches] of mbZonasMap.entries()) {
+    const zona = matches[0]?.zona;
+    if (!zona) continue;
+
+    // Buscar P1 y P2 de esta zona
+    const allZonaPartidos = partidos.filter((p) => p.zonaId === zId);
+    const p1 = allZonaPartidos.find((p) => p.posicionEnRonda === 1);
+    const p2 = allZonaPartidos.find((p) => p.posicionEnRonda === 2);
+
+    const t1 = updatesMap.get(p1?.id)?.fechaHora || (p1?.fechaHora && !p1?.sinHorarioAsignado ? p1.fechaHora : null);
+    const t2 = updatesMap.get(p2?.id)?.fechaHora || (p2?.fechaHora && !p2?.sinHorarioAsignado ? p2.fechaHora : null);
+
+    const p3 = matches.find((p) => p.posicionEnRonda === 3);
+    const p4 = matches.find((p) => p.posicionEnRonda === 4);
+
+    if (!t1 || !t2) {
+      if (p3) updatesMap.set(p3.id, { id: p3.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
+      if (p4) updatesMap.set(p4.id, { id: p4.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
+      continue;
+    }
+
+    const minStartMs = Math.max(new Date(t1).getTime(), new Date(t2).getTime()) + DURACION_MS;
+
+    // Obtener las 4 parejas de la zona
+    const zonePairs = (zona.zonaParejas || []).map((zp) => zp.pareja).filter(Boolean);
+    const slotsLists = zonePairs.map((p) => (p.slotsSeleccionados || []).map((s) => s.slotId));
+
+    // Calcular intersección cuádruple de ventanas continuas
+    let shared4 = [];
+    const conSlotsLists = slotsLists.filter((l) => l.length > 0);
+    if (conSlotsLists.length === 0) {
+      if (hasFriday) shared4.push({ dia: 'Viernes', startMs: friDayStartMs, endMs: friDayEndMs });
+      if (hasSaturday) shared4.push({ dia: 'Sabado', startMs: satDayStartMs, endMs: satDayEndMs });
+    } else {
+      const windowsList = conSlotsLists.map((l) => fusionarSlotsEnVentanas(l, refFecha));
+      shared4 = windowsList[0];
+      for (let i = 1; i < windowsList.length; i++) {
+        shared4 = interseccionVentanas(shared4, windowsList[i]);
+      }
+    }
+
+    // Calcular slots comunes exactos de las 4 parejas
+    let commonSlots4 = [];
+    if (conSlotsLists.length > 0) {
+      commonSlots4 = conSlotsLists[0];
+      for (let i = 1; i < conSlotsLists.length; i++) {
+        commonSlots4 = commonSlots4.filter((s) => conSlotsLists[i].includes(s));
+      }
+    }
+
+    // Programar P3 y P4
+    const matchesToSchedule = [p3, p4].filter(Boolean);
+    for (const m of matchesToSchedule) {
+      let asignado = false;
+
+      // 1. Probar slots comunes exactos posteriores a minStartMs
+      for (const sId of commonSlots4) {
+        const sWin = slotIdToMsWindow(sId, refFecha);
+        if (!sWin || sWin.startMs < minStartMs) continue;
+
+        let withinShared = false;
+        for (const w of shared4) {
+          if (w.dia === sWin.dia && sWin.startMs >= w.startMs && sWin.endMs <= w.endMs) {
+            withinShared = true;
+            break;
+          }
+        }
+        if (!withinShared) continue;
+
+        const canchaLibre = findFreeCourtAt(sWin.startMs, sWin.endMs);
+        if (canchaLibre !== null) {
+          courtTimelines.get(canchaLibre).push({ startMs: sWin.startMs, endMs: sWin.endMs });
+          updatesMap.set(m.id, {
+            id: m.id,
+            sinHorarioAsignado: false,
+            fechaHora: new Date(sWin.startMs),
+            canchaNumero: canchaLibre,
+          });
+          asignado = true;
+          break;
+        }
+      }
+
+      // 2. Probar ventanas continuas si no se asignó en slot común exacto
+      if (!asignado) {
+        for (const window of shared4) {
+          const isFri = window.dia === 'Viernes';
+          const dayStartMs = isFri ? friDayStartMs : satDayStartMs;
+          const dayEndMs = isFri ? friDayEndMs : satDayEndMs;
+
+          const wStart = Math.max(window.startMs, dayStartMs, minStartMs);
+          const wEnd = Math.min(window.endMs, dayEndMs);
+
+          let bestCandidate = null;
+          for (let c = 1; c <= cantidadCanchas; c++) {
+            let T = wStart;
+            while (T + DURACION_MS <= wEnd) {
+              const tEnd = T + DURACION_MS;
+              if (isCourtFree(c, T, tEnd)) {
+                if (bestCandidate === null || T < bestCandidate.T) {
+                  bestCandidate = { T, cancha: c };
+                }
+                break;
+              }
+              T += 15 * 60 * 1000;
+            }
+          }
+
+          if (bestCandidate !== null) {
+            courtTimelines.get(bestCandidate.cancha).push({
+              startMs: bestCandidate.T,
+              endMs: bestCandidate.T + DURACION_MS,
+            });
+            updatesMap.set(m.id, {
+              id: m.id,
+              sinHorarioAsignado: false,
+              fechaHora: new Date(bestCandidate.T),
+              canchaNumero: bestCandidate.cancha,
+            });
+            asignado = true;
+            break;
+          }
+        }
+      }
+
+      if (!asignado) {
+        updatesMap.set(m.id, { id: m.id, sinHorarioAsignado: true, fechaHora: null, canchaNumero: null });
       }
     }
   }
