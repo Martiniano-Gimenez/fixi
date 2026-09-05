@@ -7,6 +7,8 @@ const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
 const torneoService = require('../src/services/torneo.service');
 const partidoService = require('../src/services/partido.service');
+const { parseFechaLocal, getDiaCalendarioConTrasnoche } = require('../src/utils/dateUtils');
+const assert = require('assert');
 
 async function testModoDiaTorneo() {
   console.log('🧪 Iniciando test automatizado de Modo Día de Torneo...');
@@ -125,14 +127,7 @@ async function testModoDiaTorneo() {
   // 8. Test Reducción a 4 canchas (MODO LLUVIA)
   console.log('🌧️ Ejecutando reducción de canchas a 4 (Modo Lluvia)...');
   
-  // MOCK: Para que el test funcione sin importar la hora real a la que se corre, 
-  // forzamos que el overrideActivoDesde comience exactamente en el día lógico de los partidos.
-  await prisma.torneo.update({
-    where: { id: torneo.id },
-    data: { overrideActivoDesde: pEnCurso.fechaHora },
-  });
-
-  const resReduccion = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4);
+  const resReduccion = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4, pEnCurso.fechaHora);
   console.log(`✅ Resultado reprogramación: ${resReduccion.message}`);
   console.log(`   - Partidos reprogramados: ${resReduccion.reprogramacion.partidosReprogramados}`);
   console.log(`   - Partidos sin cambio: ${resReduccion.reprogramacion.partidosSinCambio}`);
@@ -179,7 +174,7 @@ async function testModoDiaTorneo() {
 
   console.log('🔒 Probando bloqueo al reducir cuando hay partido EN_CURSO en cancha afectada...');
   try {
-    await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 3);
+    await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 3, pEnCurso.fechaHora);
     throw new Error('FALLÓ EL TEST: Debería haber bloqueado la reducción a 3');
   } catch (err) {
     if (err.statusCode === 400 && err.message.includes('partido en curso en la Cancha 4')) {
@@ -267,13 +262,8 @@ async function testModoDiaTorneo() {
   const dLluviaTrasnoche = new Date(fechaTorneo);
   dLluviaTrasnoche.setHours(23, 30, 0, 0);
 
-  await prisma.torneo.update({
-    where: { id: torneo.id },
-    data: { overrideActivoDesde: dLluviaTrasnoche },
-  });
-
   console.log('🌧️ Ejecutando reducción de canchas a 4 (Modo Lluvia en Trasnoche)...');
-  const resTrasnoche = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4);
+  const resTrasnoche = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4, dLluviaTrasnoche);
   console.log(`✅ Resultado reprogramación trasnoche: ${resTrasnoche.message}`);
   
   if (resTrasnoche.reprogramacion.partidosReprogramados === 0) {
@@ -286,6 +276,534 @@ async function testModoDiaTorneo() {
   }
   console.log('✅ Partido de trasnoche (Sábado 01:00) fue correctamente reprogramado al reducir canchas!');
 
+  // =======================================================================
+  // 13. Test A: Aislamiento por día lógico en reducción (Opción B)
+  // =======================================================================
+  console.log('\n🎯 TEST A: Aislamiento por día lógico en reducción (Viernes no toca Sábado)...');
+  
+  // Primero restauramos a 6 canchas para tener el club completo
+  await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null);
+
+  // Obtener partidos pendientes actuales
+  const todosPartidosTorneo = await prisma.partido.findMany({
+    where: { categoria: { torneoId: torneo.id } },
+    orderBy: { id: 'asc' },
+  });
+
+  const horariosClubTest = {
+    viernesInicio: organizador.viernesInicio,
+    viernesFin: organizador.viernesFin,
+    sabadoInicio: organizador.sabadoInicio,
+    sabadoFin: organizador.sabadoFin,
+  };
+
+  // Asignar explícitamente 2 partidos al Sábado (uno en Cancha 5 y otro en Cancha 6)
+  const dSabadoManana = new Date(fechaTorneo);
+  dSabadoManana.setDate(dSabadoManana.getDate() + 1);
+  dSabadoManana.setHours(10, 0, 0, 0); // Sábado 10:00 AM
+
+  const dSabadoMediodia = new Date(fechaTorneo);
+  dSabadoMediodia.setDate(dSabadoMediodia.getDate() + 1);
+  dSabadoMediodia.setHours(11, 15, 0, 0); // Sábado 11:15 AM
+
+  const pSabado1 = todosPartidosTorneo[0];
+  const pSabado2 = todosPartidosTorneo[1];
+
+  await prisma.partido.update({
+    where: { id: pSabado1.id },
+    data: {
+      estado: 'PENDIENTE',
+      fechaHora: dSabadoManana,
+      canchaNumero: 5,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  await prisma.partido.update({
+    where: { id: pSabado2.id },
+    data: {
+      estado: 'PENDIENTE',
+      fechaHora: dSabadoMediodia,
+      canchaNumero: 6,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Asignar el resto de los partidos al Viernes
+  const dViernesTarde = new Date(fechaTorneo);
+  dViernesTarde.setHours(19, 0, 0, 0);
+
+  for (let i = 2; i < todosPartidosTorneo.length; i++) {
+    const p = todosPartidosTorneo[i];
+    if (p.estado === 'FINALIZADO') continue;
+    const horaP = new Date(dViernesTarde.getTime() + (i - 2) * 45 * 60 * 1000);
+    await prisma.partido.update({
+      where: { id: p.id },
+      data: {
+        estado: 'PENDIENTE',
+        fechaHora: horaP,
+        canchaNumero: (i % 6) + 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  // Snapshot de los partidos del sábado antes de reducir canchas
+  const snapshotSabado = [
+    await prisma.partido.findUnique({ where: { id: pSabado1.id } }),
+    await prisma.partido.findUnique({ where: { id: pSabado2.id } }),
+  ];
+
+  console.log(`📌 Snapshot Sábado: Partido 1 en Cancha ${snapshotSabado[0].canchaNumero} (${snapshotSabado[0].fechaHora.toISOString()})`);
+  console.log(`📌 Snapshot Sábado: Partido 2 en Cancha ${snapshotSabado[1].canchaNumero} (${snapshotSabado[1].fechaHora.toISOString()})`);
+
+  // Activar Modo Lluvia un Viernes (reducir a 4 canchas)
+  const dViernesLluvia = new Date(fechaTorneo);
+  dViernesLluvia.setHours(20, 0, 0, 0);
+
+  const resReduccionViernes = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4, dViernesLluvia);
+  console.log(`✅ Reducción a 4 canchas ejecutada: ${resReduccionViernes.message}`);
+
+  // Aserciones estrictas Test A:
+  // 1. Partidos del sábado deben ser idénticos antes y después
+  const pSabado1Post = await prisma.partido.findUnique({ where: { id: pSabado1.id } });
+  const pSabado2Post = await prisma.partido.findUnique({ where: { id: pSabado2.id } });
+
+  assert.strictEqual(
+    pSabado1Post.fechaHora.getTime(),
+    snapshotSabado[0].fechaHora.getTime(),
+    'FALLÓ TEST A: El horario del partido de sábado fue modificado por el override del viernes'
+  );
+  assert.strictEqual(
+    pSabado1Post.canchaNumero,
+    snapshotSabado[0].canchaNumero,
+    'FALLÓ TEST A: La cancha del partido de sábado fue modificada por el override del viernes'
+  );
+  assert.strictEqual(
+    pSabado2Post.fechaHora.getTime(),
+    snapshotSabado[1].fechaHora.getTime(),
+    'FALLÓ TEST A: El horario del partido 2 de sábado fue modificado por el override del viernes'
+  );
+  assert.strictEqual(
+    pSabado2Post.canchaNumero,
+    snapshotSabado[1].canchaNumero,
+    'FALLÓ TEST A: La cancha del partido 2 de sábado fue modificada por el override del viernes'
+  );
+
+  // 2. Partidos del sábado NO deben figurar en la lista de cambios
+  const cambiosIds = (resReduccionViernes.reprogramacion.cambios || []).map((c) => c.partidoId);
+  assert.ok(!cambiosIds.includes(pSabado1.id), 'FALLÓ TEST A: Partido de sábado apareció en cambios de la reducción');
+  assert.ok(!cambiosIds.includes(pSabado2.id), 'FALLÓ TEST A: Partido de sábado 2 apareció en cambios de la reducción');
+
+  // 3. Partidos pendientes del viernes deben estar en canchas <= 4
+  const pendientesViernesPost = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId: torneo.id },
+      estado: 'PENDIENTE',
+      id: { notIn: [pSabado1.id, pSabado2.id] },
+    },
+  });
+  for (const pv of pendientesViernesPost) {
+    if (pv.canchaNumero) {
+      assert.ok(pv.canchaNumero <= 4, `FALLÓ TEST A: Partido de viernes quedó en cancha inhabilitada: ${pv.canchaNumero}`);
+    }
+  }
+
+  // 4. getEstadoEnVivo: Partidos del sábado en canchas 5/6 NO deben ser clasificados como 'partidosEnCanchaFantasma'
+  const estadoEnVivoPostA = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
+  const fantasmaIds = estadoEnVivoPostA.partidosEnCanchaFantasma.map((p) => p.id);
+  assert.ok(!fantasmaIds.includes(pSabado1.id), 'FALLÓ TEST A: Partido de sábado en cancha 5 marcado falsamente como cancha fantasma');
+  assert.ok(!fantasmaIds.includes(pSabado2.id), 'FALLÓ TEST A: Partido de sábado en cancha 6 marcado falsamente como cancha fantasma');
+
+  // 5. getEstadoEnVivo debe exponer overrideDiaKey correspondiente al viernes lógico
+  const diaViernesEsperado = getDiaCalendarioConTrasnoche(dViernesLluvia, horariosClubTest).key;
+  assert.strictEqual(
+    estadoEnVivoPostA.torneo.overrideDiaKey,
+    diaViernesEsperado,
+    'FALLÓ TEST A: overrideDiaKey en getEstadoEnVivo no coincide con el día del override'
+  );
+  console.log('✅ TEST A PASÓ: Partidos del Sábado 100% inalterados, canchas 5 y 6 protegidas y canchas fantasma filtradas correctamente.');
+
+  // =======================================================================
+  // 14. Test B: Restauración simétrica y atomicidad
+  // =======================================================================
+  console.log('\n🎯 TEST B: Restauración simétrica (Sábado sigue intacto, Viernes se redistribuye)...');
+
+  // Verificar explícitamente que todos los partidos pendientes del viernes fueron evaluados como candidatos por el scheduler
+  const pendientesViernesCount = await prisma.partido.count({
+    where: {
+      categoria: { torneoId: torneo.id },
+      estado: 'PENDIENTE',
+      id: { notIn: [pSabado1.id, pSabado2.id] },
+    },
+  });
+  const resRestauracionSimetrica = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null);
+  console.log(`✅ Restauración ejecutada: ${resRestauracionSimetrica.message}`);
+
+  const totalEvaluadosViernes = resRestauracionSimetrica.reprogramacion.partidosReprogramados + resRestauracionSimetrica.reprogramacion.partidosSinCambio;
+  assert.strictEqual(
+    totalEvaluadosViernes,
+    pendientesViernesCount,
+    `FALLÓ TEST B: Se esperaban ${pendientesViernesCount} partidos del viernes evaluados en el scheduler, se evaluaron ${totalEvaluadosViernes}`
+  );
+  console.log(`📊 Métricas de restauración: ${totalEvaluadosViernes} partidos pendientes del viernes evaluados en scheduler (${resRestauracionSimetrica.reprogramacion.partidosSinCambio} sin cambio de hora por saturación de descanso entre las 4 zonas), 2 partidos del sábado excluidos.`);
+
+  const pSabado1PostB = await prisma.partido.findUnique({ where: { id: pSabado1.id } });
+  const pSabado2PostB = await prisma.partido.findUnique({ where: { id: pSabado2.id } });
+
+  assert.strictEqual(
+    pSabado1PostB.fechaHora.getTime(),
+    snapshotSabado[0].fechaHora.getTime(),
+    'FALLÓ TEST B: La restauración modificó el horario del partido de sábado'
+  );
+  assert.strictEqual(
+    pSabado1PostB.canchaNumero,
+    snapshotSabado[0].canchaNumero,
+    'FALLÓ TEST B: La restauración modificó la cancha del partido de sábado'
+  );
+  assert.strictEqual(
+    pSabado2PostB.fechaHora.getTime(),
+    snapshotSabado[1].fechaHora.getTime(),
+    'FALLÓ TEST B: La restauración modificó el horario del partido 2 de sábado'
+  );
+  assert.strictEqual(
+    pSabado2PostB.canchaNumero,
+    snapshotSabado[1].canchaNumero,
+    'FALLÓ TEST B: La restauración modificó la cancha del partido 2 de sábado'
+  );
+
+  // Verificar que el estado del torneo post restauración tiene overrideDiaKey en null
+  const estadoEnVivoPostB = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
+  assert.strictEqual(estadoEnVivoPostB.torneo.canchasDisponiblesOverride, null);
+  assert.strictEqual(estadoEnVivoPostB.torneo.overrideActivoDesde, null);
+  assert.strictEqual(estadoEnVivoPostB.torneo.overrideDiaKey, null);
+  console.log('✅ TEST B PASÓ: Restauración simétrica respetó el sábado, evaluó todos los partidos del viernes y reseteó overrideDiaKey limpiamente.');
+
+  // =======================================================================
+  // 15. Test C: Determinismo de partido sin fechaHora contra torneo.fecha
+  // =======================================================================
+  console.log('\n🎯 TEST C: Determinismo de partido sin fechaHora contra torneo.fecha...');
+
+  // Tomamos un partido del viernes y lo forzamos a estado sin horario
+  const pSinHorario = pendientesViernesPost[0];
+  await prisma.partido.update({
+    where: { id: pSinHorario.id },
+    data: {
+      estado: 'PENDIENTE',
+      fechaHora: null,
+      canchaNumero: null,
+      sinHorarioAsignado: true,
+    },
+  });
+
+  // Activar lluvia un viernes
+  await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4, dViernesLluvia);
+
+  const pSinHorarioPost = await prisma.partido.findUnique({ where: { id: pSinHorario.id } });
+  assert.ok(pSinHorarioPost.fechaHora !== null, 'FALLÓ TEST C: El partido sin horario no recibió fechaHora');
+  assert.ok(pSinHorarioPost.canchaNumero !== null && pSinHorarioPost.canchaNumero <= 4, 'FALLÓ TEST C: No se le asignó cancha válida');
+  assert.strictEqual(pSinHorarioPost.sinHorarioAsignado, false, 'FALLÓ TEST C: sinHorarioAsignado debería ser false');
+
+  // Aserción explícita contractual: El día asignado DEBE coincidir con el derivado de torneo.fecha
+  const diaTorneoEsperado = getDiaCalendarioConTrasnoche(parseFechaLocal(torneo.fecha), horariosClubTest).key;
+  const diaPartidoAsignado = getDiaCalendarioConTrasnoche(pSinHorarioPost.fechaHora, horariosClubTest).key;
+
+  assert.strictEqual(
+    diaPartidoAsignado,
+    diaTorneoEsperado,
+    `FALLÓ TEST C: El partido sin fechaHora fue asignado a ${diaPartidoAsignado}, pero el fallback debe ser ${diaTorneoEsperado} (derivado de torneo.fecha: ${torneo.fecha})`
+  );
+  console.log(`✅ TEST C PASÓ: Partido sin horario asignado contractualmente al día lógico de torneo.fecha (${diaTorneoEsperado}).`);
+
+  // =======================================================================
+  // 16. Test Concurrencia y Atomicidad: Operaciones concurrentes durante reducción
+  // =======================================================================
+  console.log('\n🎯 TEST Concurrencia: Verificando que lecturas y escrituras simultáneas no produzcan lock timeout...');
+  
+  // Ejecutamos simultáneamente:
+  // 1. Una lectura intensiva de getEstadoEnVivo (findMany con includes de categorías, zonas, parejas, sets)
+  // 2. Una escritura transaccional de reprogramarPorReduccionCanchas (prisma.$transaction con scheduler MCF y update de torneo)
+  // 3. Una mutación puntual de updateEstado sobre un partido
+  const pTestConc = pendientesViernesPost[1];
+  const t0 = Date.now();
+  const [resRead, resReducir, resUpdateEstado] = await Promise.all([
+    organizadorService.getEstadoEnVivo(organizador.id, torneo.id),
+    organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 5, dViernesLluvia),
+    partidoService.updateEstado(organizador.id, pTestConc.id, 'EN_CURSO'),
+  ]);
+  const duracionMs = Date.now() - t0;
+
+  assert.ok(resRead.torneo !== null, 'Lectura getEstadoEnVivo falló durante concurrencia');
+  assert.ok(resReducir.reprogramacion.ejecutada === true, 'Transacción de reducción falló durante concurrencia');
+  assert.ok(resUpdateEstado.partido !== null, 'Escritura updateEstado falló durante concurrencia');
+  console.log(`✅ TEST Concurrencia PASÓ en ${duracionMs}ms: getEstadoEnVivo (lectura), reprogramarPorReduccionCanchas (tx) y updateEstado (escritura) ejecutaron concurrentemente sin bloqueo.`);
+
+  // =======================================================================
+  // 17. Test D: Escenario Multi-Día sin restauración previa (Viernes lluvia -> Sábado lluvia)
+  // =======================================================================
+  console.log('\n🎯 TEST D: Escenario Multi-Día sin restauración previa (Viernes activa lluvia, no restaura, Sábado activa lluvia)...');
+
+  // Restaurar previamente para partir de estado limpio
+  await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null);
+
+  const partidosParaTestD = await prisma.partido.findMany({
+    where: { categoria: { torneoId: torneo.id } },
+    orderBy: { id: 'asc' },
+  });
+
+  const pD_Sabado1 = partidosParaTestD[0];
+  const pD_Sabado2 = partidosParaTestD[1];
+
+  const dSabadoMananaD = new Date(fechaTorneo);
+  dSabadoMananaD.setDate(dSabadoMananaD.getDate() + 1);
+  dSabadoMananaD.setHours(10, 0, 0, 0);
+
+  const dSabadoMediodiaD = new Date(fechaTorneo);
+  dSabadoMediodiaD.setDate(dSabadoMediodiaD.getDate() + 1);
+  dSabadoMediodiaD.setHours(11, 15, 0, 0);
+
+  // Asignar 2 partidos al sábado en Canchas 5 y 6
+  await prisma.partido.update({
+    where: { id: pD_Sabado1.id },
+    data: {
+      estado: 'PENDIENTE',
+      fechaHora: dSabadoMananaD,
+      canchaNumero: 5,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  await prisma.partido.update({
+    where: { id: pD_Sabado2.id },
+    data: {
+      estado: 'PENDIENTE',
+      fechaHora: dSabadoMediodiaD,
+      canchaNumero: 6,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // El resto de los partidos asignados al viernes en canchas 1 a 6
+  const dViernesInicioD = new Date(fechaTorneo);
+  dViernesInicioD.setHours(19, 0, 0, 0);
+  for (let i = 2; i < partidosParaTestD.length; i++) {
+    const p = partidosParaTestD[i];
+    if (p.estado === 'FINALIZADO') continue;
+    const horaP = new Date(dViernesInicioD.getTime() + (i - 2) * 45 * 60 * 1000);
+    await prisma.partido.update({
+      where: { id: p.id },
+      data: {
+        estado: 'PENDIENTE',
+        fechaHora: horaP,
+        canchaNumero: (i % 6) + 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  // PASO 1: Viernes 18:00 - Se activa Modo Lluvia (reducir a 4 canchas)
+  const dViernesLluviaD = new Date(fechaTorneo);
+  dViernesLluviaD.setHours(18, 0, 0, 0);
+  const resReduccionViernesD = await organizadorService.reprogramarPorReduccionCanchas(
+    organizador.id,
+    torneo.id,
+    4,
+    dViernesLluviaD
+  );
+  console.log(`✅ Paso 1: Modo Lluvia Viernes activado (${resReduccionViernesD.message})`);
+
+  // Verificar que en DB quedó persistido el timestamp del viernes
+  const torneoPostViernes = await prisma.torneo.findUnique({ where: { id: torneo.id } });
+  assert.strictEqual(
+    torneoPostViernes.overrideActivoDesde.getTime(),
+    dViernesLluviaD.getTime(),
+    'FALLÓ TEST D: overrideActivoDesde no se persistió con el timestamp del viernes'
+  );
+  assert.strictEqual(
+    torneoPostViernes.canchasDisponiblesOverride,
+    4,
+    'FALLÓ TEST D: canchasDisponiblesOverride no es 4 tras reducción del viernes'
+  );
+
+  // Snapshot de los partidos del viernes tras su reprogramación
+  const partidosViernesSnapshot = await prisma.partido.findMany({
+    where: {
+      categoria: { torneoId: torneo.id },
+      id: { notIn: [pD_Sabado1.id, pD_Sabado2.id] },
+    },
+  });
+
+  // PASO 2: El organizador NUNCA restaura las canchas el viernes.
+  // El torneo queda con overrideActivoDesde = Viernes 18:00 en DB.
+  // Sábado por la mañana amanece lloviendo. El organizador activa Modo Lluvia el sábado a las 09:30 AM (reduce a 4 canchas).
+  const dSabadoLluviaD = new Date(fechaTorneo);
+  dSabadoLluviaD.setDate(dSabadoLluviaD.getDate() + 1);
+  dSabadoLluviaD.setHours(9, 30, 0, 0);
+
+  console.log('🌧️ Paso 2: Sábado por la mañana — Activando Modo Lluvia sin haber restaurado el viernes...');
+  const resReduccionSabadoD = await organizadorService.reprogramarPorReduccionCanchas(
+    organizador.id,
+    torneo.id,
+    4,
+    dSabadoLluviaD
+  );
+  console.log(`✅ Resultado reprogramación sábado: ${resReduccionSabadoD.message}`);
+
+  // ASERCIONES CRÍTICAS TEST D:
+  // 1. La reprogramación de sábado DEBE haberse ejecutado (no descartada como no-op por tener la misma cantidad de canchas)
+  assert.strictEqual(
+    resReduccionSabadoD.reprogramacion.ejecutada,
+    true,
+    'FALLÓ TEST D: La reprogramación del sábado fue descartada erróneamente como no-op'
+  );
+
+  // 2. En la base de datos, overrideActivoDesde DEBE haberse actualizado a la fecha del SÁBADO (no retener el viernes)
+  const torneoPostSabado = await prisma.torneo.findUnique({ where: { id: torneo.id } });
+  assert.strictEqual(
+    torneoPostSabado.overrideActivoDesde.getTime(),
+    dSabadoLluviaD.getTime(),
+    `FALLÓ TEST D: overrideActivoDesde en DB retuvo el timestamp viejo del viernes en vez de actualizar al sábado (${torneoPostSabado.overrideActivoDesde.toISOString()} vs ${dSabadoLluviaD.toISOString()})`
+  );
+
+  // 3. En getEstadoEnVivo, overrideDiaKey DEBE ser "sabado"
+  const estadoEnVivoSabado = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
+  const diaSabadoEsperado = getDiaCalendarioConTrasnoche(dSabadoLluviaD, horariosClubTest).key;
+  assert.strictEqual(
+    estadoEnVivoSabado.torneo.overrideDiaKey,
+    diaSabadoEsperado,
+    `FALLÓ TEST D: overrideDiaKey en getEstadoEnVivo es ${estadoEnVivoSabado.torneo.overrideDiaKey}, se esperaba ${diaSabadoEsperado}`
+  );
+
+  // 4. Los partidos del sábado que estaban en canchas 5 y 6 DEBEN haber sido reprogramados a canchas <= 4
+  const pD_Sabado1Post = await prisma.partido.findUnique({ where: { id: pD_Sabado1.id } });
+  const pD_Sabado2Post = await prisma.partido.findUnique({ where: { id: pD_Sabado2.id } });
+  assert.ok(
+    pD_Sabado1Post.canchaNumero <= 4,
+    `FALLÓ TEST D: Partido del sábado 1 quedó en cancha inhabilitada: ${pD_Sabado1Post.canchaNumero}`
+  );
+  assert.ok(
+    pD_Sabado2Post.canchaNumero <= 4,
+    `FALLÓ TEST D: Partido del sábado 2 quedó en cancha inhabilitada: ${pD_Sabado2Post.canchaNumero}`
+  );
+
+  // 5. Los partidos del viernes NO deben haber sido tocados por la activación del sábado
+  for (const pViernesSnap of partidosViernesSnapshot) {
+    const pActual = await prisma.partido.findUnique({ where: { id: pViernesSnap.id } });
+    if (pViernesSnap.fechaHora) {
+      assert.strictEqual(
+        pActual.fechaHora.getTime(),
+        pViernesSnap.fechaHora.getTime(),
+        `FALLÓ TEST D: Partido del viernes ${pActual.id} fue modificado por el override del sábado`
+      );
+    }
+    assert.strictEqual(
+      pActual.canchaNumero,
+      pViernesSnap.canchaNumero,
+      `FALLÓ TEST D: Cancha del partido de viernes ${pActual.id} fue modificada por el override del sábado`
+    );
+  }
+
+  // 6. Restauración final limpia el override por completo
+  const resRestaurarD = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null);
+  assert.strictEqual(resRestaurarD.canchasActivas, 6);
+  const torneoFinal = await prisma.torneo.findUnique({ where: { id: torneo.id } });
+  assert.strictEqual(torneoFinal.canchasDisponiblesOverride, null);
+  assert.strictEqual(torneoFinal.overrideActivoDesde, null);
+
+  console.log('✅ TEST D PASÓ: Activación multi-día sin restauración previa actualizó overrideActivoDesde al sábado, reprogramó partidos del sábado a canchas válidas y no tocó los partidos del viernes.');
+
+  // =======================================================================
+  // 18. Test E: Partido EN_CURSO de día anterior no bloquea reducción del día actual
+  // =======================================================================
+  console.log('\n🎯 TEST E: Validación EN_CURSO aislada por jornada (partido colgado del viernes en Cancha 5 no bloquea reducción a 4 del sábado)...');
+
+  // 1. Restauramos a 6 canchas para tener estado base
+  await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null);
+
+  const partidosParaTestE = await prisma.partido.findMany({
+    where: { categoria: { torneoId: torneo.id } },
+    orderBy: { id: 'asc' },
+  });
+
+  const pViernesColgado = partidosParaTestE[2];
+  const dViernesNoche = new Date(fechaTorneo);
+  dViernesNoche.setHours(23, 0, 0, 0);
+
+  // Simular un partido del viernes que quedó 'EN_CURSO' en Cancha 5 (ej. el organizador se fue a dormir sin cerrarlo)
+  await prisma.partido.update({
+    where: { id: pViernesColgado.id },
+    data: {
+      estado: 'EN_CURSO',
+      canchaNumero: 5,
+      fechaHora: dViernesNoche,
+    },
+  });
+
+  // Simular activación de lluvia el sábado por la mañana reduciendo a 4 canchas
+  const dSabadoLluviaE = new Date(fechaTorneo);
+  dSabadoLluviaE.setDate(dSabadoLluviaE.getDate() + 1);
+  dSabadoLluviaE.setHours(10, 0, 0, 0);
+
+  // 2. Intentar reducir canchas a 4 para el sábado.
+  // Con el fix de filtrado por día lógico, esto DEBE tener éxito (el partido EN_CURSO pertenece al viernes, no al sábado).
+  const resReduccionSabadoE = await organizadorService.reprogramarPorReduccionCanchas(
+    organizador.id,
+    torneo.id,
+    4,
+    dSabadoLluviaE
+  );
+  assert.strictEqual(
+    resReduccionSabadoE.canchasActivas,
+    4,
+    'FALLÓ TEST E: La reducción a 4 canchas del sábado fue bloqueada erróneamente por un EN_CURSO del viernes'
+  );
+  console.log('✅ Verificado: Partido EN_CURSO del viernes en Cancha 5 NO bloqueó la reducción a 4 canchas del sábado.');
+
+  // 3. Contraprueba estricta: Si un partido del SÁBADO está EN_CURSO en Cancha 4 e intentamos reducir el sábado a 3 canchas,
+  // la validación SÍ debe bloquear la acción.
+  const pSabadoEnCurso = partidosParaTestE[0];
+  const dSabadoMananaE = new Date(fechaTorneo);
+  dSabadoMananaE.setDate(dSabadoMananaE.getDate() + 1);
+  dSabadoMananaE.setHours(10, 0, 0, 0);
+
+  await prisma.partido.update({
+    where: { id: pSabadoEnCurso.id },
+    data: {
+      estado: 'EN_CURSO',
+      canchaNumero: 4,
+      fechaHora: dSabadoMananaE,
+    },
+  });
+
+  let bloqueoExitoso = false;
+  try {
+    await organizadorService.reprogramarPorReduccionCanchas(
+      organizador.id,
+      torneo.id,
+      3,
+      dSabadoLluviaE
+    );
+  } catch (err) {
+    if (err.statusCode === 400 && err.message.includes('Cancha 4')) {
+      bloqueoExitoso = true;
+      console.log(`✅ Verificado: Partido EN_CURSO del sábado en Cancha 4 bloqueó correctamente la reducción a 3 canchas ("${err.message}").`);
+    } else {
+      throw err;
+    }
+  }
+  assert.ok(bloqueoExitoso, 'FALLÓ TEST E: No bloqueó la reducción cuando había un partido del mismo día EN_CURSO en cancha afectada');
+
+  // Limpieza final de estados
+  await prisma.partido.update({
+    where: { id: pViernesColgado.id },
+    data: { estado: 'FINALIZADO' },
+  });
+  await prisma.partido.update({
+    where: { id: pSabadoEnCurso.id },
+    data: { estado: 'PENDIENTE' },
+  });
+  await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null);
+  console.log('✅ TEST E PASÓ: Validación EN_CURSO scopeada con precisión a la jornada bajo lluvia.');
 
   console.log('\n🎉 TODOS LOS TESTS DE MODO DÍA DE TORNEO PASARON EXITOSAMENTE!');
 }

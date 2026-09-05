@@ -78,9 +78,6 @@ export default function TorneoEnVivo() {
       try {
         const res = await api.get(`/torneos/${id}/en-vivo`);
         setData(res);
-        if (!userTouchedTarget) {
-          setTargetCanchas(res.canchasActivas || res.canchasClub || 1);
-        }
       } catch (err) {
         setError(err.message || 'Error al cargar el estado en vivo del torneo');
       } finally {
@@ -88,7 +85,7 @@ export default function TorneoEnVivo() {
         setRefreshing(false);
       }
     },
-    [id, userTouchedTarget]
+    [id]
   );
 
   useEffect(() => {
@@ -212,6 +209,22 @@ export default function TorneoEnVivo() {
     });
   }, [proximosPartidosList, activeTabDay, horariosClub]);
 
+  const torneo = data?.torneo || null;
+  const canchasClub = data?.canchasClub || 1;
+  const canchasActivas = data?.canchasActivas || canchasClub;
+  const isLluviaActive = torneo?.canchasDisponiblesOverride !== null && torneo?.canchasDisponiblesOverride !== undefined;
+  // Determinar si el tab actualmente visible es el afectado por el override
+  const isTabBajoOverride = isLluviaActive && (!activeTabDay || !torneo?.overrideDiaKey || activeTabDay === torneo?.overrideDiaKey);
+  // Canchas activas contextuales al tab de día seleccionado
+  const canchasActivasContextuales = isTabBajoOverride ? canchasActivas : canchasClub;
+
+  // Sincronizar el selector de canchas con la cantidad de canchas activas contextuales de la solapa seleccionada
+  useEffect(() => {
+    if (!data) return;
+    setTargetCanchas(canchasActivasContextuales);
+    setUserTouchedTarget(false);
+  }, [activeTabDay, canchasActivasContextuales, data]);
+
   if (loading && !data) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -245,8 +258,37 @@ export default function TorneoEnVivo() {
     );
   }
 
-  const { torneo, canchasActivas, canchasClub, partidosEnCurso, partidosEnCanchaFantasma, proximosPartidos, partidosFinalizados, resumenEstado } = data;
-  const isLluviaActive = torneo.canchasDisponiblesOverride !== null && torneo.canchasDisponiblesOverride !== undefined;
+  const { partidosEnCurso, partidosEnCanchaFantasma, proximosPartidos, partidosFinalizados, resumenEstado } = data;
+
+  // Determinar el día lógico de los cambios en feedbackReprogramacion para no mostrarlo en otros tabs
+  let feedbackDiaKey = null;
+  if (feedbackReprogramacion) {
+    if (feedbackReprogramacion.overrideDiaKey) {
+      feedbackDiaKey = feedbackReprogramacion.overrideDiaKey;
+    } else {
+      const primerCambio = feedbackReprogramacion.cambios?.[0];
+      const tsCambio = primerCambio?.despues?.fechaHora || primerCambio?.antes?.fechaHora;
+      if (tsCambio) {
+        feedbackDiaKey = getDiaCalendarioConTrasnoche(tsCambio, horariosClub)?.key || null;
+      } else {
+        feedbackDiaKey = torneo.overrideDiaKey || null;
+      }
+    }
+  }
+
+  let feedbackDiaNombre = null;
+  if (feedbackReprogramacion) {
+    if (feedbackReprogramacion.diaNombre) {
+      feedbackDiaNombre = feedbackReprogramacion.diaNombre;
+    } else if (feedbackDiaKey) {
+      feedbackDiaNombre = diasDisponibles.find((d) => d.key === feedbackDiaKey)?.label || null;
+    }
+  }
+
+  // La tarjeta de feedback solo es visible si coincide con el tab de la jornada afectada
+  const isFeedbackVisible = Boolean(
+    feedbackReprogramacion && (!activeTabDay || !feedbackDiaKey || activeTabDay === feedbackDiaKey)
+  );
 
   // Construye el objeto partido que espera ResultadoModal a partir de los datos del en-vivo
   function buildPartidoParaModal(p) {
@@ -369,7 +411,7 @@ export default function TorneoEnVivo() {
       <div
         className="canchas-control-card"
         style={{
-          border: isLluviaActive ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid var(--color-border)',
+          border: isTabBajoOverride ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid var(--color-border)',
         }}
       >
         <div className="canchas-control-layout">
@@ -383,12 +425,12 @@ export default function TorneoEnVivo() {
                 style={{
                   fontSize: '1.25rem',
                   fontWeight: 800,
-                  color: isLluviaActive ? '#60a5fa' : 'var(--color-primary)',
+                  color: isTabBajoOverride ? '#60a5fa' : 'var(--color-primary)',
                 }}
               >
-                {canchasActivas} / {canchasClub}
+                {canchasActivasContextuales} / {canchasClub}
               </span>
-              {isLluviaActive ? (
+              {isTabBajoOverride ? (
                 <span
                   style={{
                     display: 'inline-flex',
@@ -405,6 +447,24 @@ export default function TorneoEnVivo() {
                 >
                   <CloudRain size={13} />
                   Modo Lluvia ({torneo.overrideActivoDesde ? formatDiaHorario(torneo.overrideActivoDesde) : 'Activo'})
+                </span>
+              ) : isLluviaActive ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                    fontSize: 'var(--font-size-xs)',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '999px',
+                    background: 'rgba(59, 130, 246, 0.1)',
+                    color: '#93c5fd',
+                    fontWeight: 600,
+                    border: '1px solid rgba(59, 130, 246, 0.25)',
+                  }}
+                >
+                  <CloudRain size={13} />
+                  Lluvia en otra jornada
                 </span>
               ) : (
                 <span
@@ -428,15 +488,17 @@ export default function TorneoEnVivo() {
             </div>
             <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0 }}>
               {isLluviaActive
-                ? 'Partidos pendientes reprogramados sobre las canchas techadas/disponibles.'
+                ? isTabBajoOverride
+                  ? 'Partidos de esta jornada reprogramados sobre las canchas disponibles.'
+                  : 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'
                 : 'Todas las canchas del club habilitadas.'}
             </p>
           </div>
 
           {/* Selector y Acciones */}
           <div className="canchas-control-actions">
-            {/* Botón Restaurar todas */}
-            {isLluviaActive && (
+            {/* Botón Restaurar todas: Solo visible si la solapa actual está bajo override */}
+            {isTabBajoOverride && (
               <button
                 type="button"
                 className="btn-secondary canchas-action-btn"
@@ -456,8 +518,8 @@ export default function TorneoEnVivo() {
               </button>
             )}
 
-            {/* Botón Reducir */}
-            {targetCanchas < canchasActivas && (
+            {/* Botón Reducir: Se compara contra canchasActivasContextuales */}
+            {targetCanchas < canchasActivasContextuales && (
               <button
                 type="button"
                 className="btn-primary canchas-action-btn"
@@ -550,7 +612,7 @@ export default function TorneoEnVivo() {
       </div>
 
       {/* ─── 3. Banner de Feedback Post-Reprogramación ──────────────── */}
-      {feedbackReprogramacion && (
+      {isFeedbackVisible && (
         <div
           style={{
             background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(18, 21, 28, 0.95))',
@@ -582,6 +644,7 @@ export default function TorneoEnVivo() {
             <CheckCircle2 size={22} style={{ color: '#60a5fa' }} />
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
               Reprogramación por Modo Lluvia completada
+              {feedbackDiaNombre && ` — ${feedbackDiaNombre}`}
             </h3>
           </div>
 
@@ -1340,7 +1403,7 @@ export default function TorneoEnVivo() {
       <ConfirmModal
         isOpen={confirmReducirOpen}
         title={`🌧️ ¿Reducir a ${targetCanchas} ${targetCanchas === 1 ? 'cancha activa' : 'canchas activas'}?`}
-        message={`Se activará el Modo Lluvia y se reprogramarán automáticamente todos los partidos pendientes a partir de este momento para ajustarse a ${targetCanchas} ${targetCanchas === 1 ? 'cancha' : 'canchas'}. Los partidos en curso y finalizados no se modificarán.`}
+        message={`Se activará el Modo Lluvia y se reprogramarán automáticamente los partidos pendientes de la jornada en curso para ajustarse a ${targetCanchas} ${targetCanchas === 1 ? 'cancha' : 'canchas'}. Los partidos de otras jornadas, así como los en curso y finalizados, no se modificarán.`}
         confirmText={actionLoading ? 'Reprogramando...' : 'Reducir y Reprogramar'}
         onConfirm={handleReducir}
         onCancel={() => setConfirmReducirOpen(false)}
@@ -1351,7 +1414,7 @@ export default function TorneoEnVivo() {
       <ConfirmModal
         isOpen={confirmRestaurarOpen}
         title="☀️ ¿Restaurar todas las canchas del club?"
-        message={`Se desactivará el Modo Lluvia y volverán a estar habilitadas las ${canchasClub} canchas del club. Los partidos ya reprogramados mantendrán su horario actual (no se mueven automáticamente).`}
+        message={`Se desactivará el Modo Lluvia y volverán a estar habilitadas las ${canchasClub} canchas del club. Los partidos pendientes de esta jornada se redistribuirán para aprovechar todas las canchas disponibles. Las demás jornadas no se modificarán.`}
         confirmText={actionLoading ? 'Restaurando...' : 'Restaurar Canchas'}
         onConfirm={handleRestaurar}
         onCancel={() => setConfirmRestaurarOpen(false)}

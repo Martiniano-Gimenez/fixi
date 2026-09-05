@@ -1058,7 +1058,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
  * En situación de emergencia (lluvia), no bloquea por disponibilidad de pareja, permitiendo jugar en cualquier horario
  * dentro del día lógico hasta el límite de trasnoche (dayLimitMs).
  */
-async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null) {
+async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null, overrideTimestamp = null) {
   const db = externalTx || prisma;
 
   const torneo = await db.torneo.findUnique({
@@ -1127,6 +1127,13 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   // Pre-sembrar partidos inmutables: FINALIZADO y EN_CURSO
   const partidosAAsignar = [];
 
+  // Calcular día lógico afectado por el override (si se proporciona)
+  let overrideDiaKey = null;
+  if (overrideTimestamp) {
+    const overrideDiaInfo = getDiaCalendarioConTrasnoche(overrideTimestamp, organizador);
+    overrideDiaKey = overrideDiaInfo?.key || null;
+  }
+
   for (const p of todosLosPartidos) {
     if (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') {
       if (p.fechaHora) {
@@ -1136,6 +1143,18 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       }
     } else if (p.estado === 'PENDIENTE') {
       if (p.pareja1Id && p.pareja2Id) {
+        // Si hay override con día lógico y el partido tiene horario, solo reprogramar si es del mismo día
+        if (overrideDiaKey && p.fechaHora) {
+          const pDiaInfo = getDiaCalendarioConTrasnoche(p.fechaHora, organizador);
+          if (pDiaInfo && pDiaInfo.key !== overrideDiaKey) {
+            // Partido de otro día lógico → tratar como ocupación fija (no mover)
+            const startMs = new Date(p.fechaHora).getTime();
+            const endMs = startMs + DURACION_MS;
+            addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, endMs);
+            continue;
+          }
+        }
+        // Partido del día afectado, o sin fechaHora → candidato a reprogramar
         partidosAAsignar.push(p);
       }
     }
