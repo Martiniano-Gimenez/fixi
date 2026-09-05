@@ -32,7 +32,11 @@ organizadores que hoy llevan todo en papel.
 - **Duración de Partido:** Fija en **75 minutos** (`DURACION_PARTIDO_MIN = 75`, constante en código, no configurable).
 - **Granularidad de Disponibilidad:** Grilla a intervalos de **15 minutos** (`SLOT_GRANULARIDAD_MIN = 15`) para máxima precisión horaria sin pérdida de disponibilidad en la carga.
 - **Reglas de Pádel en Resultados:** Mínimo 6 games para ganar set, diferencia de 2 en 6-5 (se permiten 7-5 / 7-6).
-- **Mini-Bracket (Zonas de 4):** 2 partidos iniciales (P1 vs P2, P3 vs P4) y 2 definitorios ("Ganador vs Ganador" para 1°/2° puesto y "Perdedor vs Perdedor" para 3° puesto). El orden se fija mediante el campo explícito `posicion`.
+- **Mini-Bracket (Zonas de 4) y Programación Anticipada:**
+  - 2 partidos iniciales de Ronda 1 (P1 vs P2, P3 vs P4) con parejas definidas al sortear.
+  - 2 partidos definitorios de Ronda 2 ("Ganador vs Ganador" para 1°/2° puesto y "Perdedor vs Perdedor" para 3° puesto).
+  - **Programación Anticipada con Intersección Cuádruple:** Los partidos 3 y 4 se programan con horario y cancha fija de antemano evaluando la **intersección simultánea de las 4 parejas de la zona** (`interseccionVentanas(P1, P2, P3, P4)`), garantizando que cualquier combinación de clasificados pueda jugar la definición.
+  - **Dependencia Temporal Estricta:** El scheduler procesa primero la Ronda 1 y exige que $\text{Inicio}(P3/P4) \ge \max(\text{Fin}(P1), \text{Fin}(P2))$, permitiendo que P3 y P4 se jueguen en simultáneo en dos canchas distintas o en turnos contiguos. El orden en la tabla se fija mediante el campo explícito `posicion`.
 - **Compatibilidad Horaria:** Las parejas cargan disponibilidad en rangos horarios (slots de 15 min) que se fusionan en ventanas continuas. La compatibilidad se calcula como la intersección de ventanas continuas entre parejas. *(Nota importante: En Modo Lluvia / contingencia operativa en vivo, esta restricción queda expresamente suspendida para compactar la jornada lo máximo posible con las canchas restantes; ver detalle en Modo Día de Torneo).*
 - **Jerarquía de Certeza y Resolución de Conflictos:** El ranking de opciones de resolución (previo y posterior al inicio) prioriza la certeza por sobre el esfuerzo nominal:
   1. *Certeza:* 0 partes que estiran (Estrella mutua) $\rightarrow$ 1 parte que estira (Estrella clásica / 1 sola llamada confirmatoria) $\rightarrow$ 2 partes que estiran (Casi-estrella doble).
@@ -40,10 +44,12 @@ organizadores que hoy llevan todo en papel.
   3. *Balance:* Menor diferencia de estiramiento entre parejas.
   4. *Cronológico:* Viernes antes que Sábado, hora menor a mayor.
 - **Ajuste Horario con Dirección y Formato Amigable:** Las distancias a la disponibilidad original se calculan con signo: negativo ($-Nm$) si la pareja debe arrancar antes del bloque más cercano, y positivo ($+Nm$) si debe extenderse después. Valores $\ge 60\text{ min}$ se formatean en horas (ej. `+1h`, `+1h 35m`, `-2h`).
-- **Scheduler Continuo con Prioridad de Tres Pasadas (Pool Multi-Categoría a nivel Torneo):** Cada cancha gestiona su propia línea de tiempo ordenada de intervalos ocupados. Para evitar el efecto *whack-a-mole* donde acuerdos manuales previos eran canibalizados por el solver global, la asignación se realiza en tres pasadas:
-  - *Pasada 0 (Máxima Prioridad - `resolucionManual: true`):* Asigna primero los partidos donde al menos una pareja fue destrabada manualmente en `CruceResolver`, ordenados por heurística MCF (`numOptions`), garantizando que ocupen sus turnos confirmados.
-  - *Pasada 1 Global:* Asigna en horarios de grilla estándar todos los partidos hiper-restringidos de todas las categorías (1 sola opción día+franja válida).
-  - *Pasada 2 Global:* Asigna todos los partidos flexibles en una cola ordenada por escasez de opciones (MCF Global), utilizando turnos estándar o huecos continuos de 15 min.
+- **Scheduler Continuo con Prioridad de Tres Pasadas y Dependencia Mini-Bracket (Pool Multi-Categoría a nivel Torneo):** Cada cancha gestiona su propia línea de tiempo ordenada de intervalos ocupados. La asignación se realiza en dos fases:
+  - *Fase 1 (Partidos Base - MCF 3 Pasadas):*
+    - *Pasada 0 (Máxima Prioridad - `resolucionManual: true`):* Asigna primero los partidos donde al menos una pareja fue destrabada manualmente en `CruceResolver`, ordenados por heurística MCF (`numOptions`), garantizando que ocupen sus turnos confirmados.
+    - *Pasada 1 Global:* Asigna en horarios de grilla estándar todos los partidos hiper-restringidos de todas las categorías (1 sola opción día+franja válida).
+    - *Pasada 2 Global:* Asigna todos los partidos flexibles en una cola ordenada por escasez de opciones (MCF Global), utilizando turnos estándar o huecos continuos de 15 min.
+  - *Fase 2 (Partidos Derivados - Mini-Bracket Ronda 2):* Se ejecutan únicamente tras confirmar los horarios de P1 y P2 de cada zona, asignando P3 y P4 sobre la intersección cuádruple post-Ronda 1.
 - **Asignación Determinística de Cancha:** La asignación automática de cancha se realiza siempre por orden numérico ascendente (Cancha 1 $\rightarrow$ Cancha 2 $\rightarrow$ ... $\rightarrow$ Cancha N) seleccionando la primera disponible en la franja.
 - **Prioridad de Scheduling ("Most Constrained First"):** Partidos y categorías se ordenan de menor a mayor cantidad de combinaciones día+franja válidas compartidas, reservando los recursos más escasos para los cruces con menos alternativas.
 - **Modo Día de Torneo y Reprogramación Dinámica por Cambio de Canchas ("Modo Lluvia"):**
@@ -66,25 +72,27 @@ organizadores que hoy llevan todo en papel.
 - Asignación automática continua de horarios y canchas a nivel Torneo ("Iniciar Torneo y Asignar Horarios") con pool multi-categoría, detección de huecos, pre-verificación de compatibilidad (dry-run transaccional) y bloqueo ante solapamientos.
 - **Asistente de Resolución de Cruces en Pre-Check (`CruceResolver` y Modal de Bloqueo con Snapshot Estable):**
   - **Zonas y Asignaciones Congeladas:** El primer dry-run de pre-check genera un snapshot en memoria (`preCheckSessions`) donde la distribución de zonas y los partidos previamente asignados quedan **100% inmutables**.
-  - **Resolución Incremental Monótona:** Cada resolución de cruce (`CruceResolver` o edición manual) evalúa los partidos pendientes en los huecos libres restantes del timeline de canchas sin re-ejecutar las 3 pasadas globales sobre partidos ya resueltos, garantizando que el contador de conflictos disminuya estrictamente ($N \rightarrow N-1 \rightarrow 0$) y que ningún partido previo pierda su turno ni cambie de cancha.
+  - **Resolución Incremental Monótona:** Cada resolución de cruce (`CruceResolver` o edición manual con 1-click auto-save) evalúa los partidos pendientes en los huecos libres restantes del timeline de canchas sin re-ejecutar las 3 pasadas globales sobre partidos ya resueltos, garantizando que el contador de conflictos disminuya estrictamente ($N \rightarrow N-1 \rightarrow 0$) y que ningún partido previo pierda su turno ni cambie de cancha.
   - **Sliding TTL (Touch-on-access) y Resiliencia:** Sesión con expiración renovable de 60 minutos con cada acción. Si el usuario cierra el modal y regresa, el progreso se mantiene intacto. En caso de reinicio de servidor, se notifica explícitamente (`sesionReiniciada`).
   - **Re-sorteo Explícito:** Botón y modal de advertencia pedagógica para *"Re-sortear zonas desde cero"* (`forceReset: true`) cuando el organizador desee barajar el torneo desde cero voluntariamente.
-  - **Resolución en 1 click y Deshacer (Undo):** Identificación automática de Hero Option y casi-estrellas, actualización atómica doble (`setDisponibilidadDoble`) y toast flotante de deshacer por 7s (`removerDisponibilidadDoble`).
+  - **Resolución en 1 click y Deshacer (Undo):** Identificación automática de Hero Option y casi-estrellas, actualización atómica doble (`setDisponibilidadDoble`) y toast flotante de deshacer por 7s (`removerDisponibilidadDoble`). Auto-guardado en 1 click para chips estrella en `InlineDisponibilidadEditor`.
 - Salida de emergencia condicional y gestión de partidos sin horario (`PartidosPendientesSection`): acordeón categorizado con filtrado en tiempo real que evalúa canchas libres antes de renderizar insignias de estrella (`★`), diferenciando cruces con turnos compatibles libres de cruces con horarios originales saturados.
 - **Asignar Horario Post-Inicio con Experiencia Unificada (`AsignarHorarioModal` + `rankingSlots`):** Presentación de sugerencia Hero recomendada y alternativas ordenadas por cercanía a lo declarado originalmente. Escritura directa a `Partido` (`fechaHora` + `canchaNumero`) sin contaminar `SlotPareja`, asignación en **1 click** a la primera cancha libre y grilla desplegable completa de turnos viables del club.
 - Reprogramación de horarios de partidos asignados (`AsignarHorarioModal`): escritura atómica segura que excluye la ocupación anterior del propio partido al validar disponibilidad (`ignorePartidoId`), permitiendo reasignaciones limpias sin colisiones.
 - **Modo Día de Torneo — En Vivo (`TorneoEnVivo.jsx`, `/admin/torneos/:id/en-vivo`):**
-  - Panel operativo centralizado para el día del evento con grilla visual de canchas en tiempo real (Libre, En Juego, Inhabilitada).
-  - Barra de control de Modo Lluvia (reducir/restaurar canchas activas) con feedback descriptivo de partidos corridos de horario, aislado por día lógico (`dateUtils.js`).
+  - Panel operativo centralizado para el día del evento con foco directo en partidos activos y próximos en el primer viewport (sin grilla redundante de canchas individuales).
+  - Barra de control de Modo Lluvia (reducir/restaurar canchas activas) integrada en el flujo natural del documento (no-sticky) para evitar superposiciones al scrollear.
+  - Stepper numérico de canchas `[- X +]` con posicionamiento estable tanto en desktop como en mobile (`@media (max-width: 640px)`): los botones de confirmación se despliegan a la izquierda manteniendo inmóvil el punto de clic/toque táctil para ajustes sucesivos.
   - Alerta destacada para partidos en canchas fantasma con acceso a reprogramación manual.
   - **Próximos Partidos Separados por Tabs de Día:** Pestañas dinámicas (`Viernes 28 | Sábado 29`) calculadas con la lógica de trasnoche real del club, con selección inteligente por defecto del primer día con partidos disponibles.
   - **Cambio Rápido de Estado a "EN_CURSO" y "PENDIENTE" (1-Click):**
     - Botón `Play` (`▶`) en cada tarjeta de "Próximos Partidos" para iniciar partidos al instante sin necesidad de cargar un set previo (vía `PATCH /api/partidos/:id/estado`).
     - Botón `Revertir` (`RotateCcw`) en "Partidos en Juego" para devolver a `PENDIENTE` ante clics accidentales (limpiando sets parciales).
-    - Actualización reactiva instantánea de la grilla de canchas a `EN JUEGO` y re-fetch inmediato (`fetchAndResetPolling`).
+    - Actualización reactiva instantánea y re-fetch inmediato (`fetchAndResetPolling`).
   - **Carga Rápida de Resultados:** Botón de acción directa (`ClipboardList`) en cada partido para abrir `ResultadoModal` en 1 clic y recalcular tablas sin salir de la vista operativa.
   - **Acordeón de Partidos Finalizados:** Sección colapsable que lista los partidos finalizados con sets/games visibles, pareja ganadora destacada en verde, ordenados de más reciente a más antiguo (DESC), con edición/borrado de resultado.
   - **Polling Inteligente con Reset:** Actualización reactiva cada 30s con reseteo inmediato del timer (`intervalRef`) ante cambios manuales o de override, evitando solapamientos o parpadeos.
+- **Edición Rápida del Nombre del Torneo (`TorneoDetail.jsx`):** Edición inline directa sobre el título del evento con icono discreto de lápiz (`Edit2`), foco y selección automática, guardado reactivo con feedback inmediato, soporte para teclado (<kbd>Enter</kbd> / <kbd>Escape</kbd>) y acceso alternativo mediante botón de cabecera.
 - Numeración correlativa automática de parejas inscriptas: índice visual continuo (`#{index + 1}`) y re-secuenciación en base de datos al eliminar registros.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.
