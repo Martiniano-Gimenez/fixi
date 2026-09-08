@@ -122,11 +122,13 @@ async function setCanchasOverride(req, res, next) {
   try {
     const organizadorId = getOrgId(req);
     const torneoId = req.params.id;
-    const { canchasDisponiblesOverride } = req.body;
+    const { canchasDisponiblesOverride, diaKey } = req.body;
     const result = await organizadorService.reprogramarPorReduccionCanchas(
       organizadorId,
       torneoId,
-      canchasDisponiblesOverride
+      canchasDisponiblesOverride,
+      null,
+      diaKey
     );
     res.json(result);
   } catch (error) {

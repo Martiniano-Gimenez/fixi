@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
-const { getDiaCalendarioConTrasnoche, requireTorneoFecha } = require('../utils/dateUtils');
+const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal } = require('../utils/dateUtils');
 const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -1844,7 +1844,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
 /**
  * Reprograma automáticamente los partidos pendientes ante una reducción de canchas activas (Modo Lluvia).
  */
-async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanchasOverride, mockTimestamp = null) {
+async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanchasOverride, mockTimestamp = null, diaKey = null) {
   const torneo = await prisma.torneo.findUnique({
     where: { id: torneoId },
   });
@@ -1888,16 +1888,31 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   }
 
   // CRÍTICO: Capturar overrideActivoDesde en variable local ANTES de cualquier mutación o transacción.
-  // En reducción: timestampOverride es SIEMPRE el momento de la invocación actual (new Date(), o mockTimestamp en tests).
-  // En restauración: diaOverrideTs recupera el día de lluvia original (overrideActivoDesdeOriginal)
-  // para restaurar simétricamente únicamente esa jornada.
+  // En reducción:
+  // - Si se pasa mockTimestamp (en tests automatizados), se utiliza mockTimestamp.
+  // - Si se pasa diaKey (string 'YYYY-MM-DD' desde el frontend/tab activo), se utiliza parseFechaLocal(diaKey).
+  // - De lo contrario, se usa torneo.fecha o new Date().
+  // En restauración:
+  // - Si se pasa diaKey, se restaura específicamente esa jornada lógica.
+  // - Si no se pasa diaKey, se recupera el día de lluvia original (overrideActivoDesdeOriginal || timestampOverride).
   const overrideActivoDesdeOriginal = torneo.overrideActivoDesde;
-  const timestampOverride = mockTimestamp ? new Date(mockTimestamp) : new Date();
+  
+  let timestampOverride;
+  if (mockTimestamp) {
+    timestampOverride = new Date(mockTimestamp);
+  } else if (diaKey) {
+    timestampOverride = parseFechaLocal(diaKey);
+  } else if (torneo.fecha) {
+    timestampOverride = parseFechaLocal(torneo.fecha);
+  } else {
+    timestampOverride = new Date();
+  }
+
   const esRestauracion = overrideNum === canchasClub;
 
-  const diaOverrideTs = esRestauracion
-    ? (overrideActivoDesdeOriginal || timestampOverride)
-    : timestampOverride;
+  const diaOverrideTs = diaKey
+    ? parseFechaLocal(diaKey)
+    : (esRestauracion ? (overrideActivoDesdeOriginal || timestampOverride) : timestampOverride);
 
   const horariosClubObj = {
     viernesInicio: organizador.viernesInicio,
@@ -1914,6 +1929,11 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
 
   const overrideDiaInfo = getDiaCalendarioConTrasnoche(diaOverrideTs, horariosClubObj);
   const overrideDiaKey = overrideDiaInfo?.key || null;
+
+  const DIAS_MAP = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const diaNombre = overrideDiaInfo?.logicalDate
+    ? DIAS_MAP[overrideDiaInfo.logicalDate.getDay()]
+    : null;
 
   // 2. Si no hay cambio en la cantidad de canchas activas y no es una reducción para un día distinto, no hacer nada
   if (overrideNum === canchasEfectivasActuales && (esRestauracion || esMismoDia)) {
@@ -1992,7 +2012,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     reprogramacion: {
       ejecutada: true,
       overrideDiaKey,
-      diaNombre: overrideDiaInfo?.nombre || null,
+      diaNombre,
       partidosReprogramados: mcfRes.partidosReprogramados,
       partidosSinCambio: mcfRes.partidosSinCambio,
       partidosSinHorarioNuevo: mcfRes.partidosSinHorarioNuevo,

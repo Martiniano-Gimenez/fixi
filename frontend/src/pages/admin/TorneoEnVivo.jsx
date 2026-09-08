@@ -108,6 +108,7 @@ export default function TorneoEnVivo() {
     try {
       const res = await api.post(`/torneos/${id}/canchas-override`, {
         canchasDisponiblesOverride: targetCanchas,
+        diaKey: activeTabDay,
       });
 
       setConfirmReducirOpen(false);
@@ -133,6 +134,7 @@ export default function TorneoEnVivo() {
     try {
       await api.post(`/torneos/${id}/canchas-override`, {
         canchasDisponiblesOverride: null,
+        diaKey: activeTabDay,
       });
 
       setConfirmRestaurarOpen(false);
@@ -218,12 +220,22 @@ export default function TorneoEnVivo() {
   // Canchas activas contextuales al tab de día seleccionado
   const canchasActivasContextuales = isTabBajoOverride ? canchasActivas : canchasClub;
 
+  const prevTabDayRef = useRef(activeTabDay);
+
   // Sincronizar el selector de canchas con la cantidad de canchas activas contextuales de la solapa seleccionada
   useEffect(() => {
     if (!data) return;
-    setTargetCanchas(canchasActivasContextuales);
-    setUserTouchedTarget(false);
-  }, [activeTabDay, canchasActivasContextuales, data]);
+    const tabChanged = prevTabDayRef.current !== activeTabDay;
+    prevTabDayRef.current = activeTabDay;
+
+    // Solo resetear targetCanchas si cambió de solapa o si el usuario no está manipulando el selector
+    if (tabChanged || !userTouchedTarget) {
+      setTargetCanchas(canchasActivasContextuales);
+      if (tabChanged) {
+        setUserTouchedTarget(false);
+      }
+    }
+  }, [activeTabDay, canchasActivasContextuales, data, userTouchedTarget]);
 
   if (loading && !data) {
     return (

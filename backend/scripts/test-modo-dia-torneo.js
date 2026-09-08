@@ -710,7 +710,20 @@ async function testModoDiaTorneo() {
   assert.strictEqual(torneoFinal.canchasDisponiblesOverride, null);
   assert.strictEqual(torneoFinal.overrideActivoDesde, null);
 
-  console.log('✅ TEST D PASÓ: Activación multi-día sin restauración previa actualizó overrideActivoDesde al sábado, reprogramó partidos del sábado a canchas válidas y no tocó los partidos del viernes.');
+  // 7. Prueba con diaKey (simulando request real desde el tab activo del frontend sin mockTimestamp)
+  const diaSabadoKey = getDiaCalendarioConTrasnoche(dSabadoLluviaD, horariosClubTest).key;
+  const resDiaKey = await organizadorService.reprogramarPorReduccionCanchas(
+    organizador.id,
+    torneo.id,
+    5,
+    null, // mockTimestamp null
+    diaSabadoKey
+  );
+  assert.strictEqual(resDiaKey.reprogramacion.ejecutada, true);
+  assert.strictEqual(resDiaKey.reprogramacion.overrideDiaKey, diaSabadoKey);
+  await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null);
+
+  console.log('✅ TEST D PASÓ: Activación multi-día sin restauración previa actualizó overrideActivoDesde al sábado, reprogramó partidos del sábado a canchas válidas y soportó diaKey del frontend.');
 
   // =======================================================================
   // 18. Test E: Partido EN_CURSO de día anterior no bloquea reducción del día actual
