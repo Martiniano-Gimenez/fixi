@@ -102,6 +102,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
 
     const primeraRondaNum = Math.max(...faseViejas.map(f => f.ronda));
     const fasePrimeraRonda = faseViejas.find(f => f.ronda === primeraRondaNum);
+    const esDieciseisavos = primeraRondaNum >= 32;
     
     const partidosPrimeraRonda = await prisma.partido.findMany({ 
       where: { faseEliminatoriaId: fasePrimeraRonda.id } 
@@ -109,6 +110,9 @@ async function generarEliminatoria(organizadorId, categoriaId) {
 
     for (const partido of partidosPrimeraRonda) {
       const updateData = {};
+      if (esDieciseisavos && partido.estado !== 'FINALIZADO') {
+        updateData.sinHorarioAsignado = true;
+      }
       
       if (partido.origenPareja1) {
         const c1 = clasificadasMap.get(partido.origenPareja1);
@@ -145,7 +149,11 @@ async function generarEliminatoria(organizadorId, categoriaId) {
       }
     }
 
-    return { message: 'Clasificados asignados al bracket exitosamente.' };
+    return { 
+      message: 'Clasificados asignados al bracket exitosamente.',
+      primeraRonda: primeraRondaNum,
+      esDieciseisavos,
+    };
   }
 
   // 3. Determinar estructura de rondas
@@ -276,6 +284,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
 
   // 6. Crear Partidos en la base de datos
   const primeraRonda = rondas[0];
+  const esDieciseisavos = esRondaDieciseisavos(primeraRonda);
   const partidosPrimeraRonda = [];
 
   for (let i = 0; i < M; i++) {
@@ -304,6 +313,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
         origenPareja2: p2?.origenTxt || null,
         ganadorId,
         estado,
+        sinHorarioAsignado: esDieciseisavos && !isBye,
       },
     });
 
@@ -376,7 +386,13 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     potencia,
     rondas,
     fases,
+    primeraRonda,
+    esDieciseisavos,
   };
+}
+
+function esRondaDieciseisavos(ronda) {
+  return Number(ronda) >= 32;
 }
 
 async function getFasesEliminatorias(organizadorId, categoriaId) {
@@ -422,4 +438,5 @@ module.exports = {
   generarEliminatoria,
   getFasesEliminatorias,
   borrarEliminatoria,
+  esRondaDieciseisavos,
 };

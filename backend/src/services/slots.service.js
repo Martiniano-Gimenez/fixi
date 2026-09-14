@@ -44,10 +44,11 @@ function generarSlotsDia(dia, horaInicio, horaFin) {
  * Genera la grilla de slots para el club (organizador) agrupada por día
  */
 function generarGrillaOrganizador(organizador) {
-  if (!organizador) return { viernes: [], sabado: [] };
+  if (!organizador) return { viernes: [], sabado: [], domingo: [] };
   const viernes = generarSlotsDia('Viernes', organizador.viernesInicio, organizador.viernesFin);
   const sabado = generarSlotsDia('Sabado', organizador.sabadoInicio, organizador.sabadoFin);
-  return { viernes, sabado };
+  const domingo = generarSlotsDia('Domingo', organizador.domingoInicio, organizador.domingoFin);
+  return { viernes, sabado, domingo };
 }
 
 /**

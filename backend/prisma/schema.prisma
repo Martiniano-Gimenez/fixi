@@ -25,6 +25,8 @@ model Organizador {
   viernesFin       String? // "21:00"
   sabadoInicio     String? // "09:00" — null = no se juega sábado
   sabadoFin        String? // "20:00"
+  domingoInicio    String? // "08:00" — null = no se juega domingo
+  domingoFin       String? // "21:00"
 
   torneos Torneo[]
 }
@@ -46,10 +48,11 @@ model Torneo {
 }
 
 model Categoria {
-  id        String   @id @default(uuid())
-  torneoId  String
-  nombre    String   // "4ta", "6ta", "8va", "5ta Damas", etc.
-  estado    String   @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
+  id           String   @id @default(uuid())
+  torneoId     String
+  nombre       String   // "4ta", "6ta", "8va", "5ta Damas", etc.
+  ordenDomingo Int?     // Prioridad de arranque en domingo (1..N)
+  estado       String   @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

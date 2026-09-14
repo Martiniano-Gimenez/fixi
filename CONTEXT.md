@@ -17,9 +17,9 @@ organizadores que hoy llevan todo en papel.
 - Auth: JWT + bcryptjs
 
 ## Modelo de datos (resumen)
-- **Organizador (Club):** nombre, email, passwordHash, `cantidadCanchas` (int), horarios de apertura (`viernesInicio`, `viernesFin`, `sabadoInicio`, `sabadoFin` — strings "HH:MM", soportan turnos de trasnoche pasada la medianoche) → tiene múltiples `Torneos`.
+- **Organizador (Club):** nombre, email, passwordHash, `cantidadCanchas` (int), horarios de apertura (`viernesInicio`, `viernesFin`, `sabadoInicio`, `sabadoFin`, `domingoInicio`, `domingoFin` — strings "HH:MM", soportan turnos de trasnoche pasada la medianoche) → tiene múltiples `Torneos`.
 - **Torneo (Evento):** nombre (ej. "Pares Agosto"), fecha, slug único (`slug`), estado (`BORRADOR` | `EN_CURSO` | `FINALIZADO`), `canchasDisponiblesOverride` (Int?), `overrideActivoDesde` (DateTime?), organizadorId → tiene múltiples `Categorías`.
-- **Categoría (Cuadro de juego):** nombre (ej. "4ta", "6ta", "8va", "5ta Damas"), estado (`BORRADOR` | `EN_CURSO` | `FINALIZADO`), torneoId → tiene múltiples `Parejas`, `Zonas`, `FasesEliminatorias` y `Partidos`.
+- **Categoría (Cuadro de juego):** nombre (ej. "4ta", "6ta", "8va", "5ta Damas"), `ordenDomingo` (Int?, prioridad de arranque en domingo 1..N), estado (`BORRADOR` | `EN_CURSO` | `FINALIZADO`), torneoId → tiene múltiples `Parejas`, `Zonas`, `FasesEliminatorias` y `Partidos`.
 - **Pareja:** jugador1, jugador2, orden, `resolucionManual` (boolean, default false), categoriaId → tiene múltiples `SlotPareja` seleccionados.
 - **SlotPareja:** relación única `(parejaId, slotId)` donde `slotId` es un string plano a intervalos de 15 minutos (ej. `"Viernes-18:00"`, `"Viernes-18:15"`, `"Viernes-00:15"`).
 - **Zona:** categoriaId, nombre ("Zona A", "Zona B"), clasifican (int), formato (`ROUND_ROBIN` | `MINI_BRACKET`), requiereArmadoManual (boolean).
@@ -98,6 +98,12 @@ organizadores que hoy llevan todo en papel.
   - **Acordeón de Partidos Finalizados:** Sección colapsable que lista los partidos finalizados con sets/games visibles, pareja ganadora destacada en verde, ordenados de más reciente a más antiguo (DESC), con edición/borrado de resultado.
   - **Polling Inteligente con Reset:** Actualización reactiva cada 30s con reseteo inmediato del timer (`intervalRef`) ante cambios manuales o de override, evitando solapamientos o parpadeos.
 - **Edición Rápida del Nombre del Torneo (`TorneoDetail.jsx`):** Edición inline directa sobre el título del evento con icono discreto de lápiz (`Edit2`), foco y selección automática, guardado reactivo con feedback inmediato, soporte para teclado (<kbd>Enter</kbd> / <kbd>Escape</kbd>) y acceso alternativo mediante botón de cabecera.
+- **Continuidad de Día de Torneo y Asignación de Cruces (`TorneoEnVivo.jsx`):**
+  - **Detección Automática de Categorías Listas (`categoriasListasParaEliminatoria`):** Cuando todos los partidos de zona de una categoría están `FINALIZADO` y su bracket eliminatorio aún no fue generado con clasificados, se expone en la sección *"Fase de Grupos Completada"* sin necesidad de abandonar la vista operativa.
+  - **Generación de Cruces en 1 Clic por Categoría:** Dispara la resolución de clasificados y asignación a Ronda 1 vía `POST /api/categorias/:id/generar-eliminatoria` directamente desde `TorneoEnVivo`.
+  - **Orden de Prioridad del Domingo (`ordenDomingo` + `OrdenDomingoModal.jsx`):** Modal ágil accesible desde `TorneoDetail` y `TorneoEnVivo` con desplegables `1..N` para definir el orden de arranque de las categorías en domingo en cualquier momento del torneo (sin heurísticos frágiles ni esperar al fin de todas las zonas).
+  - **Auto-Scheduling Liviano de Ronda 1 (Earliest-Fit Puro):** Servicio `eliminatoriaScheduler.service.js` que toma los partidos de Ronda 1 de domingo de las categorías listas en orden de `ordenDomingo ASC` y busca el primer slot y cancha libre dentro de la jornada (`domingoInicio` a `domingoFin`), validando colisiones de parejas y ocupación de canchas de todo el club. Si varias categorías entran en paralelo en canchas sobrantes, se aprovechan sin desperdicio.
+  - **Tratamiento Diferenciado de Dieciseisavos (`esRondaDieciseisavos`):** Regla de negocio que estipula que dieciseisavos (`ronda >= 32`) se juegan sábado a la noche; sus partidos se crean con `sinHorarioAsignado: true` para asignación manual con `PartidosPendientesSection` integrada al pie de `TorneoEnVivo.jsx`. Las rondas menores (< 32) se auto-agendan para el domingo.
 - Numeración correlativa automática de parejas inscriptas: índice visual continuo (`#{index + 1}`) y re-secuenciación en base de datos al eliminar registros.
 - Gestión manual de zonas post-sorteo (`ZoneEditorModal`).
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.

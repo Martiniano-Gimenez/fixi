@@ -82,7 +82,10 @@ function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
   if (diaSemana === 6) { // Sabado de madrugada
     if (timeInMinutes < sabInicioMin) shiftDays = -1; // Pertenece al Viernes
   } else if (diaSemana === 0) { // Domingo de madrugada
-    if (timeInMinutes < 6 * 60) shiftDays = -1; // Pertenece al Sabado
+    const domInicio = horariosClub?.domingoInicio || '06:00';
+    const [dh, dm] = domInicio.split(':').map(Number);
+    const domInicioMin = (isNaN(dh) ? 6 : dh) * 60 + (isNaN(dm) ? 0 : dm);
+    if (timeInMinutes < domInicioMin) shiftDays = -1; // Pertenece al Sabado
   } else if (timeInMinutes < 6 * 60) {
     shiftDays = -1;
   }

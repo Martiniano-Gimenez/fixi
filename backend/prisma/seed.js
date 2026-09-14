@@ -33,6 +33,8 @@ async function main() {
       viernesFin: '23:00',
       sabadoInicio: '09:00',
       sabadoFin: '21:00',
+      domingoInicio: '08:00',
+      domingoFin: '21:00',
     },
   });
   console.log(`✅ Organizador creado: demo@padel.com (PW: 123456)`);

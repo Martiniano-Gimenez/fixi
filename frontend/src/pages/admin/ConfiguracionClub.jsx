@@ -17,6 +17,8 @@ export default function ConfiguracionClub() {
     viernesFin: '',
     sabadoInicio: '',
     sabadoFin: '',
+    domingoInicio: '',
+    domingoFin: '',
   });
 
   const [confirmModal, setConfirmModal] = useState({
@@ -41,6 +43,8 @@ export default function ConfiguracionClub() {
         viernesFin: data.viernesFin || '',
         sabadoInicio: data.sabadoInicio || '',
         sabadoFin: data.sabadoFin || '',
+        domingoInicio: data.domingoInicio || '',
+        domingoFin: data.domingoFin || '',
       });
     } catch (err) {
       setError(err.message || 'Error al cargar perfil del club.');
@@ -61,6 +65,8 @@ export default function ConfiguracionClub() {
       viernesFin: form.viernesFin || null,
       sabadoInicio: form.sabadoInicio || null,
       sabadoFin: form.sabadoFin || null,
+      domingoInicio: form.domingoInicio || null,
+      domingoFin: form.domingoFin || null,
     };
 
     try {
@@ -209,6 +215,29 @@ export default function ConfiguracionClub() {
                       type="time"
                       value={form.sabadoFin}
                       onChange={(e) => setForm({ ...form, sabadoFin: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Domingo */}
+              <div style={{ background: 'var(--color-bg-input)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                <h4 style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.75rem' }}>Domingo</h4>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
+                    <label style={{ fontSize: 'var(--font-size-xs)' }}>Inicio</label>
+                    <input
+                      type="time"
+                      value={form.domingoInicio}
+                      onChange={(e) => setForm({ ...form, domingoInicio: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
+                    <label style={{ fontSize: 'var(--font-size-xs)' }}>Fin</label>
+                    <input
+                      type="time"
+                      value={form.domingoFin}
+                      onChange={(e) => setForm({ ...form, domingoFin: e.target.value })}
                     />
                   </div>
                 </div>

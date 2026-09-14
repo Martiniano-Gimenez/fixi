@@ -78,8 +78,11 @@ export function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
       shiftDays = -1; // Pertenece al Viernes
     }
   } else if (diaSemana === 0) {
-    // Domingo de madrugada: si es antes de las 06:00 AM
-    if (timeInMinutes < 6 * 60) {
+    // Domingo de madrugada: si es antes de la apertura del domingo (o antes de las 06:00 AM)
+    const domInicio = horariosClub?.domingoInicio || '06:00';
+    const [dh, dm] = domInicio.split(':').map(Number);
+    const domInicioMin = (isNaN(dh) ? 6 : dh) * 60 + (isNaN(dm) ? 0 : dm);
+    if (timeInMinutes < domInicioMin) {
       shiftDays = -1; // Pertenece al Sábado
     }
   } else if (timeInMinutes < 6 * 60) {

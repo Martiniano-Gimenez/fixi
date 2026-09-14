@@ -17,10 +17,15 @@ import {
   Trophy,
   Play,
   RotateCcw,
+  Zap,
+  Loader2,
+  ListOrdered,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import ResultadoModal from '../../components/ResultadoModal';
+import PartidosPendientesSection from '../../components/PartidosPendientesSection';
+import OrdenDomingoModal from '../../components/OrdenDomingoModal';
 import { formatDiaHorario, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
 
 export default function TorneoEnVivo() {
@@ -59,6 +64,11 @@ export default function TorneoEnVivo() {
 
   // Tab activo de Próximos Partidos (por día calendario)
   const [activeTabDay, setActiveTabDay] = useState(null);
+
+  // Cruces y Orden del Domingo
+  const [ordenDomingoModalOpen, setOrdenDomingoModalOpen] = useState(false);
+  const [generandoCrucesCatId, setGenerandoCrucesCatId] = useState(null);
+  const [alertaEliminatoria, setAlertaEliminatoria] = useState(null);
 
   // Referencia al interval de polling — permite resetearlo tras un fetch manual
   const intervalRef = useRef(null);
@@ -99,6 +109,37 @@ export default function TorneoEnVivo() {
     await fetchEnVivoData(true);
     startPolling(fetchEnVivoData);
   }, [fetchEnVivoData, startPolling]);
+
+  const handleGenerarCruces = async (categoriaId, categoriaNombre) => {
+    setGenerandoCrucesCatId(categoriaId);
+    setAlertaEliminatoria(null);
+    try {
+      const res = await api.post(`/categorias/${categoriaId}/generar-eliminatoria`);
+      if (res.esDieciseisavos) {
+        setAlertaEliminatoria({
+          tipo: 'warning',
+          esDieciseisavos: true,
+          mensaje: `Cruces de dieciseisavos generados para "${categoriaNombre}". Al jugarse el sábado a la noche, requieren asignación manual de horario en Partidos Pendientes.`,
+        });
+      } else {
+        const cant = res.schedulingResult?.partidosAgendados ?? 0;
+        setAlertaEliminatoria({
+          tipo: 'success',
+          esDieciseisavos: false,
+          mensaje: `¡Cruces generados para "${categoriaNombre}"! ${cant > 0 ? `${cant} partidos de primera ronda fueron agendados automáticamente para el domingo.` : 'Cruces asignados para el domingo.'}`,
+        });
+      }
+      await fetchEnVivoData(true);
+    } catch (err) {
+      setAlertaEliminatoria({
+        tipo: 'error',
+        esDieciseisavos: false,
+        mensaje: err.message || `Error al generar cruces para "${categoriaNombre}".`,
+      });
+    } finally {
+      setGenerandoCrucesCatId(null);
+    }
+  };
 
 
   // Manejar reducción de canchas
@@ -852,6 +893,179 @@ export default function TorneoEnVivo() {
 
 
 
+      {/* ─── Banner / Alerta de Acción de Cruces ───────────────────── */}
+      {alertaEliminatoria && (
+        <div
+          style={{
+            background: alertaEliminatoria.tipo === 'error'
+              ? 'rgba(239, 68, 68, 0.1)'
+              : (alertaEliminatoria.esDieciseisavos ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)'),
+            border: `1px solid ${alertaEliminatoria.tipo === 'error' ? 'var(--color-error)' : (alertaEliminatoria.esDieciseisavos ? '#f59e0b' : 'var(--color-success)')}`,
+            borderRadius: 'var(--radius-lg)',
+            padding: '1rem 1.25rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '1rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            {alertaEliminatoria.tipo === 'error' ? (
+              <AlertTriangle size={20} style={{ color: 'var(--color-error)' }} />
+            ) : (alertaEliminatoria.esDieciseisavos ? (
+              <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+            ) : (
+              <CheckCircle2 size={20} style={{ color: 'var(--color-success)' }} />
+            ))}
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>
+                {alertaEliminatoria.mensaje}
+              </div>
+              {alertaEliminatoria.esDieciseisavos && (
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginTop: '0.2rem' }}>
+                  Los partidos de dieciseisavos se juegan el sábado a la noche y quedaron listos para asignación manual.{' '}
+                  <a
+                    href="#partidos-pendientes-section"
+                    style={{ color: '#60a5fa', fontWeight: 600, textDecoration: 'underline' }}
+                  >
+                    Ir a Partidos Pendientes ↓
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAlertaEliminatoria(null)}
+            className="btn-icon"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* ─── Fase de Grupos Completada (Generar Cruces) ─────────────── */}
+      {data.categoriasListasParaEliminatoria && data.categoriasListasParaEliminatoria.length > 0 && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(18, 21, 28, 0.95))',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '1.25rem',
+            marginBottom: '1.5rem',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              marginBottom: '0.75rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <Trophy size={22} style={{ color: 'var(--color-success)' }} />
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
+                  Fase de Grupos Completada
+                </h3>
+                <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                  Las zonas de las siguientes categorías finalizaron todos sus partidos. Ya podés generar los cruces de eliminatoria.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setOrdenDomingoModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                fontSize: 'var(--font-size-xs)',
+                padding: '0.45rem 0.8rem',
+              }}
+            >
+              <ListOrdered size={15} /> Configurar Orden del Domingo
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem' }}>
+            {data.categoriasListasParaEliminatoria.map((cat) => {
+              const isGenerating = generandoCrucesCatId === cat.id;
+
+              return (
+                <div
+                  key={cat.id}
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.35)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '0.85rem 1rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 'var(--font-size-base)' }}>
+                      {cat.nombre}
+                    </div>
+                    <div style={{ marginTop: '0.2rem' }}>
+                      {cat.ordenDomingo ? (
+                        <span
+                          className="badge badge-info"
+                          style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }}
+                        >
+                          Domingo: #{cat.ordenDomingo} en arrancar
+                        </span>
+                      ) : (
+                        <span
+                          style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)' }}
+                        >
+                          Sin prioridad asignada (al final)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={isGenerating}
+                    onClick={() => handleGenerarCruces(cat.id, cat.nombre)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.45rem 0.85rem',
+                      fontSize: 'var(--font-size-xs)',
+                      width: 'auto',
+                    }}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 size={14} className="spin" /> Generando...
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={14} /> Generar Cruces
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ─── 6. Resumen Estadístico ───────────────────────────────── */}
       <div
         style={{
@@ -1409,6 +1623,24 @@ export default function TorneoEnVivo() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ─── Partidos Pendientes de Horario ─────────────────────────── */}
+      <div id="partidos-pendientes-section" style={{ marginTop: '2.5rem' }}>
+        <PartidosPendientesSection
+          torneoId={id}
+          torneoEstado={data?.torneo?.estado}
+          onPartidosActualizados={fetchAndResetPolling}
+        />
+      </div>
+
+      {ordenDomingoModalOpen && (
+        <OrdenDomingoModal
+          isOpen={true}
+          torneoId={id}
+          onClose={() => setOrdenDomingoModalOpen(false)}
+          onSaved={() => fetchAndResetPolling()}
+        />
       )}
 
       {/* ─── Modal de Confirmación: Reducir Canchas (Modo Lluvia) ───── */}

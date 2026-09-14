@@ -81,6 +81,8 @@ async function getOrganizador(organizadorId) {
       viernesFin: true,
       sabadoInicio: true,
       sabadoFin: true,
+      domingoInicio: true,
+      domingoFin: true,
       createdAt: true,
     },
   });
@@ -137,6 +139,8 @@ async function updateOrganizador(organizadorId, data) {
   if (data.viernesFin !== undefined) updateData.viernesFin = data.viernesFin || null;
   if (data.sabadoInicio !== undefined) updateData.sabadoInicio = data.sabadoInicio || null;
   if (data.sabadoFin !== undefined) updateData.sabadoFin = data.sabadoFin || null;
+  if (data.domingoInicio !== undefined) updateData.domingoInicio = data.domingoInicio || null;
+  if (data.domingoFin !== undefined) updateData.domingoFin = data.domingoFin || null;
 
   return await prisma.$transaction(async (tx) => {
     const updated = await tx.organizador.update({
@@ -151,6 +155,8 @@ async function updateOrganizador(organizadorId, data) {
         viernesFin: true,
         sabadoInicio: true,
         sabadoFin: true,
+        domingoInicio: true,
+        domingoFin: true,
       },
     });
 
@@ -1582,7 +1588,7 @@ async function getCanchasDisponiblesTorneo(organizadorId, torneoId, ignorePartid
   });
 
   const slotsEvaluados = [];
-  const allSlotIds = [...grilla.viernes, ...grilla.sabado];
+  const allSlotIds = [...grilla.viernes, ...grilla.sabado, ...(grilla.domingo || [])];
 
   for (const slotId of allSlotIds) {
     const [dia, hora] = slotId.split('-');
@@ -1693,11 +1699,66 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     viernesFin: organizador.viernesFin,
     sabadoInicio: organizador.sabadoInicio,
     sabadoFin: organizador.sabadoFin,
+    domingoInicio: organizador.domingoInicio,
+    domingoFin: organizador.domingoFin,
   };
   const overrideDiaInfo = (torneo.overrideActivoDesde)
     ? getDiaCalendarioConTrasnoche(torneo.overrideActivoDesde, horariosClubObj)
     : null;
   const overrideDiaKey = overrideDiaInfo?.key || null;
+
+  // Categorías con todas sus zonas finalizadas y sin clasificados asignados aún a eliminatorias
+  const categoriasTorneo = await prisma.categoria.findMany({
+    where: { torneoId },
+    select: {
+      id: true,
+      nombre: true,
+      ordenDomingo: true,
+      zonas: {
+        select: {
+          partidos: { select: { id: true, estado: true } },
+        },
+      },
+      fasesEliminatorias: {
+        orderBy: { ronda: 'desc' },
+        take: 1,
+        select: {
+          ronda: true,
+          partidos: { select: { id: true, pareja1Id: true, pareja2Id: true } },
+        },
+      },
+    },
+  });
+
+  const categoriasListasParaEliminatoria = [];
+
+  for (const cat of categoriasTorneo) {
+    if (!cat.zonas || cat.zonas.length === 0) continue;
+
+    let totalPartidosZona = 0;
+    let partidosZonaPendientes = 0;
+
+    for (const z of cat.zonas) {
+      totalPartidosZona += z.partidos.length;
+      partidosZonaPendientes += z.partidos.filter((p) => p.estado !== 'FINALIZADO').length;
+    }
+
+    if (totalPartidosZona === 0 || partidosZonaPendientes > 0) {
+      continue;
+    }
+
+    if (cat.fasesEliminatorias && cat.fasesEliminatorias.length > 0) {
+      const primeraFase = cat.fasesEliminatorias[0];
+      const tieneClasificadosAsignados = primeraFase.partidos.some((p) => p.pareja1Id || p.pareja2Id);
+      if (tieneClasificadosAsignados) continue;
+    }
+
+    categoriasListasParaEliminatoria.push({
+      id: cat.id,
+      nombre: cat.nombre,
+      ordenDomingo: cat.ordenDomingo,
+    });
+  }
 
   // Clasificar partidos
   const partidosEnCursoList = [];
@@ -1816,6 +1877,8 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         viernesFin: organizador.viernesFin,
         sabadoInicio: organizador.sabadoInicio,
         sabadoFin: organizador.sabadoFin,
+        domingoInicio: organizador.domingoInicio,
+        domingoFin: organizador.domingoFin,
       },
     },
     canchasActivas,
@@ -1824,6 +1887,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     partidosEnCurso: partidosEnCursoList,
     partidosEnCanchaFantasma: partidosEnCanchaFantasmaList,
     proximosPartidos: proximosPartidosList,
+    categoriasListasParaEliminatoria,
     // Ordenados más reciente primero para que el último resultado cargado aparezca arriba
     partidosFinalizados: [...partidosFinalizadosList].sort((a, b) => {
       const tA = a.fechaHora ? new Date(a.fechaHora).getTime() : 0;

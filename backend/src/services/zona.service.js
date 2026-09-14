@@ -411,7 +411,8 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
  * Calcula la próxima fecha de un día ("Viernes" o "Sabado") a partir de una fecha base
  */
 function proximaFechaPorDia(dia, fechaBase) {
-  const targetDia = dia === 'Viernes' ? 5 : 6;
+  const diaMap = { 'Viernes': 5, 'Sabado': 6, 'Domingo': 0 };
+  const targetDia = diaMap[dia] !== undefined ? diaMap[dia] : 5;
   const hoy = parseFechaLocal(fechaBase);
   const diaActual = hoy.getDay();
   let diff = targetDia - diaActual;

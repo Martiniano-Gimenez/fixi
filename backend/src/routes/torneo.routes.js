@@ -29,5 +29,6 @@ router.get('/:id/canchas-disponibles', torneoController.getCanchasDisponiblesTor
 // Modo Día de Torneo
 router.get('/:id/en-vivo', torneoController.getEnVivo);
 router.post('/:id/canchas-override', torneoController.setCanchasOverride);
+router.put('/:id/orden-domingo', torneoController.actualizarOrdenDomingo);
 
 module.exports = router;
