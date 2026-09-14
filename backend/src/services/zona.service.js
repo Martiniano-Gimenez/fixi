@@ -1135,27 +1135,58 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     overrideDiaKey = overrideDiaInfo?.key || null;
   }
 
+  // Registrar el horario de fin más tardío de partidos de zona por categoría
+  const maxEndPorCategoriaZona = new Map();
+
+  // Calcular el último fin de partidos FINALIZADO o EN_CURSO en la jornada lógica bajo override
+  let latestFinishedOrEnCursoMs = 0;
+
   for (const p of todosLosPartidos) {
+    if (p.fechaHora && p.zonaId) {
+      const pStart = new Date(p.fechaHora).getTime();
+      const pEnd = pStart + DURACION_MS;
+      const currentMax = maxEndPorCategoriaZona.get(p.categoriaId) || 0;
+      if (pEnd > currentMax) {
+        maxEndPorCategoriaZona.set(p.categoriaId, pEnd);
+      }
+    }
+
     if (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') {
       if (p.fechaHora) {
         const startMs = new Date(p.fechaHora).getTime();
         const endMs = startMs + DURACION_MS;
         addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, endMs);
+
+        const pDiaInfo = getDiaCalendarioConTrasnoche(p.fechaHora, organizador);
+        if (!overrideDiaKey || pDiaInfo?.key === overrideDiaKey) {
+          if (endMs > latestFinishedOrEnCursoMs) {
+            latestFinishedOrEnCursoMs = endMs;
+          }
+        }
       }
     } else if (p.estado === 'PENDIENTE') {
       if (p.pareja1Id && p.pareja2Id) {
-        // Si hay override con día lógico y el partido tiene horario, solo reprogramar si es del mismo día
-        if (overrideDiaKey && p.fechaHora) {
-          const pDiaInfo = getDiaCalendarioConTrasnoche(p.fechaHora, organizador);
-          if (pDiaInfo && pDiaInfo.key !== overrideDiaKey) {
-            // Partido de otro día lógico → tratar como ocupación fija (no mover)
+        // Cruces de eliminatoria sin horario asignado (ej. dieciseisavos) quedan para asignación manual
+        if (p.faseEliminatoriaId && (p.sinHorarioAsignado || !p.fechaHora)) {
+          continue;
+        }
+
+        // Determinar día lógico del partido (o fallback a torneo.fecha si no tiene fechaHora)
+        const pDiaInfo = p.fechaHora
+          ? getDiaCalendarioConTrasnoche(p.fechaHora, organizador)
+          : getDiaCalendarioConTrasnoche(parseFechaLocal(refFecha), organizador);
+
+        if (overrideDiaKey && pDiaInfo && pDiaInfo.key !== overrideDiaKey) {
+          // Partido de otro día lógico → tratar como ocupación fija si tiene horario
+          if (p.fechaHora && p.canchaNumero) {
             const startMs = new Date(p.fechaHora).getTime();
             const endMs = startMs + DURACION_MS;
             addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, endMs);
-            continue;
           }
+          continue;
         }
-        // Partido del día afectado, o sin fechaHora → candidato a reprogramar
+
+        // Partido del día afectado → candidato a reprogramar
         partidosAAsignar.push(p);
       }
     }
@@ -1204,8 +1235,26 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     const isFriday = origDiaInfo.logicalDate.getDay() === 5;
     const sessionDayStartMs = isFriday ? friDayStartMs : satDayStartMs;
 
+    // Para partidos de eliminatoria (dieciseisavos, etc.):
+    // - No pueden arrancar antes de que finalicen las zonas de su categoría (catZoneFloorMs).
+    // - Si ya tenían horario asignado por el organizador (origStartMs), respetarlo como piso mínimo para no adelantarse hacia el pasado.
+    let minSearchMs = sessionDayStartMs;
+    if (partido.faseEliminatoriaId) {
+      const catZoneFloorMs = maxEndPorCategoriaZona.get(partido.categoriaId) || 0;
+      minSearchMs = Math.max(minSearchMs, catZoneFloorMs);
+      if (origStartMs) {
+        minSearchMs = Math.max(minSearchMs, origStartMs);
+      }
+    }
+
+    // Ajustar minSearchMs al tick de 15 minutos más cercano hacia arriba
+    const remainder = minSearchMs % (15 * 60 * 1000);
+    if (remainder !== 0) {
+      minSearchMs += (15 * 60 * 1000 - remainder);
+    }
+
     let bestCandidate = null;
-    let T = sessionDayStartMs;
+    let T = minSearchMs;
 
     while (T + DURACION_MS <= dayLimitMs) {
       const tEnd = T + DURACION_MS;
