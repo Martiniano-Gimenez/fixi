@@ -103,6 +103,7 @@ export default function OrdenDomingoModal({ isOpen, torneoId, categorias: initia
             <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
               Asigná la prioridad con la que las categorías arrancan a jugar el domingo.
               Las de menor número (ej. 1) ocuparán los primeros turnos y canchas disponibles (ej. 08:00 AM).
+              Al iniciar el torneo, todos los cruces eliminatorios (Octavos a Final) se programarán automáticamente según este orden y quedarán fijados.
             </p>
           </div>
           <button

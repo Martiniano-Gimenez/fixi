@@ -19,7 +19,6 @@ import {
   RotateCcw,
   Zap,
   Loader2,
-  ListOrdered,
   GitBranch,
   Calendar,
   Layers,
@@ -28,7 +27,6 @@ import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import ResultadoModal from '../../components/ResultadoModal';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
-import OrdenDomingoModal from '../../components/OrdenDomingoModal';
 import { formatDiaHorario, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
 
 export default function TorneoEnVivo() {
@@ -68,8 +66,7 @@ export default function TorneoEnVivo() {
   // Tab activo de Próximos Partidos (por día calendario)
   const [activeTabDay, setActiveTabDay] = useState(null);
 
-  // Cruces y Orden del Domingo
-  const [ordenDomingoModalOpen, setOrdenDomingoModalOpen] = useState(false);
+  // Cruces
   const [generandoCrucesCatId, setGenerandoCrucesCatId] = useState(null);
   const [alertaEliminatoria, setAlertaEliminatoria] = useState(null);
 
@@ -1298,21 +1295,6 @@ export default function TorneoEnVivo() {
                 </p>
               </div>
             </div>
-
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setOrdenDomingoModalOpen(true)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                fontSize: 'var(--font-size-xs)',
-                padding: '0.45rem 0.8rem',
-              }}
-            >
-              <ListOrdered size={15} /> Configurar Orden del Domingo
-            </button>
           </div>
 
           {/* Aviso si alguna categoría completó sus zonas */}
@@ -2026,15 +2008,6 @@ export default function TorneoEnVivo() {
           onPartidosActualizados={fetchAndResetPolling}
         />
       </div>
-
-      {ordenDomingoModalOpen && (
-        <OrdenDomingoModal
-          isOpen={true}
-          torneoId={id}
-          onClose={() => setOrdenDomingoModalOpen(false)}
-          onSaved={() => fetchAndResetPolling()}
-        />
-      )}
 
       {/* ─── Modal de Confirmación: Reducir Canchas (Modo Lluvia) ───── */}
       <ConfirmModal

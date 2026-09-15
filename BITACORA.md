@@ -630,9 +630,42 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+## 25. Scheduling Completo de Eliminatorias al Iniciar Torneo, Inmutabilidad de Orden de Domingo y Tratamiento de BYEs
+
+### Programación Integral de Playoffs desde el Inicio y Blindaje del Cronograma
+- **Problema o necesidad que motivó el trabajo:** 
+  1. En los cuadros eliminatorios, gran parte de los partidos (Octavos, Cuartos, Semifinales y Finales) permanecían sin horario ni cancha asignados (`fechaHora: null, canchaNumero: null`), postergando la asignación hasta etapas avanzadas del fin de semana. El usuario organizador solicitó expresamente que **desde el primer momento se asignen los horarios y canchas de todos los cruces eliminatorios** para brindar certeza total a los jugadores y al club.
+  2. Se estableció como regla de negocio estricta que los **Dieciseisavos de final (`ronda >= 32`) se juegan siempre el sábado por la tardecita/noche**, mientras que el domingo se reserva para las rondas desde Octavos de final hasta las Finales.
+  3. El orden de prioridad de arranque del domingo (`ordenDomingo`) podía ser editado durante el transcurso del torneo en vivo, lo que abría la puerta a modificaciones tardías que rompían la planificación de turnos y turnos en disputa. Se solicitó que dicho orden quede fijado e inmutable antes del inicio.
+  4. Los partidos con avance libre (BYE) consumían turnos y canchas reales innecesariamente en la grilla del club; adicionalmente, se detectó un desfasaje donde pasar `'Sábado'` con tilde a `proximaFechaPorDia` caía en el fallback de viernes.
+- **Qué decidí y por qué:**
+  1. **Motor de Scheduling Completo Multi-Ronda (`eliminatoriaScheduler.service.js`):**
+     - Diseñé la función unificada `programarHorariosEliminatorias(organizadorId, torneoId, categoriaId, externalTx)`.
+     - **Sábado (Dieciseisavos, Ronda $\ge 32$):** Se programa exclusivamente en la franja nocturna del sábado (desde las 18:00hs hasta el cierre del club, post-zonas).
+     - **Domingo (Octavos a Finales, Rondas $< 32$):** Se programa mediante un recorrido topológico por niveles jerárquicos (Nivel 0 = primera ronda dominical de cada categoría, Nivel 1 = siguiente ronda, etc.). Las categorías se ordenan por su prioridad `ordenDomingo ASC`, ocupando las canchas más tempranas (ej. 08:00 AM). Las rondas posteriores se calculan garantizando un descanso mínimo de 30 minutos (`MIN_REST_MS`) respecto a los partidos precedentes (padres), con fallback a descanso cero si la jornada se encuentra saturada.
+  2. **Detección y Tratamiento Transparente de BYEs (`esPartidoBye`):**
+     - Las llaves donde un equipo no tiene oponente (BYE) se identifican de inmediato y se excluyen del timeline de canchas (`fechaHora: null, canchaNumero: null, sinHorarioAsignado: false`), evitando el consumo de turnos ficticios.
+     - Su tiempo de finalización computa como 0, permitiendo que la llave subsiguiente avance sin retrasos artificiales de descanso.
+  3. **Inmutabilidad Estricta de `ordenDomingo`:**
+     - En `categoria.service.js`: `actualizarOrdenDomingoTorneo` valida que `torneo.estado === 'BORRADOR'`, arrojando error HTTP 400 si se intenta alterar con el torneo `EN_CURSO`.
+     - En `TorneoDetail.jsx`: El botón *"Orden del Domingo"* solo se visualiza cuando el torneo está en estado `BORRADOR`.
+     - En `TorneoEnVivo.jsx`: Se eliminó el botón *"Configurar Orden del Domingo"* y su modal asociado, manteniendo únicamente la lectura informativa de prioridad en las tarjetas.
+     - En `OrdenDomingoModal.jsx`: Se explicitó en el texto explicativo que la configuración define la grilla fija de domingo antes de iniciar el torneo.
+  4. **Corrección en Soporte de Días con Acento (`zona.service.js`):**
+     - Se añadió `'Sábado': 6` al mapa de días canónicos de `proximaFechaPorDia`, asegurando que tanto strings acentuados como sin acento resuelvan con precisión matemática.
+  5. **Integración al Inicio Multi-Categoría (`organizador.service.js`):**
+     - En `iniciarTorneoMultiCategoria`, inmediatamente después de generar las llaves con `generarEliminatoria`, se ejecuta `programarHorariosEliminatorias(organizadorId, torneoId)` para todas las categorías del torneo en lote.
+  6. **Migración en Caliente de Torneos en Curso (`reprogramar-eliminatorias-existentes.js`):**
+     - Se ejecutó el script sobre la base de datos local, logrando que el 100% de los cruces de todos los torneos activos (incluido *"Impares Agosto"*) queden con su horario, cancha y secuencia de descanso asignados.
+  7. **Suite de Pruebas Automatizadas (`test-eliminatoria-scheduler-completo.js`):**
+     - Verificación exhaustiva de 5 puntos clave: edición en borrador, bloqueo 400 en torneo iniciado, 100% de partidos con horario y cancha, respeto de secuencias temporales entre rondas (padres vs hijos con descanso), y limpieza atómica.
+- **Resultado final:** Llaves eliminatorias con cronograma 100% definido y predecible desde el minuto uno del torneo, Dieciseisavos estrictamente el sábado noche, orden dominical blindado e inmutable una vez comenzado el torneo, cero canchas desperdiciadas en BYEs, y suite de tests ejecutada al 100% sin regresiones.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 24 sesiones de trabajo, sumando un aproximado total de entre 65 y 75 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 25 sesiones de trabajo, sumando un aproximado total de entre 67 y 77 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -660,6 +693,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 24 s
 | **22** | ~1.5 a 2 horas | Protección temporal y causal de eliminatorias en Modo Lluvia: exclusión de eliminatorias sin horario de la reprogramación automática, piso temporal estricto (no antes de fin de zonas de la categoría ni antes del horario original pautado), prevención de retrocesos hacia la mañana (08:00 AM) al restaurar canchas y suite de regresión (`test-modo-lluvia-eliminatorias.js`). |
 | **23** | ~2.5 a 3 horas | Auditoría Integral de Lógica de Negocio y Corrección de Casos Borde: orden unificado `ordenarZonaParejas` (respeto estricto de `posicion` en Mini-Bracket para clasificar 1° y 2° vs desempate oficial en Round Robin), reseteo atómico en `reiniciarTorneo` (`resolucionManual = false`, overrides de lluvia a `null`, limpieza de snapshot de pre-check), invalidación reactiva por hash de parejas (`parejaIdsHash`), filtrado estricto por `categoriaId` y horas de domingo en schedulers, y prioridad cronológica `Infinity` en colas de Modo Lluvia. Suite de verificación (`test-auditoria-fixes.js`). |
 | **24** | ~2 a 2.5 horas | Brackets vacíos al iniciar torneo y monitoreo integral en Día de Torneo: auto-generación de llaves eliminatorias con orígenes semánticos ("1°A vs 2°B") en `iniciarTorneoMultiCategoria`, sección permanente "Cuadros Eliminatorios (Brackets)" en `TorneoEnVivo.jsx` con progreso en tiempo real y botón "Ver Bracket" por categoría, navegación fluida bidireccional ("🏟️ Ir a Día de Torneo" y "Vista Pública"), ajuste de métricas para evitar alertas rojas prematuras en partidos futuros de eliminatorias, y enlace directo a bracket en `TorneoDetail.jsx`. |
-| **Total** | **~64.5 a 74.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, continuidad de torneo con cruces en 1 clic y auto-scheduling de domingo, y diseño UI/UX premium. |
+| **25** | ~2.5 a 3 horas | Scheduling completo de playoffs al iniciar torneo: auto-asignación de fecha, hora y cancha para todas las rondas (Octavos a Finales) en domingo con descansos de 30 min y prioridad `ordenDomingo`, Dieciseisavos estrictamente sábado por la tardecita/noche, bypass de canchas para BYEs, corrección de `'Sábado'` acentuado, inmutabilidad de orden del domingo tras iniciar torneo (bloqueo 400 y remoción de edición en vivo), reprogramación de torneos existentes en DB y suite de test automatizada (`test-eliminatoria-scheduler-completo.js`). |
+| **Total** | **~67 a 77.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y orden de domingo blindado, y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

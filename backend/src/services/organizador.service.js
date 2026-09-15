@@ -1362,6 +1362,15 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
       }
     }
 
+    // Programar automáticamente los horarios y canchas de todos los cruces eliminatorios
+    // (Dieciseisavos el sábado por la tardecita/noche, Octavos a Final el domingo)
+    const { programarHorariosEliminatorias } = require('./eliminatoriaScheduler.service');
+    try {
+      await programarHorariosEliminatorias(organizadorId, torneoId);
+    } catch (err) {
+      console.warn(`[iniciarTorneo] No se pudieron programar horarios de eliminatorias: ${err.message}`);
+    }
+
     return {
       message: 'Torneo iniciado y horarios asignados exitosamente.',
       categoriasIniciadas: resumen,

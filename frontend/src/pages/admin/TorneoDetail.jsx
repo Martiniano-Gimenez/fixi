@@ -1049,7 +1049,7 @@ export default function TorneoDetail() {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {torneo.categorias && torneo.categorias.length > 0 && (
+          {torneo.estado === 'BORRADOR' && torneo.categorias && torneo.categorias.length > 0 && (
             <button
               type="button"
               className="btn-secondary"

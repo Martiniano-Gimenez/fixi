@@ -145,6 +145,12 @@ async function actualizarOrdenDomingoTorneo(organizadorId, torneoId, ordenes) {
     throw error;
   }
 
+  if (torneo.estado !== 'BORRADOR') {
+    const error = new Error('El orden del domingo solo puede definirse antes de iniciar el torneo (estado BORRADOR).');
+    error.statusCode = 400;
+    throw error;
+  }
+
   return await prisma.$transaction(async (tx) => {
     for (const item of ordenes) {
       const val = (item.ordenDomingo === null || item.ordenDomingo === '' || isNaN(Number(item.ordenDomingo)))
