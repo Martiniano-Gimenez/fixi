@@ -1,6 +1,30 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 
+function ordenarZonaParejas(zonaParejas, formato) {
+  if (!Array.isArray(zonaParejas)) return [];
+  return [...zonaParejas].sort((a, b) => {
+    if (formato === 'MINI_BRACKET') {
+      const posA = a.posicion || 99;
+      const posB = b.posicion || 99;
+      if (posA !== posB) return posA - posB;
+    }
+
+    if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+    if (b.pg !== a.pg) return b.pg - a.pg;
+
+    const diffSetsA = (a.sf || 0) - (a.sc || 0);
+    const diffSetsB = (b.sf || 0) - (b.sc || 0);
+    if (diffSetsB !== diffSetsA) return diffSetsB - diffSetsA;
+
+    const diffGamesA = (a.gf || 0) - (a.gc || 0);
+    const diffGamesB = (b.gf || 0) - (b.gc || 0);
+    if (diffGamesB !== diffGamesA) return diffGamesB - diffGamesA;
+
+    return 0;
+  });
+}
+
 function nombreRonda(ronda) {
   const nombres = {
     2: 'Final',
@@ -38,10 +62,6 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     orderBy: { nombre: 'asc' },
     include: {
       zonaParejas: {
-        orderBy: [
-          { puntos: 'desc' },
-          { pg: 'desc' },
-        ],
         include: { pareja: true },
       },
     },
@@ -59,7 +79,8 @@ async function generarEliminatoria(organizadorId, categoriaId) {
   const otros = [];
 
   zonas.forEach((zona) => {
-    const topZona = zona.zonaParejas.slice(0, zona.clasifican);
+    const ordenadas = ordenarZonaParejas(zona.zonaParejas, zona.formato);
+    const topZona = ordenadas.slice(0, zona.clasifican);
     
     for (let index = 0; index < zona.clasifican; index++) {
       let parejaId = null;
@@ -435,6 +456,7 @@ async function borrarEliminatoria(organizadorId, categoriaId) {
 }
 
 module.exports = {
+  ordenarZonaParejas,
   generarEliminatoria,
   getFasesEliminatorias,
   borrarEliminatoria,

@@ -1,4 +1,5 @@
 const zonaService = require('../services/zona.service');
+const { ordenarZonaParejas } = require('../services/faseEliminatoria.service');
 
 function getOrgId(req) {
   return req.organizadorId || req.organizador?.id;
@@ -12,25 +13,7 @@ async function getZonasByCategoria(req, res, next) {
 
     for (const zona of zonas) {
       if (zona.formato === 'ROUND_ROBIN' || zona.formato === 'MINI_BRACKET') {
-        zona.zonaParejas.sort((a, b) => {
-          if (zona.formato === 'MINI_BRACKET') {
-            const posA = a.posicion || 99;
-            const posB = b.posicion || 99;
-            if (posA !== posB) return posA - posB;
-          }
-
-          if (b.puntos !== a.puntos) return b.puntos - a.puntos;
-          
-          const diffSetsA = a.sf - a.sc;
-          const diffSetsB = b.sf - b.sc;
-          if (diffSetsB !== diffSetsA) return diffSetsB - diffSetsA;
-          
-          const diffGamesA = a.gf - a.gc;
-          const diffGamesB = b.gf - b.gc;
-          if (diffGamesB !== diffGamesA) return diffGamesB - diffGamesA;
-
-          return 0;
-        });
+        zona.zonaParejas = ordenarZonaParejas(zona.zonaParejas, zona.formato);
       }
     }
 

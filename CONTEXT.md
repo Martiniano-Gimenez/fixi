@@ -36,6 +36,12 @@ organizadores que hoy llevan todo en papel.
   - 2 partidos iniciales de Ronda 1 (P1 vs P2, P3 vs P4) con parejas definidas al sortear.
   - 2 partidos definitorios de Ronda 2 ("Ganador vs Ganador" para 1°/2° puesto y "Perdedor vs Perdedor" para 3° puesto).
   - **Programación Anticipada con Intersección Cuádruple:** Los partidos 3 y 4 se programan con horario y cancha fija de antemano evaluando la **intersección simultánea de las 4 parejas de la zona** (`interseccionVentanas(P1, P2, P3, P4)`), garantizando que cualquier combinación de clasificados pueda jugar la definición.
+  - **Regla Estricta de Clasificación en Mini-Bracket:**
+    - 1°: Ganador de P3 (gana ambos partidos).
+    - 2°: Perdedor de P3 (gana P1/P2 y pierde P3). Ambos clasificados al cuadro principal.
+    - 3°: Ganador de P4 (pierde P1/P2 y gana P4).
+    - 4°: Perdedor de P4 (pierde ambos partidos).
+    Tanto el 2° como el 3° quedan con 3 puntos y 1 partido ganado. La función unificada `ordenarZonaParejas` ordena estrictamente por `posicion ASC` (`1 -> 2 -> 3 -> 4`) en `MINI_BRACKET` (evitando que el 3° usurpe la clasificación del 2°), mientras que en `ROUND_ROBIN` aplica el desempate reglamentario (puntos, PG, dif sets, dif games, GF).
   - **Dependencia Temporal Estricta:** El scheduler procesa primero la Ronda 1 y exige que $\text{Inicio}(P3/P4) \ge \max(\text{Fin}(P1), \text{Fin}(P2))$, permitiendo que P3 y P4 se jueguen en simultáneo en dos canchas distintas o en turnos contiguos. El orden en la tabla se fija mediante el campo explícito `posicion`.
 - **Compatibilidad Horaria:** Las parejas cargan disponibilidad en rangos horarios (slots de 15 min) que se fusionan en ventanas continuas. La compatibilidad se calcula como la intersección de ventanas continuas entre parejas. *(Nota importante: En Modo Lluvia / contingencia operativa en vivo, esta restricción queda expresamente suspendida para compactar la jornada lo máximo posible con las canchas restantes; ver detalle en Modo Día de Torneo).*
 - **Jerarquía de Certeza y Resolución de Conflictos:** El ranking de opciones de resolución (previo y posterior al inicio) prioriza la certeza por sobre el esfuerzo nominal:
@@ -72,13 +78,14 @@ organizadores que hoy llevan todo en papel.
 
 ## Funcionalidades implementadas
 - Jerarquía completa: Club $\rightarrow$ Torneo (Evento) $\rightarrow$ Categorías $\rightarrow$ Parejas/Zonas/Partidos/Eliminatorias.
-- CRUD completo de torneos y categorías (crear, editar nombre/fecha vía modal interactivo, eliminar y reiniciar a borrador, reseteando flags de `resolucionManual`).
+- CRUD completo de torneos y categorías (crear, editar nombre/fecha vía modal interactivo, eliminar y reiniciar a borrador, reseteando flags de `resolucionManual` en `Pareja`, overrides de lluvia `canchasDisponiblesOverride`/`overrideActivoDesde` en `Torneo` y eliminando sesiones activas de pre-check).
 - Gestión de Club / Organizador (`/admin/club`): edición de canchas totales y horarios de apertura con advertencia de impacto.
 - Carga de disponibilidad por pareja mediante **Slider de Rango Horario dual (15 min)** (`RangeSliderDia`, `RangeSliderGroup` y `DisponibilidadEditor`): selectores de manijas desde-hasta con snap de 15 min, soporte para múltiples rangos independientes por día (gaps/huecos en el medio), indicador de trasnoche y algoritmo de reconstrucción con expansión de slots de 75 min previos a ventanas continuas completas.
 - Generación de zonas por sorteo aleatorio (Fisher-Yates) o por compatibilidad horaria por categoría.
 - Asignación automática continua de horarios y canchas a nivel Torneo ("Iniciar Torneo y Asignar Horarios") con pool multi-categoría, detección de huecos, pre-verificación de compatibilidad (dry-run transaccional) y bloqueo ante solapamientos.
 - **Asistente de Resolución de Cruces en Pre-Check (`CruceResolver` y Modal de Bloqueo con Snapshot Estable):**
   - **Zonas y Asignaciones Congeladas:** El primer dry-run de pre-check genera un snapshot en memoria (`preCheckSessions`) donde la distribución de zonas y los partidos previamente asignados quedan **100% inmutables**.
+  - **Detección Automática de Cambios en Parejas (`parejaIdsHash`):** Si el organizador agrega o elimina parejas de una categoría con un snapshot de pre-check activo, el sistema detecta la mutación de la nómina y re-genera automáticamente el sorteo para evitar inconsistencias.
   - **Resolución Incremental Monótona:** Cada resolución de cruce (`CruceResolver` o edición manual con 1-click auto-save) evalúa los partidos pendientes en los huecos libres restantes del timeline de canchas sin re-ejecutar las 3 pasadas globales sobre partidos ya resueltos, garantizando que el contador de conflictos disminuya estrictamente ($N \rightarrow N-1 \rightarrow 0$) y que ningún partido previo pierda su turno ni cambie de cancha.
   - **Sliding TTL (Touch-on-access) y Resiliencia:** Sesión con expiración renovable de 60 minutos con cada acción. Si el usuario cierra el modal y regresa, el progreso se mantiene intacto. En caso de reinicio de servidor, se notifica explícitamente (`sesionReiniciada`).
   - **Re-sorteo Explícito:** Botón y modal de advertencia pedagógica para *"Re-sortear zonas desde cero"* (`forceReset: true`) cuando el organizador desee barajar el torneo desde cero voluntariamente.

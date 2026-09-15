@@ -986,11 +986,17 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
     }
   }
 
+  // Hash de IDs de parejas para invalidar automáticamente el snapshot si se agregan o eliminan parejas
+  const currentParejaIds = Array.from(parejasMap.keys()).sort().join(',');
+
   // =========================================================================
   // CAMINO 1: RE-EVALUACIÓN SOBRE SNAPSHOT CONGELADO EXISTENTE (Incremental)
   // =========================================================================
   const existingSession = preCheckSessions.get(torneoId);
-  const isSessionValid = existingSession && existingSession.organizadorId === organizadorId && existingSession.expiresAt > Date.now();
+  const isSessionValid = existingSession &&
+    existingSession.organizadorId === organizadorId &&
+    existingSession.expiresAt > Date.now() &&
+    existingSession.parejaIdsHash === currentParejaIds;
 
   if (isSessionValid && !forceReset) {
     // Sliding TTL: renueva la expiración en cada interacción
@@ -1160,6 +1166,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
         organizadorId,
         createdAt: Date.now(),
         expiresAt: Date.now() + PRECHECK_TTL_MS,
+        parejaIdsHash: currentParejaIds,
         validos,
         omitidos,
         categoriasPlan,
@@ -1983,6 +1990,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     viernesFin: organizador.viernesFin,
     sabadoInicio: organizador.sabadoInicio,
     sabadoFin: organizador.sabadoFin,
+    domingoInicio: organizador.domingoInicio,
+    domingoFin: organizador.domingoFin,
   };
 
   const diaAnteriorKey = overrideActivoDesdeOriginal

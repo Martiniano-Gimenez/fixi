@@ -135,13 +135,31 @@ async function reiniciarTorneo(organizadorId, torneoId) {
         where: { id: { in: categoriaIds } },
         data: { estado: 'BORRADOR' },
       });
+
+      await tx.pareja.updateMany({
+        where: { categoriaId: { in: categoriaIds } },
+        data: { resolucionManual: false },
+      });
     }
 
     await tx.torneo.update({
       where: { id: torneo.id },
-      data: { estado: 'BORRADOR' },
+      data: {
+        estado: 'BORRADOR',
+        canchasDisponiblesOverride: null,
+        overrideActivoDesde: null,
+      },
     });
   });
+
+  try {
+    const { preCheckSessions } = require('./organizador.service');
+    if (preCheckSessions && preCheckSessions.delete) {
+      preCheckSessions.delete(torneoId);
+    }
+  } catch (err) {
+    // Ignorar si hay ciclo de dependencias
+  }
 
   return { message: 'Torneo reiniciado con éxito' };
 }

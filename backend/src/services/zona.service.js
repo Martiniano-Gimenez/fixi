@@ -1194,8 +1194,8 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
 
   // 3. Ordenar partidos pendientes cronológicamente por horario original (preservando antigüedad de turno)
   partidosAAsignar.sort((a, b) => {
-    const tA = a.fechaHora ? new Date(a.fechaHora).getTime() : 0;
-    const tB = b.fechaHora ? new Date(b.fechaHora).getTime() : 0;
+    const tA = a.fechaHora ? new Date(a.fechaHora).getTime() : Infinity;
+    const tB = b.fechaHora ? new Date(b.fechaHora).getTime() : Infinity;
     if (tA !== tB) return tA - tB;
     if ((a.canchaNumero || 0) !== (b.canchaNumero || 0)) {
       return (a.canchaNumero || 0) - (b.canchaNumero || 0);

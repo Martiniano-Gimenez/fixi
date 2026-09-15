@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma');
+const { ordenarZonaParejas } = require('../services/faseEliminatoria.service');
 
 /**
  * GET /api/public/:slug
@@ -82,7 +83,7 @@ async function getTorneoPublico(req, res, next) {
         nombre: z.nombre,
         formato: z.formato,
         clasifican: z.clasifican,
-        tabla: z.zonaParejas.map((zp) => ({
+        tabla: ordenarZonaParejas(z.zonaParejas, z.formato).map((zp) => ({
           pareja: `${zp.pareja.jugador1} / ${zp.pareja.jugador2}`,
           posicion: zp.posicion,
           puntos: zp.puntos,

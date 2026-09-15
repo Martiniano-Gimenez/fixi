@@ -81,6 +81,7 @@ async function asignarHorariosRondaUno(organizadorId, torneoId, categoriaId = nu
   const categoriaMap = new Map();
 
   for (const cat of torneo.categorias) {
+    if (categoriaId && cat.id !== categoriaId) continue;
     if (cat.fasesEliminatorias && cat.fasesEliminatorias.length > 0) {
       // La primera ronda de eliminatoria es la de mayor número de ronda (ej. 16, 8, 4, 2)
       const primeraFase = cat.fasesEliminatorias[0];

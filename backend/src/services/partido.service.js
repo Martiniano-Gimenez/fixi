@@ -678,6 +678,7 @@ module.exports = {
   updateFechaHora,
   updateBracketMatch,
   propagarEliminatoria,
+  propagarMiniBracket,
   getPartidosByCategoria,
   asignarHorarioManual,
   updateEstado,
