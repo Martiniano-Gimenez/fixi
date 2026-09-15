@@ -711,7 +711,8 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   3. **Alineación de Descanso Deseado a 75 Minutos:** Tanto el descanso mínimo como el deseado entre Cuartos y Semis se fijaron en 75 minutos (1 turno de juego completo libre), permitiendo que la categoría use canchas libres tempranas (20:30) y no se demore hasta altas horas de la noche.
   4. **Extensión Garantizada para Finales de Campeonato:** Para partidos de Final (`fase.ronda === 2`), se amplió la tolerancia máxima a `domDayEndMs + 2 * DURACION_MS` (+150 min), garantizando que el 100% de los cruces de coronación tengan horario y cancha confirmados.
   5. **Tolerancia de Alineación Temporal:** Se incorporó un margen de tolerancia de 1 segundo (`alignedStartMs < startSearchMs - 1000`) para erradicar saltos indebidos de 75 minutos provocados por diferencias sub-segundo de timestamps.
-- **Resultado final:** 100% de los partidos del domingo agendados (`partidosSinHorario: 0` en 68 cruces de eliminatorias), secuencias temporales impecables con descansos de $\ge 75$ min entre rondas y todas las finales con horario confirmado.
+  6. **Priorización de Debut en Cuartos de Final:** En la ronda de Cuartos de final, se priorizan las categorías que no jugaron Octavos ese día (como Suma 7). Al debutar en el primer turno de Cuartos (14:15), no tienen que esperar hasta las 18:00hs para su primer partido de domingo y, al mismo tiempo, se les otorga un descanso más holgado y reparador (más de 3 a 5 horas) para almorzar a las categorías que disputaron Octavos durante la mañana.
+- **Resultado final:** 100% de los partidos del domingo agendados (`partidosSinHorario: 0` en 68 cruces de eliminatorias), debut inmediato de Suma 7 en Cuartos a las 14:15, descansos ideales para todas las categorías y coronaciones garantizadas.
 
 ---
 

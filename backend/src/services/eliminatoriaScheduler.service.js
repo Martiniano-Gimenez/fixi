@@ -326,7 +326,23 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
   ).sort((a, b) => b - a);
 
   for (const rondaTarget of allSundayRondas) {
-    for (const cat of catsToSchedule) {
+    // Ordenar categorías para esta ronda:
+    // En Cuartos de final, dar prioridad a categorías que debutan en el día (sin ronda previa en domingo)
+    // para que no esperen hasta última hora de la tarde y permitir mayor descanso a quienes jugaron Octavos a la mañana.
+    const catsForRound = [...catsToSchedule].sort((a, b) => {
+      if (rondaTarget === 8) {
+        const aHasParent = a.fasesEliminatorias.some((f) => f.ronda === 16);
+        const bHasParent = b.fasesEliminatorias.some((f) => f.ronda === 16);
+        if (!aHasParent && bHasParent) return -1;
+        if (aHasParent && !bHasParent) return 1;
+      }
+      const ordA = a.ordenDomingo ?? 999;
+      const ordB = b.ordenDomingo ?? 999;
+      if (ordA !== ordB) return ordA - ordB;
+      return (a.nombre || '').localeCompare(b.nombre || '');
+    });
+
+    for (const cat of catsForRound) {
       const fase = cat.fasesEliminatorias.find((f) => f.ronda === rondaTarget);
       if (!fase) continue;
       const maxRonda = Math.max(...cat.fasesEliminatorias.map((f) => f.ronda));
