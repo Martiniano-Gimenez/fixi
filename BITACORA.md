@@ -625,7 +625,7 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
      - Inyección inmediata y transparente de parejas clasificadas (`1° Zona A`, `2° Zona B`, etc.) en el bracket eliminatorio generado al inicio del torneo.
      - Disparo autónomo de `asignarHorariosRondaUno` para auto-programar los horarios y canchas del domingo respetando `ordenDomingo` y evitando superposiciones.
      - En `faseEliminatoria.service.js`: Salvaguarda para asegurar que solo los partidos en estado `PENDIENTE` actualicen sus parejas, protegiendo llaves ya iniciadas. Corrección de soporte de seeding cuando clasifican únicamente 1ros de zona (`primeros.slice(M)` en `restoClasificados`).
-     - En `TorneoEnVivo.jsx` y `EliminatoriaView.jsx`: Se eliminaron por completo todos los botones manuales de asignación de clasificados (incluido re-sincronizar), dejando la UI 100% libre de botones imperativos y centrada exclusivamente en el acceso y visualización fluida de llaves (`Ver Bracket`).
+     - En `TorneoEnVivo.jsx` y `EliminatoriaView.jsx`: Se eliminaron por completo todos los botones manuales de asignación de clasificados (incluido re-sincronizar) y el destructivo botón *"Borrar Bracket"*, blindando el torneo contra accidentes y dejando la UI 100% libre de botones imperativos y centrada exclusivamente en la visualización fluida de llaves (`Ver Bracket`).
 - **Resultado final:** Cuadros eliminatorios visualizables desde el minuto cero en vistas públicas y privadas, traspaso y programación automática de playoffs en tiempo real con cero intervención manual, experiencia operativa en Día de Torneo 100% limpia y enfocada por jornada, y cero fricción de navegación.
 
 ---

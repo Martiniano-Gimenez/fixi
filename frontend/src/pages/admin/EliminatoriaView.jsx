@@ -6,7 +6,7 @@ import EditBracketMatchModal from '../../components/EditBracketMatchModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import BracketLines from '../../components/BracketLines';
-import { ChevronLeft, GitBranch, Trash2, Settings, Trophy, Edit2, Plus, Clock } from 'lucide-react';
+import { ChevronLeft, GitBranch, Settings, Trophy, Edit2, Plus, Clock } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
 import './EliminatoriaView.css';
 
@@ -137,40 +137,7 @@ export default function EliminatoriaView() {
           {categoria.torneo?.nombre} — Categoría {categoria.nombre} (Fase Eliminatoria)
         </h1>
         <div className="header-actions">
-          {fases.length > 0 && (
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
 
-              <button
-                onClick={handleBorrarEliminatoria}
-                disabled={generando}
-                style={{
-                  width: 'auto',
-                  marginTop: 0,
-                  padding: '0.5rem 1rem',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: '500',
-                  background: 'var(--color-bg-input)',
-                  border: '1px solid var(--color-danger)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--color-danger)',
-                  transition: 'all 0.2s ease',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--color-danger-bg)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'var(--color-bg-input)';
-                }}
-              >
-                <Trash2 size={15} strokeWidth={2} />
-                Borrar Bracket
-              </button>
-            </div>
-          )}
           <div className="status">{categoria.estado}</div>
         </div>
       </div>
