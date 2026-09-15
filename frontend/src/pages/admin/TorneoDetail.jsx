@@ -1172,8 +1172,8 @@ export default function TorneoDetail() {
                       </span>
                     )}
                     {totalPartidos > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: '95px' }}>
-                        <span style={{ fontSize: 'var(--font-size-xs)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '95px' }}>
+                        <span style={{ fontSize: 'var(--font-size-xs)', lineHeight: 1.2 }}>
                           <strong style={{ color: 'var(--color-text)' }}>{partidosFinalizados}</strong>/{totalPartidos} jugados
                         </span>
                         <div className="progress-bar-mini">
