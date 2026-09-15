@@ -1190,7 +1190,7 @@ export default function TorneoDetail() {
                 >
                   <Link
                     to={`/admin/torneos/${torneo.id}/categorias/${cat.id}`}
-                    className="btn-primary"
+                    className="btn-outline"
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
