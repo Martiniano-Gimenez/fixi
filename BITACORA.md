@@ -592,9 +592,34 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+## 24. Brackets Vacíos al Iniciar Torneo y Monitoreo Integral en Día de Torneo
+
+### Visibilidad Temprana de Llaves y Experiencia de Usuario Centralizada en En Vivo
+- **Problema o necesidad que motivó el trabajo:** Originalmente, los cruces eliminatorios solo se generaban una vez que todas las zonas de una categoría habían finalizado todos sus partidos. Esto impedía a organizadores y jugadores visualizar el cuadro eliminatorio con sus llaves proyectadas ("1° Zona A" vs "2° Zona B") desde el inicio del torneo. Asimismo, una vez generado, en el panel operativo central de *Día de Torneo* (`TorneoEnVivo.jsx`) no existía ningún enlace ni sección para consultar el cuadro eliminatorio de las categorías, obligando al usuario a salir de la pantalla operativa, navegar al detalle del torneo y entrar a cada categoría individual para ver el bracket.
+- **Qué decidí y por qué:**
+  1. **Generación Automática de Brackets Vacíos al Iniciar (`organizador.service.js`):**
+     - En `iniciarTorneoMultiCategoria`, tras persistir el inicio de las categorías y el sorteo de zonas, se invoca automáticamente `generarEliminatoria(organizadorId, cat.categoriaId)` para cada categoría iniciada.
+     - `generarEliminatoria` crea todas las rondas y partidos de la eliminatoria con `pareja1Id: null` y `pareja2Id: null`, asignando etiquetas semánticas de origen (`origenPareja1: "1° Zona A"`, `origenPareja2: "2° Zona B"`, etc.) y marcando BYEs correspondientes.
+     - Los BYEs no se marcan como `FINALIZADO` mientras las zonas estén activas (ya que aún no se conoce quién avanza).
+     - Al terminar las zonas, la re-ejecución de `generarEliminatoria` detecta las fases existentes y **puebla** las parejas reales sobre las llaves ya armadas, resolviendo automáticamente los BYEs y agendando la primera ronda del domingo.
+  2. **Enriquecimiento del Estado en Vivo (`getEstadoEnVivo`):**
+     - Se incorporó la colección completa de `categorias` con métricas de zonas y eliminatorias: `estadoEliminatoria` (`ESPERANDO_ZONAS`, `LISTA_PARA_ASIGNAR`, `EN_CURSO`, `FINALIZADA`), progreso de partidos de zona y eliminatoria, y orden de domingo.
+     - Se ajustó el conteo de `pendientesSinHorarioCount` para que los partidos futuros de eliminatorias no agendados todavía no disparen falsas alertas rojas de "Sin Horario".
+  3. **Sección Permanente "Cuadros Eliminatorios (Brackets)" en `TorneoEnVivo.jsx`:**
+     - Reemplazo del bloque condicional aislado por una tarjeta integrada con visualización de todas las categorías.
+     - Badges de estado contextuales (`¡Zonas listas!`, `Cuadro armado`, `En disputa`, `🏆 Definido`), barras de progreso de zonas y botón directo *"Ver Bracket"* (`<Link to="...">` con icono `GitBranch`).
+     - Alerta visual destacada cuando alguna categoría completa su fase de grupos con botón prioritario *"Asignar Clasificados"*.
+  4. **Navegación Fluida Bidireccional:**
+     - En `EliminatoriaView.jsx`: Se añadió el botón de retorno rápido *"🏟️ Ir a Día de Torneo"* en la cabecera cuando el torneo está en curso.
+     - En `TorneoEnVivo.jsx`: Se añadió el botón *"Vista Pública"* para acceder directamente al link de jugadores en nueva pestaña.
+     - En `TorneoDetail.jsx`: Se añadió acceso directo *"Bracket"* en cada tarjeta de categoría junto a *"Administrar"*.
+- **Resultado final:** Cuadros eliminatorios visualizables desde el minuto cero en vistas públicas y privadas, monitoreo centralizado en Día de Torneo con 1 solo clic de distancia, y cero fricción de navegación.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 23 sesiones de trabajo, sumando un aproximado total de entre 62.5 y 72 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 24 sesiones de trabajo, sumando un aproximado total de entre 64.5 y 74.5 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -621,6 +646,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 23 s
 | **21** | ~3 a 3.5 horas | Continuidad de Día de Torneo: detección de categorías listas y generación de cruces en 1 clic (`TorneoEnVivo.jsx`), orden de prioridad del domingo persistido (`ordenDomingo` + `OrdenDomingoModal.jsx`), horarios dominicales en club (`domingoInicio`/`domingoFin`), auto-scheduler earliest-fit de Ronda 1 multi-cancha en paralelo (`eliminatoriaScheduler.service.js`), tratamiento de dieciseisavos sábado noche (`esRondaDieciseisavos`) con `PartidosPendientesSection` y suite de tests automatizada (`test-scheduling-domingo.js`). |
 | **22** | ~1.5 a 2 horas | Protección temporal y causal de eliminatorias en Modo Lluvia: exclusión de eliminatorias sin horario de la reprogramación automática, piso temporal estricto (no antes de fin de zonas de la categoría ni antes del horario original pautado), prevención de retrocesos hacia la mañana (08:00 AM) al restaurar canchas y suite de regresión (`test-modo-lluvia-eliminatorias.js`). |
 | **23** | ~2.5 a 3 horas | Auditoría Integral de Lógica de Negocio y Corrección de Casos Borde: orden unificado `ordenarZonaParejas` (respeto estricto de `posicion` en Mini-Bracket para clasificar 1° y 2° vs desempate oficial en Round Robin), reseteo atómico en `reiniciarTorneo` (`resolucionManual = false`, overrides de lluvia a `null`, limpieza de snapshot de pre-check), invalidación reactiva por hash de parejas (`parejaIdsHash`), filtrado estricto por `categoriaId` y horas de domingo en schedulers, y prioridad cronológica `Infinity` en colas de Modo Lluvia. Suite de verificación (`test-auditoria-fixes.js`). |
-| **Total** | **~62.5 a 72 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, continuidad de torneo con cruces en 1 clic y auto-scheduling de domingo, brackets dinámicos, disponibilidad por sliders y diseño UI/UX premium. |
+| **24** | ~2 a 2.5 horas | Brackets vacíos al iniciar torneo y monitoreo integral en Día de Torneo: auto-generación de llaves eliminatorias con orígenes semánticos ("1°A vs 2°B") en `iniciarTorneoMultiCategoria`, sección permanente "Cuadros Eliminatorios (Brackets)" en `TorneoEnVivo.jsx` con progreso en tiempo real y botón "Ver Bracket" por categoría, navegación fluida bidireccional ("🏟️ Ir a Día de Torneo" y "Vista Pública"), ajuste de métricas para evitar alertas rojas prematuras en partidos futuros de eliminatorias, y enlace directo a bracket en `TorneoDetail.jsx`. |
+| **Total** | **~64.5 a 74.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, continuidad de torneo con cruces en 1 clic y auto-scheduling de domingo, y diseño UI/UX premium. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.

@@ -1727,56 +1727,114 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     : null;
   const overrideDiaKey = overrideDiaInfo?.key || null;
 
-  // Categorías con todas sus zonas finalizadas y sin clasificados asignados aún a eliminatorias
+  // Categorías con métricas de zonas y fases eliminatorias
   const categoriasTorneo = await prisma.categoria.findMany({
     where: { torneoId },
+    orderBy: { nombre: 'asc' },
     select: {
       id: true,
       nombre: true,
       ordenDomingo: true,
       zonas: {
         select: {
+          id: true,
+          nombre: true,
           partidos: { select: { id: true, estado: true } },
         },
       },
       fasesEliminatorias: {
         orderBy: { ronda: 'desc' },
-        take: 1,
         select: {
+          id: true,
+          nombre: true,
           ronda: true,
-          partidos: { select: { id: true, pareja1Id: true, pareja2Id: true } },
+          partidos: {
+            select: {
+              id: true,
+              estado: true,
+              pareja1Id: true,
+              pareja2Id: true,
+              ganadorId: true,
+            },
+          },
         },
       },
     },
   });
 
   const categoriasListasParaEliminatoria = [];
+  const categoriasInfo = [];
 
   for (const cat of categoriasTorneo) {
-    if (!cat.zonas || cat.zonas.length === 0) continue;
-
     let totalPartidosZona = 0;
-    let partidosZonaPendientes = 0;
+    let partidosZonaFinalizados = 0;
 
-    for (const z of cat.zonas) {
+    for (const z of (cat.zonas || [])) {
       totalPartidosZona += z.partidos.length;
-      partidosZonaPendientes += z.partidos.filter((p) => p.estado !== 'FINALIZADO').length;
+      partidosZonaFinalizados += z.partidos.filter((p) => p.estado === 'FINALIZADO').length;
     }
 
-    if (totalPartidosZona === 0 || partidosZonaPendientes > 0) {
-      continue;
-    }
+    const partidosZonaPendientes = totalPartidosZona - partidosZonaFinalizados;
+    const zonasFinalizadas = totalPartidosZona > 0 && partidosZonaPendientes === 0;
 
-    if (cat.fasesEliminatorias && cat.fasesEliminatorias.length > 0) {
+    const tieneEliminatoria = Boolean(cat.fasesEliminatorias && cat.fasesEliminatorias.length > 0);
+    let clasificadosAsignados = false;
+    let totalPartidosEliminatoria = 0;
+    let partidosEliminatoriaFinalizados = 0;
+    let finalFinalizada = false;
+
+    if (tieneEliminatoria) {
       const primeraFase = cat.fasesEliminatorias[0];
-      const tieneClasificadosAsignados = primeraFase.partidos.some((p) => p.pareja1Id || p.pareja2Id);
-      if (tieneClasificadosAsignados) continue;
+      clasificadosAsignados = primeraFase.partidos.some((p) => p.pareja1Id || p.pareja2Id);
+
+      for (const f of cat.fasesEliminatorias) {
+        totalPartidosEliminatoria += f.partidos.length;
+        partidosEliminatoriaFinalizados += f.partidos.filter((p) => p.estado === 'FINALIZADO').length;
+        if (f.ronda === 2) {
+          const finalMatch = f.partidos[0];
+          if (finalMatch && finalMatch.estado === 'FINALIZADO' && finalMatch.ganadorId) {
+            finalFinalizada = true;
+          }
+        }
+      }
     }
 
-    categoriasListasParaEliminatoria.push({
+    // Compatibilidad: categorías que tienen zonas terminadas y bracket listo para asignar
+    if (zonasFinalizadas && tieneEliminatoria && !clasificadosAsignados) {
+      categoriasListasParaEliminatoria.push({
+        id: cat.id,
+        nombre: cat.nombre,
+        ordenDomingo: cat.ordenDomingo,
+      });
+    }
+
+    let estadoEliminatoria = 'SIN_ELIMINATORIA';
+    if (tieneEliminatoria) {
+      if (finalFinalizada) {
+        estadoEliminatoria = 'FINALIZADA';
+      } else if (clasificadosAsignados) {
+        estadoEliminatoria = 'EN_CURSO';
+      } else if (zonasFinalizadas) {
+        estadoEliminatoria = 'LISTA_PARA_ASIGNAR';
+      } else {
+        estadoEliminatoria = 'ESPERANDO_ZONAS';
+      }
+    }
+
+    categoriasInfo.push({
       id: cat.id,
       nombre: cat.nombre,
       ordenDomingo: cat.ordenDomingo,
+      totalZonas: cat.zonas?.length || 0,
+      totalPartidosZona,
+      partidosZonaFinalizados,
+      zonasFinalizadas,
+      tieneEliminatoria,
+      primeraRondaNombre: tieneEliminatoria ? cat.fasesEliminatorias[0]?.nombre : null,
+      clasificadosAsignados,
+      totalPartidosEliminatoria,
+      partidosEliminatoriaFinalizados,
+      estadoEliminatoria,
     });
   }
 
@@ -1839,9 +1897,9 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         canchaOcupadaPorPartido.set(p.canchaNumero, enCursoObj);
       }
     } else if (p.estado === 'PENDIENTE') {
-      if (p.sinHorarioAsignado || !p.fechaHora) {
+      if (p.sinHorarioAsignado || (!p.faseEliminatoriaId && !p.fechaHora)) {
         pendientesSinHorarioCount++;
-      } else {
+      } else if (p.fechaHora) {
         pendientesConHorarioCount++;
         // Verificar si quedó en cancha fantasma (cancha > canchasActivas)
         // Solo marcar como fantasma si el partido pertenece al día lógico bajo override (o si no hay override definido)
@@ -1908,6 +1966,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     partidosEnCanchaFantasma: partidosEnCanchaFantasmaList,
     proximosPartidos: proximosPartidosList,
     categoriasListasParaEliminatoria,
+    categorias: categoriasInfo,
     // Ordenados más reciente primero para que el último resultado cargado aparezca arriba
     partidosFinalizados: [...partidosFinalizadosList].sort((a, b) => {
       const tA = a.fechaHora ? new Date(a.fechaHora).getTime() : 0;

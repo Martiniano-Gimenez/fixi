@@ -26,6 +26,7 @@ import {
   Edit2,
   X,
   ListOrdered,
+  GitBranch,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
 import CruceResolver from '../../components/CruceResolver';
@@ -1170,7 +1171,23 @@ export default function TorneoDetail() {
                       textDecoration: 'none',
                     }}
                   >
-                    <Settings size={15} /> Administrar Categoría
+                    <Settings size={15} /> Administrar
+                  </Link>
+
+                  <Link
+                    to={`/admin/torneos/${torneo.id}/categorias/${cat.id}/eliminatoria`}
+                    className="btn-secondary"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.45rem 0.65rem',
+                      fontSize: 'var(--font-size-sm)',
+                      textDecoration: 'none',
+                    }}
+                    title="Ver Bracket Eliminatorio"
+                  >
+                    <GitBranch size={15} /> Bracket
                   </Link>
 
                   <button

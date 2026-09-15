@@ -106,14 +106,33 @@ export default function EliminatoriaView() {
   return (
     <div className="eliminatoria-container">
       <div className="header">
-        <Link
-          to={backUrl}
-          className="back-btn"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
-        >
-          <ChevronLeft size={16} strokeWidth={2} />
-          Volver a Categoría {categoria.nombre}
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <Link
+            to={backUrl}
+            className="back-btn"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+          >
+            <ChevronLeft size={16} strokeWidth={2} />
+            Volver a Categoría {categoria.nombre}
+          </Link>
+          {categoria.torneo?.estado === 'EN_CURSO' && (
+            <Link
+              to={`/admin/torneos/${torneoId || categoria.torneoId}/en-vivo`}
+              className="back-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                textDecoration: 'none',
+                background: 'rgba(0, 208, 132, 0.12)',
+                color: 'var(--color-primary)',
+                border: '1px solid rgba(0, 208, 132, 0.35)',
+              }}
+            >
+              🏟️ Ir a Día de Torneo
+            </Link>
+          )}
+        </div>
         <h1>
           {categoria.torneo?.nombre} — Categoría {categoria.nombre} (Fase Eliminatoria)
         </h1>

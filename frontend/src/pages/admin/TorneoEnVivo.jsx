@@ -20,6 +20,7 @@ import {
   Zap,
   Loader2,
   ListOrdered,
+  GitBranch,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -422,22 +423,45 @@ export default function TorneoEnVivo() {
           </div>
         </div>
 
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => fetchEnVivoData(true)}
-          disabled={refreshing}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            fontSize: 'var(--font-size-xs)',
-            padding: '0.45rem 0.85rem',
-          }}
-        >
-          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-          {refreshing ? 'Actualizando...' : 'Actualizar ahora'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {torneo.slug && (
+            <a
+              href={`/torneos/${torneo.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                fontSize: 'var(--font-size-xs)',
+                padding: '0.45rem 0.85rem',
+                textDecoration: 'none',
+              }}
+              title="Abrir vista pública del torneo en una pestaña nueva"
+            >
+              <ExternalLink size={14} />
+              <span>Vista Pública</span>
+            </a>
+          )}
+
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => fetchEnVivoData(true)}
+            disabled={refreshing}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontSize: 'var(--font-size-xs)',
+              padding: '0.45rem 0.85rem',
+            }}
+          >
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Actualizando...' : 'Actualizar ahora'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -946,12 +970,12 @@ export default function TorneoEnVivo() {
         </div>
       )}
 
-      {/* ─── Fase de Grupos Completada (Generar Cruces) ─────────────── */}
-      {data.categoriasListasParaEliminatoria && data.categoriasListasParaEliminatoria.length > 0 && (
+      {/* ─── 5. Cuadros Eliminatorios (Brackets) ────────────────────── */}
+      {((data.categorias && data.categorias.length > 0) || (data.categoriasListasParaEliminatoria && data.categoriasListasParaEliminatoria.length > 0)) && (
         <div
           style={{
-            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(18, 21, 28, 0.95))',
-            border: '1px solid rgba(16, 185, 129, 0.35)',
+            background: 'var(--bg-card-start)',
+            border: '1px solid var(--color-border)',
             borderRadius: 'var(--radius-lg)',
             padding: '1.25rem',
             marginBottom: '1.5rem',
@@ -964,17 +988,17 @@ export default function TorneoEnVivo() {
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: '0.75rem',
-              marginBottom: '0.75rem',
+              marginBottom: '1rem',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Trophy size={22} style={{ color: 'var(--color-success)' }} />
+              <Trophy size={22} style={{ color: 'var(--color-primary)' }} />
               <div>
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
-                  Fase de Grupos Completada
+                  Cuadros Eliminatorios (Brackets)
                 </h3>
                 <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                  Las zonas de las siguientes categorías finalizaron todos sus partidos. Ya podés asignar los clasificados al cuadro eliminatorio.
+                  Visualizá las llaves de cada categoría, el progreso de cruces y la asignación de clasificados.
                 </p>
               </div>
             </div>
@@ -995,70 +1019,228 @@ export default function TorneoEnVivo() {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem' }}>
-            {data.categoriasListasParaEliminatoria.map((cat) => {
+          {/* Aviso si alguna categoría está lista para asignar clasificados */}
+          {data.categorias && data.categorias.some((c) => c.estadoEliminatoria === 'LISTA_PARA_ASIGNAR') && (
+            <div
+              style={{
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid var(--color-success)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.65rem 0.9rem',
+                marginBottom: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--color-text)',
+              }}
+            >
+              <Zap size={16} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+              <span>
+                <strong>¡Fase de grupos completada!</strong> Hay categorías listas para asignar sus clasificados definitivos al cuadro eliminatorio.
+              </span>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '0.85rem' }}>
+            {(data.categorias || data.categoriasListasParaEliminatoria || []).map((cat) => {
               const isGenerating = generandoCrucesCatId === cat.id;
+              const isReadyToAssign = cat.estadoEliminatoria === 'LISTA_PARA_ASIGNAR' || (!cat.estadoEliminatoria && data.categoriasListasParaEliminatoria?.some((c) => c.id === cat.id));
+              const pctZonas = cat.totalPartidosZona > 0
+                ? Math.round((cat.partidosZonaFinalizados / cat.totalPartidosZona) * 100)
+                : 0;
 
               return (
                 <div
                   key={cat.id}
                   style={{
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: isReadyToAssign
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(20, 24, 33, 0.95))'
+                      : 'rgba(0, 0, 0, 0.35)',
+                    border: `1px solid ${isReadyToAssign ? 'rgba(16, 185, 129, 0.45)' : 'rgba(255, 255, 255, 0.08)'}`,
                     borderRadius: 'var(--radius-md)',
-                    padding: '0.85rem 1rem',
+                    padding: '0.9rem 1rem',
                     display: 'flex',
+                    flexDirection: 'column',
                     justifyContent: 'space-between',
-                    alignItems: 'center',
                     gap: '0.75rem',
+                    boxShadow: isReadyToAssign ? '0 0 15px rgba(16, 185, 129, 0.12)' : 'none',
+                    transition: 'all 0.2s ease',
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 'var(--font-size-base)' }}>
-                      {cat.nombre}
-                    </div>
-                    <div style={{ marginTop: '0.2rem' }}>
-                      {cat.ordenDomingo ? (
+                    {/* Header de Categoría + Badge */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                      <div style={{ fontWeight: 700, fontSize: 'var(--font-size-base)', color: 'var(--color-text)' }}>
+                        {cat.nombre}
+                      </div>
+
+                      {/* Badge de Estado */}
+                      {isReadyToAssign ? (
+                        <span
+                          className="badge badge-success"
+                          style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
+                        >
+                          <Zap size={11} /> ¡Zonas listas!
+                        </span>
+                      ) : cat.estadoEliminatoria === 'ESPERANDO_ZONAS' ? (
                         <span
                           className="badge badge-info"
-                          style={{ fontSize: '0.7rem', padding: '0.15rem 0.45rem' }}
+                          style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
                         >
-                          Domingo: #{cat.ordenDomingo} en arrancar
+                          <Clock size={11} /> Cuadro armado
+                        </span>
+                      ) : cat.estadoEliminatoria === 'EN_CURSO' ? (
+                        <span
+                          className="badge badge-warning"
+                          style={{
+                            fontSize: '0.7rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            padding: '0.15rem 0.45rem',
+                            background: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            borderColor: 'rgba(59, 130, 246, 0.3)',
+                          }}
+                        >
+                          <Flame size={11} /> En disputa
+                        </span>
+                      ) : cat.estadoEliminatoria === 'FINALIZADA' ? (
+                        <span
+                          className="badge badge-success"
+                          style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
+                        >
+                          <CheckCircle2 size={11} /> 🏆 Definido
                         </span>
                       ) : (
                         <span
                           style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)' }}
                         >
-                          Sin prioridad asignada (al final)
+                          {cat.tieneEliminatoria ? 'Cuadro listo' : 'Sin cuadro'}
                         </span>
                       )}
                     </div>
+
+                    {/* Prioridad Domingo */}
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      {cat.ordenDomingo ? (
+                        <span
+                          className="badge badge-info"
+                          style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem' }}
+                        >
+                          Domingo: #{cat.ordenDomingo} en arrancar
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.68rem', color: 'var(--color-text-secondary)' }}>
+                          Sin prioridad asignada para el domingo
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Progreso de Zonas */}
+                    {cat.totalPartidosZona > 0 && (
+                      <div style={{ marginTop: '0.4rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
+                          <span>Zonas</span>
+                          <span>{cat.partidosZonaFinalizados}/{cat.totalPartidosZona} jugados ({pctZonas}%)</span>
+                        </div>
+                        <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              width: `${pctZonas}%`,
+                              height: '100%',
+                              background: pctZonas === 100 ? 'var(--color-success)' : 'var(--color-primary)',
+                              borderRadius: '2px',
+                              transition: 'width 0.3s ease',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Info de Eliminatoria */}
+                    {cat.tieneEliminatoria && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginTop: '0.45rem' }}>
+                        {cat.estadoEliminatoria === 'ESPERANDO_ZONAS' ? (
+                          <span>Cruces iniciales definidos. Esperando definición de zonas.</span>
+                        ) : cat.totalPartidosEliminatoria > 0 ? (
+                          <span>{cat.primeraRondaNombre || 'Eliminatoria'}: {cat.partidosEliminatoriaFinalizados}/{cat.totalPartidosEliminatoria} jugados</span>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
 
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    disabled={isGenerating}
-                    onClick={() => handleGenerarCruces(cat.id, cat.nombre)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.45rem 0.85rem',
-                      fontSize: 'var(--font-size-xs)',
-                      width: 'auto',
-                    }}
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 size={14} className="spin" /> Asignando...
-                      </>
-                    ) : (
-                      <>
-                        <Zap size={14} /> Asignar Clasificados
-                      </>
+                  {/* Acciones */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.6rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    {cat.tieneEliminatoria && (
+                      <Link
+                        to={`/admin/torneos/${id}/categorias/${cat.id}/eliminatoria`}
+                        className="btn-secondary"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.4rem 0.75rem',
+                          fontSize: 'var(--font-size-xs)',
+                          textDecoration: 'none',
+                          flex: isReadyToAssign ? '0 0 auto' : '1',
+                          justifyContent: 'center',
+                        }}
+                        title={`Ver cuadro eliminatorio de ${cat.nombre}`}
+                      >
+                        <GitBranch size={14} /> Ver Bracket
+                      </Link>
                     )}
-                  </button>
+
+                    {isReadyToAssign && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={isGenerating}
+                        onClick={() => handleGenerarCruces(cat.id, cat.nombre)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.4rem 0.85rem',
+                          fontSize: 'var(--font-size-xs)',
+                          flex: '1',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {isGenerating ? (
+                          <>
+                            <Loader2 size={14} className="spin" /> Asignando...
+                          </>
+                        ) : (
+                          <>
+                            <Zap size={14} /> Asignar Clasificados
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {!cat.tieneEliminatoria && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={isGenerating}
+                        onClick={() => handleGenerarCruces(cat.id, cat.nombre)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          padding: '0.4rem 0.75rem',
+                          fontSize: 'var(--font-size-xs)',
+                          flex: '1',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <GitBranch size={14} /> Generar Bracket
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
