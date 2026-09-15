@@ -1154,6 +1154,7 @@ export default function TorneoDetail() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      flexWrap: 'wrap',
                       gap: '1rem',
                       color: 'var(--color-text-secondary)',
                       fontSize: 'var(--font-size-sm)',
@@ -1171,9 +1172,24 @@ export default function TorneoDetail() {
                       </span>
                     )}
                     {totalPartidos > 0 && (
-                      <span style={{ fontSize: 'var(--font-size-xs)' }}>
-                        {partidosFinalizados}/{totalPartidos} jugados
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: '95px' }}>
+                        <span style={{ fontSize: 'var(--font-size-xs)' }}>
+                          <strong style={{ color: 'var(--color-text)' }}>{partidosFinalizados}</strong>/{totalPartidos} jugados
+                        </span>
+                        <div className="progress-bar-mini">
+                          <div
+                            className="progress-bar-mini-fill"
+                            style={{
+                              width: `${Math.round((partidosFinalizados / totalPartidos) * 100)}%`,
+                            }}
+                            role="progressbar"
+                            aria-valuenow={partidosFinalizados}
+                            aria-valuemin={0}
+                            aria-valuemax={totalPartidos}
+                            aria-label={`${partidosFinalizados} de ${totalPartidos} partidos jugados`}
+                          />
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
