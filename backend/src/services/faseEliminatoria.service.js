@@ -136,14 +136,17 @@ async function generarEliminatoria(organizadorId, categoriaId) {
         updateData.sinHorarioAsignado = true;
       }
       
-      if (partido.origenPareja1) {
-        const c1 = clasificadasMap.get(partido.origenPareja1);
-        if (c1 && c1.parejaId) updateData.pareja1Id = c1.parejaId;
-      }
-      
-      if (partido.origenPareja2) {
-        const c2 = clasificadasMap.get(partido.origenPareja2);
-        if (c2 && c2.parejaId) updateData.pareja2Id = c2.parejaId;
+      // Solo actualizar parejas si el partido de primera ronda aún no comenzó (PENDIENTE)
+      if (partido.estado === 'PENDIENTE') {
+        if (partido.origenPareja1) {
+          const c1 = clasificadasMap.get(partido.origenPareja1);
+          if (c1 && c1.parejaId) updateData.pareja1Id = c1.parejaId;
+        }
+        
+        if (partido.origenPareja2) {
+          const c2 = clasificadasMap.get(partido.origenPareja2);
+          if (c2 && c2.parejaId) updateData.pareja2Id = c2.parejaId;
+        }
       }
 
       // Determinar parejas efectivas tras el update
@@ -266,8 +269,8 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     }
   }
 
-  // 5.3. Ubicar a los 2dos (y 3ros si los hay)
-  const restoClasificados = [...segundos, ...otros];
+  // 5.3. Ubicar a los 2dos (y 1ros excedentes si clasificó 1 solo por zona, o 3ros si los hay)
+  const restoClasificados = [...primeros.slice(M), ...segundos, ...otros];
   for (let i = 0; i < restoClasificados.length; i++) {
     const equipo = restoClasificados[i];
     const idealSeqIdx = i ^ 1; 

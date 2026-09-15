@@ -326,6 +326,13 @@ async function cargarResultado(organizadorId, partidoId, data) {
       } else if (zona.formato === 'MINI_BRACKET') {
         await propagarMiniBracket(partido.zonaId);
       }
+
+      // Auto-asignación de clasificados y programación de domingo si concluyó la fase de grupos
+      try {
+        await verificarYAutoAsignarEliminatoria(organizadorId, partido.categoriaId);
+      } catch (errAuto) {
+        console.error('[Auto-Eliminatoria] Error al auto-asignar eliminatoria tras partido de zona:', errAuto);
+      }
     }
 
     if (partido.faseEliminatoriaId) {
@@ -672,6 +679,57 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
   };
 }
 
+/**
+ * Auto-asigna clasificados al cuadro eliminatorio si se completaron todos los partidos de zona de la categoría.
+ * También dispara la auto-programación de primera ronda de domingo si corresponde.
+ */
+async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId) {
+  if (!categoriaId || !organizadorId) return null;
+
+  // 1. Contar partidos de zona no finalizados en esta categoría
+  const partidosPendientes = await prisma.partido.count({
+    where: {
+      categoriaId,
+      zonaId: { not: null },
+      estado: { not: 'FINALIZADO' },
+    },
+  });
+
+  // Si aún quedan partidos de zona pendientes o en curso, no se auto-asigna
+  if (partidosPendientes > 0) return null;
+
+  // 2. Verificar si la categoría tiene fases eliminatorias creadas (bracket generado al inicio)
+  const fasesCount = await prisma.faseEliminatoria.count({
+    where: { categoriaId },
+  });
+
+  if (fasesCount === 0) return null;
+
+  // 3. Ejecutar asignación de clasificados (poblado dinámico del bracket existente)
+  const { generarEliminatoria } = require('./faseEliminatoria.service');
+  const { asignarHorariosRondaUno } = require('./eliminatoriaScheduler.service');
+
+  const resultado = await generarEliminatoria(organizadorId, categoriaId);
+
+  // 4. Si no es dieciseisavos (que se juegan el sábado a la noche), programar domingo
+  if (!resultado.esDieciseisavos) {
+    const categoria = await prisma.categoria.findUnique({
+      where: { id: categoriaId },
+      select: { torneoId: true },
+    });
+
+    if (categoria?.torneoId) {
+      try {
+        await asignarHorariosRondaUno(organizadorId, categoria.torneoId, categoriaId);
+      } catch (errSched) {
+        console.warn(`[Auto-Scheduler] Aviso al auto-programar domingo para categoría ${categoriaId}:`, errSched.message);
+      }
+    }
+  }
+
+  return resultado;
+}
+
 module.exports = {
   cargarResultado,
   borrarResultado,
@@ -682,4 +740,5 @@ module.exports = {
   getPartidosByCategoria,
   asignarHorarioManual,
   updateEstado,
+  verificarYAutoAsignarEliminatoria,
 };

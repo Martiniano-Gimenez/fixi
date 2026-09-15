@@ -620,7 +620,13 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
      - Filtrado integral contextual por día para: canchas activas y Modo Lluvia, resumen estadístico (total, en juego, programados, finalizados, sin horario), lista de partidos en juego, grilla de próximos partidos y acordeón de partidos finalizados.
      - Enfoque temático: Se retiraron los cuadros eliminatorios de las solapas de **Viernes** y **Sábado** para mantener esas jornadas enfocadas al 100% en la fase de grupos (zonas), reservando los **Cuadros Eliminatorios** de forma estelar para el **Domingo (Playoffs)** y para la vista panorámica **Todo el Torneo**.
      - Banner de alerta cruzada con salto en 1 clic cuando hay partidos disputándose en una jornada diferente a la activa.
-- **Resultado final:** Cuadros eliminatorios visualizables desde el minuto cero en vistas públicas y privadas, experiencia operativa en Día de Torneo 100% limpia y enfocada por jornada (fase de grupos pura en viernes y sábado, playoffs en domingo), monitoreo centralizado a 1 clic de distancia y cero fricción de navegación.
+  6. **Asignación y Programación 100% Autónoma de Clasificados a Playoffs:**
+     - En `partido.service.js`: Implementación de `verificarYAutoAsignarEliminatoria(organizadorId, categoriaId)` disparada en el instante en que el último partido de zona de una categoría pasa a `FINALIZADO`.
+     - Inyección inmediata y transparente de parejas clasificadas (`1° Zona A`, `2° Zona B`, etc.) en el bracket eliminatorio generado al inicio del torneo.
+     - Disparo autónomo de `asignarHorariosRondaUno` para auto-programar los horarios y canchas del domingo respetando `ordenDomingo` y evitando superposiciones.
+     - En `faseEliminatoria.service.js`: Salvaguarda para asegurar que solo los partidos en estado `PENDIENTE` actualicen sus parejas, protegiendo llaves ya iniciadas. Corrección de soporte de seeding cuando clasifican únicamente 1ros de zona (`primeros.slice(M)` en `restoClasificados`).
+     - En `TorneoEnVivo.jsx`: Reemplazo del botón manual imperativo por acceso directo al bracket (`Ver Bracket`) y botón secundario sutil de `Re-sincronizar`.
+- **Resultado final:** Cuadros eliminatorios visualizables desde el minuto cero en vistas públicas y privadas, traspaso y programación automática de playoffs en tiempo real con cero intervención manual, experiencia operativa en Día de Torneo 100% limpia y enfocada por jornada, y cero fricción de navegación.
 
 ---
 

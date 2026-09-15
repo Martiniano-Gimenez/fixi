@@ -1315,8 +1315,8 @@ export default function TorneoEnVivo() {
             </button>
           </div>
 
-          {/* Aviso si alguna categoría está lista para asignar clasificados */}
-          {data.categorias && data.categorias.some((c) => c.estadoEliminatoria === 'LISTA_PARA_ASIGNAR') && (
+          {/* Aviso si alguna categoría completó sus zonas */}
+          {data.categorias && data.categorias.some((c) => c.zonasFinalizadas) && (
             <div
               style={{
                 background: 'rgba(16, 185, 129, 0.12)',
@@ -1333,7 +1333,7 @@ export default function TorneoEnVivo() {
             >
               <Zap size={16} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
               <span>
-                <strong>¡Fase de grupos completada!</strong> Hay categorías listas para asignar sus clasificados definitivos al cuadro eliminatorio.
+                <strong>¡Fase de grupos completada!</strong> Los clasificados y horarios de domingo se asignan y programan automáticamente al cuadro eliminatorio.
               </span>
             </div>
           )}
@@ -1350,17 +1350,17 @@ export default function TorneoEnVivo() {
                 <div
                   key={cat.id}
                   style={{
-                    background: isReadyToAssign
-                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(20, 24, 33, 0.95))'
+                    background: cat.clasificadosAsignados
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(20, 24, 33, 0.95))'
                       : 'rgba(0, 0, 0, 0.35)',
-                    border: `1px solid ${isReadyToAssign ? 'rgba(16, 185, 129, 0.45)' : 'rgba(255, 255, 255, 0.08)'}`,
+                    border: `1px solid ${cat.clasificadosAsignados ? 'rgba(16, 185, 129, 0.35)' : 'rgba(255, 255, 255, 0.08)'}`,
                     borderRadius: 'var(--radius-md)',
                     padding: '0.9rem 1rem',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
                     gap: '0.75rem',
-                    boxShadow: isReadyToAssign ? '0 0 15px rgba(16, 185, 129, 0.12)' : 'none',
+                    boxShadow: cat.clasificadosAsignados ? '0 0 15px rgba(16, 185, 129, 0.08)' : 'none',
                     transition: 'all 0.2s ease',
                   }}
                 >
@@ -1372,7 +1372,14 @@ export default function TorneoEnVivo() {
                       </div>
 
                       {/* Badge de Estado */}
-                      {isReadyToAssign ? (
+                      {cat.clasificadosAsignados && cat.estadoEliminatoria !== 'FINALIZADA' ? (
+                        <span
+                          className="badge badge-success"
+                          style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
+                        >
+                          <CheckCircle2 size={11} /> Clasificados listos
+                        </span>
+                      ) : isReadyToAssign ? (
                         <span
                           className="badge badge-success"
                           style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
@@ -1459,7 +1466,7 @@ export default function TorneoEnVivo() {
                     {cat.tieneEliminatoria && (
                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginTop: '0.45rem' }}>
                         {cat.estadoEliminatoria === 'ESPERANDO_ZONAS' ? (
-                          <span>Cruces iniciales definidos. Esperando definición de zonas.</span>
+                          <span>Cruces iniciales definidos. Se completan automáticamente al finalizar zonas.</span>
                         ) : cat.totalPartidosEliminatoria > 0 ? (
                           <span>{cat.primeraRondaNombre || 'Eliminatoria'}: {cat.partidosEliminatoriaFinalizados}/{cat.totalPartidosEliminatoria} jugados</span>
                         ) : null}
@@ -1480,7 +1487,7 @@ export default function TorneoEnVivo() {
                           padding: '0.4rem 0.75rem',
                           fontSize: 'var(--font-size-xs)',
                           textDecoration: 'none',
-                          flex: isReadyToAssign ? '0 0 auto' : '1',
+                          flex: '1',
                           justifyContent: 'center',
                         }}
                         title={`Ver cuadro eliminatorio de ${cat.nombre}`}
@@ -1489,31 +1496,29 @@ export default function TorneoEnVivo() {
                       </Link>
                     )}
 
-                    {isReadyToAssign && (
+                    {/* Re-sincronizar opcional como fallback */}
+                    {cat.tieneEliminatoria && (
                       <button
                         type="button"
-                        className="btn-primary"
+                        className="btn-secondary"
                         disabled={isGenerating}
                         onClick={() => handleGenerarCruces(cat.id, cat.nombre)}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '0.4rem',
-                          padding: '0.4rem 0.85rem',
+                          gap: '0.35rem',
+                          padding: '0.4rem 0.65rem',
                           fontSize: 'var(--font-size-xs)',
-                          flex: '1',
                           justifyContent: 'center',
                         }}
+                        title="Re-sincronizar clasificados de zonas con el bracket"
                       >
                         {isGenerating ? (
-                          <>
-                            <Loader2 size={14} className="spin" /> Asignando...
-                          </>
+                          <Loader2 size={13} className="spin" />
                         ) : (
-                          <>
-                            <Zap size={14} /> Asignar Clasificados
-                          </>
+                          <RefreshCw size={13} />
                         )}
+                        <span>{isGenerating ? 'Sincronizando...' : 'Re-sincronizar'}</span>
                       </button>
                     )}
 
