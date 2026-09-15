@@ -613,13 +613,20 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
      - En `EliminatoriaView.jsx`: Se añadió el botón de retorno rápido *"🏟️ Ir a Día de Torneo"* en la cabecera cuando el torneo está en curso.
      - En `TorneoEnVivo.jsx`: Se añadió el botón *"Vista Pública"* para acceder directamente al link de jugadores en nueva pestaña.
      - En `TorneoDetail.jsx`: Se añadió acceso directo *"Bracket"* en cada tarjeta de categoría junto a *"Administrar"*.
-- **Resultado final:** Cuadros eliminatorios visualizables desde el minuto cero en vistas públicas y privadas, monitoreo centralizado en Día de Torneo con 1 solo clic de distancia, y cero fricción de navegación.
+  5. **División Global de Día de Torneo por Jornadas (`TorneoEnVivo.jsx`):**
+     - Reestructuración de la vista operativa mediante **Solapas Globales de Jornada** en la cabecera: `[ 📅 Viernes ] [ 📅 Sábado ] [ 🏆 Domingo (Playoffs) ] [ 📊 Todo el Torneo ]`.
+     - Cálculo de días canónicos asegurando la disponibilidad de las 3 jornadas (Viernes, Sábado y Domingo) a partir de `torneo.fecha`, con conteos de partidos e indicador visual de partidos en juego (pulsing dot).
+     - Selección inteligente por defecto según el estado del torneo (apertura automática en la jornada activa de juego).
+     - Filtrado integral contextual por día para: canchas activas y Modo Lluvia, resumen estadístico (total, en juego, programados, finalizados, sin horario), lista de partidos en juego, grilla de próximos partidos y acordeón de partidos finalizados.
+     - Enfoque temático: Domingo destaca los **Cuadros Eliminatorios**, Sábado destaca el cierre de zonas y pase a eliminatorias, y Viernes ofrece consulta rápida de cruces proyectados.
+     - Banner de alerta cruzada con salto en 1 clic cuando hay partidos disputándose en una jornada diferente a la activa.
+- **Resultado final:** Cuadros eliminatorios visualizables desde el minuto cero en vistas públicas y privadas, experiencia operativa en Día de Torneo 100% limpia y enfocada por jornada, monitoreo centralizado a 1 clic de distancia y cero fricción de navegación.
 
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 24 sesiones de trabajo, sumando un aproximado total de entre 64.5 y 74.5 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 24 sesiones de trabajo, sumando un aproximado total de entre 65 y 75 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|

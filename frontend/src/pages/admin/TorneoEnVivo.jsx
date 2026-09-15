@@ -21,6 +21,8 @@ import {
   Loader2,
   ListOrdered,
   GitBranch,
+  Calendar,
+  Layers,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -206,59 +208,175 @@ export default function TorneoEnVivo() {
     }
   };
 
-  const proximosPartidosList = data?.proximosPartidos || [];
   const horariosClub = data?.torneo?.horariosClub || null;
-
-  // Derivar días únicos disponibles para los tabs respetando la lógica de trasnoche
-  const diasDisponibles = useMemo(() => {
-    if (!proximosPartidosList || proximosPartidosList.length === 0) return [];
-    const map = new Map();
-    for (const p of proximosPartidosList) {
-      if (!p.fechaHora) continue;
-      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
-      if (!info) continue;
-      if (!map.has(info.key)) {
-        map.set(info.key, {
-          key: info.key,
-          label: info.label,
-          count: 0,
-        });
-      }
-      map.get(info.key).count++;
-    }
-    return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
-  }, [proximosPartidosList, horariosClub]);
-
-  // Selección por defecto del tab (primer día con partidos pendientes)
-  useEffect(() => {
-    if (diasDisponibles.length === 0) {
-      if (activeTabDay) setActiveTabDay(null);
-      return;
-    }
-
-    if (activeTabDay && diasDisponibles.some((d) => d.key === activeTabDay)) {
-      return;
-    }
-
-    setActiveTabDay(diasDisponibles[0].key);
-  }, [diasDisponibles, activeTabDay]);
-
-  // Partidos filtrados por el tab de día seleccionado
-  const proximosFiltrados = useMemo(() => {
-    if (!activeTabDay) return proximosPartidosList;
-    return proximosPartidosList.filter((p) => {
-      if (!p.fechaHora) return false;
-      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
-      return info?.key === activeTabDay;
-    });
-  }, [proximosPartidosList, activeTabDay, horariosClub]);
-
   const torneo = data?.torneo || null;
   const canchasClub = data?.canchasClub || 1;
   const canchasActivas = data?.canchasActivas || canchasClub;
   const isLluviaActive = torneo?.canchasDisponiblesOverride !== null && torneo?.canchasDisponiblesOverride !== undefined;
+
+  // Derivar jornadas disponibles (Viernes, Sábado, Domingo garantizados a partir de torneo.fecha + partidos)
+  const jornadasDisponibles = useMemo(() => {
+    if (!data) return [];
+    const map = new Map();
+
+    // 1. Siempre incluir los 3 días canónicos a partir de torneo.fecha
+    if (data.torneo?.fecha) {
+      const refFecha = new Date(data.torneo.fecha);
+      if (!isNaN(refFecha.getTime())) {
+        for (let i = 0; i < 3; i++) {
+          const d = new Date(refFecha.getTime() + i * 24 * 3600 * 1000);
+          const info = getDiaCalendarioConTrasnoche(d, horariosClub);
+          if (info && !map.has(info.key)) {
+            map.set(info.key, {
+              key: info.key,
+              label: info.diaNombre === 'Domingo' ? `${info.label} (Playoffs)` : info.label,
+              diaNombre: info.diaNombre,
+              diaNumero: info.diaNumero,
+              totalPartidos: 0,
+              enCursoCount: 0,
+              proximosCount: 0,
+              finalizadosCount: 0,
+            });
+          }
+        }
+      }
+    }
+
+    // 2. Registrar partidos en sus jornadas respectivas
+    const registrar = (p, tipo) => {
+      if (!p.fechaHora) return;
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
+      if (!info) return;
+      if (!map.has(info.key)) {
+        map.set(info.key, {
+          key: info.key,
+          label: info.diaNombre === 'Domingo' ? `${info.label} (Playoffs)` : info.label,
+          diaNombre: info.diaNombre,
+          diaNumero: info.diaNumero,
+          totalPartidos: 0,
+          enCursoCount: 0,
+          proximosCount: 0,
+          finalizadosCount: 0,
+        });
+      }
+      const entry = map.get(info.key);
+      entry.totalPartidos++;
+      if (tipo === 'EN_CURSO') entry.enCursoCount++;
+      else if (tipo === 'PROXIMO') entry.proximosCount++;
+      else if (tipo === 'FINALIZADO') entry.finalizadosCount++;
+    };
+
+    (data.partidosEnCurso || []).forEach((p) => registrar(p, 'EN_CURSO'));
+    (data.proximosPartidos || []).forEach((p) => registrar(p, 'PROXIMO'));
+    (data.partidosFinalizados || []).forEach((p) => registrar(p, 'FINALIZADO'));
+
+    return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
+  }, [data, horariosClub]);
+
+  // Selección inteligente por defecto del tab
+  useEffect(() => {
+    if (jornadasDisponibles.length === 0) return;
+
+    if (activeTabDay === 'TODO' || (activeTabDay && jornadasDisponibles.some((j) => j.key === activeTabDay))) {
+      return;
+    }
+
+    // Prioridad 1: Día con partido en curso actualmente
+    const primerEnCurso = (data?.partidosEnCurso || []).find((p) => p.fechaHora);
+    if (primerEnCurso) {
+      const info = getDiaCalendarioConTrasnoche(primerEnCurso.fechaHora, horariosClub);
+      if (info && jornadasDisponibles.some((j) => j.key === info.key)) {
+        setActiveTabDay(info.key);
+        return;
+      }
+    }
+
+    // Prioridad 2: Primer día con partidos pendientes
+    const primerPendiente = (data?.proximosPartidos || []).find((p) => p.fechaHora);
+    if (primerPendiente) {
+      const info = getDiaCalendarioConTrasnoche(primerPendiente.fechaHora, horariosClub);
+      if (info && jornadasDisponibles.some((j) => j.key === info.key)) {
+        setActiveTabDay(info.key);
+        return;
+      }
+    }
+
+    // Prioridad 3: Primer día canónico del torneo
+    setActiveTabDay(jornadasDisponibles[0].key);
+  }, [jornadasDisponibles, activeTabDay, data, horariosClub]);
+
+  const activeJornadaInfo = useMemo(() => {
+    if (!activeTabDay || activeTabDay === 'TODO') return null;
+    return jornadasDisponibles.find((j) => j.key === activeTabDay) || null;
+  }, [activeTabDay, jornadasDisponibles]);
+
+  const esModoTodo = activeTabDay === 'TODO';
+  const esViernes = activeJornadaInfo?.diaNombre === 'Viernes';
+  const esSabado = activeJornadaInfo?.diaNombre === 'Sábado';
+  const esDomingo = activeJornadaInfo?.diaNombre === 'Domingo';
+
+  // Partidos en curso filtrados
+  const partidosEnCursoFiltrados = useMemo(() => {
+    const list = data?.partidosEnCurso || [];
+    if (esModoTodo) return list;
+    return list.filter((p) => {
+      if (!p.fechaHora) return true;
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
+      return info?.key === activeTabDay;
+    });
+  }, [data?.partidosEnCurso, esModoTodo, activeTabDay, horariosClub]);
+
+  // Partidos en curso en otra jornada
+  const partidosEnCursoOtraJornada = useMemo(() => {
+    if (esModoTodo) return [];
+    const list = data?.partidosEnCurso || [];
+    return list.filter((p) => {
+      if (!p.fechaHora) return false;
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
+      return info?.key !== activeTabDay;
+    });
+  }, [data?.partidosEnCurso, esModoTodo, activeTabDay, horariosClub]);
+
+  // Próximos partidos filtrados
+  const proximosFiltrados = useMemo(() => {
+    const list = data?.proximosPartidos || [];
+    if (esModoTodo) return list;
+    return list.filter((p) => {
+      if (!p.fechaHora) return false;
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
+      return info?.key === activeTabDay;
+    });
+  }, [data?.proximosPartidos, esModoTodo, activeTabDay, horariosClub]);
+
+  // Partidos finalizados filtrados
+  const finalizadosFiltrados = useMemo(() => {
+    const list = data?.partidosFinalizados || [];
+    if (esModoTodo) return list;
+    return list.filter((p) => {
+      if (!p.fechaHora) return false;
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
+      return info?.key === activeTabDay;
+    });
+  }, [data?.partidosFinalizados, esModoTodo, activeTabDay, horariosClub]);
+
+  // Resumen estadístico contextual
+  const resumenContextual = useMemo(() => {
+    if (esModoTodo || !data) return data?.resumenEstado || {};
+    return {
+      totalPartidos: partidosEnCursoFiltrados.length + proximosFiltrados.length + finalizadosFiltrados.length,
+      enCurso: partidosEnCursoFiltrados.length,
+      pendientesConHorario: proximosFiltrados.length,
+      finalizados: finalizadosFiltrados.length,
+      pendientesSinHorario: esSabado ? (data?.resumenEstado?.pendientesSinHorario || 0) : 0,
+      enCanchaFantasma: (data?.partidosEnCanchaFantasma || []).filter((p) => {
+        const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClub);
+        return info?.key === activeTabDay;
+      }).length,
+    };
+  }, [esModoTodo, data, partidosEnCursoFiltrados, proximosFiltrados, finalizadosFiltrados, esSabado, horariosClub, activeTabDay]);
+
   // Determinar si el tab actualmente visible es el afectado por el override
-  const isTabBajoOverride = isLluviaActive && (!activeTabDay || !torneo?.overrideDiaKey || activeTabDay === torneo?.overrideDiaKey);
+  const isTabBajoOverride = isLluviaActive && (!torneo?.overrideDiaKey || esModoTodo || activeTabDay === torneo?.overrideDiaKey);
   // Canchas activas contextuales al tab de día seleccionado
   const canchasActivasContextuales = isTabBajoOverride ? canchasActivas : canchasClub;
 
@@ -335,7 +453,7 @@ export default function TorneoEnVivo() {
     if (feedbackReprogramacion.diaNombre) {
       feedbackDiaNombre = feedbackReprogramacion.diaNombre;
     } else if (feedbackDiaKey) {
-      feedbackDiaNombre = diasDisponibles.find((d) => d.key === feedbackDiaKey)?.label || null;
+      feedbackDiaNombre = jornadasDisponibles.find((d) => d.key === feedbackDiaKey)?.label || null;
     }
   }
 
@@ -464,6 +582,177 @@ export default function TorneoEnVivo() {
         </div>
       </div>
 
+      {/* ─── Selector Global de Jornada ─────────────────────────────── */}
+      {jornadasDisponibles.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            marginBottom: '1.25rem',
+            overflowX: 'auto',
+            paddingBottom: '0.4rem',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {jornadasDisponibles.map((jornada) => {
+            const isActive = activeTabDay === jornada.key;
+            const hasLive = jornada.enCursoCount > 0;
+
+            return (
+              <button
+                key={jornada.key}
+                type="button"
+                onClick={() => {
+                  setActiveTabDay(jornada.key);
+                  setUserTouchedTarget(false);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.55rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: isActive ? 700 : 500,
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(0, 208, 132, 0.15), rgba(18, 21, 28, 0.95))'
+                    : 'var(--bg-card-start)',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  border: isActive
+                    ? '1px solid var(--color-primary)'
+                    : '1px solid var(--color-border)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
+                  boxShadow: isActive ? '0 0 12px rgba(0, 208, 132, 0.15)' : 'none',
+                }}
+              >
+                {jornada.diaNombre === 'Domingo' ? (
+                  <Trophy size={16} style={{ color: isActive ? 'var(--color-primary)' : '#f59e0b' }} />
+                ) : (
+                  <Calendar size={16} />
+                )}
+                <span>{jornada.label}</span>
+
+                {/* Indicador de partidos en juego */}
+                {hasLive && (
+                  <span
+                    style={{
+                      width: '7px',
+                      height: '7px',
+                      borderRadius: '50%',
+                      background: 'var(--color-primary)',
+                      display: 'inline-block',
+                      animation: 'pulse 1.5s infinite',
+                    }}
+                    title={`${jornada.enCursoCount} partido(s) en juego`}
+                  />
+                )}
+
+                {/* Badge de cantidad */}
+                <span
+                  style={{
+                    fontSize: '11px',
+                    padding: '0.1rem 0.45rem',
+                    borderRadius: '999px',
+                    background: isActive ? 'rgba(0, 208, 132, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                    color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                    fontWeight: 700,
+                  }}
+                >
+                  {jornada.totalPartidos}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* Solapa "Todo el Torneo" */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTabDay('TODO');
+              setUserTouchedTarget(false);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              padding: '0.55rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: activeTabDay === 'TODO' ? 700 : 500,
+              background: activeTabDay === 'TODO'
+                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(18, 21, 28, 0.95))'
+                : 'var(--bg-card-start)',
+              color: activeTabDay === 'TODO' ? '#60a5fa' : 'var(--color-text-secondary)',
+              border: activeTabDay === 'TODO'
+                ? '1px solid #60a5fa'
+                : '1px solid var(--color-border)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              whiteSpace: 'nowrap',
+              boxShadow: activeTabDay === 'TODO' ? '0 0 12px rgba(59, 130, 246, 0.15)' : 'none',
+            }}
+          >
+            <Layers size={16} />
+            <span>Todo el Torneo</span>
+            <span
+              style={{
+                fontSize: '11px',
+                padding: '0.1rem 0.45rem',
+                borderRadius: '999px',
+                background: activeTabDay === 'TODO' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                color: activeTabDay === 'TODO' ? '#60a5fa' : 'var(--color-text-muted)',
+                fontWeight: 700,
+              }}
+            >
+              {data.resumenEstado.totalPartidos}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Aviso si hay partidos en juego en otra jornada distinta a la activa */}
+      {partidosEnCursoOtraJornada.length > 0 && (
+        <div
+          style={{
+            background: 'rgba(0, 208, 132, 0.08)',
+            border: '1px solid rgba(0, 208, 132, 0.25)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.6rem 0.9rem',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 'var(--font-size-xs)',
+            gap: '0.5rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Flame size={14} style={{ color: 'var(--color-primary)' }} />
+            <span>
+              Hay <strong>{partidosEnCursoOtraJornada.length} partido(s) en juego</strong> en otra jornada.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              const primerOtraJornada = partidosEnCursoOtraJornada[0];
+              const info = getDiaCalendarioConTrasnoche(primerOtraJornada.fechaHora, horariosClub);
+              if (info) setActiveTabDay(info.key);
+            }}
+            style={{
+              padding: '0.25rem 0.6rem',
+              fontSize: '11px',
+            }}
+          >
+            Ir a jornada en juego →
+          </button>
+        </div>
+      )}
+
       {error && (
         <div
           style={{
@@ -496,7 +785,7 @@ export default function TorneoEnVivo() {
           <div style={{ flex: '1 1 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)' }}>
-                Canchas activas:
+                Canchas activas {activeJornadaInfo ? `(${activeJornadaInfo.diaNombre})` : ''}:
               </span>
               <span
                 style={{
@@ -974,11 +1263,14 @@ export default function TorneoEnVivo() {
       {((data.categorias && data.categorias.length > 0) || (data.categoriasListasParaEliminatoria && data.categoriasListasParaEliminatoria.length > 0)) && (
         <div
           style={{
-            background: 'var(--bg-card-start)',
-            border: '1px solid var(--color-border)',
+            background: esDomingo
+              ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(18, 21, 28, 0.98))'
+              : 'var(--bg-card-start)',
+            border: esDomingo ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid var(--color-border)',
             borderRadius: 'var(--radius-lg)',
             padding: '1.25rem',
             marginBottom: '1.5rem',
+            boxShadow: esDomingo ? '0 0 20px rgba(245, 158, 11, 0.08)' : 'none',
           }}
         >
           <div
@@ -992,13 +1284,25 @@ export default function TorneoEnVivo() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Trophy size={22} style={{ color: 'var(--color-primary)' }} />
+              <Trophy size={22} style={{ color: esDomingo ? '#f59e0b' : 'var(--color-primary)' }} />
               <div>
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
-                  Cuadros Eliminatorios (Brackets)
+                  {esDomingo
+                    ? 'Cuadros Eliminatorios — Definición del Domingo'
+                    : esSabado
+                    ? 'Cuadros Eliminatorios (Definición de Zonas)'
+                    : esViernes
+                    ? 'Cuadros Eliminatorios (Cruces Proyectados)'
+                    : 'Cuadros Eliminatorios (Brackets)'}
                 </h3>
                 <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                  Visualizá las llaves de cada categoría, el progreso de cruces y la asignación de clasificados.
+                  {esDomingo
+                    ? 'Seguimiento de cruces, avance de llaves y campeones del torneo.'
+                    : esSabado
+                    ? 'Al finalizar las zonas de hoy sábado, podés asignar los clasificados para armar el domingo.'
+                    : esViernes
+                    ? 'Cruces proyectados (1° vs 2°). Se completarán con los clasificados al finalizar las zonas.'
+                    : 'Visualizá las llaves de cada categoría, el progreso de cruces y la asignación de clasificados.'}
                 </p>
               </div>
             </div>
@@ -1266,8 +1570,10 @@ export default function TorneoEnVivo() {
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{resumenEstado.totalPartidos}</div>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>Total Partidos</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{resumenContextual.totalPartidos}</div>
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+            {esModoTodo ? 'Total Torneo' : `Partidos ${activeJornadaInfo?.diaNombre || ''}`}
+          </div>
         </div>
 
         <div
@@ -1280,7 +1586,7 @@ export default function TorneoEnVivo() {
           }}
         >
           <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-primary)' }}>
-            {resumenEstado.enCurso}
+            {resumenContextual.enCurso}
           </div>
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>En Juego</div>
         </div>
@@ -1295,7 +1601,7 @@ export default function TorneoEnVivo() {
           }}
         >
           <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#60a5fa' }}>
-            {resumenEstado.pendientesConHorario}
+            {resumenContextual.pendientesConHorario}
           </div>
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>Programados</div>
         </div>
@@ -1310,12 +1616,12 @@ export default function TorneoEnVivo() {
           }}
         >
           <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-secondary)' }}>
-            {resumenEstado.finalizados}
+            {resumenContextual.finalizados}
           </div>
           <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>Finalizados</div>
         </div>
 
-        {resumenEstado.pendientesSinHorario > 0 && (
+        {resumenContextual.pendientesSinHorario > 0 && (
           <div
             style={{
               background: 'rgba(239, 68, 68, 0.1)',
@@ -1326,7 +1632,7 @@ export default function TorneoEnVivo() {
             }}
           >
             <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-danger)' }}>
-              {resumenEstado.pendientesSinHorario}
+              {resumenContextual.pendientesSinHorario}
             </div>
             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-danger)' }}>Sin Horario</div>
           </div>
@@ -1339,10 +1645,10 @@ export default function TorneoEnVivo() {
         <div>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <Flame size={18} style={{ color: 'var(--color-primary)' }} />
-            Partidos en Juego ({partidosEnCurso.length})
+            Partidos en Juego ({partidosEnCursoFiltrados.length})
           </h3>
 
-          {partidosEnCurso.length === 0 ? (
+          {partidosEnCursoFiltrados.length === 0 ? (
             <div
               style={{
                 background: 'var(--bg-card-start)',
@@ -1354,11 +1660,11 @@ export default function TorneoEnVivo() {
                 fontSize: 'var(--font-size-sm)',
               }}
             >
-              No hay partidos en juego en este momento.
+              No hay partidos en juego para esta jornada.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {partidosEnCurso.map((p) => {
+              {partidosEnCursoFiltrados.map((p) => {
                 const sets = p.sets || [];
                 const resultadoStr = sets.length > 0
                   ? sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')
@@ -1491,65 +1797,11 @@ export default function TorneoEnVivo() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Clock size={18} style={{ color: '#60a5fa' }} />
-              Próximos Partidos ({proximosPartidos.length})
+              Próximos Partidos ({proximosFiltrados.length})
             </h3>
           </div>
 
-          {/* Tabs por Día */}
-          {diasDisponibles.length > 1 && (
-            <div
-              style={{
-                display: 'flex',
-                gap: '0.4rem',
-                marginBottom: '0.85rem',
-                overflowX: 'auto',
-                paddingBottom: '0.2rem',
-                scrollbarWidth: 'none',
-              }}
-            >
-              {diasDisponibles.map((dia) => {
-                const isActive = dia.key === activeTabDay;
-                return (
-                  <button
-                    key={dia.key}
-                    type="button"
-                    onClick={() => setActiveTabDay(dia.key)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.45rem',
-                      padding: '0.35rem 0.8rem',
-                      borderRadius: '999px',
-                      fontSize: 'var(--font-size-xs)',
-                      fontWeight: isActive ? 700 : 500,
-                      background: isActive ? 'var(--color-primary)' : 'var(--bg-card-start)',
-                      color: isActive ? '#0d1117' : 'var(--color-text-secondary)',
-                      border: isActive ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                      cursor: 'pointer',
-                      transition: 'var(--transition-fast)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <span>{dia.label}</span>
-                    <span
-                      style={{
-                        fontSize: '11px',
-                        padding: '0.1rem 0.4rem',
-                        borderRadius: '999px',
-                        background: isActive ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.08)',
-                        color: isActive ? '#0d1117' : 'var(--color-text-muted)',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {dia.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {proximosPartidos.length === 0 ? (
+          {proximosFiltrados.length === 0 ? (
             <div
               style={{
                 background: 'var(--bg-card-start)',
@@ -1561,21 +1813,9 @@ export default function TorneoEnVivo() {
                 fontSize: 'var(--font-size-sm)',
               }}
             >
-              No hay partidos pendientes con horario asignado.
-            </div>
-          ) : proximosFiltrados.length === 0 ? (
-            <div
-              style={{
-                background: 'var(--bg-card-start)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '2rem 1rem',
-                textAlign: 'center',
-                color: 'var(--color-text-muted)',
-                fontSize: 'var(--font-size-sm)',
-              }}
-            >
-              No hay partidos pendientes para el día seleccionado.
+              {esDomingo
+                ? 'Los partidos del domingo se agendarán automáticamente cuando se completen las zonas y se asignen los clasificados.'
+                : 'No hay partidos programados para esta jornada.'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '480px', overflowY: 'auto' }}>
@@ -1678,7 +1918,7 @@ export default function TorneoEnVivo() {
       </div>
 
       {/* ─── 8. Partidos Finalizados (acordeón, colapsado por default) ─── */}
-      {partidosFinalizados && partidosFinalizados.length > 0 && (
+      {finalizadosFiltrados && finalizadosFiltrados.length > 0 && (
         <div style={{ marginTop: '1.75rem' }}>
           <button
             type="button"
@@ -1698,7 +1938,7 @@ export default function TorneoEnVivo() {
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem' }}>
               <Trophy size={18} style={{ color: 'var(--color-text-secondary)' }} />
-              Partidos Finalizados ({partidosFinalizados.length})
+              Partidos Finalizados {activeJornadaInfo ? `(${activeJornadaInfo.diaNombre})` : ''} ({finalizadosFiltrados.length})
             </span>
             {finalizadosExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
@@ -1714,7 +1954,7 @@ export default function TorneoEnVivo() {
                 overflowY: 'auto',
               }}
             >
-              {partidosFinalizados.map((p, idx) => {
+              {finalizadosFiltrados.map((p, idx) => {
                 const sets = p.sets || [];
                 const resultadoStr = sets.length > 0
                   ? sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')
