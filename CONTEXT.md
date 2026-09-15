@@ -125,6 +125,16 @@ organizadores que hoy llevan todo en papel.
 - Carga y validación estricta de resultados y cálculo automático de tablas de posiciones.
 - Fase eliminatoria por categoría con bracket SVG dinámico, manejo de BYEs, edición manual de cruces y propagación dinámica de orígenes.
 - **Modelo de Fechas Determinista (`torneo.fecha` como Única Fuente de Verdad):** Los slots horarios de las parejas (ej. `"Viernes-18:00"`, `"Sabado-09:00"`) se convierten a fechas reales de forma 100% matemática y determinista a partir de `Torneo.fecha` (`parseFechaLocal` y `requireTorneoFecha`), sin depender del reloj del sistema (`new Date()`) ni requerir variables de simulación de fecha/hora.
+- **Refactor UI/UX y Jerarquía Visual en Detalle de Torneo (`TorneoDetail.jsx`):**
+  - **Mapeo de Estados Legibles (`estadoLabels.js`):** Traducción de enums de Prisma (`BORRADOR`, `EN_CURSO`, `FINALIZADO`) a formato legible en sentence case ("Borrador", "En curso", "Finalizado") sin forzar transformaciones mayúsculas en CSS (`.badge`).
+  - **Regla de CTA Único Primario:** Unificación de acciones de cabecera con un único botón primario sólido (`btn-primary`, ej. *"Día de Torneo"* o *"Iniciar Torneo"*), acciones secundarias neutras en estilo ghost (`btn-ghost`) y confinamiento de la acción destructiva *"Reiniciar Torneo"* a un menú overflow desplegable (`⋮`, `MoreVertical`) con click-outside y toque táctil seguro.
+  - **Reducción de Ruido Visual en Categorías:** El chip de estado de la categoría se oculta si coincide con el estado global del torneo (`cat.estado !== torneo.estado`), reservando el badge verde únicamente para discrepancias relevantes. El botón destructivo de eliminar categoría permanece invisible (opacidad 0) hasta que el cursor hace hover o el foco de teclado entra a la tarjeta (`:focus-within` y mobile touch fallback), estandarizando su hit-area con borde sutil consistente.
+  - **Estilo Outline y Micro-Progreso:** Botón *"Administrar"* estilizado en outline (`.btn-outline`) con saturación y borde verde desaturados para no rivalizar con el badge de estado ni con el CTA primario. Incorporación de mini barra de progreso deportiva (`.progress-bar-mini`, 4px verde esmeralda con glow) unida a la métrica de partidos jugados.
+  - **Accesibilidad Global (`:focus-visible`):** Contorno de navegación por teclado accesible y visible sin alterar clics de mouse.
+- **Blindaje y Soporte Dual de Vista Pública (`/torneo/:slug` y `/torneos/:slug`):**
+  - Enrutamiento dual en `App.jsx` que atiende indistintamente rutas en singular o plural, evitando pantallas en blanco por errores tipográficos o enlaces compartidos desde *"Día de Torneo"*.
+  - Inclusión de estilos de cuadros eliminatorios (`EliminatoriaView.css`) en `TorneoPublic.jsx`, garantizando que llaves, columnas y tarjetas se rendericen con su diseño premium completo en cualquier pestaña nueva o ventana privada.
+  - Fallback visual para categorías vacías sin zonas ni eliminatorias y unificación de navegación vía `<Link>`.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo

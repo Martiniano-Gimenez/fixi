@@ -716,9 +716,37 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+## 28. Refactor UI/UX de Detalle de Torneo, Jerarquía Visual y Blindaje de Vista Pública
+
+### Refactorización de Jerarquía Visual en Panel de Torneo y Robustecimiento de Vista Pública
+- **Problema o necesidad que motivó el trabajo:**
+  1. **Sobrecarga y competencia de jerarquías en `TorneoDetail.jsx`:** La cabecera del torneo presentaba múltiples botones con estilos llamativos compitiendo por atención; la acción destructiva *"Reiniciar Torneo"* estaba expuesta directamente en la barra principal; cada tarjeta de categoría repetía un botón primario sólido *"Administrar"*, badges de estado redundantes (aunque coincidieran con el torneo) y un botón de eliminación de categoría permanentemente visible con riesgo de clic accidental.
+  2. **Valores crudos de enum en UI:** Los valores `BORRADOR`, `EN_CURSO` y `FINALIZADO` se mostraban en mayúsculas sin formato amigable para el usuario.
+  3. **Fallas en la Vista Pública:** Al ingresar a la vista pública desde *"Día de Torneo"* o ingresando la URL en plural (`/torneos/:slug`), la aplicación renderizaba una pantalla en blanco debido a una discrepancia de rutas con `App.jsx`. Asimismo, la vista pública no importaba la hoja de estilos de llaves (`EliminatoriaView.css`), provocando que los cuadros eliminatorios se vieran deformados, sin columnas y con líneas SVG cruzadas al abrir el enlace público en pestañas nuevas.
+- **Qué decidí y por qué:**
+  1. **Helper de Mapeo de Estados Legibles (`estadoLabels.js`):** Se creó un helper centralizado para transformar enums a *sentence case* ("Borrador", "En curso", "Finalizado") y se removió la regla CSS `text-transform: uppercase` de `.badge` para respetar el diseño editorial.
+  2. **Regla de CTA Único Primario:** Se reservó el estilo sólido `btn-primary` para la única acción principal de avance del torneo (*"Día de Torneo"* o *"Iniciar Torneo"*). Las acciones complementarias pasaron a estilo `btn-ghost`.
+  3. **Menú Overflow `⋮` para Acciones Destructivas:** Se confinó la acción *"Reiniciar Torneo"* dentro de un menú desplegable contextual (`MoreVertical`) con cierre automático al hacer clic afuera (click-outside tanto con `mousedown` como con `touchstart` para soporte móvil táctil). Se descartó abstraerlo prematuramente a un componente genérico para no violar el principio YAGNI.
+  4. **Badge de Categoría Condicional:** El chip de estado de cada categoría solo se renderiza si difiere del estado global del torneo (`cat.estado !== torneo.estado`), eliminando repeticiones visuales innecesarias.
+  5. **Revelado Progresivo del Botón Eliminar:** Se ocultó por defecto (`opacity: 0`) el botón de eliminar categoría, haciéndolo visible mediante CSS puro en `:hover`, en foco de teclado (`:focus-within`) y fallback en dispositivos táctiles (`@media (hover: none)`), con un área de clic y borde consistentes con el botón *"Bracket"*.
+  6. **Calibración de Estilo Outline y Micro-Progreso:** Se rediseñó el botón *"Administrar"* en estilo outline (`.btn-outline`) con borde y texto en verde desaturado (`rgba(0, 208, 132, 0.4)` / `0.85`), evitando que 4 botones compitan con el chip de estado ni con el CTA primario. Se agregó una mini barra de progreso (`.progress-bar-mini`, 4px verde esmeralda con glow) vinculada directamente a la métrica de partidos jugados con un espaciado compacto (`3px`).
+  7. **Elevación Sutil y Accesibilidad:** Se reemplazó el borde verde llamativo en el hover de las tarjetas por un borde de acero sutil (`rgba(255, 255, 255, 0.18)`), y se incorporó la regla `:focus-visible` global para navegación por teclado.
+  8. **Blindaje de Vista Pública:**
+     - Se añadió la ruta alias `/torneos/:slug` en `App.jsx` en paralelo a `/torneo/:slug`, garantizando que tanto enlaces singulares como plurales resuelvan la vista pública.
+     - Se unificaron los enlaces de navegación usando `<Link>` en `TorneoDetail.jsx` y `TorneoEnVivo.jsx`.
+     - Se importó `EliminatoriaView.css` dentro de `TorneoPublic.jsx`, asegurando la carga de layout, columnas y estilos de brackets en cualquier pestaña nueva o ventana privada.
+     - Se generalizó el fallback visual *"En Preparación"* para cualquier categoría que no posea zonas ni eliminatorias cargadas.
+- **Alternativas consideradas y descartadas:**
+  - *Extraer un componente genérico de Dropdown en `components/`:* Descartado para esta etapa por principio YAGNI; implementarlo localmente en `TorneoDetail.jsx` resuelve la necesidad actual sin inventar abstracciones prematuras con un solo caso de uso.
+  - *Menú ⋮ por cada tarjeta de categoría:* Descartado para no sobrecargar de menús la pantalla; el revelado progresivo del botón eliminar por CSS puro resultó más liviano y limpio.
+  - *Redirección HTTP 301/Navigate para `/torneos/:slug`:* Descartado en favor de registrar ambas rutas con el mismo componente en `App.jsx`, logrando renderizado inmediato sin saltos de URL ni redirecciones intermedias.
+- **Resultado final:** Pantalla de detalle de torneo con jerarquía visual de nivel profesional ("Dark Premium Deportivo"), navegación clara orientada a un único botón de acción primario, cero ruido redundante en categorías, y vista pública 100% blindada y estilizada en fixtures y cuadros eliminatorios.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 27 sesiones de trabajo, sumando un aproximado total de entre 72 y 83 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 28 sesiones de trabajo, sumando un aproximado total de entre 74.5 y 86.5 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -749,6 +777,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 27 s
 | **25** | ~2.5 a 3 horas | Scheduling completo de playoffs al iniciar torneo: auto-asignación de fecha, hora y cancha para todas las rondas (Octavos a Finales) en domingo con descansos de 30 min y prioridad `ordenDomingo`, Dieciseisavos estrictamente sábado por la tardecita/noche, bypass de canchas para BYEs, corrección de `'Sábado'` acentuado, inmutabilidad de orden del domingo tras iniciar torneo (bloqueo 400 y remoción de edición en vivo), reprogramación de torneos existentes en DB y suite de test automatizada (`test-eliminatoria-scheduler-completo.js`). |
 | **26** | ~3 a 3.5 horas | Modo Lluvia independiente por día (Viernes, Sábado y Domingo) con persistencia desacoplada (`canchasOverrides.service.js`), playoffs de domingo con descansos humanos saludables ($\ge 75$ min entre rondas tempranas, 30 a 45 min pre-final), asignación sincronizada en bloque de ronda ("round-block"), ventanas dominicales naturales (Octavos mañana, Cuartos mediodía, Semis tarde, Finales noche), delegación de lluvia de domingo a scheduler de eliminatorias y suite de tests (`test-modo-lluvia-independiente.js`). |
 | **27** | ~2 a 2.5 horas | Sincronización universal por ronda decreciente en Domingo (`[16, 8, 4, 2]`), resolución de finales huérfanas en reducción de canchas, desacople de fases para categorías directas en Cuartos (Suma 7), calibración de descanso Cuartos-Semis a 75 min (1 turno completo de club), buffer de extensión nocturna para finales de campeonato y tolerancia sub-segundo en grilla horaria. |
-| **Total** | **~72 a 83.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y orden de domingo blindado, modo lluvia independiente por día (V/S/D), sincronización universal de rondas dominicales y diseño UI/UX premium. |
+| **28** | ~2.5 a 3 horas | Refactor UI/UX Detalle de Torneo (Jerarquía visual, CTA único, menú overflow ⋮, badges condicionales, progreso mini, estilos outline, focus-visible) y Blindaje Vista Pública (soporte dual de rutas `/torneo` y `/torneos`, bracket CSS en vista pública). |
+| **Total** | **~74.5 a 86.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y orden de domingo blindado, modo lluvia independiente por día (V/S/D), sincronización universal de rondas dominicales, refactor UI/UX deportivo de alta jerarquía y blindaje integral de vista pública. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
