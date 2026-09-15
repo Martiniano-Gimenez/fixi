@@ -119,6 +119,15 @@ input, select, textarea {
   font-size: inherit;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: invert(1);
   opacity: 0.5;
@@ -526,9 +535,9 @@ ul, ol {
 }
 
 .torneo-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--color-primary);
-  box-shadow: 0 10px 20px rgba(0,0,0,0.4), 0 0 10px var(--color-accent-glow);
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .torneo-card h3 {
@@ -544,8 +553,17 @@ ul, ol {
 
 /* Botón de eliminar categoría en card — visibilidad sutil / en hover */
 .torneo-card .cat-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.65rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  cursor: pointer;
   opacity: 0;
-  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  transition: opacity var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
 }
 
 .torneo-card:hover .cat-delete-btn,
@@ -553,9 +571,20 @@ ul, ol {
   opacity: 1;
 }
 
+.torneo-card .cat-delete-btn:hover {
+  border-color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-danger-hover);
+}
+
+.torneo-card .cat-delete-btn:focus-visible {
+  outline: 2px solid var(--color-danger);
+  outline-offset: 2px;
+}
+
 @media (hover: none), (pointer: coarse), (max-width: 768px) {
   .torneo-card .cat-delete-btn {
-    opacity: 0.5;
+    opacity: 0.6;
   }
   .torneo-card .cat-delete-btn:active {
     opacity: 1;
