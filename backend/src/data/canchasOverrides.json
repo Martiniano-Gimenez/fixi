@@ -1,0 +1,21 @@
+{
+  "85275898-76fb-4097-aa21-c636f998fcdb": {
+    "2026-09-18": {
+      "canchas": 4,
+      "isLluvia": true,
+      "activoDesde": "2026-09-18T21:00:00.000Z"
+    },
+    "2026-09-19": {
+      "canchas": 4,
+      "isLluvia": true,
+      "activoDesde": "2026-09-19T12:30:00.000Z"
+    }
+  },
+  "33869187-c4bf-43f8-8066-d5ee17018225": {
+    "2026-09-18": {
+      "canchas": 4,
+      "isLluvia": true,
+      "activoDesde": "2026-09-18T21:00:00.000Z"
+    }
+  }
+}

@@ -372,10 +372,19 @@ export default function TorneoEnVivo() {
     };
   }, [esModoTodo, data, partidosEnCursoFiltrados, proximosFiltrados, finalizadosFiltrados, esSabado, horariosClub, activeTabDay]);
 
-  // Determinar si el tab actualmente visible es el afectado por el override
-  const isTabBajoOverride = isLluviaActive && (!torneo?.overrideDiaKey || esModoTodo || activeTabDay === torneo?.overrideDiaKey);
-  // Canchas activas contextuales al tab de día seleccionado
-  const canchasActivasContextuales = isTabBajoOverride ? canchasActivas : canchasClub;
+  // Datos contextuales del día activo en el modelo independiente por jornada
+  const diaInfoContextual = (activeTabDay && data?.canchasPorDia?.[activeTabDay]) || null;
+  const anyDayHasLluvia = Object.values(data?.canchasPorDia || {}).some((d) => d && d.isLluvia) || isLluviaActive;
+
+  // Determinar si la solapa actualmente visible está bajo modo lluvia
+  const isTabBajoOverride = diaInfoContextual
+    ? Boolean(diaInfoContextual.isLluvia)
+    : (isLluviaActive && (!torneo?.overrideDiaKey || esModoTodo || activeTabDay === torneo?.overrideDiaKey));
+
+  // Canchas activas contextuales a la solapa de día seleccionada
+  const canchasActivasContextuales = diaInfoContextual
+    ? diaInfoContextual.canchas
+    : (isTabBajoOverride ? canchasActivas : canchasClub);
 
   const prevTabDayRef = useRef(activeTabDay);
 
@@ -632,6 +641,14 @@ export default function TorneoEnVivo() {
                 )}
                 <span>{jornada.label}</span>
 
+                {data?.canchasPorDia?.[jornada.key]?.isLluvia && (
+                  <CloudRain
+                    size={14}
+                    style={{ color: '#60a5fa' }}
+                    title={`Modo Lluvia activo (${data.canchasPorDia[jornada.key].canchas}/${canchasClub} canchas)`}
+                  />
+                )}
+
                 {/* Indicador de partidos en juego */}
                 {hasLive && (
                   <span
@@ -809,9 +826,9 @@ export default function TorneoEnVivo() {
                   }}
                 >
                   <CloudRain size={13} />
-                  Modo Lluvia ({torneo.overrideActivoDesde ? formatDiaHorario(torneo.overrideActivoDesde) : 'Activo'})
+                  Modo Lluvia ({diaInfoContextual?.activoDesde ? formatDiaHorario(diaInfoContextual.activoDesde) : (torneo.overrideActivoDesde ? formatDiaHorario(torneo.overrideActivoDesde) : 'Activo')})
                 </span>
-              ) : isLluviaActive ? (
+              ) : anyDayHasLluvia ? (
                 <span
                   style={{
                     display: 'inline-flex',
@@ -850,11 +867,11 @@ export default function TorneoEnVivo() {
               )}
             </div>
             <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0 }}>
-              {isLluviaActive
-                ? isTabBajoOverride
-                  ? 'Partidos de esta jornada reprogramados sobre las canchas disponibles.'
-                  : 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'
-                : 'Todas las canchas del club habilitadas.'}
+              {isTabBajoOverride
+                ? 'Partidos de esta jornada reprogramados sobre las canchas disponibles.'
+                : anyDayHasLluvia
+                  ? 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'
+                  : 'Todas las canchas del club habilitadas.'}
             </p>
           </div>
 

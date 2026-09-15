@@ -13,6 +13,8 @@ const {
   slotIdToMsWindow,
   asignarHorariosModoLluviaMCF,
 } = require('./zona.service');
+const canchasOverridesService = require('./canchasOverrides.service');
+const { programarHorariosEliminatorias } = require('./eliminatoriaScheduler.service');
 
 // Cache de planes validados en memoria para inicio determinista
 const planesCache = new Map();
@@ -32,7 +34,13 @@ setInterval(() => {
   }
 }, 60_000);
 
-function getCanchasEfectivas(torneo, organizador) {
+function getCanchasEfectivas(torneo, organizador, diaKey = null) {
+  if (diaKey && torneo?.id) {
+    const diaOverride = canchasOverridesService.getCanchasDia(torneo.id, diaKey, organizador?.cantidadCanchas || 1);
+    if (diaOverride && diaOverride.canchas) {
+      return Math.min(Number(diaOverride.canchas), organizador?.cantidadCanchas || 1);
+    }
+  }
   if (torneo && torneo.canchasDisponiblesOverride != null) {
     return Math.min(torneo.canchasDisponiblesOverride, organizador?.cantidadCanchas || 1);
   }
@@ -1910,14 +1918,15 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         pendientesSinHorarioCount++;
       } else if (p.fechaHora) {
         pendientesConHorarioCount++;
-        // Verificar si quedó en cancha fantasma (cancha > canchasActivas)
-        // Solo marcar como fantasma si el partido pertenece al día lógico bajo override (o si no hay override definido)
+        // Verificar si quedó en cancha fantasma (cancha > canchasActivas del día respectivo)
         const partidoDiaKey = p.fechaHora
           ? getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key
           : null;
-        const esDelDiaOverride = !overrideDiaKey || partidoDiaKey === overrideDiaKey;
+        const diaPartidoOverride = partidoDiaKey ? canchasOverridesService.getCanchasDia(torneoId, partidoDiaKey, canchasClub) : null;
+        const canchasMaxDia = diaPartidoOverride ? diaPartidoOverride.canchas : canchasClub;
+        const esDelDiaLluvia = diaPartidoOverride ? diaPartidoOverride.isLluvia : false;
 
-        if (p.canchaNumero && p.canchaNumero > canchasActivas && esDelDiaOverride) {
+        if (p.canchaNumero && p.canchaNumero > canchasMaxDia && esDelDiaLluvia) {
           partidosEnCanchaFantasmaList.push({
             ...formatted,
             motivo: 'Partido anterior al override en cancha inhabilitada',
@@ -1926,6 +1935,66 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
           proximosPartidosList.push(formatted);
         }
       }
+    }
+  }
+
+  // Construir mapa de canchas independientes por jornada (canchasPorDia)
+  const overridesTorneo = canchasOverridesService.getOverridesTorneo(torneoId);
+  const canchasPorDia = {};
+
+  // 1. Cargar días canónicos a partir de torneo.fecha (Viernes, Sábado, Domingo)
+  if (torneo.fecha) {
+    const refFecha = new Date(torneo.fecha);
+    if (!isNaN(refFecha.getTime())) {
+      for (let i = 0; i < 3; i++) {
+        const d = new Date(refFecha.getTime() + i * 24 * 3600 * 1000);
+        const info = getDiaCalendarioConTrasnoche(d, horariosClubObj);
+        if (info && !canchasPorDia[info.key]) {
+          const ov = overridesTorneo[info.key];
+          canchasPorDia[info.key] = {
+            canchas: ov && ov.canchas ? Number(ov.canchas) : canchasClub,
+            isLluvia: Boolean(ov && ov.isLluvia),
+            activoDesde: ov ? ov.activoDesde : null,
+          };
+        }
+      }
+    }
+  }
+
+  // 2. Incluir cualquier día que tenga override explícito en JSON
+  for (const [diaK, ov] of Object.entries(overridesTorneo)) {
+    if (!canchasPorDia[diaK]) {
+      canchasPorDia[diaK] = {
+        canchas: ov && ov.canchas ? Number(ov.canchas) : canchasClub,
+        isLluvia: Boolean(ov && ov.isLluvia),
+        activoDesde: ov ? ov.activoDesde : null,
+      };
+    }
+  }
+
+  // 3. Incluir días con partidos existentes
+  for (const p of partidos) {
+    if (p.fechaHora) {
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj);
+      if (info && !canchasPorDia[info.key]) {
+        const ov = overridesTorneo[info.key];
+        canchasPorDia[info.key] = {
+          canchas: ov && ov.canchas ? Number(ov.canchas) : canchasClub,
+          isLluvia: Boolean(ov && ov.isLluvia),
+          activoDesde: ov ? ov.activoDesde : null,
+        };
+      }
+    }
+  }
+
+  // 4. Retrocompatibilidad: si torneo.canchasDisponiblesOverride existe en DB pero no en canchasPorDia
+  if (torneo.canchasDisponiblesOverride != null && overrideDiaKey) {
+    if (!canchasPorDia[overrideDiaKey] || !canchasPorDia[overrideDiaKey].isLluvia) {
+      canchasPorDia[overrideDiaKey] = {
+        canchas: Number(torneo.canchasDisponiblesOverride),
+        isLluvia: true,
+        activoDesde: torneo.overrideActivoDesde ? new Date(torneo.overrideActivoDesde).toISOString() : null,
+      };
     }
   }
 
@@ -1970,6 +2039,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     },
     canchasActivas,
     canchasClub,
+    canchasPorDia,
     canchas,
     partidosEnCurso: partidosEnCursoList,
     partidosEnCanchaFantasma: partidosEnCanchaFantasmaList,
@@ -2089,10 +2159,14 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     ? DIAS_MAP[overrideDiaInfo.logicalDate.getDay()]
     : null;
 
-  // 2. Si no hay cambio en la cantidad de canchas activas y no es una reducción para un día distinto, no hacer nada
-  if (overrideNum === canchasEfectivasActuales && (esRestauracion || esMismoDia)) {
+  const canchasActualesDia = overrideDiaKey
+    ? canchasOverridesService.getCanchasDia(torneoId, overrideDiaKey, canchasClub).canchas
+    : canchasEfectivasActuales;
+
+  // 2. Si no hay cambio en la cantidad de canchas activas para esta jornada específica, no hacer nada
+  if (overrideNum === canchasActualesDia && (esRestauracion || !diaKey || esMismoDia)) {
     return {
-      message: `La cantidad de canchas activas ya es ${overrideNum}.`,
+      message: `La cantidad de canchas activas para ${diaNombre || 'la jornada'} ya es ${overrideNum}.`,
       canchasActivas: overrideNum,
       overrideActivoDesde: torneo.overrideActivoDesde,
       reprogramacion: { ejecutada: false },
@@ -2131,33 +2205,82 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     }
   }
 
+  // 4. Determinar si la jornada afectada es Domingo (eliminatorias/playoffs) o Viernes/Sábado (fase de zonas)
+  const esDomingo = overrideDiaInfo?.logicalDate
+    ? overrideDiaInfo.logicalDate.getDay() === 0
+    : false;
+
   // Ejecutar scheduler y actualización de torneo en una ÚNICA transacción atómica.
   // Si cualquiera de las dos operaciones falla, todo hace rollback sin dejar estados inconsistentes.
   const mcfRes = await prisma.$transaction(async (tx) => {
-    // 4. Ejecutar el Scheduler Continuo MCF dentro de tx (scopeado al día lógico)
-    const res = await asignarHorariosModoLluviaMCF(
-      organizadorId,
-      torneoId,
-      overrideNum,
-      tx,             // externalTx: operaciones sobre db.partido dentro de tx
-      diaOverrideTs   // overrideTimestamp para scopear al día lógico correspondiente
-    );
+    let res;
 
-    // 5. Persistir estado de override en Torneo dentro de la misma tx
-    await tx.torneo.update({
-      where: { id: torneoId },
-      data: {
-        canchasDisponiblesOverride: esRestauracion ? null : overrideNum,
-        overrideActivoDesde: esRestauracion ? null : timestampOverride,
-      },
-    });
+    if (esDomingo) {
+      // En Domingo todas las fases son eliminatorias/playoffs.
+      // Delegamos en programarHorariosEliminatorias con las canchas reducidas y descansos reales.
+      const schedRes = await programarHorariosEliminatorias(
+        organizadorId,
+        torneoId,
+        null,
+        tx,
+        overrideNum
+      );
+      res = {
+        partidosReprogramados: schedRes.partidosAgendados,
+        partidosSinCambio: 0,
+        partidosSinHorarioNuevo: schedRes.partidosSinHorario,
+        cambios: [],
+      };
+    } else {
+      // Viernes o Sábado (zonas): ejecutar el Scheduler Continuo MCF dentro de tx (scopeado al día lógico)
+      res = await asignarHorariosModoLluviaMCF(
+        organizadorId,
+        torneoId,
+        overrideNum,
+        tx,             // externalTx: operaciones sobre db.partido dentro de tx
+        diaOverrideTs   // overrideTimestamp para scopear al día lógico correspondiente
+      );
+    }
+
+    // Actualizar override independiente por día
+    if (esRestauracion) {
+      if (diaKey && overrideDiaKey) {
+        canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey);
+      } else {
+        canchasOverridesService.clearOverridesTorneo(torneoId);
+      }
+    } else if (overrideDiaKey) {
+      canchasOverridesService.setOverrideDia(torneoId, overrideDiaKey, overrideNum, timestampOverride);
+    }
+
+    // Sincronizar estado en Torneo dentro de la misma tx (retrocompatibilidad)
+    if (esRestauracion) {
+      const allOverrides = canchasOverridesService.getOverridesTorneo(torneoId);
+      const activeEntries = Object.values(allOverrides).filter((o) => o && o.isLluvia);
+      const latestRemaining = activeEntries.length > 0 ? activeEntries[activeEntries.length - 1] : null;
+      await tx.torneo.update({
+        where: { id: torneoId },
+        data: {
+          canchasDisponiblesOverride: latestRemaining ? latestRemaining.canchas : null,
+          overrideActivoDesde: latestRemaining ? new Date(latestRemaining.activoDesde) : null,
+        },
+      });
+    } else {
+      await tx.torneo.update({
+        where: { id: torneoId },
+        data: {
+          canchasDisponiblesOverride: overrideNum,
+          overrideActivoDesde: timestampOverride,
+        },
+      });
+    }
 
     return res;
-  }, { timeout: 15000, maxWait: 5000 });
+  }, { timeout: 20000, maxWait: 5000 });
 
   const message = esRestauracion
-    ? `Todas las canchas (${canchasClub}) fueron restauradas. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`
-    : `Canchas reducidas a ${overrideNum}. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`;
+    ? `Todas las canchas (${canchasClub}) fueron restauradas para ${diaNombre || 'la jornada'}. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`
+    : `Canchas reducidas a ${overrideNum} para ${diaNombre || 'la jornada'}. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`;
 
   return {
     message,
@@ -2170,7 +2293,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       partidosReprogramados: mcfRes.partidosReprogramados,
       partidosSinCambio: mcfRes.partidosSinCambio,
       partidosSinHorarioNuevo: mcfRes.partidosSinHorarioNuevo,
-      cambios: mcfRes.cambios,
+      cambios: mcfRes.cambios || [],
     },
   };
 }
