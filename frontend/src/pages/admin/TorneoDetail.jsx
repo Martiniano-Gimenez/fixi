@@ -27,6 +27,7 @@ import {
   X,
   ListOrdered,
   GitBranch,
+  MoreVertical,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
 import CruceResolver from '../../components/CruceResolver';
@@ -328,6 +329,23 @@ export default function TorneoDetail() {
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
   const [ordenDomingoModalOpen, setOrdenDomingoModalOpen] = useState(false);
+  const [menuAccionesOpen, setMenuAccionesOpen] = useState(false);
+  const menuAccionesRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuAccionesOpen) return;
+    const handleClickOutside = (event) => {
+      if (menuAccionesRef.current && !menuAccionesRef.current.contains(event.target)) {
+        setMenuAccionesOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [menuAccionesOpen]);
 
   // Editar Torneo y Fecha
   const [editTorneoModalOpen, setEditTorneoModalOpen] = useState(false);
@@ -936,12 +954,11 @@ export default function TorneoDetail() {
           </div>
 
           {/* Acciones principales */}
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               type="button"
-              className="btn-secondary"
+              className="btn-ghost"
               onClick={handleOpenEditTorneo}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
               title="Editar nombre y fecha del torneo"
             >
               <Edit2 size={15} /> Editar Torneo
@@ -949,25 +966,54 @@ export default function TorneoDetail() {
 
             <button
               type="button"
-              className="btn-secondary"
+              className="btn-ghost"
               onClick={handleCopyLink}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
               title="Copiar link público para compartir con jugadores"
             >
               {copiado ? <Check size={16} style={{ color: 'var(--color-primary)' }} /> : <Copy size={16} />}
-              {copiado ? 'Link Copiado!' : 'Copiar Link Público'}
+              {copiado ? 'Link Copiado!' : 'Copiar Link'}
             </button>
 
             <a
               href={`/torneo/${torneo.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', textDecoration: 'none' }}
+              className="btn-ghost"
               title="Abrir vista pública en nueva pestaña"
             >
               <Eye size={16} /> Ver Público
             </a>
+
+            {torneo.estado !== 'BORRADOR' && (
+              <div className="actions-menu" ref={menuAccionesRef}>
+                <button
+                  type="button"
+                  className={`actions-menu-btn ${menuAccionesOpen ? 'active' : ''}`}
+                  onClick={() => setMenuAccionesOpen((prev) => !prev)}
+                  title="Más opciones"
+                  aria-label="Más opciones"
+                  aria-expanded={menuAccionesOpen}
+                >
+                  <MoreVertical size={16} />
+                </button>
+
+                {menuAccionesOpen && (
+                  <div className="actions-menu-panel" role="menu">
+                    <button
+                      type="button"
+                      className="actions-menu-item danger"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuAccionesOpen(false);
+                        setReiniciarModalOpen(true);
+                      }}
+                    >
+                      <RotateCcw size={15} /> Reiniciar Torneo
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {torneo.estado === 'EN_CURSO' && (
               <Link
@@ -1006,24 +1052,6 @@ export default function TorneoDetail() {
                     <Play size={16} /> Iniciar Torneo y Asignar Horarios
                   </>
                 )}
-              </button>
-            )}
-
-            {torneo.estado !== 'BORRADOR' && (
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setReiniciarModalOpen(true)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  width: 'auto',
-                  borderColor: 'rgba(239, 68, 68, 0.4)',
-                  color: 'var(--color-danger)',
-                }}
-              >
-                <RotateCcw size={16} /> Reiniciar Torneo
               </button>
             )}
           </div>
