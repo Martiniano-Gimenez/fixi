@@ -1223,8 +1223,9 @@ export default function TorneoDetail() {
 
                   <button
                     type="button"
-                    className="btn-danger"
+                    className="btn-danger cat-delete-btn"
                     title="Eliminar categoría"
+                    aria-label={`Eliminar categoría ${cat.nombre}`}
                     onClick={() => setCategoriaAEliminar(cat)}
                     style={{
                       padding: '0.45rem 0.6rem',

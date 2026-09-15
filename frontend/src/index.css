@@ -542,6 +542,23 @@ ul, ol {
   margin-bottom: var(--space-4);
 }
 
+/* Botón de eliminar categoría en card — visibilidad sutil / en hover */
+.torneo-card .cat-delete-btn {
+  opacity: 0;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.torneo-card:hover .cat-delete-btn,
+.torneo-card:focus-within .cat-delete-btn {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .torneo-card .cat-delete-btn {
+    opacity: 0.45;
+  }
+}
+
 .badge {
   display: inline-block;
   padding: var(--space-1) var(--space-3);
