@@ -1259,8 +1259,8 @@ export default function TorneoEnVivo() {
         </div>
       )}
 
-      {/* ─── 5. Cuadros Eliminatorios (Brackets) ────────────────────── */}
-      {((data.categorias && data.categorias.length > 0) || (data.categoriasListasParaEliminatoria && data.categoriasListasParaEliminatoria.length > 0)) && (
+      {/* ─── 5. Cuadros Eliminatorios (Brackets) — Solo Domingo o Todo el Torneo ─── */}
+      {!esViernes && !esSabado && ((data.categorias && data.categorias.length > 0) || (data.categoriasListasParaEliminatoria && data.categoriasListasParaEliminatoria.length > 0)) && (
         <div
           style={{
             background: esDomingo
@@ -1289,19 +1289,11 @@ export default function TorneoEnVivo() {
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
                   {esDomingo
                     ? 'Cuadros Eliminatorios — Definición del Domingo'
-                    : esSabado
-                    ? 'Cuadros Eliminatorios (Definición de Zonas)'
-                    : esViernes
-                    ? 'Cuadros Eliminatorios (Cruces Proyectados)'
                     : 'Cuadros Eliminatorios (Brackets)'}
                 </h3>
                 <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
                   {esDomingo
                     ? 'Seguimiento de cruces, avance de llaves y campeones del torneo.'
-                    : esSabado
-                    ? 'Al finalizar las zonas de hoy sábado, podés asignar los clasificados para armar el domingo.'
-                    : esViernes
-                    ? 'Cruces proyectados (1° vs 2°). Se completarán con los clasificados al finalizar las zonas.'
                     : 'Visualizá las llaves de cada categoría, el progreso de cruces y la asignación de clasificados.'}
                 </p>
               </div>

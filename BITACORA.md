@@ -618,9 +618,9 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
      - Cálculo de días canónicos asegurando la disponibilidad de las 3 jornadas (Viernes, Sábado y Domingo) a partir de `torneo.fecha`, con conteos de partidos e indicador visual de partidos en juego (pulsing dot).
      - Selección inteligente por defecto según el estado del torneo (apertura automática en la jornada activa de juego).
      - Filtrado integral contextual por día para: canchas activas y Modo Lluvia, resumen estadístico (total, en juego, programados, finalizados, sin horario), lista de partidos en juego, grilla de próximos partidos y acordeón de partidos finalizados.
-     - Enfoque temático: Domingo destaca los **Cuadros Eliminatorios**, Sábado destaca el cierre de zonas y pase a eliminatorias, y Viernes ofrece consulta rápida de cruces proyectados.
+     - Enfoque temático: Se retiraron los cuadros eliminatorios de las solapas de **Viernes** y **Sábado** para mantener esas jornadas enfocadas al 100% en la fase de grupos (zonas), reservando los **Cuadros Eliminatorios** de forma estelar para el **Domingo (Playoffs)** y para la vista panorámica **Todo el Torneo**.
      - Banner de alerta cruzada con salto en 1 clic cuando hay partidos disputándose en una jornada diferente a la activa.
-- **Resultado final:** Cuadros eliminatorios visualizables desde el minuto cero en vistas públicas y privadas, experiencia operativa en Día de Torneo 100% limpia y enfocada por jornada, monitoreo centralizado a 1 clic de distancia y cero fricción de navegación.
+- **Resultado final:** Cuadros eliminatorios visualizables desde el minuto cero en vistas públicas y privadas, experiencia operativa en Día de Torneo 100% limpia y enfocada por jornada (fase de grupos pura en viernes y sábado, playoffs en domingo), monitoreo centralizado a 1 clic de distancia y cero fricción de navegación.
 
 ---
 
