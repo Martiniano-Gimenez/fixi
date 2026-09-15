@@ -1496,32 +1496,6 @@ export default function TorneoEnVivo() {
                       </Link>
                     )}
 
-                    {/* Re-sincronizar opcional como fallback */}
-                    {cat.tieneEliminatoria && (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        disabled={isGenerating}
-                        onClick={() => handleGenerarCruces(cat.id, cat.nombre)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          padding: '0.4rem 0.65rem',
-                          fontSize: 'var(--font-size-xs)',
-                          justifyContent: 'center',
-                        }}
-                        title="Re-sincronizar clasificados de zonas con el bracket"
-                      >
-                        {isGenerating ? (
-                          <Loader2 size={13} className="spin" />
-                        ) : (
-                          <RefreshCw size={13} />
-                        )}
-                        <span>{isGenerating ? 'Sincronizando...' : 'Re-sincronizar'}</span>
-                      </button>
-                    )}
-
                     {!cat.tieneEliminatoria && (
                       <button
                         type="button"
