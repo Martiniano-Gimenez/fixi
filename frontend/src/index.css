@@ -550,7 +550,6 @@ ul, ol {
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.5px;
-  text-transform: uppercase;
   border: 1px solid transparent;
 }
 

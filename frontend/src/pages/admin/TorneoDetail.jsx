@@ -32,6 +32,7 @@ import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEdi
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import OrdenDomingoModal from '../../components/OrdenDomingoModal';
+import { estadoLabel } from '../../utils/estadoLabels';
 
 function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -793,7 +794,7 @@ export default function TorneoDetail() {
                   >
                     <Edit2 size={14} style={{ color: 'var(--color-primary)' }} />
                   </button>
-                  <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
+                  <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{estadoLabel(torneo.estado)}</span>
                 </div>
               ) : (
                 <form
@@ -1115,7 +1116,7 @@ export default function TorneoDetail() {
                           Dom #{cat.ordenDomingo}
                         </span>
                       )}
-                      <span className={`badge badge-${cat.estado.toLowerCase()}`}>{cat.estado}</span>
+                      <span className={`badge badge-${cat.estado.toLowerCase()}`}>{estadoLabel(cat.estado)}</span>
                     </div>
                   </div>
 
