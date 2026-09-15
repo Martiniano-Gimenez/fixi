@@ -1116,7 +1116,9 @@ export default function TorneoDetail() {
                           Dom #{cat.ordenDomingo}
                         </span>
                       )}
-                      <span className={`badge badge-${cat.estado.toLowerCase()}`}>{estadoLabel(cat.estado)}</span>
+                      {cat.estado !== torneo.estado && (
+                        <span className={`badge badge-${cat.estado.toLowerCase()}`}>{estadoLabel(cat.estado)}</span>
+                      )}
                     </div>
                   </div>
 
