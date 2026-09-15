@@ -48,8 +48,11 @@ export default function App() {
             <Route path="torneos/:torneoId/categorias/:id/eliminatoria" element={<EliminatoriaView />} />
           </Route>
 
-          {/* Vista pública */}
+          {/* Vista pública (soporta /torneo/:slug y /torneos/:slug) */}
           <Route path="/torneo/:slug" element={<PublicLayout />}>
+            <Route index element={<TorneoPublic />} />
+          </Route>
+          <Route path="/torneos/:slug" element={<PublicLayout />}>
             <Route index element={<TorneoPublic />} />
           </Route>
         </Routes>

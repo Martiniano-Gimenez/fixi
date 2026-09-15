@@ -4,6 +4,8 @@ import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
 import { Award, AlertTriangle, Users, Trophy, Calendar, RefreshCw, Layers, Clock } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
+import { estadoLabel } from '../../utils/estadoLabels';
+import '../admin/EliminatoriaView.css';
 
 const POLL_INTERVAL = 15000; // 15 seconds
 
@@ -100,7 +102,7 @@ export default function TorneoPublic() {
         </h1>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{torneo.estado}</span>
+          <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{estadoLabel(torneo.estado)}</span>
           <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
             Club: <strong style={{ color: 'var(--color-text)' }}>{torneo.organizador}</strong>
           </span>
@@ -228,7 +230,7 @@ export default function TorneoPublic() {
         <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '2rem' }}>
           No hay información disponible para este torneo aún.
         </div>
-      ) : activeCategoria.estado === 'BORRADOR' && zonas.length === 0 ? (
+      ) : zonas.length === 0 && eliminatoria.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
           <Users size={40} style={{ color: 'var(--color-primary)', marginBottom: '0.75rem', opacity: 0.8 }} />
           <h3>Categoría {activeCategoria.nombre} — En Preparación</h3>

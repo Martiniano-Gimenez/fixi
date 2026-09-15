@@ -549,8 +549,8 @@ export default function TorneoEnVivo() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {torneo.slug && (
-            <a
-              href={`/torneos/${torneo.slug}`}
+            <Link
+              to={`/torneo/${torneo.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-secondary"
@@ -566,7 +566,7 @@ export default function TorneoEnVivo() {
             >
               <ExternalLink size={14} />
               <span>Vista Pública</span>
-            </a>
+            </Link>
           )}
 
           <button

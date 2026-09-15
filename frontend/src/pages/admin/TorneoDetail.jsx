@@ -974,15 +974,15 @@ export default function TorneoDetail() {
               {copiado ? 'Link Copiado!' : 'Copiar Link'}
             </button>
 
-            <a
-              href={`/torneo/${torneo.slug}`}
+            <Link
+              to={`/torneo/${torneo.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-ghost"
               title="Abrir vista pública en nueva pestaña"
             >
               <Eye size={16} /> Ver Público
-            </a>
+            </Link>
 
             {torneo.estado !== 'BORRADOR' && (
               <div className="actions-menu" ref={menuAccionesRef}>
