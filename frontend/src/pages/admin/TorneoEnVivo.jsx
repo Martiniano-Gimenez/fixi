@@ -119,14 +119,14 @@ export default function TorneoEnVivo() {
         setAlertaEliminatoria({
           tipo: 'warning',
           esDieciseisavos: true,
-          mensaje: `Cruces de dieciseisavos generados para "${categoriaNombre}". Al jugarse el sábado a la noche, requieren asignación manual de horario en Partidos Pendientes.`,
+          mensaje: `Clasificados asignados al bracket de "${categoriaNombre}". Al jugarse el sábado a la noche, los dieciseisavos requieren asignación manual de horario en Partidos Pendientes.`,
         });
       } else {
         const cant = res.schedulingResult?.partidosAgendados ?? 0;
         setAlertaEliminatoria({
           tipo: 'success',
           esDieciseisavos: false,
-          mensaje: `¡Cruces generados para "${categoriaNombre}"! ${cant > 0 ? `${cant} partidos de primera ronda fueron agendados automáticamente para el domingo.` : 'Cruces asignados para el domingo.'}`,
+          mensaje: `¡Clasificados asignados para "${categoriaNombre}"! ${cant > 0 ? `${cant} partidos de primera ronda fueron agendados automáticamente para el domingo.` : 'Cruces listos para el domingo.'}`,
         });
       }
       await fetchEnVivoData(true);
@@ -134,7 +134,7 @@ export default function TorneoEnVivo() {
       setAlertaEliminatoria({
         tipo: 'error',
         esDieciseisavos: false,
-        mensaje: err.message || `Error al generar cruces para "${categoriaNombre}".`,
+        mensaje: err.message || `Error al asignar clasificados para "${categoriaNombre}".`,
       });
     } finally {
       setGenerandoCrucesCatId(null);
@@ -974,7 +974,7 @@ export default function TorneoEnVivo() {
                   Fase de Grupos Completada
                 </h3>
                 <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                  Las zonas de las siguientes categorías finalizaron todos sus partidos. Ya podés generar los cruces de eliminatoria.
+                  Las zonas de las siguientes categorías finalizaron todos sus partidos. Ya podés asignar los clasificados al cuadro eliminatorio.
                 </p>
               </div>
             </div>
@@ -1051,11 +1051,11 @@ export default function TorneoEnVivo() {
                   >
                     {isGenerating ? (
                       <>
-                        <Loader2 size={14} className="spin" /> Generando...
+                        <Loader2 size={14} className="spin" /> Asignando...
                       </>
                     ) : (
                       <>
-                        <Zap size={14} /> Generar Cruces
+                        <Zap size={14} /> Asignar Clasificados
                       </>
                     )}
                   </button>

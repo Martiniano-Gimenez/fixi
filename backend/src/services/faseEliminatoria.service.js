@@ -126,7 +126,8 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     const esDieciseisavos = primeraRondaNum >= 32;
     
     const partidosPrimeraRonda = await prisma.partido.findMany({ 
-      where: { faseEliminatoriaId: fasePrimeraRonda.id } 
+      where: { faseEliminatoriaId: fasePrimeraRonda.id },
+      orderBy: { posicionEnRonda: 'asc' },
     });
 
     for (const partido of partidosPrimeraRonda) {
@@ -137,18 +138,34 @@ async function generarEliminatoria(organizadorId, categoriaId) {
       
       if (partido.origenPareja1) {
         const c1 = clasificadasMap.get(partido.origenPareja1);
-        if (c1) updateData.pareja1Id = c1.parejaId;
+        if (c1 && c1.parejaId) updateData.pareja1Id = c1.parejaId;
       }
       
       if (partido.origenPareja2) {
         const c2 = clasificadasMap.get(partido.origenPareja2);
-        if (c2) updateData.pareja2Id = c2.parejaId;
+        if (c2 && c2.parejaId) updateData.pareja2Id = c2.parejaId;
+      }
+
+      // Determinar parejas efectivas tras el update
+      const pareja1Id = updateData.pareja1Id !== undefined ? updateData.pareja1Id : partido.pareja1Id;
+      const pareja2Id = updateData.pareja2Id !== undefined ? updateData.pareja2Id : partido.pareja2Id;
+
+      // Detectar BYE: un slot tiene origen pero la pareja contraria no tiene origen (es BYE)
+      const esBye = (partido.origenPareja1 && !partido.origenPareja2) || 
+                    (!partido.origenPareja1 && partido.origenPareja2);
+      
+      if (esBye && partido.estado !== 'FINALIZADO') {
+        if (pareja1Id && !pareja2Id) {
+          updateData.estado = 'FINALIZADO';
+          updateData.ganadorId = pareja1Id;
+        } else if (pareja2Id && !pareja1Id) {
+          updateData.estado = 'FINALIZADO';
+          updateData.ganadorId = pareja2Id;
+        }
       }
       
+      // Partidos ya finalizados previamente (caso edge de re-ejecución)
       if (partido.estado === 'FINALIZADO') {
-        const pareja1Id = updateData.pareja1Id !== undefined ? updateData.pareja1Id : partido.pareja1Id;
-        const pareja2Id = updateData.pareja2Id !== undefined ? updateData.pareja2Id : partido.pareja2Id;
-        
         if (pareja1Id && !pareja2Id) {
           updateData.ganadorId = pareja1Id;
         } else if (pareja2Id && !pareja1Id) {
@@ -162,7 +179,8 @@ async function generarEliminatoria(organizadorId, categoriaId) {
           data: updateData 
         });
 
-        if (partido.estado === 'FINALIZADO' && updateData.ganadorId) {
+        // Propagar ganador de BYE a la siguiente ronda
+        if (updateData.ganadorId) {
           const { propagarEliminatoria } = require('./partido.service');
           const updatedPartido = { ...partido, ...updateData };
           await propagarEliminatoria(updatedPartido, updateData.ganadorId);
@@ -317,7 +335,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     let estado = 'PENDIENTE';
     let ganadorId = null;
 
-    if (isBye) {
+    if (isBye && gruposFinalizados) {
       estado = 'FINALIZADO';
       if (p1) ganadorId = p1.parejaId;
       if (p2) ganadorId = p2.parejaId;

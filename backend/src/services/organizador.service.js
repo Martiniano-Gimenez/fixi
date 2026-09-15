@@ -1349,6 +1349,19 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
     planesCache.delete(planId);
     preCheckSessions.delete(torneoId);
 
+    // Generar brackets eliminatorios vacíos (estructura con orígenes "1° Zona A", etc.)
+    // para cada categoría iniciada. Los clasificados se asignarán cuando finalicen las zonas.
+    const { generarEliminatoria } = require('./faseEliminatoria.service');
+    for (const cat of resumen) {
+      try {
+        await generarEliminatoria(organizadorId, cat.categoriaId);
+      } catch (err) {
+        // No bloquear el inicio del torneo si algún bracket no se genera
+        // (ej: categoría con una sola zona de 2 parejas sin bracket eliminatorio)
+        console.warn(`[iniciarTorneo] No se pudo generar bracket para "${cat.nombre}": ${err.message}`);
+      }
+    }
+
     return {
       message: 'Torneo iniciado y horarios asignados exitosamente.',
       categoriasIniciadas: resumen,
