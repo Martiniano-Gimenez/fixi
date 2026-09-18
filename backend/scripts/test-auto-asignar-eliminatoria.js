@@ -33,7 +33,6 @@ async function testAutoAsignacionEliminatoria() {
     data: {
       torneoId: torneo.id,
       nombre: '6ta Varones',
-      ordenDomingo: 1,
       estado: 'EN_CURSO',
     },
   });

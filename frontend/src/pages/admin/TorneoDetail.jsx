@@ -25,14 +25,12 @@ import {
   Activity,
   Edit2,
   X,
-  ListOrdered,
   GitBranch,
   MoreVertical,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
-import OrdenDomingoModal from '../../components/OrdenDomingoModal';
 import { estadoLabel } from '../../utils/estadoLabels';
 
 function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
@@ -328,7 +326,6 @@ export default function TorneoDetail() {
 
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
-  const [ordenDomingoModalOpen, setOrdenDomingoModalOpen] = useState(false);
   const [menuAccionesOpen, setMenuAccionesOpen] = useState(false);
   const menuAccionesRef = useRef(null);
 
@@ -1078,16 +1075,6 @@ export default function TorneoDetail() {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {torneo.estado === 'BORRADOR' && torneo.categorias && torneo.categorias.length > 0 && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setOrdenDomingoModalOpen(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
-            >
-              <ListOrdered size={16} /> Orden del Domingo
-            </button>
-          )}
           <button
             type="button"
             className="btn-primary"
@@ -1139,11 +1126,6 @@ export default function TorneoDetail() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <h3 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{cat.nombre}</h3>
                     <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                      {cat.ordenDomingo !== null && cat.ordenDomingo !== undefined && (
-                        <span className="badge badge-info" title="Prioridad de arranque del domingo">
-                          Dom #{cat.ordenDomingo}
-                        </span>
-                      )}
                       {cat.estado !== torneo.estado && (
                         <span className={`badge badge-${cat.estado.toLowerCase()}`}>{estadoLabel(cat.estado)}</span>
                       )}
@@ -2066,16 +2048,6 @@ export default function TorneoDetail() {
             </div>
           </div>
         </div>
-      )}
-
-      {ordenDomingoModalOpen && (
-        <OrdenDomingoModal
-          isOpen={true}
-          torneoId={torneo.id}
-          categorias={torneo.categorias || []}
-          onClose={() => setOrdenDomingoModalOpen(false)}
-          onSaved={() => fetchData()}
-        />
       )}
     </div>
   );

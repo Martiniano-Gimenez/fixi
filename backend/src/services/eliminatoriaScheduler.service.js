@@ -37,7 +37,7 @@ function esPartidoBye(partido, fase, maxRondaCat) {
 /**
  * Auto-asigna horarios y canchas para TODOS los partidos de eliminatorias.
  * - Rondas 16 a 2 (Octavos, Cuartos, Semifinales y Finales) se programan en Domingo
- *   en bloques sincronizados por ronda, respetando ordenDomingo y descansos saludables.
+ *   en bloques sincronizados por ronda, respetando prioridad por cantidad de clasificados y descansos saludables.
  * - Ronda 32 (Dieciseisavos) se programa el Sábado por la noche (20:45 o post-zonas).
  * - Maneja reducciones de canchas (Modo Lluvia en domingo) respetando partidos en curso/finalizados.
  * 
@@ -71,6 +71,7 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
     include: {
       categorias: {
         include: {
+          zonas: { select: { clasifican: true } },
           fasesEliminatorias: {
             orderBy: { ronda: 'desc' },
             include: {
@@ -130,13 +131,13 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
   const MIN_REST_SEMIS_FINAL_MS = 30 * 60 * 1000; // Pre-final: 30 a 45 min
   const DESIRED_REST_SEMIS_FINAL_MS = 45 * 60 * 1000;
 
-  // 1. Filtrar y ordenar categorías prioritariamente por ordenDomingo
+  // 1. Filtrar y ordenar categorías prioritariamente por cantidadParejasClasificadas (DESC)
   const catsToSchedule = torneo.categorias
     .filter((cat) => (!categoriaId || cat.id === categoriaId) && cat.fasesEliminatorias && cat.fasesEliminatorias.length > 0)
     .sort((a, b) => {
-      const ordA = a.ordenDomingo ?? 999;
-      const ordB = b.ordenDomingo ?? 999;
-      if (ordA !== ordB) return ordA - ordB;
+      const clasA = (a.zonas || []).reduce((s, z) => s + (z.clasifican || 0), 0);
+      const clasB = (b.zonas || []).reduce((s, z) => s + (z.clasifican || 0), 0);
+      if (clasB !== clasA) return clasB - clasA;
       const nombreComp = (a.nombre || '').localeCompare(b.nombre || '');
       if (nombreComp !== 0) return nombreComp;
       return a.id.localeCompare(b.id);
@@ -336,10 +337,12 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
         if (!aHasParent && bHasParent) return -1;
         if (aHasParent && !bHasParent) return 1;
       }
-      const ordA = a.ordenDomingo ?? 999;
-      const ordB = b.ordenDomingo ?? 999;
-      if (ordA !== ordB) return ordA - ordB;
-      return (a.nombre || '').localeCompare(b.nombre || '');
+      const clasA = (a.zonas || []).reduce((s, z) => s + (z.clasifican || 0), 0);
+      const clasB = (b.zonas || []).reduce((s, z) => s + (z.clasifican || 0), 0);
+      if (clasB !== clasA) return clasB - clasA;
+      const nombreComp = (a.nombre || '').localeCompare(b.nombre || '');
+      if (nombreComp !== 0) return nombreComp;
+      return a.id.localeCompare(b.id);
     });
 
     for (const cat of catsForRound) {
@@ -585,6 +588,202 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
           }
         }
         blockAssigned = allIndividualAssigned;
+      }
+    }
+
+    // Paso 5.b: Backfill inteligente dentro de la misma ronda (Misma ronda, sin romper bloques ni descansos)
+    // Si quedaron canchas libres en turnos tempranos y hay partidos de esta misma ronda programados más tarde,
+    // se adelantan de manera determinística verificando descanso individual de parejas y dependencias de cruces.
+    let huboCambioBackfill = true;
+    while (huboCambioBackfill) {
+      huboCambioBackfill = false;
+
+      // Partidos asignados en domingo para esta ronda
+      const partidosRonda = [];
+      for (const cat of catsToSchedule) {
+        const fase = cat.fasesEliminatorias.find((f) => f.ronda === rondaTarget);
+        if (!fase) continue;
+        for (const p of fase.partidos) {
+          const sched = matchScheduleMap.get(`${cat.id}:${rondaTarget}:${p.posicionEnRonda}`);
+          if (sched && sched.fechaHora && sched.canchaNumero && sched.startMs >= domDayStartMs) {
+            partidosRonda.push({
+              partido: p,
+              categoria: cat,
+              fase,
+              startMs: sched.startMs,
+              endMs: sched.endMs,
+              canchaNumero: sched.canchaNumero,
+            });
+          }
+        }
+      }
+
+      if (partidosRonda.length === 0) break;
+
+      // Recolectar todos los turnos del domingo donde juega esta misma ronda en el torneo (incluyendo otras categorías ya agendadas)
+      const allSlotsSet = new Set(partidosRonda.map((p) => p.startMs));
+      for (const cat of torneo.categorias) {
+        const fase = cat.fasesEliminatorias?.find((f) => f.ronda === rondaTarget);
+        if (!fase) continue;
+        for (const p of fase.partidos) {
+          const sched = matchScheduleMap.get(`${cat.id}:${rondaTarget}:${p.posicionEnRonda}`);
+          if (sched?.fechaHora && sched.startMs >= domDayStartMs) {
+            allSlotsSet.add(sched.startMs);
+          } else if (p.fechaHora) {
+            const pTime = new Date(p.fechaHora).getTime();
+            if (pTime >= domDayStartMs && pTime < domDayEndMs) {
+              allSlotsSet.add(pTime);
+            }
+          }
+        }
+      }
+      const slotsRonda = Array.from(allSlotsSet).sort((a, b) => a - b);
+
+      for (const slotTime of slotsRonda) {
+        const partidosEnSlot = partidosRonda.filter((p) => p.startMs === slotTime);
+
+        for (let c = 1; c <= cantidadCanchas; c++) {
+          if (!isCourtFree(sundayCourtTimelines, c, slotTime, slotTime + DURACION_MS)) continue;
+
+          // Cancha c libre en slotTime.
+          // Buscar candidatos de esta misma ronda programados en turnos posteriores (cand.startMs > slotTime)
+          const candidatos = partidosRonda.filter((cand) => {
+            if (cand.startMs <= slotTime) return false;
+
+            // Para rondas menores a 16 (Cuartos, Semis, Finales), proteger bloques unificados:
+            // Solo permitir adelantar si la categoría ya juega fraccionada en múltiples turnos en esta ronda
+            if (rondaTarget < 16) {
+              const turnosCat = new Set(
+                partidosRonda
+                  .filter((m) => m.categoria.id === cand.categoria.id)
+                  .map((m) => m.startMs)
+              );
+              if (turnosCat.size <= 1) return false;
+            }
+
+            return true;
+          });
+
+          // Criterio de ordenamiento determinístico:
+          // 1. Cantidad de clasificados de la categoría DESC
+          // 2. Nombre de la categoría ASC
+          // 3. posicionEnRonda ASC
+          // 4. ID del partido ASC
+          candidatos.sort((a, b) => {
+            const clasA = (a.categoria.zonas || []).reduce((s, z) => s + (z.clasifican || 0), 0);
+            const clasB = (b.categoria.zonas || []).reduce((s, z) => s + (z.clasifican || 0), 0);
+            if (clasB !== clasA) return clasB - clasA;
+
+            const nomComp = (a.categoria.nombre || '').localeCompare(b.categoria.nombre || '');
+            if (nomComp !== 0) return nomComp;
+
+            if (a.partido.posicionEnRonda !== b.partido.posicionEnRonda) {
+              return a.partido.posicionEnRonda - b.partido.posicionEnRonda;
+            }
+            return a.partido.id.localeCompare(b.partido.id);
+          });
+
+          for (const cand of candidatos) {
+            const p = cand.partido;
+            const cat = cand.categoria;
+            const fase = cand.fase;
+
+            // 1. Validar descanso individual con ronda previa (si tiene padre, ej. Dieciseisavos sábado)
+            const parentRonda = fase.ronda * 2;
+            const hasParent = cat.fasesEliminatorias.some((f) => f.ronda === parentRonda);
+            let parentRestOk = true;
+
+            if (hasParent) {
+              const parentKey1 = `${cat.id}:${parentRonda}:${2 * p.posicionEnRonda - 1}`;
+              const parentKey2 = `${cat.id}:${parentRonda}:${2 * p.posicionEnRonda}`;
+              const p1Sched = matchScheduleMap.get(parentKey1);
+              const p2Sched = matchScheduleMap.get(parentKey2);
+              const MIN_ALLOWED_REST = 75 * 60 * 1000;
+              if (p1Sched && p1Sched.endMs && slotTime < p1Sched.endMs + MIN_ALLOWED_REST) {
+                parentRestOk = false;
+              }
+              if (p2Sched && p2Sched.endMs && slotTime < p2Sched.endMs + MIN_ALLOWED_REST) {
+                parentRestOk = false;
+              }
+            }
+
+            if (!parentRestOk) continue;
+
+            // 2. Validar colisión de parejas en el turno slotTime
+            const colisionEnSlot = partidosEnSlot.some((m) => {
+              const mp = m.partido;
+              return (
+                (mp.pareja1Id && (mp.pareja1Id === p.pareja1Id || mp.pareja1Id === p.pareja2Id)) ||
+                (mp.pareja2Id && (mp.pareja2Id === p.pareja1Id || mp.pareja2Id === p.pareja2Id))
+              );
+            });
+
+            if (colisionEnSlot) continue;
+
+            // 3. Validar descanso individual de las parejas con cualquier otro partido agendado
+            let conflictoDescansoPareja = false;
+            for (const otherCat of catsToSchedule) {
+              for (const otherFase of otherCat.fasesEliminatorias) {
+                for (const otherP of otherFase.partidos) {
+                  if (otherP.id === p.id) continue;
+                  const otherSched = matchScheduleMap.get(`${otherCat.id}:${otherFase.ronda}:${otherP.posicionEnRonda}`);
+                  if (!otherSched || !otherSched.fechaHora) continue;
+
+                  const mismaPareja = (
+                    (p.pareja1Id && (otherP.pareja1Id === p.pareja1Id || otherP.pareja2Id === p.pareja1Id)) ||
+                    (p.pareja2Id && (otherP.pareja1Id === p.pareja2Id || otherP.pareja2Id === p.pareja2Id))
+                  );
+
+                  if (mismaPareja) {
+                    const diff = Math.abs(slotTime - otherSched.startMs);
+                    if (diff < DURACION_MS + 75 * 60 * 1000) {
+                      conflictoDescansoPareja = true;
+                      break;
+                    }
+                  }
+                }
+                if (conflictoDescansoPareja) break;
+              }
+              if (conflictoDescansoPareja) break;
+            }
+
+            if (conflictoDescansoPareja) continue;
+
+            // 4. Aplicar adelanto (Pull Forward)
+            const oldStartMs = cand.startMs;
+            const oldCancha = cand.canchaNumero;
+            const tEnd = slotTime + DURACION_MS;
+
+            // Actualizar sundayCourtTimelines: quitar viejo y agregar nuevo
+            const oldTimeline = sundayCourtTimelines.get(oldCancha) || [];
+            const idxTimeline = oldTimeline.findIndex((t) => t.startMs === oldStartMs);
+            if (idxTimeline !== -1) {
+              oldTimeline.splice(idxTimeline, 1);
+            }
+            sundayCourtTimelines.get(c).push({ startMs: slotTime, endMs: tEnd });
+
+            // Actualizar matchScheduleMap
+            const schedKey = `${cat.id}:${rondaTarget}:${p.posicionEnRonda}`;
+            matchScheduleMap.set(schedKey, {
+              startMs: slotTime,
+              endMs: tEnd,
+              fechaHora: new Date(slotTime),
+              canchaNumero: c,
+              isBye: false,
+            });
+
+            // Actualizar updates
+            const updateItem = updates.find((u) => u.id === p.id);
+            if (updateItem) {
+              updateItem.fechaHora = new Date(slotTime);
+              updateItem.canchaNumero = c;
+              updateItem.sinHorarioAsignado = false;
+            }
+
+            huboCambioBackfill = true;
+            break; // Avanza a la siguiente cancha o slot
+          }
+        }
       }
     }
   }

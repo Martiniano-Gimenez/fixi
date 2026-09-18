@@ -1424,21 +1424,6 @@ export default function TorneoEnVivo() {
                       )}
                     </div>
 
-                    {/* Prioridad Domingo */}
-                    <div style={{ marginBottom: '0.5rem' }}>
-                      {cat.ordenDomingo ? (
-                        <span
-                          className="badge badge-info"
-                          style={{ fontSize: '0.68rem', padding: '0.1rem 0.4rem' }}
-                        >
-                          Domingo: #{cat.ordenDomingo} en arrancar
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: '0.68rem', color: 'var(--color-text-secondary)' }}>
-                          Sin prioridad asignada para el domingo
-                        </span>
-                      )}
-                    </div>
 
                     {/* Progreso de Zonas */}
                     {cat.totalPartidosZona > 0 && (

@@ -48,11 +48,10 @@ model Torneo {
 }
 
 model Categoria {
-  id           String   @id @default(uuid())
-  torneoId     String
-  nombre       String   // "4ta", "6ta", "8va", "5ta Damas", etc.
-  ordenDomingo Int?     // Prioridad de arranque en domingo (1..N)
-  estado       String   @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
+  id        String   @id @default(uuid())
+  torneoId  String
+  nombre    String   // "4ta", "6ta", "8va", "5ta Damas", etc.
+  estado    String   @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

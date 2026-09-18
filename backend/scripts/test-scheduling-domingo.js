@@ -56,13 +56,21 @@ async function runTest() {
   });
   console.log('  ✅ Horarios configurados: 08:00 a 21:00');
 
-  // 2. Crear Categoría 1 (ordenDomingo = 1) con 2 parejas / 2 partidos (Semis)
+  // 2. Crear Categoría 1 (4 clasificados) con 2 parejas / 2 partidos (Semis)
   const cat1 = await prisma.categoria.create({
     data: {
       torneoId: torneo.id,
       nombre: '8va Varones',
-      ordenDomingo: 1,
       estado: 'EN_CURSO',
+    },
+  });
+
+  await prisma.zona.create({
+    data: {
+      categoriaId: cat1.id,
+      nombre: 'Zona 1',
+      formato: 'ROUND_ROBIN',
+      clasifican: 4,
     },
   });
 
@@ -102,13 +110,21 @@ async function runTest() {
     },
   });
 
-  // 3. Crear Categoría 2 (ordenDomingo = 2) con 2 partidos (Semis)
+  // 3. Crear Categoría 2 (2 clasificados) con 2 partidos (Semis)
   const cat2 = await prisma.categoria.create({
     data: {
       torneoId: torneo.id,
       nombre: '7ma Varones',
-      ordenDomingo: 2,
       estado: 'EN_CURSO',
+    },
+  });
+
+  await prisma.zona.create({
+    data: {
+      categoriaId: cat2.id,
+      nombre: 'Zona 1',
+      formato: 'ROUND_ROBIN',
+      clasifican: 2,
     },
   });
 
@@ -164,10 +180,10 @@ async function runTest() {
   }
 
   console.log('\n3. Verificando resultados de asignación de cancha y turno:');
-  console.log(`  Cat 1 (orden 1) - Partido 1: Cancha ${p1_c1_up.canchaNumero} @ ${getHoraLocal(p1_c1_up.fechaHora)}`);
-  console.log(`  Cat 1 (orden 1) - Partido 2: Cancha ${p2_c1_up.canchaNumero} @ ${getHoraLocal(p2_c1_up.fechaHora)}`);
-  console.log(`  Cat 2 (orden 2) - Partido 1: Cancha ${p1_c2_up.canchaNumero} @ ${getHoraLocal(p1_c2_up.fechaHora)}`);
-  console.log(`  Cat 2 (orden 2) - Partido 2: Cancha ${p2_c2_up.canchaNumero} @ ${getHoraLocal(p2_c2_up.fechaHora)}`);
+  console.log(`  Cat 1 (4 clasificados) - Partido 1: Cancha ${p1_c1_up.canchaNumero} @ ${getHoraLocal(p1_c1_up.fechaHora)}`);
+  console.log(`  Cat 1 (4 clasificados) - Partido 2: Cancha ${p2_c1_up.canchaNumero} @ ${getHoraLocal(p2_c1_up.fechaHora)}`);
+  console.log(`  Cat 2 (2 clasificados) - Partido 1: Cancha ${p1_c2_up.canchaNumero} @ ${getHoraLocal(p1_c2_up.fechaHora)}`);
+  console.log(`  Cat 2 (2 clasificados) - Partido 2: Cancha ${p2_c2_up.canchaNumero} @ ${getHoraLocal(p2_c2_up.fechaHora)}`);
 
   // Aserciones exactas:
   // Cancha 1 a las 08:00 para Cat 1 P1
@@ -203,6 +219,7 @@ async function runTest() {
   await prisma.partido.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
   await prisma.faseEliminatoria.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
   await prisma.pareja.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
+  await prisma.zona.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
   await prisma.categoria.deleteMany({ where: { torneoId: torneo.id } });
   await prisma.torneo.delete({ where: { id: torneo.id } });
   await prisma.organizador.delete({ where: { id: organizador.id } });

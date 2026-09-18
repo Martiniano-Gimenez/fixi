@@ -1,10 +1,9 @@
 const prisma = require('../src/lib/prisma');
 const organizadorService = require('../src/services/organizador.service');
-const categoriaService = require('../src/services/categoria.service');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
 
 async function test() {
-  console.log('=== TEST: SCHEDULER COMPLETO DE ELIMINATORIAS Y ORDEN DOMINGO ===\n');
+  console.log('=== TEST: SCHEDULER COMPLETO DE ELIMINATORIAS (PRIORIDAD POR CLASIFICADOS) ===\n');
 
   // 1. Crear organizador y club de prueba con horarios de fin de semana
   const emailOrg = `test-sched-${Date.now()}@padel.test`;
@@ -34,12 +33,11 @@ async function test() {
     },
   });
 
-  // 2. Crear dos categorías: Cat A (ordenDomingo: 1) y Cat B (ordenDomingo: 2)
+  // 2. Crear dos categorías: Cat A y Cat B
   const catA = await prisma.categoria.create({
     data: {
       torneoId: torneo.id,
       nombre: 'Cat A (8 parejas)',
-      ordenDomingo: 1,
       estado: 'BORRADOR',
     },
   });
@@ -48,7 +46,6 @@ async function test() {
     data: {
       torneoId: torneo.id,
       nombre: 'Cat B (8 parejas)',
-      ordenDomingo: 2,
       estado: 'BORRADOR',
     },
   });
@@ -71,38 +68,11 @@ async function test() {
     });
   }
 
-  console.log('1. Probando mutabilidad de ordenDomingo en estado BORRADOR...');
-  const resBorrador = await categoriaService.actualizarOrdenDomingoTorneo(org.id, torneo.id, [
-    { categoriaId: catA.id, ordenDomingo: 2 },
-    { categoriaId: catB.id, ordenDomingo: 1 },
-  ]);
-  console.log('  OrdenDomingo actualizado en BORRADOR exitosamente:', resBorrador.map((c) => `${c.nombre}: ${c.ordenDomingo}`).join(', '));
-
-  // Volvemos a Cat A = 1, Cat B = 2
-  await categoriaService.actualizarOrdenDomingoTorneo(org.id, torneo.id, [
-    { categoriaId: catA.id, ordenDomingo: 1 },
-    { categoriaId: catB.id, ordenDomingo: 2 },
-  ]);
-
-  console.log('\n2. Iniciando torneo multi-categoría...');
+  console.log('1. Iniciando torneo multi-categoría...');
   const inicioRes = await organizadorService.iniciarTorneoMultiCategoria(org.id, torneo.id);
   console.log('  Torneo iniciado:', inicioRes.message);
 
-  console.log('\n3. Probando inmutabilidad de ordenDomingo en estado EN_CURSO...');
-  try {
-    await categoriaService.actualizarOrdenDomingoTorneo(org.id, torneo.id, [
-      { categoriaId: catA.id, ordenDomingo: 2 },
-    ]);
-    throw new Error('FALLO: Permitió modificar ordenDomingo con torneo EN_CURSO!');
-  } catch (err) {
-    if (err.statusCode === 400 && err.message.includes('BORRADOR')) {
-      console.log('  ¡Correcto! Bloqueó modificación con status 400:', err.message);
-    } else {
-      throw err;
-    }
-  }
-
-  console.log('\n4. Verificando que TODOS los cruces de eliminatorias tengan horario y cancha asignados desde el inicio...');
+  console.log('\n2. Verificando que TODOS los cruces de eliminatorias tengan horario y cancha asignados desde el inicio...');
   const partidosEliminatorias = await prisma.partido.findMany({
     where: {
       faseEliminatoriaId: { not: null },
@@ -113,7 +83,7 @@ async function test() {
       categoria: true,
     },
     orderBy: [
-      { categoria: { ordenDomingo: 'asc' } },
+      { categoria: { nombre: 'asc' } },
       { faseEliminatoria: { ronda: 'desc' } },
       { posicionEnRonda: 'asc' },
     ],

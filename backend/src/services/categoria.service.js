@@ -120,53 +120,9 @@ async function updateCategoria(organizadorId, categoriaId, data) {
   if (data.estado !== undefined) {
     updateData.estado = data.estado;
   }
-  if (data.ordenDomingo !== undefined) {
-    updateData.ordenDomingo = (data.ordenDomingo === null || data.ordenDomingo === '')
-      ? null
-      : parseInt(data.ordenDomingo, 10);
-  }
-
   return await prisma.categoria.update({
     where: { id: categoria.id },
     data: updateData,
-  });
-}
-
-async function actualizarOrdenDomingoTorneo(organizadorId, torneoId, ordenes) {
-  const torneo = await prisma.torneo.findUnique({ where: { id: torneoId } });
-  if (!torneo) {
-    const error = new Error('Torneo no encontrado.');
-    error.statusCode = 404;
-    throw error;
-  }
-  if (torneo.organizadorId !== organizadorId) {
-    const error = new Error('No tenés permisos sobre este torneo.');
-    error.statusCode = 403;
-    throw error;
-  }
-
-  if (torneo.estado !== 'BORRADOR') {
-    const error = new Error('El orden del domingo solo puede definirse antes de iniciar el torneo (estado BORRADOR).');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  return await prisma.$transaction(async (tx) => {
-    for (const item of ordenes) {
-      const val = (item.ordenDomingo === null || item.ordenDomingo === '' || isNaN(Number(item.ordenDomingo)))
-        ? null
-        : parseInt(item.ordenDomingo, 10);
-      await tx.categoria.update({
-        where: { id: item.categoriaId },
-        data: { ordenDomingo: val },
-      });
-    }
-
-    return await tx.categoria.findMany({
-      where: { torneoId },
-      select: { id: true, nombre: true, ordenDomingo: true },
-      orderBy: { nombre: 'asc' },
-    });
   });
 }
 
@@ -219,7 +175,6 @@ module.exports = {
   createCategoria,
   getCategorias,
   updateCategoria,
-  actualizarOrdenDomingoTorneo,
   deleteCategoria,
   reiniciarCategoria,
 };

@@ -23,7 +23,7 @@ async function check() {
 
   console.log(`Torneo: ${impares.nombre} (${impares.id}), Estado: ${impares.estado}`);
   for (const cat of impares.categorias) {
-    console.log(`\nCategoría: ${cat.nombre} (ordenDomingo: ${cat.ordenDomingo})`);
+    console.log(`\nCategoría: ${cat.nombre}`);
     for (const fase of cat.fasesEliminatorias) {
       console.log(`  Ronda ${fase.ronda}: ${fase.partidos.length} partido(s)`);
       for (const p of fase.partidos) {

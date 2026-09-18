@@ -136,19 +136,6 @@ async function setCanchasOverride(req, res, next) {
   }
 }
 
-async function actualizarOrdenDomingo(req, res, next) {
-  try {
-    const organizadorId = getOrgId(req);
-    const torneoId = req.params.id;
-    const { ordenes } = req.body;
-    const categoriaService = require('../services/categoria.service');
-    const result = await categoriaService.actualizarOrdenDomingoTorneo(organizadorId, torneoId, ordenes || []);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-}
-
 module.exports = {
   createTorneo,
   getTorneos,
@@ -162,5 +149,4 @@ module.exports = {
   getCanchasDisponiblesTorneo,
   getEnVivo,
   setCanchasOverride,
-  actualizarOrdenDomingo,
 };

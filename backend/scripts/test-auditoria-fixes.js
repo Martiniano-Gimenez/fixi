@@ -264,8 +264,8 @@ async function main() {
     },
   });
 
-  const catA = await prisma.categoria.create({ data: { torneoId: torneo4.id, nombre: 'Cat A', ordenDomingo: 1, estado: 'EN_CURSO' } });
-  const catB = await prisma.categoria.create({ data: { torneoId: torneo4.id, nombre: 'Cat B', ordenDomingo: 2, estado: 'EN_CURSO' } });
+  const catA = await prisma.categoria.create({ data: { torneoId: torneo4.id, nombre: 'Cat A', estado: 'EN_CURSO' } });
+  const catB = await prisma.categoria.create({ data: { torneoId: torneo4.id, nombre: 'Cat B', estado: 'EN_CURSO' } });
 
   const pA1 = await prisma.pareja.create({ data: { categoriaId: catA.id, jugador1: 'A1', jugador2: 'A2' } });
   const pA2 = await prisma.pareja.create({ data: { categoriaId: catA.id, jugador1: 'A3', jugador2: 'A4' } });

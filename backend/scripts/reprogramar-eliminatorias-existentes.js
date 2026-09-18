@@ -57,7 +57,7 @@ async function main() {
         categoria: true,
       },
       orderBy: [
-        { categoria: { ordenDomingo: 'asc' } },
+        { categoria: { nombre: 'asc' } },
         { faseEliminatoria: { ronda: 'desc' } },
         { posicionEnRonda: 'asc' },
       ],

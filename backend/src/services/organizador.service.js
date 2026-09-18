@@ -1751,7 +1751,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     select: {
       id: true,
       nombre: true,
-      ordenDomingo: true,
       zonas: {
         select: {
           id: true,
@@ -1821,7 +1820,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       categoriasListasParaEliminatoria.push({
         id: cat.id,
         nombre: cat.nombre,
-        ordenDomingo: cat.ordenDomingo,
       });
     }
 
@@ -1841,7 +1839,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     categoriasInfo.push({
       id: cat.id,
       nombre: cat.nombre,
-      ordenDomingo: cat.ordenDomingo,
       totalZonas: cat.zonas?.length || 0,
       totalPartidosZona,
       partidosZonaFinalizados,

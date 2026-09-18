@@ -742,11 +742,59 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   - *Redirección HTTP 301/Navigate para `/torneos/:slug`:* Descartado en favor de registrar ambas rutas con el mismo componente en `App.jsx`, logrando renderizado inmediato sin saltos de URL ni redirecciones intermedias.
 - **Resultado final:** Pantalla de detalle de torneo con jerarquía visual de nivel profesional ("Dark Premium Deportivo"), navegación clara orientada a un único botón de acción primario, cero ruido redundante en categorías, y vista pública 100% blindada y estilizada en fixtures y cuadros eliminatorios.
 
+### Sesión 29: Prioridad Automática de Eliminatorias por Clasificados (Reemplazo de `ordenDomingo`)
+
+- **Objetivo:** Reemplazar el orden de prioridad manual del domingo (`ordenDomingo`) por un criterio objetivo, automático y justo basado en la cantidad de parejas clasificadas a eliminatorias por categoría (`cantidadParejasClasificadas DESC`, desempate alfabético).
+- **Decisiones de diseño:**
+  - A partir del feedback de la dueña del club (quien consideró subjetivo e injusto el orden manual anterior de categorías de menor nivel primero), se evaluaron dos caminos técnicos:
+    - *Opción A:* Mantener `ordenDomingo` persistido con recálculo automático y flag `ordenDomingoManual` para overrides manuales.
+    - *Opción B (elegida):* Reemplazo 100% automático on-the-fly en el scheduler (`sum(zona.clasifican)` DESC por categoría) y eliminación completa de `ordenDomingo`, `OrdenDomingoModal.jsx`, rutas y campos de base de datos.
+  - La Opción B fue elegida por eliminar complejidad innecesaria (sin estado mixto automático vs manual, sin código muerto, sin necesidad de hooks de recálculo al crear o editar zonas, y con ~226 LOC menos en frontend).
+- **Implementación técnica:**
+  1. **Scheduler de Eliminatorias (`eliminatoriaScheduler.service.js`):**
+     - Se añadió `zonas: { select: { clasifican: true } }` a la consulta de categorías del torneo.
+     - Se reemplazó la ordenación por `ordenDomingo` por la suma de clasificados `(a.zonas || []).reduce((s, z) => s + (z.clasifican || 0), 0)` en orden descendente, desempatando alfabéticamente por nombre de categoría y por ID.
+  2. **Esquema de Base de Datos (`schema.prisma`):**
+     - Se removió el campo `ordenDomingo Int?` de la tabla `Categoria`.
+     - Se sincronizó la base de datos con `prisma db push --accept-data-loss`.
+  3. **Backend Cleanups (`torneo.routes.js`, `torneo.controller.js`, `categoria.service.js`, `organizador.service.js`):**
+     - Se eliminó la ruta `PUT /:id/orden-domingo` y el método `actualizarOrdenDomingo` del controller.
+     - Se removió la función `actualizarOrdenDomingoTorneo` y la lectura de `ordenDomingo` en `updateCategoria` (evitando campos fantasmas en payloads).
+     - Se eliminó `ordenDomingo` de las proyecciones de `getEstadoEnVivo` en `organizador.service.js`.
+  4. **Frontend Cleanups (`OrdenDomingoModal.jsx`, `TorneoDetail.jsx`, `TorneoEnVivo.jsx`):**
+     - Se eliminó el componente modal `OrdenDomingoModal.jsx` (226 líneas).
+     - Se removieron los botones y badges "Dom #N" en `TorneoDetail.jsx`.
+     - Se removió la sección "Prioridad Domingo" en `TorneoEnVivo.jsx`.
+  5. **Scripts y Tests Actualizados:**
+     - Se actualizaron `test-eliminatoria-scheduler-completo.js`, `test-auto-asignar-eliminatoria.js`, `test-auditoria-fixes.js`, `test-scheduling-domingo.js`, `reprogramar-eliminatorias-existentes.js` y `check-impares.js` para operar sin `ordenDomingo`.
+     - Todas las suites de tests pasaron al 100%.
+- **Resultado final:** Un sistema de asignación de turnos dominicales matemáticamente justo, libre de sesgos de género o nivel, sin configuración manual requerida por el organizador y con una base de código más limpia y mantenible.
+
+### Sesión 30: Backfill Dirigido en Eliminatorias Dominicales y Preservación de Bloques Sincronizados
+
+- **Objetivo:** Resolver canchas vacías en turnos matutinos de eliminatorias dominicales (ej. Cancha 6 a las 09:15hs) sin romper la sincronización por bloques ni generar disparidad de descansos en las rondas de la tarde.
+- **Problema o necesidad que motivó el trabajo:**
+  1. En torneos con múltiples categorías y 6 canchas (ej. *"Impares Agosto"*), a las 09:15 quedaba la Cancha 6 vacía debido a la distribución natural de partidos (7ma ocupaba 2 canchas y 7ma Damas ocupaba 3), mientras que a las 10:30 y 11:45 había cruces de Octavos de 5ta disponibles para adelantarse.
+  2. Surgió el dilema de diseño entre compactar agresivamente la tarde para llenar canchas (ej. fraccionar los Cuartos de 7ma Damas entre 13:00 y 14:15) vs. preservar la equidad deportiva de bloques sincronizados.
+  3. Se requirió auditar el flujo de asignación automática de clasificados (`verificarYAutoAsignarEliminatoria`) y clarificar la fórmula horaria de debut en Cuartos de categorías sin Octavos (Suma 7 a las 11:45hs).
+- **Qué decidí y por qué:**
+  1. **Backfill Dirigido dentro de la misma ronda (Paso 5.b en `eliminatoriaScheduler.service.js`):**
+     - Se incorporó un algoritmo determinístico de llenado de huecos tempranos que opera dentro de cada ronda dominical (`for (const rondaTarget of allSundayRondas)`).
+     - Si una cancha queda libre en un turno previo (ej. Cancha 6 a las 09:15), busca partidos candidatos de esa misma ronda en turnos posteriores y los adelanta validando descanso individual de parejas ($\ge 75$ min), dependencias parentales y disponibilidad real en la grilla del club.
+  2. **Protección Estricta de Bloques Sincronizados (`rondaTarget < 16`):**
+     - Para Cuartos de Final, Semifinales y Finales, el backfill prohíbe mover partidos si la categoría juega en un bloque único unificado (`turnosCat.size <= 1`).
+     - Se definió como principio de diseño innegociable priorizar el descanso equitativo de los jugadores por sobre la ocupación artificial de canchas intermedias.
+  3. **Aclaración y Documentación de Debut en Cuartos (`domDayStartMs + 3 * DURACION_MS`):**
+     - Se documentó formalmente que las categorías sin Octavos (Suma 7) abren Cuartos a las 11:45hs (`08:00 + 225 min`), aprovechando 4 canchas libres matutinas y gozando de 3h 45m de almuerzo/descanso antes de sus Semifinales (16:45hs), evitando el choque con 5ta a las 14:15hs.
+  4. **Suite de Regresión Permanente (`test-scheduler-backfill-regression.js`):**
+     - Validación automatizada de ocupación 6/6 a las 08:00, 09:15 y 10:30, cascada hacia Cancha 6 y prueba de idempotencia en re-ejecución.
+- **Resultado final:** Erradicación del hueco matutino en eliminatorias con ocupación perfecta al 100% en los 3 primeros turnos (08:00, 09:15 y 10:30 a 6/6 canchas), bloques de Cuartos de Damas y Suma 7 100% sincronizados y preservados, y sistema de pruebas automatizado.
+
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 28 sesiones de trabajo, sumando un aproximado total de entre 74.5 y 86.5 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 30 sesiones de trabajo, sumando un aproximado total de entre 79 y 92 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -778,6 +826,8 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 28 s
 | **26** | ~3 a 3.5 horas | Modo Lluvia independiente por día (Viernes, Sábado y Domingo) con persistencia desacoplada (`canchasOverrides.service.js`), playoffs de domingo con descansos humanos saludables ($\ge 75$ min entre rondas tempranas, 30 a 45 min pre-final), asignación sincronizada en bloque de ronda ("round-block"), ventanas dominicales naturales (Octavos mañana, Cuartos mediodía, Semis tarde, Finales noche), delegación de lluvia de domingo a scheduler de eliminatorias y suite de tests (`test-modo-lluvia-independiente.js`). |
 | **27** | ~2 a 2.5 horas | Sincronización universal por ronda decreciente en Domingo (`[16, 8, 4, 2]`), resolución de finales huérfanas en reducción de canchas, desacople de fases para categorías directas en Cuartos (Suma 7), calibración de descanso Cuartos-Semis a 75 min (1 turno completo de club), buffer de extensión nocturna para finales de campeonato y tolerancia sub-segundo en grilla horaria. |
 | **28** | ~2.5 a 3 horas | Refactor UI/UX Detalle de Torneo (Jerarquía visual, CTA único, menú overflow ⋮, badges condicionales, progreso mini, estilos outline, focus-visible) y Blindaje Vista Pública (soporte dual de rutas `/torneo` y `/torneos`, bracket CSS en vista pública). |
-| **Total** | **~74.5 a 86.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y orden de domingo blindado, modo lluvia independiente por día (V/S/D), sincronización universal de rondas dominicales, refactor UI/UX deportivo de alta jerarquía y blindaje integral de vista pública. |
+| **29** | ~2 a 2.5 horas | Prioridad Automática de Eliminatorias: reemplazo de orden manual del domingo (`ordenDomingo` y `OrdenDomingoModal.jsx`) por cálculo on-the-fly objetivo (`cantidadParejasClasificadas DESC`, desempate alfabético), remoción de columna en Prisma, limpieza de endpoints y actualización de suite de tests. |
+| **30** | ~2.5 a 3 horas | Backfill Dirigido en Eliminatorias Dominicales (Paso 5.b en `eliminatoriaScheduler.service.js`), erradicación del hueco de Cancha 6 a las 09:15hs (6/6 canchas llenas a 08:00, 09:15 y 10:30), protección estricta de bloques sincronizados en Cuartos/Semis/Finales (`rondaTarget < 16`), clarificación y verificación de debut en Cuartos de cuadros sin Octavos (Suma 7 a las 11:45hs) y suite de regresión (`test-scheduler-backfill-regression.js`). |
+| **Total** | **~79 a 92 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía y blindaje integral de vista pública. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
