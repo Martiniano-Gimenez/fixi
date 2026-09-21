@@ -77,7 +77,10 @@ export default function ZonaTable({ zona }) {
                     }}
                   >
                     <td className="col-pos"><span className="pos-number">{index + 1}</span></td>
-                    <td className="col-pareja team-name">
+                    <td 
+                      className="col-pareja team-name"
+                      title={`${zp.pareja.jugador1} / ${zp.pareja.jugador2}`}
+                    >
                       {zp.pareja.jugador1} / {zp.pareja.jugador2}
                     </td>
                     <td className="col-pts text-center stat-pts">{zp.puntos}</td>

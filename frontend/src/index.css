@@ -993,6 +993,11 @@ tr:nth-child(1) .pos-number {
   width: 100%;
 }
 
+.zona-table th,
+.zona-table td {
+  padding: 0.85rem 0.45rem;
+}
+
 .zona-table .th-short {
   display: none;
 }
@@ -1024,34 +1029,46 @@ tr:nth-child(1) .pos-number {
 }
 
 .zona-table .col-pareja {
-  width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 0.6rem;
+  padding-right: 0.6rem;
+}
+
+.zona-table .team-name {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .zona-table .col-pts {
-  width: 50px;
+  width: 48px;
 }
 
 .zona-table .col-pj {
-  width: 44px;
+  width: 40px;
 }
 
 .zona-table .col-pg {
-  width: 44px;
+  width: 40px;
 }
 
 .zona-table .col-pp {
-  width: 44px;
+  width: 40px;
 }
 
 .zona-table .col-sets {
-  width: 68px;
+  width: 70px;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .zona-table .col-games {
-  width: 78px;
+  width: 80px;
+  white-space: nowrap;
+  text-align: center;
 }
 
 @media (max-width: 480px) {
