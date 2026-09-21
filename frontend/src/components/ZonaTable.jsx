@@ -28,12 +28,7 @@ export default function ZonaTable({ zona }) {
 
   return (
     <div className="torneo-card" style={{ marginBottom: '1.5rem' }}>
-      <div className="flex-header" style={{ marginBottom: '1rem' }}>
-        <h3>{zona.nombre}</h3>
-        <span className="badge badge-en_curso">
-          Clasifican {zona.clasifican}
-        </span>
-      </div>
+      <h3 style={{ marginBottom: '1rem' }}>{zona.nombre}</h3>
 
       <div className={`table-responsive-wrapper ${hasOverflow ? 'has-overflow' : ''}`}>
         <div className="table-responsive" ref={tableContainerRef}>
