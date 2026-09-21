@@ -289,7 +289,7 @@ export default function CategoriaDetail() {
                 onUpdateFechaHora={handleUpdateFechaHora}
               />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+              <div className="zona-grid">
                 {/* Tabla de posiciones de la zona */}
                 <div>
                   <h3 style={{ marginBottom: '1rem', fontSize: 'var(--font-size-lg)' }}>
