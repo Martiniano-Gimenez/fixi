@@ -1059,6 +1059,17 @@ tr:nth-child(1) .pos-number {
   width: 40px;
 }
 
+.zona-table td.col-pj,
+.zona-table td.col-pp {
+  color: var(--color-text-secondary);
+}
+
+.zona-table td.col-pg {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
 .zona-table .col-sets {
   width: 70px;
   white-space: nowrap;
