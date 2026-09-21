@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
   Users,
   GitBranch,
-  RotateCcw,
   Settings,
   Trash2,
+  MoreVertical,
+  Eraser,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { estadoLabel } from '../../utils/estadoLabels';
@@ -40,6 +41,23 @@ export default function CategoriaDetail() {
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
   const [zoneEditorOpen, setZoneEditorOpen] = useState(false);
+  const [menuAccionesOpen, setMenuAccionesOpen] = useState(false);
+  const menuAccionesRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuAccionesOpen) return;
+    const handleClickOutside = (event) => {
+      if (menuAccionesRef.current && !menuAccionesRef.current.contains(event.target)) {
+        setMenuAccionesOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [menuAccionesOpen]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -175,19 +193,17 @@ export default function CategoriaDetail() {
           </div>
 
           {/* Acciones principales de la categoría */}
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/parejas`}
-              className="btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', textDecoration: 'none' }}
+              className="btn-outline"
             >
               <Users size={16} /> Parejas ({parejas.length})
             </Link>
 
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/eliminatoria`}
-              className="btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', textDecoration: 'none' }}
+              className="btn-outline"
             >
               <GitBranch size={16} /> Fase Eliminatoria
             </Link>
@@ -196,38 +212,52 @@ export default function CategoriaDetail() {
               <>
                 <button
                   type="button"
-                  className="btn-secondary"
+                  className="btn-outline"
                   onClick={() => setZoneEditorOpen(true)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
                   title="Reestructurar o mover parejas entre zonas"
                 >
                   <Settings size={16} /> Modificar Zonas
                 </button>
 
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setLimpiarModalOpen(true)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
-                >
-                  <RotateCcw size={16} /> Limpiar Resultados
-                </button>
+                <div className="actions-menu" ref={menuAccionesRef}>
+                  <button
+                    type="button"
+                    className={`actions-menu-btn ${menuAccionesOpen ? 'active' : ''}`}
+                    onClick={() => setMenuAccionesOpen((prev) => !prev)}
+                    title="Más opciones"
+                    aria-label="Más opciones"
+                    aria-expanded={menuAccionesOpen}
+                  >
+                    <MoreVertical size={16} />
+                  </button>
 
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setReiniciarModalOpen(true)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    width: 'auto',
-                    borderColor: 'rgba(239, 68, 68, 0.4)',
-                    color: 'var(--color-danger)',
-                  }}
-                >
-                  <Trash2 size={16} /> Reiniciar Categoría
-                </button>
+                  {menuAccionesOpen && (
+                    <div className="actions-menu-panel" role="menu">
+                      <button
+                        type="button"
+                        className="actions-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuAccionesOpen(false);
+                          setLimpiarModalOpen(true);
+                        }}
+                      >
+                        <Eraser size={15} /> Limpiar Resultados
+                      </button>
+                      <button
+                        type="button"
+                        className="actions-menu-item danger"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuAccionesOpen(false);
+                          setReiniciarModalOpen(true);
+                        }}
+                      >
+                        <Trash2 size={15} /> Reiniciar Categoría
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
