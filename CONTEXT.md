@@ -135,6 +135,26 @@ organizadores que hoy llevan todo en papel.
   - Enrutamiento dual en `App.jsx` que atiende indistintamente rutas en singular o plural, evitando pantallas en blanco por errores tipográficos o enlaces compartidos desde *"Día de Torneo"*.
   - Inclusión de estilos de cuadros eliminatorios (`EliminatoriaView.css`) en `TorneoPublic.jsx`, garantizando que llaves, columnas y tarjetas se rendericen con su diseño premium completo en cualquier pestaña nueva o ventana privada.
   - Fallback visual para categorías vacías sin zonas ni eliminatorias y unificación de navegación vía `<Link>`.
+- **Refactor UI/UX y Jerarquía Visual en Detalle de Categoría (`CategoriaDetail.jsx` y `ZonaTable.jsx`):**
+  - **Tabla de Posiciones Deportiva Responsive y Compacta (`ZonaTable.jsx`):**
+    - Eliminación de scroll horizontal innecesario en tablets y pantallas intermedias mediante `table-layout: fixed` con anchos proporcionales y celda de Pareja elástica (`width: auto`, sin truncado artificial con ellipsis para evitar recortes prematuros de nombres como *"Barbieri / Lobos"*).
+    - Compactación calibrada del padding general de celdas (`0.85rem 0.45rem`), liberando más de 180px de ancho neto sin reducir el tamaño tipográfico de los datos.
+    - Columna de posición (`POS`) reducida quirúrgicamente a 32px (`padding: 0.25rem`).
+    - Envolvente de seguridad con `white-space: nowrap` en celdas y encabezados numéricos compuestos (`SETS` y `GAMES`), garantizando que marcadores de dos dígitos (ej. "16 - 14") nunca se quiebren en dos renglones.
+    - Adaptación accesible en pantallas móviles estrechas ($\le 480\text{px}$): encabezados duales con texto semántico para lectores de pantalla (`.sr-only`) y abreviaturas visuales de un solo carácter (`.th-short`, ej. `P`, `J`, `G`, `S`).
+    - Indicador dinámico de desborde horizontal con gradiente fade a la derecha mediante `ResizeObserver` reactivo (`hasOverflow`).
+  - **Colapso Inteligente de Grilla en Anchos Intermedios (`.zona-grid`):**
+    - Punto de quiebre ajustado a 1 columna en $\le 1200\text{px}$ (cubriendo el rango problemático medido empíricamente de 848px a 1192px), permitiendo que en tablets (iPad mini/Air) y laptops en ventana dividida la tabla de posiciones y la lista de partidos se apilen holgadamente sin scroll forzado, manteniendo las 2 columnas solo cuando hay $\ge 1201\text{px}$ de ancho real disponible.
+  - **Jerarquía Visual de Tres Niveles en Estadísticas Deportivas:**
+    - *Nivel 1 (Puntos):* **PTS** destacado en verde esmeralda brillante (`var(--color-primary)`), tamaño agrandado (`1.1rem`) y peso `700`, atrayendo la atención inmediata sobre la métrica clasificatoria reina.
+    - *Nivel 2 (Victorias):* **PG** en blanco puro deportivo de alto contraste (`var(--color-text)`), peso `700`, facilitando identificar a los ganadores al instante.
+    - *Nivel 3 (Métricas Secundarias y Neutras):* **PJ** y **PP** atenuados en gris secundario (`var(--color-text-secondary)`), y columnas de sets y games en texto neutro estándar (`font-weight: 500`), logrando una lectura ágil y sin sobrecarga cognitiva.
+  - **Filas Clasificatorias Sutiles:**
+    - Reemplazo del chip aislado "Clasifican N" por fondo sutil `--color-classify-bg` y borde izquierdo distintivo `--color-classify-border` aplicado directamente sobre las filas de parejas que avanzan al cuadro eliminatorio (`posicion <= clasifican`), integrando la información visualmente de forma orgánica.
+  - **Despeje de Cabecera y Menú Overflow `⋮` (`CategoriaDetail.jsx`):**
+    - Supresión de encabezados redundantes *"Posiciones — Zona {letra}"* y *"Partidos — Zona {letra}"*, conectando directamente las tarjetas con los tabs superiores de selección de zona.
+    - Mapeo de estados legibles mediante `estadoLabel()` ("Borrador", "En curso", "Finalizado").
+    - Reorganización de acciones destructivas/secundarias (*"Limpiar Resultados"*, *"Reiniciar Categoría"*) dentro de un menú contextual desplegable `⋮` (`MoreVertical`) con detector click-outside y toque táctil seguro (`mousedown`/`touchstart`), manteniendo limpia la cabecera.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo

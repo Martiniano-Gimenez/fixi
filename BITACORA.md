@@ -792,9 +792,50 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+### Sesión 31: Refactor UI/UX de Detalle de Categoría y Tabla de Posiciones Deportiva Responsive
+
+- **Objetivo:** Elevar la jerarquía visual y la usabilidad de la pantalla de detalle de categoría (`CategoriaDetail.jsx`) y su tabla de posiciones (`ZonaTable.jsx`), resolviendo problemas funcionales de responsive (scroll horizontal forzado en tablets de 848px a 1192px y desborde en mobile), eliminando textos redundantes, ordenando acciones en menú overflow y aplicando el sistema de diseño "Dark Premium Deportivo" con jerarquía de 3 niveles en estadísticas deportivas.
+- **Problema o necesidad que motivó el trabajo:**
+  1. **Problemas funcionales y responsive en la tabla de posiciones:**
+     - En dispositivos móviles ($\le 480\text{px}$), la tabla con 8 columnas numéricas se cortaba abruptamente forzando scroll sin indicación visual clara, con encabezados de columnas demasiado anchos para pantallas de 320px–375px.
+     - En tablets e interfaces intermedias (rango medido empíricamente de 848px a 1192px, ej. iPad mini y pantallas con layout dividido), `.zona-grid` mantenía forzadamente 2 columnas (`repeat(auto-fit, minmax(380px, 1fr))`), comprimiendo el contenedor de la tabla a menos de 500px y forzando un scroll horizontal antiestético innecesario.
+  2. **Regresión visual de truncado y quiebre de línea (post commit 02708f2):** Al intentar fijar anchos de columna rígidos con `table-layout: fixed` y `text-overflow: ellipsis`, los nombres de las parejas ("Barbieri / Lobos", "Amaya / Godoy") se truncaban con "..." incluso en pantallas de escritorio donde sobraban más de 800px libres, y valores de dos dígitos en GAMES ("16 - 14") se partían en dos renglones verticales debido a un padding horizontal residual de 1rem (32px totales por celda).
+  3. **Ruido visual y redundancia en cabecera:**
+     - Textos repetitivos *"Posiciones — Zona {letra}"* y *"Partidos — Zona {letra}"* que duplicaban la información ya expuesta por los tabs superiores y el título de la tarjeta.
+     - Chip huérfano *"Clasifican N"* flotando en la cabecera de la tarjeta sin conexión visual con las parejas que efectivamente avanzaban.
+     - Botones de acciones secundarias/destructivas (*"Limpiar Resultados"*, *"Reiniciar Categoría"*) compitiendo por atención con las acciones principales.
+     - Badge de estado con valor de enum crudo (`EN_CURSO` en mayúsculas).
+  4. **Falta de jerarquía visual en estadísticas:** Puntos (PTS), partidos jugados (PJ), ganados (PG), perdidos (PP), sets y games compartían idéntico peso y color visual, dificultando la lectura y el escaneo ágil que caracteriza a las tablas deportivas profesionales.
+- **Qué decidí y por qué:**
+  1. **Ingeniería Responsive en Tabla de Posiciones (`ZonaTable.jsx` + `index.css`):**
+     - En mobile ($\le 480\text{px}$), se implementaron encabezados duales accesibles: texto completo oculto visualmente con `.sr-only` para lectores de pantalla (`clip`/`absolute`) y abreviaturas visibles de 1 carácter (`.th-short`, ej. `P`, `J`, `G`, `S`).
+     - Contenedor con `ResizeObserver` dinámico que activa un gradiente *fade* a la derecha (`.zona-table-container.has-overflow::after`) únicamente cuando existe desborde real.
+     - Reducción de la columna de posición `POS` a 32px con padding lateral de 0.25rem.
+     - Colapso del layout `.zona-grid` a 1 columna a partir de $\le 1200\text{px}$ (medición empírica confirmada en el rango 848px–1192px), permitiendo que en tablets ambas tarjetas respiren a ancho completo sin scroll, restaurando las 2 columnas únicamente cuando hay $\ge 1201\text{px}$ de ancho disponible.
+  2. **Resolución de la Regresión de Truncado y Quiebres:**
+     - Se ajustó el padding general de celdas a `0.85rem 0.45rem` (9px laterales en lugar de 32px), liberando más de 180px netos de ancho para la tabla.
+     - La columna `col-pareja` se configuró elástica (`width: auto`, sin truncado artificial `ellipsis`), garantizando que los nombres completos se lean sin cortes en desktop y tablets.
+     - Se añadió `white-space: nowrap` estricto en celdas y encabezados de `SETS` y `GAMES`, impidiendo fracturas de renglón en marcadores compuestos.
+  3. **Jerarquía Visual Deportiva de Tres Niveles:**
+     - **Nivel 1 (PTS):** Verde esmeralda vibrante (`var(--color-primary)`), tipografía destacada de `1.1rem` y peso `700`.
+     - **Nivel 2 (PG):** Blanco puro de alto contraste (`var(--color-text)`), peso `700`, facilitando identificar inmediatamente a los ganadores.
+     - **Nivel 3 (PJ, PP, Sets, Games):** PJ y PP en gris secundario suave (`var(--color-text-secondary)`), y Sets/Games en texto neutro (`font-weight: 500`), logrando una jerarquía visual clara sin fatiga cognitiva.
+  4. **Filas Clasificatorias Sutiles:**
+     - Reemplazo del chip aislado "Clasifican N" por fondos sutiles `--color-classify-bg` (`rgba(0, 208, 132, 0.05)`) y borde izquierdo distintivo `--color-classify-border` (`rgba(0, 208, 132, 0.6)`) directamente en las filas que clasifican (`posicion <= clasifican`), comunicando el avance de fase de forma orgánica y contextual.
+  5. **Despeje de Cabecera y Menú Overflow `⋮` (`CategoriaDetail.jsx`):**
+     - Remoción de los títulos redundantes "Posiciones —" y "Partidos —", alineando la vista superior directamente con los tabs de zona.
+     - Mapeo de estado mediante `estadoLabel()` para renderizar "Borrador", "En curso", "Finalizado".
+     - Reorganización de acciones destructivas ("Limpiar Resultados", "Reiniciar Categoría") en menú contextual desplegable `⋮` (`MoreVertical`) con detector click-outside y touchstart para mobile, despejando la barra superior y previniendo clics accidentales.
+- **Validación y verificación visual:**
+  - Verificación visual exhaustiva en múltiples viewports (320px, 375px, 820px, 1000px, 1280px) confirmando cero scroll horizontal indeseado, ausencia de truncados prematuros en nombres, perfecta alineación de dos dígitos en games, jerarquía de colores nítida y contraste accesible.
+  - Build de producción verificado con `npm run build` en frontend (0 errores, 0 advertencias).
+- **Resultado final:** Una pantalla de detalle de categoría y tabla de posiciones 100% pulida, responsive, accesible y visualmente imponente bajo el estándar "Dark Premium Deportivo", sin scroll forzado en tablets, con jerarquía visual clara y navegación intuitiva.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 30 sesiones de trabajo, sumando un aproximado total de entre 79 y 92 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 31 sesiones de trabajo, sumando un aproximado total de entre 82.5 y 96 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -828,6 +869,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 30 s
 | **28** | ~2.5 a 3 horas | Refactor UI/UX Detalle de Torneo (Jerarquía visual, CTA único, menú overflow ⋮, badges condicionales, progreso mini, estilos outline, focus-visible) y Blindaje Vista Pública (soporte dual de rutas `/torneo` y `/torneos`, bracket CSS en vista pública). |
 | **29** | ~2 a 2.5 horas | Prioridad Automática de Eliminatorias: reemplazo de orden manual del domingo (`ordenDomingo` y `OrdenDomingoModal.jsx`) por cálculo on-the-fly objetivo (`cantidadParejasClasificadas DESC`, desempate alfabético), remoción de columna en Prisma, limpieza de endpoints y actualización de suite de tests. |
 | **30** | ~2.5 a 3 horas | Backfill Dirigido en Eliminatorias Dominicales (Paso 5.b en `eliminatoriaScheduler.service.js`), erradicación del hueco de Cancha 6 a las 09:15hs (6/6 canchas llenas a 08:00, 09:15 y 10:30), protección estricta de bloques sincronizados en Cuartos/Semis/Finales (`rondaTarget < 16`), clarificación y verificación de debut en Cuartos de cuadros sin Octavos (Suma 7 a las 11:45hs) y suite de regresión (`test-scheduler-backfill-regression.js`). |
-| **Total** | **~79 a 92 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía y blindaje integral de vista pública. |
+| **31** | ~3.5 a 4 horas | Refactor UI/UX de Detalle de Categoría: tabla de posiciones responsive (table-layout fixed, columna pareja elástica, nowrap en sets/games, mobile .sr-only/.th-short), colapso de grid a 1 columna en $\le 1200\text{px}$ (rango 848–1192px sin scroll), jerarquía visual de estadísticas (PTS verde esmeralda, PG blanco, PJ/PP gris secundario), filas clasificatorias estilizadas sin chip huérfano, menú overflow ⋮ para acciones secundarias y remoción de encabezados redundantes. |
+| **Total** | **~82.5 a 96 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía en detalle de torneo y de categorías, tablas de posiciones responsivas sin scroll forzado y blindaje integral de vista pública. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
