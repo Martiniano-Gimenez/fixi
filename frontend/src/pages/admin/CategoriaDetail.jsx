@@ -323,17 +323,11 @@ export default function CategoriaDetail() {
               <div className="zona-grid">
                 {/* Tabla de posiciones de la zona */}
                 <div>
-                  <h3 style={{ marginBottom: '1rem', fontSize: 'var(--font-size-lg)' }}>
-                    Posiciones — {activeZona.nombre}
-                  </h3>
                   <ZonaTable zona={activeZona} />
                 </div>
 
                 {/* Partidos de la zona */}
                 <div>
-                  <h3 style={{ marginBottom: '1rem', fontSize: 'var(--font-size-lg)' }}>
-                    Partidos — {activeZona.nombre}
-                  </h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {partidosDeZona.map((partido) => (
                       <PartidoCard
