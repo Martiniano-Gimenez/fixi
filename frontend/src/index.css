@@ -981,7 +981,8 @@ tr:nth-child(1) .pos-number {
   gap: 1.5rem;
 }
 
-@media (max-width: 480px) {
+/* Colapsar a 1 columna en ≤1200px para que la tabla de posiciones no comprima sus 8 columnas */
+@media (max-width: 1200px) {
   .zona-grid {
     grid-template-columns: 1fr;
   }
