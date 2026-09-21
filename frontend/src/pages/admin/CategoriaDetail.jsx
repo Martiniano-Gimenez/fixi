@@ -9,6 +9,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { api } from '../../api/client';
+import { estadoLabel } from '../../utils/estadoLabels';
 import ZonaTable from '../../components/ZonaTable';
 import PartidoCard from '../../components/PartidoCard';
 import MiniBracketView from '../../components/MiniBracketView';
@@ -165,7 +166,7 @@ export default function CategoriaDetail() {
               <h1 style={{ margin: 0, fontSize: 'var(--font-size-2xl)' }}>
                 Categoría {categoria.nombre}
               </h1>
-              <span className={`badge badge-${categoria.estado.toLowerCase()}`}>{categoria.estado}</span>
+              <span className={`badge badge-${categoria.estado.toLowerCase()}`}>{estadoLabel(categoria.estado)}</span>
             </div>
 
             <p style={{ margin: '0.4rem 0 0 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
