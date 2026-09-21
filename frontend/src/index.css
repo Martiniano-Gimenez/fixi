@@ -988,6 +988,11 @@ tr:nth-child(1) .pos-number {
   }
 }
 
+.zona-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
 .zona-table .th-short {
   display: none;
 }
@@ -1018,9 +1023,45 @@ tr:nth-child(1) .pos-number {
   display: inline-block;
 }
 
+.zona-table .col-pareja {
+  width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zona-table .col-pts {
+  width: 50px;
+}
+
+.zona-table .col-pj {
+  width: 44px;
+}
+
+.zona-table .col-pg {
+  width: 44px;
+}
+
+.zona-table .col-pp {
+  width: 44px;
+}
+
+.zona-table .col-sets {
+  width: 68px;
+}
+
+.zona-table .col-games {
+  width: 78px;
+}
+
 @media (max-width: 480px) {
+  .zona-table {
+    table-layout: auto;
+  }
+
   .zona-table th,
   .zona-table td {
+    width: auto;
     padding: 0.45rem 0.15rem;
     font-size: 0.78rem;
   }
@@ -1029,6 +1070,16 @@ tr:nth-child(1) .pos-number {
     width: 20px;
     padding-left: 0.15rem;
     padding-right: 0.15rem;
+  }
+
+  .zona-table .col-pareja,
+  .zona-table .col-pts,
+  .zona-table .col-pj,
+  .zona-table .col-pg,
+  .zona-table .col-pp,
+  .zona-table .col-sets,
+  .zona-table .col-games {
+    width: auto;
   }
 
   .zona-table .team-name {

@@ -44,22 +44,22 @@ export default function ZonaTable({ zona }) {
                   <span className="sr-only">Pos</span>
                   <span aria-hidden="true" className="th-short">#</span>
                 </th>
-                <th>Pareja</th>
-                <th className="text-center" title="Puntos">
+                <th className="col-pareja">Pareja</th>
+                <th className="col-pts text-center" title="Puntos">
                   <span className="sr-only">Pts</span>
                   <span aria-hidden="true" className="th-short">P</span>
                 </th>
-                <th className="text-center hide-on-mobile" title="Partidos Jugados">PJ</th>
-                <th className="text-center" title="Partidos Ganados">
+                <th className="col-pj text-center hide-on-mobile" title="Partidos Jugados">PJ</th>
+                <th className="col-pg text-center" title="Partidos Ganados">
                   <span className="sr-only">PG</span>
                   <span aria-hidden="true" className="th-short">G</span>
                 </th>
-                <th className="text-center hide-on-mobile" title="Partidos Perdidos">PP</th>
-                <th className="text-center" title="Sets a Favor / En Contra">
+                <th className="col-pp text-center hide-on-mobile" title="Partidos Perdidos">PP</th>
+                <th className="col-sets text-center" title="Sets a Favor / En Contra">
                   <span className="sr-only">Sets</span>
                   <span aria-hidden="true" className="th-short">S</span>
                 </th>
-                <th className="text-center" title="Games a Favor / En Contra">
+                <th className="col-games text-center" title="Games a Favor / En Contra">
                   <span className="sr-only">Games</span>
                   <span aria-hidden="true" className="th-short">Gm</span>
                 </th>
@@ -77,15 +77,15 @@ export default function ZonaTable({ zona }) {
                     }}
                   >
                     <td className="col-pos"><span className="pos-number">{index + 1}</span></td>
-                    <td className="team-name">
+                    <td className="col-pareja team-name">
                       {zp.pareja.jugador1} / {zp.pareja.jugador2}
                     </td>
-                    <td className="text-center stat-pts">{zp.puntos}</td>
-                    <td className="text-center hide-on-mobile">{zp.pj}</td>
-                    <td className="text-center stat-highlight">{zp.pg}</td>
-                    <td className="text-center hide-on-mobile">{zp.pp}</td>
-                    <td className="text-center">{zp.sf} - {zp.sc}</td>
-                    <td className="text-center">{zp.gf} - {zp.gc}</td>
+                    <td className="col-pts text-center stat-pts">{zp.puntos}</td>
+                    <td className="col-pj text-center hide-on-mobile">{zp.pj}</td>
+                    <td className="col-pg text-center stat-highlight">{zp.pg}</td>
+                    <td className="col-pp text-center hide-on-mobile">{zp.pp}</td>
+                    <td className="col-sets text-center">{zp.sf} - {zp.sc}</td>
+                    <td className="col-games text-center">{zp.gf} - {zp.gc}</td>
                   </tr>
                 );
               })}
