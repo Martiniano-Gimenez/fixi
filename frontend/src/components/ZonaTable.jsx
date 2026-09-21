@@ -40,7 +40,7 @@ export default function ZonaTable({ zona }) {
           <table className="zona-table">
             <thead>
               <tr>
-                <th title="Posición">
+                <th className="col-pos" title="Posición">
                   <span className="sr-only">Pos</span>
                   <span aria-hidden="true" className="th-short">#</span>
                 </th>
@@ -76,7 +76,7 @@ export default function ZonaTable({ zona }) {
                       borderLeft: clasifica ? '4px solid var(--color-classify-border)' : '4px solid transparent',
                     }}
                   >
-                    <td><span className="pos-number">{index + 1}</span></td>
+                    <td className="col-pos"><span className="pos-number">{index + 1}</span></td>
                     <td className="team-name">
                       {zp.pareja.jugador1} / {zp.pareja.jugador2}
                     </td>

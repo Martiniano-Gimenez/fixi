@@ -1001,11 +1001,33 @@ tr:nth-child(1) .pos-number {
   white-space: normal;
 }
 
+.zona-table .col-pos {
+  width: 32px;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+  text-align: center;
+}
+
+.zona-table th.col-pos {
+  letter-spacing: 0;
+}
+
+.zona-table .col-pos .pos-number {
+  width: auto;
+  display: inline-block;
+}
+
 @media (max-width: 480px) {
   .zona-table th,
   .zona-table td {
     padding: 0.45rem 0.15rem;
     font-size: 0.78rem;
+  }
+
+  .zona-table .col-pos {
+    width: 20px;
+    padding-left: 0.15rem;
+    padding-right: 0.15rem;
   }
 
   .zona-table .team-name {
