@@ -72,8 +72,8 @@ export default function ZonaTable({ zona }) {
                   <tr 
                     key={zp.id} 
                     style={{ 
-                      backgroundColor: clasifica ? 'var(--color-primary-light)' : 'transparent',
-                      borderLeft: clasifica ? '4px solid var(--color-primary)' : '4px solid transparent',
+                      backgroundColor: clasifica ? 'var(--color-classify-bg)' : 'transparent',
+                      borderLeft: clasifica ? '4px solid var(--color-classify-border)' : '4px solid transparent',
                     }}
                   >
                     <td><span className="pos-number">{index + 1}</span></td>

@@ -1049,6 +1049,8 @@ tr:nth-child(1) .pos-number {
   --color-warning-bg: rgba(245, 158, 11, 0.1);
   --color-success-bg: rgba(0, 208, 132, 0.1);
   --color-danger-bg: rgba(239, 68, 68, 0.08);
+  --color-classify-bg: rgba(0, 208, 132, 0.08);
+  --color-classify-border: rgba(0, 208, 132, 0.35);
   --color-text-tertiary: #64748b;
 }
 
