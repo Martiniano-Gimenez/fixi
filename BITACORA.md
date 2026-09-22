@@ -906,9 +906,47 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+### Sesión 33: Auditoría de Consistencia y Blindaje de Ciclo de Vida en Gestión de Parejas
+
+- **Objetivo:** Auditar la base de datos real del club piloto ("Impares Agosto") para detectar posibles inconsistencias o datos corruptos derivados del uso previo de la pantalla de parejas fuera de borrador, e implementar el blindaje integral del ciclo de vida en backend y frontend para impedir altas o bajas en categorías iniciadas o finalizadas.
+- **Problema o necesidad que motivó el trabajo:**
+  1. Se detectó que la pantalla de alta/baja de parejas (`ParejasManager.jsx`) y sus endpoints base (`POST /api/categorias/:id/parejas` y `DELETE /api/parejas/:id`) no validaban `categoria.estado`.
+  2. Si se creaba una pareja con el torneo en curso, quedaba flotando sin registro en `ZonaPareja` ni partidos asociados.
+  3. Si se eliminaba una pareja con el torneo en curso, la cascada de Prisma borraba su registro en `ZonaPareja`, pero dejaba los partidos jugados o programados con `pareja1Id: null` / `ganadorId: null` por la regla `onDelete: SetNull`, corrompiendo la tabla de posiciones y estadísticas de la zona.
+- **Qué decidí y por qué:**
+  1. **Auditoría profunda de la base real:** Se corrieron consultas de diagnóstico sobre SQLite confirmando que afortunadamente no existían registros zombies ni inconsistencias matemáticas en el torneo del club piloto.
+  2. **Bloqueo estricto en backend:** En `pareja.service.js`, se condicionó `createPareja`, `deletePareja` y `updatePareja` a `categoria.estado === 'BORRADOR'`, respondiendo con HTTP 400 y mensaje explicativo claro indicando que con el torneo en curso debe utilizarse "Agregar Pareja a Zona".
+  3. **Ocultamiento completo en UI:** En `ParejasManager.jsx`, cuando la categoría no está en `BORRADOR`, se remueve por completo el formulario de carga y los botones de tacho de basura (`Trash2`), sustituyéndolos por un panel informativo destacado (`AlertCircle`) que orienta al organizador hacia las opciones permitidas.
+- **Validación y verificación:**
+  - Verificación de consultas SQL/Prisma en frío sobre la base de datos de producción.
+  - Test HTTP comprobando rechazo 400 al intentar mutar parejas fuera de `BORRADOR`.
+  - Verificación visual de la pantalla con categoría `EN_CURSO` confirmando el panel informativo y la ausencia de controles destructivos.
+- **Resultado final:** Cierre definitivo del vector de corrupción de datos en altas y bajas de parejas, preservando la integridad del fixture y las tablas estadísticas.
+
+---
+
+### Sesión 34: Guard de Estado y Helper Text en Disponibilidad Horaria
+
+- **Objetivo:** Auditar y blindar el endpoint de actualización de franjas horarias (`PUT /api/parejas/:id/disponibilidad`) y su editor frontend (`DisponibilidadEditor.jsx`), equilibrando la integridad de datos con la flexibilidad operativa que exige la gestión en vivo de un torneo de pádel.
+- **Problema o necesidad que motivó el trabajo:**
+  1. `PUT /api/parejas/:id/disponibilidad` no validaba `categoria.estado`, permitiendo mutar franjas horarias incluso en categorías concluidas (`FINALIZADO`).
+  2. A diferencia de las altas/bajas de parejas, la edición de disponibilidad solo altera la tabla `SlotPareja` y no dispara en automático recálculos de compatibilidad ni reprogramación forzada de partidos ya fijados.
+  3. En estado `EN_CURSO` existe un caso de uso operativo legítimo: permitir que una pareja notifique un cambio de disponibilidad de último momento para que el organizador luego reprograme su próximo partido de forma controlada mediante `AsignarHorarioModal`. Bloquearlo en `EN_CURSO` hubiera sido perjudicial para la operativa del club.
+- **Qué decidí y por qué:**
+  1. **Backend — Bloqueo enfocado únicamente en `FINALIZADO`:** En `disponibilidad.service.js`, se validó que si `pareja.categoria.estado === 'FINALIZADO'`, la petición sea rechazada con HTTP 400 y mensaje `"No se puede modificar la disponibilidad de una categoría finalizada."`, manteniendo la edición permitida en `BORRADOR` y `EN_CURSO`.
+  2. **Frontend — Aclaración pedagógica en `EN_CURSO`:** En `DisponibilidadEditor.jsx`, se incorporó un helper text sutil y no intrusivo (`11.5px`) con ícono `<Info size={13} />`: *"Actualizar esto no reprograma automáticamente los partidos ya asignados. Si la pareja necesita otro horario, usá 'Asignar Horario' en el partido pendiente después de guardar el cambio."*
+  3. **Frontend — Deshabilitación total en `FINALIZADO`:** En `FINALIZADO`, `DisponibilidadEditor.jsx` no carga grillas ni renderiza sliders interactivos, mostrando una tarjeta informativa limpia indicando que la categoría finalizó y no es modificable.
+- **Validación y verificación:**
+  - Test HTTP automatizado contra el servidor real verificando código 200 en `BORRADOR`, 200 en `EN_CURSO` y 400 con mensaje de error en `FINALIZADO`.
+  - Build de producción frontend verificado (`npm run build`, 0 errores).
+  - Verificación visual de los estados condicionales en el componente.
+- **Resultado final:** Módulo de disponibilidad seguro contra modificaciones extemporáneas en torneos terminados y con comunicación transparente para el organizador durante la competencia en vivo.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 32 sesiones de trabajo, sumando un aproximado total de entre 86 y 100 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 34 sesiones de trabajo, sumando un aproximado total de entre 89 y 104.5 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -945,6 +983,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 32 s
 | **31** | ~3.5 a 4 horas | Refactor UI/UX de Detalle de Categoría: tabla de posiciones responsive (table-layout fixed, columna pareja elástica, nowrap en sets/games, mobile .sr-only/.th-short), colapso de grid a 1 columna en $\le 1200\text{px}$ (rango 848–1192px sin scroll), jerarquía visual de estadísticas (PTS verde esmeralda, PG blanco, PJ/PP gris secundario), filas clasificatorias estilizadas sin chip huérfano, menú overflow ⋮ para acciones secundarias y remoción de encabezados redundantes. |
 | **32** | ~3.5 a 4 horas | Operaciones seguras de zonas post-inicio (`mover-pareja` y `agregar-pareja` atómicas y transaccionales), rediseño responsive mobile de modales con blindaje universal Safari iOS (`<form>` contenedor nativo y `type="button"` en botones no-submit) y componente `ActionsMenu` flotante con clamping de viewport via Portal (resolución definitiva de corte en pantallas $\le 376\text{px}$). |
 | **33** | ~1 a 1.5 horas | Auditoría de consistencia en base de datos SQLite real y blindaje del ciclo de vida de parejas: bloqueo backend 400 por `categoria.estado !== 'BORRADOR'`, ocultamiento total de formulario de alta y botones de borrado en `ParejasManager.jsx` con panel informativo pedagógico. |
-| **Total** | **~87 a 101.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía en detalle de torneo y de categorías, tablas de posiciones responsivas sin scroll forzado, operaciones seguras post-inicio con modales ergonómicos, blindaje de alta/baja de parejas por estado y menús móviles universales. |
+| **34** | ~1 a 1.5 horas | Guard de estado en disponibilidad horaria (`PUT /api/parejas/:id/disponibilidad` y `DisponibilidadEditor.jsx`): bloqueo HTTP 400 exclusivo en `FINALIZADO`, helper text pedagógico para reprogramación manual en `EN_CURSO` y deshabilitación total en `FINALIZADO`. |
+| **Total** | **~89 a 104.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía en detalle de torneo y de categorías, tablas de posiciones responsivas sin scroll forzado, operaciones seguras post-inicio con modales ergonómicos, blindaje de ciclo de vida en parejas y disponibilidad, y menús móviles universales. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
