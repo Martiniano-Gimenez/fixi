@@ -231,6 +231,8 @@ export default function MoverParejaModal({ isOpen, onClose, categoriaId, zonas =
           border: '1px solid var(--color-border)',
           overflow: 'hidden',
           margin: 0,
+          padding: 0,
+          boxSizing: 'border-box',
         }}
       >
         {/* Header Fijo */}
