@@ -150,17 +150,24 @@ organizadores que hoy llevan todo en papel.
     - *Nivel 3 (Métricas Secundarias y Neutras):* **PJ** y **PP** atenuados en gris secundario (`var(--color-text-secondary)`), y columnas de sets y games en texto neutro estándar (`font-weight: 500`), logrando una lectura ágil y sin sobrecarga cognitiva.
   - **Filas Clasificatorias Sutiles:**
     - Reemplazo del chip aislado "Clasifican N" por fondo sutil `--color-classify-bg` y borde izquierdo distintivo `--color-classify-border` aplicado directamente sobre las filas de parejas que avanzan al cuadro eliminatorio (`posicion <= clasifican`), integrando la información visualmente de forma orgánica.
-  - **Despeje de Cabecera y Menú Overflow `⋮` (`CategoriaDetail.jsx`):**
+  - **Despeje de Cabecera y Menú Flotante Clampeado (`ActionsMenu.jsx`):**
     - Supresión de encabezados redundantes *"Posiciones — Zona {letra}"* y *"Partidos — Zona {letra}"*, conectando directamente las tarjetas con los tabs superiores de selección de zona.
     - Mapeo de estados legibles mediante `estadoLabel()` ("Borrador", "En curso", "Finalizado").
-    - Reorganización de acciones destructivas/secundarias (*"Limpiar Resultados"*, *"Reiniciar Categoría"*) y operaciones de ajuste seguro (*"Mover Pareja de Zona"*, *"Agregar Pareja a Zona"*) dentro de un menú contextual desplegable `⋮` (`MoreVertical`) con detector click-outside y toque táctil seguro (`mousedown`/`touchstart`), manteniendo limpia la cabecera.
+    - Componente desacoplado `ActionsMenu.jsx` compartido en `CategoriaDetail.jsx` y `TorneoDetail.jsx`: renderiza el panel flotante mediante `createPortal(..., document.body)` para total inmunidad ante recortes `overflow` o transforms de tarjetas padre.
+    - **Clamping Dinámico contra Viewport:** Posicionamiento sincrónico en `useLayoutEffect` con detección de desborde horizontal (`left = Math.max(8, btnRect.left)` cuando el botón `⋮` hace flex-wrap al inicio de una fila en pantallas $\le 376\text{px}$), flip vertical hacia arriba si no entra abajo, y autocierre nativo en scroll, resize y click outside.
 - **Operaciones Seguras de Zonas Post-Inicio (Mover Pareja y Alta Tardía):**
   - Dos endpoints atómicos dedicados en backend (`POST /api/categorias/:id/zonas/mover-pareja` y `POST /api/categorias/:id/zonas/agregar-pareja`) para corregir errores de asignación o incorporar parejas de último momento con el torneo en curso.
   - Guards estrictos de estado repetidos atómicamente dentro de `prisma.$transaction`: la operación se bloquea si cualquiera de las zonas involucradas tiene al menos un partido `FINALIZADO` o `EN_CURSO` (solo permitido si todos los partidos de esas zonas están `PENDIENTE`).
   - Blindaje total de playoffs y zonas testigo: no altera partidos de fase eliminatoria ni partidos de zonas ajenas a la operación.
   - Invariantes de formato y límites de zona: bloquea si una zona quedaría con menos de 2 parejas o superaría el máximo de 4 parejas. Recalcula formato (`ROUND_ROBIN` / `MINI_BRACKET`) y cupos de clasificación (2 o 3) según el nuevo tamaño.
+  - Reevaluación de compatibilidad pairwise real (`evaluarCompatibilidadZona`) para persistir `requiereArmadoManual` fidedignamente en la base de datos.
   - Reasignación horaria automática mediante `asignarHorariosAutomatico(..., tx)` componible dentro de la misma transacción externa.
-  - Modales en frontend (`MoverParejaModal` y `AgregarParejaModal`) integrados al menú `⋮` de `CategoriaDetail.jsx`.
+  - **Arquitectura de Modales Mobile-First y Blindaje Safari iOS (`MoverParejaModal` y `AgregarParejaModal`):**
+    - Contenedor con altura dinámica `maxHeight: min(90vh, calc(100dvh - 2rem))` y scroll vertical interno, cabecera y pie fijos con `env(safe-area-inset-bottom, 0px)`.
+    - Acciones compactas en una sola línea horizontal (`[ ⇄ Mover Pareja ]`, `[ + Agregar Pareja ]`) junto a `Cancelar`.
+    - Badges de 3 estados (completado con tilde verde, activo con glow, pendiente atenuado) y selects con borde reactivo (neutro en placeholder, esmeralda con selección).
+    - Raíz convertida en elemento `<form onSubmit={handleSubmit} className="card">` nativo con reseteo de estilos (`padding: 0; margin: 0; boxSizing: 'border-box'`), eliminando la dependencia del atributo externo `form="id"` para erradicar fallas silenciosas de submit en WebKit/Safari iOS antiguo y WebViews.
+    - Seguridad estricta con `type="button"` explícito en botones de cancelar y cierre `✕` para impedir submits espurios por defecto de HTML.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo
