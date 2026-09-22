@@ -168,6 +168,9 @@ organizadores que hoy llevan todo en papel.
     - Badges de 3 estados (completado con tilde verde, activo con glow, pendiente atenuado) y selects con borde reactivo (neutro en placeholder, esmeralda con selección).
     - Raíz convertida en elemento `<form onSubmit={handleSubmit} className="card">` nativo con reseteo de estilos (`padding: 0; margin: 0; boxSizing: 'border-box'`), eliminando la dependencia del atributo externo `form="id"` para erradicar fallas silenciosas de submit en WebKit/Safari iOS antiguo y WebViews.
     - Seguridad estricta con `type="button"` explícito en botones de cancelar y cierre `✕` para impedir submits espurios por defecto de HTML.
+- **Blindaje del Ciclo de Vida en Gestión Base de Parejas (`ParejasManager.jsx` y `pareja.service.js`):**
+  - Validación estricta en backend (`categoria.estado === 'BORRADOR'`) en `createPareja`, `deletePareja` y `updatePareja` con error HTTP 400. Una vez iniciado el torneo, se bloquea el alta libre (que generaría parejas huérfanas sin zona) y la baja (que dejaría partidos zombies con parejas nulas por `SetNull` y estadísticas desincronizadas). Las incorporaciones en torneo en curso deben canalizarse exclusivamente por el flujo seguro `POST /api/categorias/:id/zonas/agregar-pareja`.
+  - Ocultamiento total en frontend: cuando la categoría no está en `BORRADOR`, el formulario de alta y los botones de borrado por fila se eliminan del DOM en `ParejasManager.jsx`, reemplazándose por un panel informativo con borde de advertencia que explica el bloqueo y guía al usuario hacia la acción correspondiente en el detalle de la categoría.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo
