@@ -3,7 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import DisponibilidadEditor from '../../components/DisponibilidadEditor';
-import { ChevronLeft, Plus, Clock, Trash2, Users } from 'lucide-react';
+import { ChevronLeft, Plus, Clock, Trash2, Users, AlertCircle } from 'lucide-react';
 
 export default function ParejasManager() {
   const { torneoId, id } = useParams();
@@ -63,6 +63,7 @@ export default function ParejasManager() {
 
   const handleAdd = async (e) => {
     e.preventDefault();
+    if (categoria?.estado !== 'BORRADOR') return;
     try {
       await api.post(`/categorias/${id}/parejas`, { jugador1, jugador2 });
       setJugador1('');
@@ -74,11 +75,12 @@ export default function ParejasManager() {
   };
 
   const handleDelete = (parejaId) => {
+    if (categoria?.estado !== 'BORRADOR') return;
     setParejaToDelete(parejaId);
   };
 
   const executeDelete = async () => {
-    if (!parejaToDelete) return;
+    if (!parejaToDelete || categoria?.estado !== 'BORRADOR') return;
     try {
       await api.delete(`/parejas/${parejaToDelete}`);
       setParejaToDelete(null);
@@ -101,6 +103,7 @@ export default function ParejasManager() {
   if (loading) return <div className="loading">Cargando parejas...</div>;
   if (error || !categoria) return <div className="error-message">{error || 'Categoría no encontrada'}</div>;
 
+  const isBorrador = categoria.estado === 'BORRADOR';
   const backUrl = `/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}`;
 
   return (
@@ -129,41 +132,83 @@ export default function ParejasManager() {
       </div>
 
       <div className="manager-grid">
-        {/* Formulario (solo en BORRADOR) */}
+        {/* Formulario (solo en BORRADOR) o Panel informativo */}
         <div>
-          <div className="torneo-card">
-            <h3>Agregar Pareja</h3>
-            <form onSubmit={handleAdd} style={{ marginTop: '1rem' }}>
-              <div className="form-group">
-                <label>Jugador 1</label>
-                <input
-                  type="text"
-                  value={jugador1}
-                  onChange={(e) => setJugador1(e.target.value)}
-                  placeholder="Nombre y apellido"
-                  required
-                />
+          {isBorrador ? (
+            <div className="torneo-card">
+              <h3>Agregar Pareja</h3>
+              <form onSubmit={handleAdd} style={{ marginTop: '1rem' }}>
+                <div className="form-group">
+                  <label>Jugador 1</label>
+                  <input
+                    type="text"
+                    value={jugador1}
+                    onChange={(e) => setJugador1(e.target.value)}
+                    placeholder="Nombre y apellido"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Jugador 2</label>
+                  <input
+                    type="text"
+                    value={jugador2}
+                    onChange={(e) => setJugador2(e.target.value)}
+                    placeholder="Nombre y apellido"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+                >
+                  <Plus size={16} strokeWidth={2} />
+                  Añadir Pareja
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div
+              className="torneo-card"
+              style={{
+                borderLeft: '4px solid var(--color-warning)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-warning)' }}>
+                <AlertCircle size={20} strokeWidth={2} />
+                <h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', color: 'var(--color-text)' }}>
+                  Edición Bloqueada
+                </h3>
               </div>
-              <div className="form-group">
-                <label>Jugador 2</label>
-                <input
-                  type="text"
-                  value={jugador2}
-                  onChange={(e) => setJugador2(e.target.value)}
-                  placeholder="Nombre y apellido"
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                className="btn-primary"
-                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                Esta categoría está en estado <strong>{categoria.estado}</strong>. No es posible agregar ni eliminar parejas desde esta pantalla una vez iniciado el torneo.
+              </p>
+              <div
+                style={{
+                  background: 'var(--color-bg)',
+                  padding: '0.75rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 'var(--font-size-xs)',
+                  color: 'var(--color-text-secondary)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem',
+                  border: '1px solid var(--color-border)',
+                }}
               >
-                <Plus size={16} strokeWidth={2} />
-                Añadir Pareja
-              </button>
-            </form>
-          </div>
+                <div>
+                  <strong style={{ color: 'var(--color-text)' }}>• Agregar pareja:</strong> Ingresá al detalle de la categoría y seleccioná <em>"Agregar Pareja a Zona"</em> desde el menú de acciones (⋮) para incorporarla a una zona existente con lugar disponible.
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--color-text)' }}>• Eliminar pareja:</strong> No está permitido eliminar parejas con el torneo en curso para preservar la integridad del fixture y las estadísticas (limitación conocida).
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Lista de parejas inscriptas */}
@@ -255,19 +300,21 @@ export default function ParejasManager() {
                             </span>
                           </button>
 
-                          <button
-                            type="button"
-                            className="btn-danger"
-                            onClick={() => handleDelete(pareja.id)}
-                            style={{
-                              padding: '0.3rem 0.5rem',
-                              background: 'transparent',
-                              borderColor: 'transparent',
-                            }}
-                            title="Eliminar pareja"
-                          >
-                            <Trash2 size={14} strokeWidth={2} style={{ color: 'var(--color-danger)' }} />
-                          </button>
+                          {isBorrador && (
+                            <button
+                              type="button"
+                              className="btn-danger"
+                              onClick={() => handleDelete(pareja.id)}
+                              style={{
+                                padding: '0.3rem 0.5rem',
+                                background: 'transparent',
+                                borderColor: 'transparent',
+                              }}
+                              title="Eliminar pareja"
+                            >
+                              <Trash2 size={14} strokeWidth={2} style={{ color: 'var(--color-danger)' }} />
+                            </button>
+                          )}
                         </div>
                       </div>
 

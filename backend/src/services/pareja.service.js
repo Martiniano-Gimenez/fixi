@@ -2,7 +2,15 @@ const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 
 async function createPareja(organizadorId, categoriaId, data) {
-  await getCategoriaById(organizadorId, categoriaId); // Verifica existencia y permisos
+  const categoria = await getCategoriaById(organizadorId, categoriaId); // Verifica existencia y permisos
+
+  if (categoria.estado !== 'BORRADOR') {
+    const error = new Error(
+      "No se pueden agregar parejas una vez iniciado el torneo. Usá 'Agregar Pareja a Zona' desde el detalle de la categoría."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
 
   if (!data.jugador1 || !data.jugador2) {
     const error = new Error('Los nombres de ambos jugadores son obligatorios.');
@@ -65,6 +73,12 @@ async function getParejaAndVerifyPermisos(organizadorId, parejaId) {
 async function updatePareja(organizadorId, parejaId, data) {
   const pareja = await getParejaAndVerifyPermisos(organizadorId, parejaId);
 
+  if (pareja.categoria.estado !== 'BORRADOR') {
+    const error = new Error('No se pueden modificar parejas una vez iniciado el torneo.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const updateData = {};
   if (data.jugador1) updateData.jugador1 = data.jugador1.trim();
   if (data.jugador2) updateData.jugador2 = data.jugador2.trim();
@@ -79,6 +93,12 @@ async function updatePareja(organizadorId, parejaId, data) {
 async function deletePareja(organizadorId, parejaId) {
   const pareja = await getParejaAndVerifyPermisos(organizadorId, parejaId);
   const categoriaId = pareja.categoriaId;
+
+  if (pareja.categoria.estado !== 'BORRADOR') {
+    const error = new Error('No se pueden eliminar parejas una vez iniciado el torneo.');
+    error.statusCode = 400;
+    throw error;
+  }
 
   await prisma.pareja.delete({
     where: { id: pareja.id },
