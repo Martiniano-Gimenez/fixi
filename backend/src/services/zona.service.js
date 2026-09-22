@@ -1461,63 +1461,6 @@ async function limpiarResultadosZonas(organizadorId, categoriaId) {
   return { message: 'Resultados de zonas reseteados.' };
 }
 
-/**
- * Reestructura manualmente las zonas de la categoría
- */
-async function reestructurarZonas(organizadorId, categoriaId, zonasPayload) {
-  const categoria = await getCategoriaById(organizadorId, categoriaId);
-
-  if (categoria.estado === 'BORRADOR') {
-    throw new Error('La categoría está en borrador. Iniciá la categoría primero.');
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const fases = await tx.faseEliminatoria.findMany({ where: { categoriaId } });
-    if (fases.length > 0) {
-      await tx.partido.deleteMany({
-        where: { faseEliminatoriaId: { in: fases.map((f) => f.id) } },
-      });
-      await tx.faseEliminatoria.deleteMany({ where: { categoriaId } });
-    }
-
-    for (const zPayload of zonasPayload) {
-      const zona = await tx.zona.findUnique({ where: { id: zPayload.id } });
-      if (!zona) continue;
-
-      const size = zPayload.parejas.length;
-      if (size < 2) continue;
-
-      const formato = size === 4 ? 'MINI_BRACKET' : 'ROUND_ROBIN';
-      const clasifican = size >= 4 ? 3 : 2;
-
-      await tx.zona.update({
-        where: { id: zona.id },
-        data: { formato, clasifican, requiereArmadoManual: false },
-      });
-
-      const partidosViejos = await tx.partido.findMany({ where: { zonaId: zona.id } });
-      if (partidosViejos.length > 0) {
-        await tx.setPartido.deleteMany({ where: { partidoId: { in: partidosViejos.map((p) => p.id) } } });
-        await tx.partido.deleteMany({ where: { zonaId: zona.id } });
-      }
-
-      await tx.zonaPareja.deleteMany({ where: { zonaId: zona.id } });
-
-      const parejasEnEstaZona = [];
-      for (const pId of zPayload.parejas) {
-        await tx.zonaPareja.create({
-          data: { zonaId: zona.id, parejaId: pId },
-        });
-        parejasEnEstaZona.push({ id: pId });
-      }
-
-      await generarPartidosZonaHelper(tx, categoriaId, zona.id, formato, size, parejasEnEstaZona);
-    }
-  });
-
-  return { message: 'Zonas reestructuradas correctamente.' };
-}
-
 module.exports = {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -1526,7 +1469,6 @@ module.exports = {
   asignarHorariosAutomatico,
   getZonasByCategoria,
   limpiarResultadosZonas,
-  reestructurarZonas,
   fusionarSlotsEnVentanas,
   interseccionVentanas,
   parseSlotToDate,

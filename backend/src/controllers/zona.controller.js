@@ -34,24 +34,8 @@ async function limpiarResultadosZonas(req, res, next) {
   }
 }
 
-async function reestructurarZonas(req, res, next) {
-  try {
-    const organizadorId = getOrgId(req);
-    const categoriaId = req.params.categoriaId || req.params.id;
-    const { zonas } = req.body;
-    if (!zonas || !Array.isArray(zonas)) {
-      return res.status(400).json({ message: 'El payload debe contener un array de zonas.' });
-    }
-    const result = await zonaService.reestructurarZonas(organizadorId, categoriaId, zonas);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-}
-
 module.exports = {
   getZonasByCategoria,
   getZonasByTorneo: getZonasByCategoria,
   limpiarResultadosZonas,
-  reestructurarZonas,
 };

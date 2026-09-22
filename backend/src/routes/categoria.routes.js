@@ -25,7 +25,6 @@ router.get('/:id/parejas', parejaController.getParejasByCategoria);
 // Zonas de la categoría
 router.get('/:id/zonas', zonaController.getZonasByCategoria);
 router.delete('/:id/zonas/resultados', zonaController.limpiarResultadosZonas);
-router.put('/:id/zonas/reestructurar', zonaController.reestructurarZonas);
 
 // Eliminatorias de la categoría
 router.post('/:id/generar-eliminatoria', faseEliminatoriaController.generarEliminatoria);

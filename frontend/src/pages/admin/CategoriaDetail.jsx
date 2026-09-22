@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   Users,
   GitBranch,
-  Settings,
   Trash2,
   MoreVertical,
   Eraser,
@@ -16,7 +15,6 @@ import PartidoCard from '../../components/PartidoCard';
 import MiniBracketView from '../../components/MiniBracketView';
 import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
-import ZoneEditorModal from '../../components/ZoneEditorModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 
 export default function CategoriaDetail() {
@@ -40,7 +38,6 @@ export default function CategoriaDetail() {
   const [limpiandoZonas, setLimpiandoZonas] = useState(false);
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
-  const [zoneEditorOpen, setZoneEditorOpen] = useState(false);
   const [menuAccionesOpen, setMenuAccionesOpen] = useState(false);
   const menuAccionesRef = useRef(null);
 
@@ -209,56 +206,45 @@ export default function CategoriaDetail() {
             </Link>
 
             {categoria.estado !== 'BORRADOR' && (
-              <>
+              <div className="actions-menu" ref={menuAccionesRef}>
                 <button
                   type="button"
-                  className="btn-outline"
-                  onClick={() => setZoneEditorOpen(true)}
-                  title="Reestructurar o mover parejas entre zonas"
+                  className={`actions-menu-btn ${menuAccionesOpen ? 'active' : ''}`}
+                  onClick={() => setMenuAccionesOpen((prev) => !prev)}
+                  title="Más opciones"
+                  aria-label="Más opciones"
+                  aria-expanded={menuAccionesOpen}
                 >
-                  <Settings size={16} /> Modificar Zonas
+                  <MoreVertical size={16} />
                 </button>
 
-                <div className="actions-menu" ref={menuAccionesRef}>
-                  <button
-                    type="button"
-                    className={`actions-menu-btn ${menuAccionesOpen ? 'active' : ''}`}
-                    onClick={() => setMenuAccionesOpen((prev) => !prev)}
-                    title="Más opciones"
-                    aria-label="Más opciones"
-                    aria-expanded={menuAccionesOpen}
-                  >
-                    <MoreVertical size={16} />
-                  </button>
-
-                  {menuAccionesOpen && (
-                    <div className="actions-menu-panel" role="menu">
-                      <button
-                        type="button"
-                        className="actions-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setMenuAccionesOpen(false);
-                          setLimpiarModalOpen(true);
-                        }}
-                      >
-                        <Eraser size={15} /> Limpiar Resultados
-                      </button>
-                      <button
-                        type="button"
-                        className="actions-menu-item danger"
-                        role="menuitem"
-                        onClick={() => {
-                          setMenuAccionesOpen(false);
-                          setReiniciarModalOpen(true);
-                        }}
-                      >
-                        <Trash2 size={15} /> Reiniciar Categoría
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
+                {menuAccionesOpen && (
+                  <div className="actions-menu-panel" role="menu">
+                    <button
+                      type="button"
+                      className="actions-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuAccionesOpen(false);
+                        setLimpiarModalOpen(true);
+                      }}
+                    >
+                      <Eraser size={15} /> Limpiar Resultados
+                    </button>
+                    <button
+                      type="button"
+                      className="actions-menu-item danger"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuAccionesOpen(false);
+                        setReiniciarModalOpen(true);
+                      }}
+                    >
+                      <Trash2 size={15} /> Reiniciar Categoría
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -369,21 +355,6 @@ export default function CategoriaDetail() {
           onClose={() => setPartidoReprogramar(null)}
           onAssigned={() => {
             setPartidoReprogramar(null);
-            fetchData();
-          }}
-        />
-      )}
-
-      {/* Modal de Reestructuración de Zonas */}
-      {zoneEditorOpen && (
-        <ZoneEditorModal
-          isOpen={zoneEditorOpen}
-          categoriaId={id}
-          zonas={zonas}
-          parejas={parejas}
-          onClose={() => setZoneEditorOpen(false)}
-          onSuccess={() => {
-            setZoneEditorOpen(false);
             fetchData();
           }}
         />
