@@ -1289,18 +1289,17 @@ tr:nth-child(1) .pos-number {
 }
 
 .actions-menu-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
   min-width: 180px;
+  max-width: calc(100vw - 16px);
   background: var(--bg-card-end);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg), 0 8px 24px rgba(0, 0, 0, 0.5);
-  z-index: 250;
+  z-index: 1050;
   overflow: hidden;
-  animation: slideUp 150ms ease;
   padding: 0.25rem 0;
+  box-sizing: border-box;
 }
 
 .actions-menu-item {

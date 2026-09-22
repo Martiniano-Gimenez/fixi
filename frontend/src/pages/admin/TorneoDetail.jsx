@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
+import ActionsMenu from '../../components/ActionsMenu';
 import {
   ChevronLeft,
   Plus,
@@ -326,23 +327,6 @@ export default function TorneoDetail() {
 
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
-  const [menuAccionesOpen, setMenuAccionesOpen] = useState(false);
-  const menuAccionesRef = useRef(null);
-
-  useEffect(() => {
-    if (!menuAccionesOpen) return;
-    const handleClickOutside = (event) => {
-      if (menuAccionesRef.current && !menuAccionesRef.current.contains(event.target)) {
-        setMenuAccionesOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [menuAccionesOpen]);
 
   // Editar Torneo y Fecha
   const [editTorneoModalOpen, setEditTorneoModalOpen] = useState(false);
@@ -982,34 +966,16 @@ export default function TorneoDetail() {
             </Link>
 
             {torneo.estado !== 'BORRADOR' && (
-              <div className="actions-menu" ref={menuAccionesRef}>
+              <ActionsMenu>
                 <button
                   type="button"
-                  className={`actions-menu-btn ${menuAccionesOpen ? 'active' : ''}`}
-                  onClick={() => setMenuAccionesOpen((prev) => !prev)}
-                  title="Más opciones"
-                  aria-label="Más opciones"
-                  aria-expanded={menuAccionesOpen}
+                  className="actions-menu-item danger"
+                  role="menuitem"
+                  onClick={() => setReiniciarModalOpen(true)}
                 >
-                  <MoreVertical size={16} />
+                  <RotateCcw size={15} /> Reiniciar Torneo
                 </button>
-
-                {menuAccionesOpen && (
-                  <div className="actions-menu-panel" role="menu">
-                    <button
-                      type="button"
-                      className="actions-menu-item danger"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuAccionesOpen(false);
-                        setReiniciarModalOpen(true);
-                      }}
-                    >
-                      <RotateCcw size={15} /> Reiniciar Torneo
-                    </button>
-                  </div>
-                )}
-              </div>
+              </ActionsMenu>
             )}
 
             {torneo.estado === 'EN_CURSO' && (

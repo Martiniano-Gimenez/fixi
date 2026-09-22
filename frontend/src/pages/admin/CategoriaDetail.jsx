@@ -5,7 +5,6 @@ import {
   Users,
   GitBranch,
   Trash2,
-  MoreVertical,
   Eraser,
   ArrowRightLeft,
   UserPlus,
@@ -21,6 +20,7 @@ import ConfirmModal from '../../components/ConfirmModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import MoverParejaModal from '../../components/MoverParejaModal';
 import AgregarParejaModal from '../../components/AgregarParejaModal';
+import ActionsMenu from '../../components/ActionsMenu';
 
 export default function CategoriaDetail() {
   const { torneoId, id } = useParams();
@@ -46,23 +46,6 @@ export default function CategoriaDetail() {
   const [moverModalOpen, setMoverModalOpen] = useState(false);
   const [agregarModalOpen, setAgregarModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-  const [menuAccionesOpen, setMenuAccionesOpen] = useState(false);
-  const menuAccionesRef = useRef(null);
-
-  useEffect(() => {
-    if (!menuAccionesOpen) return;
-    const handleClickOutside = (event) => {
-      if (menuAccionesRef.current && !menuAccionesRef.current.contains(event.target)) {
-        setMenuAccionesOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [menuAccionesOpen]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -214,72 +197,45 @@ export default function CategoriaDetail() {
             </Link>
 
             {categoria.estado !== 'BORRADOR' && (
-              <div className="actions-menu" ref={menuAccionesRef}>
-                <button
-                  type="button"
-                  className={`actions-menu-btn ${menuAccionesOpen ? 'active' : ''}`}
-                  onClick={() => setMenuAccionesOpen((prev) => !prev)}
-                  title="Más opciones"
-                  aria-label="Más opciones"
-                  aria-expanded={menuAccionesOpen}
-                >
-                  <MoreVertical size={16} />
-                </button>
-
-                {menuAccionesOpen && (
-                  <div className="actions-menu-panel" role="menu">
-                    {categoria.estado === 'EN_CURSO' && (
-                      <>
-                        <button
-                          type="button"
-                          className="actions-menu-item"
-                          role="menuitem"
-                          onClick={() => {
-                            setMenuAccionesOpen(false);
-                            setMoverModalOpen(true);
-                          }}
-                        >
-                          <ArrowRightLeft size={15} /> Mover Pareja de Zona
-                        </button>
-                        <button
-                          type="button"
-                          className="actions-menu-item"
-                          role="menuitem"
-                          onClick={() => {
-                            setMenuAccionesOpen(false);
-                            setAgregarModalOpen(true);
-                          }}
-                        >
-                          <UserPlus size={15} /> Agregar Pareja a Zona
-                        </button>
-                        <div style={{ height: '1px', background: 'var(--color-border)', margin: '0.25rem 0' }} />
-                      </>
-                    )}
+              <ActionsMenu>
+                {categoria.estado === 'EN_CURSO' && (
+                  <>
                     <button
                       type="button"
                       className="actions-menu-item"
                       role="menuitem"
-                      onClick={() => {
-                        setMenuAccionesOpen(false);
-                        setLimpiarModalOpen(true);
-                      }}
+                      onClick={() => setMoverModalOpen(true)}
                     >
-                      <Eraser size={15} /> Limpiar Resultados
+                      <ArrowRightLeft size={15} /> Mover Pareja de Zona
                     </button>
                     <button
                       type="button"
-                      className="actions-menu-item danger"
+                      className="actions-menu-item"
                       role="menuitem"
-                      onClick={() => {
-                        setMenuAccionesOpen(false);
-                        setReiniciarModalOpen(true);
-                      }}
+                      onClick={() => setAgregarModalOpen(true)}
                     >
-                      <Trash2 size={15} /> Reiniciar Categoría
+                      <UserPlus size={15} /> Agregar Pareja a Zona
                     </button>
-                  </div>
+                    <div style={{ height: '1px', background: 'var(--color-border)', margin: '0.25rem 0' }} />
+                  </>
                 )}
-              </div>
+                <button
+                  type="button"
+                  className="actions-menu-item"
+                  role="menuitem"
+                  onClick={() => setLimpiarModalOpen(true)}
+                >
+                  <Eraser size={15} /> Limpiar Resultados
+                </button>
+                <button
+                  type="button"
+                  className="actions-menu-item danger"
+                  role="menuitem"
+                  onClick={() => setReiniciarModalOpen(true)}
+                >
+                  <Trash2 size={15} /> Reiniciar Categoría
+                </button>
+              </ActionsMenu>
             )}
           </div>
         </div>
