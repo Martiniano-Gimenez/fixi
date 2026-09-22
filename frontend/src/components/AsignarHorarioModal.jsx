@@ -74,9 +74,115 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
 
   const viernesViables = slotsValidos.filter((s) => s.dia === 'Viernes');
   const sabadoViables = slotsValidos.filter((s) => s.dia === 'Sabado');
+  const domingoViables = slotsValidos.filter((s) => s.dia === 'Domingo');
 
   const p1Nombre = partido.pareja1 ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}` : 'Pareja 1';
   const p2Nombre = partido.pareja2 ? `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}` : 'Pareja 2';
+
+  // Jerarquía visual dinámica por disponibilidad (terciles sobre valores presentes)
+  const allLibresCounts = slotsValidos.map((s) => s.canchasLibres?.length || 0);
+  const maxLibres = allLibresCounts.length > 0 ? Math.max(...allLibresCounts) : 0;
+  const minLibres = allLibresCounts.length > 0 ? Math.min(...allLibresCounts) : 0;
+
+  const getDisponibilidadTier = (canchasCount) => {
+    const range = maxLibres - minLibres;
+    // Si la dispersión es <= 1 (ej. todos 2, o 6 y 5), no penalizamos: todos quedan estándar
+    if (range <= 1) return 'tier-mid';
+    // Si la dispersión es >= 2, distribuimos según terciles relativos (fallback limpio a 2 niveles si hay pocos datos)
+    if (canchasCount >= minLibres + (range * 2) / 3) return 'tier-high';
+    if (canchasCount <= minLibres + range / 3) return 'tier-low';
+    return 'tier-mid';
+  };
+
+  const toMinutes = (hora) => {
+    if (!hora) return 0;
+    const [h, m] = hora.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const agruparSlotsEnBloques = (slots) => {
+    if (!slots || slots.length === 0) return [];
+    const sorted = [...slots].sort((a, b) => toMinutes(a.hora) - toMinutes(b.hora));
+    const bloques = [];
+    let bloqueActual = [sorted[0]];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      const diff = toMinutes(curr.hora) - toMinutes(prev.hora);
+      // Salto discontinuo si la diferencia entre inicios de turno supera 90 minutos
+      if (diff > 90) {
+        bloques.push(bloqueActual);
+        bloqueActual = [curr];
+      } else {
+        bloqueActual.push(curr);
+      }
+    }
+    bloques.push(bloqueActual);
+    return bloques;
+  };
+
+  const renderSlotChip = (s) => {
+    const isApplying = guardandoSlotId === s.slotId;
+    const tierClass = getDisponibilidadTier(s.canchasLibres?.length || 0);
+
+    return (
+      <button
+        key={s.slotId}
+        type="button"
+        disabled={Boolean(guardandoSlotId)}
+        className={`slot-chip ${tierClass}`}
+        style={{
+          padding: '0.25rem 0.5rem',
+          fontSize: '11px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.25rem',
+          minHeight: '28px',
+        }}
+        onClick={() => handleAsignar(s)}
+        title={`Asignar ${s.slotId} (${s.canchasLibres?.length || 0} canchas libres)`}
+      >
+        {isApplying ? (
+          <>
+            <Loader2 size={10} className="spin" /> {s.hora}
+          </>
+        ) : (
+          `${s.hora} (${s.canchasLibres.length} lib.)`
+        )}
+      </button>
+    );
+  };
+
+  const renderDiaBloques = (diaNombre, slots) => {
+    if (!slots || slots.length === 0) return null;
+    const bloques = agruparSlotsEnBloques(slots);
+
+    return (
+      <div style={{ marginBottom: '0.45rem' }}>
+        <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>
+          {diaNombre}:
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+          {bloques.map((bloque, bIdx) => (
+            <div key={bIdx} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              {bIdx > 0 && (
+                <div
+                  style={{
+                    borderTop: '1px dashed rgba(255, 255, 255, 0.1)',
+                    margin: '0.2rem 0',
+                  }}
+                />
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                {bloque.map(renderSlotChip)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const handleAsignar = async (opt) => {
     if (!opt || guardandoSlotId) return;
@@ -426,85 +532,9 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                       border: '1px solid var(--color-border)',
                     }}
                   >
-                    <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', marginBottom: '0.35rem', fontStyle: 'italic' }}>
-                      Hacé clic en cualquier turno para asignarlo directamente al partido:
-                    </div>
-
-                    {viernesViables.length > 0 && (
-                      <div style={{ marginBottom: '0.4rem' }}>
-                        <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
-                          Viernes:
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                          {viernesViables.map((s) => {
-                            const isApplying = guardandoSlotId === s.slotId;
-                            return (
-                              <button
-                                key={s.slotId}
-                                type="button"
-                                disabled={Boolean(guardandoSlotId)}
-                                className="slot-chip"
-                                style={{
-                                  padding: '0.2rem 0.45rem',
-                                  fontSize: '11px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.25rem',
-                                }}
-                                onClick={() => handleAsignar(s)}
-                                title={`Asignar ${s.slotId} en 1 click`}
-                              >
-                                {isApplying ? (
-                                  <>
-                                    <Loader2 size={10} className="spin" /> {s.hora}
-                                  </>
-                                ) : (
-                                  `${s.hora} (${s.canchasLibres.length} lib.)`
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {sabadoViables.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
-                          Sábado:
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                          {sabadoViables.map((s) => {
-                            const isApplying = guardandoSlotId === s.slotId;
-                            return (
-                              <button
-                                key={s.slotId}
-                                type="button"
-                                disabled={Boolean(guardandoSlotId)}
-                                className="slot-chip"
-                                style={{
-                                  padding: '0.2rem 0.45rem',
-                                  fontSize: '11px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '0.25rem',
-                                }}
-                                onClick={() => handleAsignar(s)}
-                                title={`Asignar ${s.slotId} en 1 click`}
-                              >
-                                {isApplying ? (
-                                  <>
-                                    <Loader2 size={10} className="spin" /> {s.hora}
-                                  </>
-                                ) : (
-                                  `${s.hora} (${s.canchasLibres.length} lib.)`
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    {renderDiaBloques('Viernes', viernesViables)}
+                    {renderDiaBloques('Sábado', sabadoViables)}
+                    {domingoViables.length > 0 && renderDiaBloques('Domingo', domingoViables)}
                   </div>
                 )}
               </div>

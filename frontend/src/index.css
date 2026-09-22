@@ -1464,6 +1464,20 @@ tr:nth-child(1) .pos-number {
   font-weight: 700;
   box-shadow: 0 0 8px var(--color-primary-light);
 }
+.slot-chip.tier-high {
+  color: var(--color-text);
+  font-weight: 700;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.slot-chip.tier-low {
+  opacity: 0.65;
+  border-color: rgba(255, 255, 255, 0.08);
+  font-weight: 500;
+}
+.slot-chip.tier-low:hover {
+  opacity: 1;
+}
+
 
 /* ─── Range Slider (Dual Range para Disponibilidad) ──────── */
 .ranges-list {
