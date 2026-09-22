@@ -104,6 +104,7 @@ export default function ParejasManager() {
   if (error || !categoria) return <div className="error-message">{error || 'Categoría no encontrada'}</div>;
 
   const isBorrador = categoria.estado === 'BORRADOR';
+  const isFinalizado = categoria.estado === 'FINALIZADO';
   const backUrl = `/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}`;
 
   return (
@@ -290,7 +291,7 @@ export default function ParejasManager() {
                               gap: '0.35rem',
                               width: 'auto',
                             }}
-                            title="Configurar disponibilidad horaria"
+                            title={isFinalizado ? 'Categoría finalizada — disponibilidad no editable' : 'Configurar disponibilidad horaria'}
                           >
                             <Clock size={12} strokeWidth={2} />
                             <span>
@@ -329,6 +330,7 @@ export default function ParejasManager() {
                         >
                           <DisponibilidadEditor
                             parejaId={pareja.id}
+                            categoriaEstado={categoria.estado}
                             onSlotsChanged={(count) => handleSlotsChanged(pareja.id, count)}
                           />
                         </div>

@@ -29,6 +29,12 @@ async function setDisponibilidad(parejaId, slotIds) {
     throw error;
   }
 
+  if (pareja.categoria?.estado === 'FINALIZADO') {
+    const error = new Error('No se puede modificar la disponibilidad de una categoría finalizada.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   // Filtrar solo los slots que pertenezcan a la grilla actual del club (organizador)
   const organizador = pareja.categoria.torneo.organizador;
   const slotsValidos = getSlotsValidosSet(organizador);
@@ -95,6 +101,12 @@ async function setDisponibilidadDoble(parejaId1, slotsToAdd1 = [], parejaId2, sl
   if (!pareja1 || !pareja2) {
     const error = new Error('Una o ambas parejas no fueron encontradas.');
     error.statusCode = 404;
+    throw error;
+  }
+
+  if (pareja1.categoria?.estado === 'FINALIZADO' || pareja2.categoria?.estado === 'FINALIZADO') {
+    const error = new Error('No se puede modificar la disponibilidad de una categoría finalizada.');
+    error.statusCode = 400;
     throw error;
   }
 

@@ -70,11 +70,11 @@ function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado) 
   return Array.from(result);
 }
 
-export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, onSlotsChanged, onClose }) {
+export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEstado, onChanged, onSlotsChanged, onClose }) {
   const [grilla, setGrilla] = useState({ viernes: [], sabado: [] });
   const [rangosViernes, setRangosViernes] = useState([]);
   const [rangosSabado, setRangosSabado] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(categoriaEstado !== 'FINALIZADO');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -82,8 +82,9 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
   const initialLoadedRef = useRef(false);
 
   useEffect(() => {
+    if (categoriaEstado === 'FINALIZADO') return;
     cargarDatos();
-  }, [parejaId, torneoId]);
+  }, [parejaId, torneoId, categoriaEstado]);
 
   const cargarDatos = async () => {
     setLoading(true);
@@ -139,6 +140,29 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
     guardarCambios(rangosViernes, newRangos);
   };
 
+  if (categoriaEstado === 'FINALIZADO') {
+    return (
+      <div className="disponibilidad-editor" style={{ padding: '0.25rem 0' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.65rem 0.85rem',
+            background: 'var(--color-bg)',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--color-border)',
+            fontSize: 'var(--font-size-xs)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          <Info size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
+          <span>La categoría ya finalizó. No se puede modificar la disponibilidad horaria.</span>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="loading" style={{ padding: '1rem' }}>Cargando grilla de horarios...</div>;
   }
@@ -175,6 +199,25 @@ export default function DisponibilidadEditor({ parejaId, torneoId, onChanged, on
               </span>
             ) : null}
           </div>
+
+          {categoriaEstado === 'EN_CURSO' && (
+            <p
+              style={{
+                margin: '-0.25rem 0 0 0',
+                fontSize: '11.5px',
+                color: 'var(--color-text-secondary)',
+                lineHeight: 1.4,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.35rem',
+              }}
+            >
+              <Info size={13} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--color-text-secondary)' }} />
+              <span>
+                Actualizar esto no reprograma automáticamente los partidos ya asignados. Si la pareja necesita otro horario, usá &apos;Asignar Horario&apos; en el partido pendiente después de guardar el cambio.
+              </span>
+            </p>
+          )}
 
           {/* Grilla Viernes */}
           {grilla.viernes.length > 0 && (

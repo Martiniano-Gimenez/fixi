@@ -171,6 +171,10 @@ organizadores que hoy llevan todo en papel.
 - **Blindaje del Ciclo de Vida en Gestión Base de Parejas (`ParejasManager.jsx` y `pareja.service.js`):**
   - Validación estricta en backend (`categoria.estado === 'BORRADOR'`) en `createPareja`, `deletePareja` y `updatePareja` con error HTTP 400. Una vez iniciado el torneo, se bloquea el alta libre (que generaría parejas huérfanas sin zona) y la baja (que dejaría partidos zombies con parejas nulas por `SetNull` y estadísticas desincronizadas). Las incorporaciones en torneo en curso deben canalizarse exclusivamente por el flujo seguro `POST /api/categorias/:id/zonas/agregar-pareja`.
   - Ocultamiento total en frontend: cuando la categoría no está en `BORRADOR`, el formulario de alta y los botones de borrado por fila se eliminan del DOM en `ParejasManager.jsx`, reemplazándose por un panel informativo con borde de advertencia que explica el bloqueo y guía al usuario hacia la acción correspondiente en el detalle de la categoría.
+- **Gestión Quirúrgica de Disponibilidad Horaria según Ciclo de Vida (`DisponibilidadEditor.jsx` y `disponibilidad.service.js`):**
+  - Validación en backend (`PUT /api/parejas/:id/disponibilidad`): se bloquea exclusivamente cuando `categoria.estado === 'FINALIZADO'` con error HTTP 400 (`"No se puede modificar la disponibilidad de una categoría finalizada."`), preservando la edición permitida en `BORRADOR` y `EN_CURSO` (caso de uso real: permitir avisar cambios de disponibilidad para reprogramaciones manuales posteriores).
+  - En `EN_CURSO`: se despliega un texto de ayuda discreto y no intrusivo en el editor aclarando que guardar cambios de franja no reprograma en automático partidos ya asignados y recomendando el uso de "Asignar Horario" en el cruce pendiente.
+  - En `FINALIZADO`: el editor de disponibilidad se deshabilita/oculta por completo, reemplazándose por un mensaje informativo de torneo finalizado sin cargar turnos ni renderizar sliders interactivos.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo
