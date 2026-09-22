@@ -13,6 +13,8 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   const [showAlternativas, setShowAlternativas] = useState(false);
   const [showTodosViables, setShowTodosViables] = useState(false);
 
+  const [expandedSlotId, setExpandedSlotId] = useState(null);
+
   useEffect(() => {
     if (isOpen && torneoId) {
       cargarCanchasDisponibles();
@@ -20,6 +22,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       setError('');
       setShowAlternativas(false);
       setShowTodosViables(false);
+      setExpandedSlotId(null);
     }
   }, [isOpen, torneoId, partido]);
 
@@ -57,6 +60,10 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     if (p1Ocupada || p2Ocupada) return false;
     return true;
   });
+
+  const slotsEnComunDisponibles = slotsEnComunOriginales.filter((id) =>
+    slotsValidos.some((s) => s.slotId === id)
+  );
 
   // Ranking inteligente idéntico a preCheck (certeza -> menor distancia total -> balance)
   const rankedSlots = rankearSlotsParaPartido(slotsValidos, slotsP1, slotsP2);
@@ -100,77 +107,122 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
 
   const renderOptionRow = (opt, isHero = false) => {
     const isThisApplying = guardandoSlotId === opt.slotId;
+    const isExpanded = expandedSlotId === opt.slotId;
     const isEstrellaMutua = !opt.addToP1 && !opt.addToP2;
     const isCasiEstrellaDoble = opt.addToP1 && opt.addToP2;
     const isEstrellaClasica = !isEstrellaMutua && !isCasiEstrellaDoble;
 
     let textDetails = null;
     if (isCasiEstrellaDoble) {
-      textDetails = `— ${p1Nombre} ${formatAjusteTiempo(opt.distP1)}, ${p2Nombre} ${formatAjusteTiempo(opt.distP2)}`;
+      textDetails = `${p1Nombre} ${formatAjusteTiempo(opt.distP1)} · ${p2Nombre} ${formatAjusteTiempo(opt.distP2)}`;
     } else if (isEstrellaClasica) {
       const parejaQueEstira = opt.addToP1 ? p1Nombre : p2Nombre;
       const distQueEstira = opt.addToP1 ? opt.distP1 : opt.distP2;
-      textDetails = `— ${parejaQueEstira} ${formatAjusteTiempo(distQueEstira)}`;
+      textDetails = `${parejaQueEstira} ${formatAjusteTiempo(distQueEstira)}`;
+    } else if (isEstrellaMutua) {
+      textDetails = 'Dentro de la disponibilidad original de ambas parejas';
     }
 
     return (
       <div
         key={opt.slotId}
+        onClick={() => setExpandedSlotId((prev) => (prev === opt.slotId ? null : opt.slotId))}
         style={{
           padding: isHero ? '0.6rem 0.75rem' : '0.45rem 0.6rem',
-          background: isHero ? 'rgba(255, 255, 255, 0.03)' : 'transparent',
+          background: isHero ? 'rgba(255, 255, 255, 0.03)' : 'rgba(255, 255, 255, 0.01)',
           border: isHero ? '1px solid rgba(234, 179, 8, 0.35)' : '1px solid var(--color-border)',
           borderRadius: 'var(--radius-sm)',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '0.75rem',
-          flexWrap: 'wrap',
+          flexDirection: 'column',
+          gap: '0.35rem',
+          cursor: 'pointer',
+          transition: 'border-color 0.15s ease, background-color 0.15s ease',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: isHero ? 'var(--font-size-sm)' : 'var(--font-size-xs)' }}>
-          {isCasiEstrellaDoble ? (
-            <Users size={14} style={{ color: '#38bdf8', flexShrink: 0 }} />
-          ) : (
-            <Star size={14} style={{ color: '#eab308', fill: '#eab308', flexShrink: 0 }} />
-          )}
-          <strong style={{ color: 'var(--color-text)' }}>
-            {opt.dia} {opt.hora}
-          </strong>
-          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-            ({opt.canchasLibres.length} {opt.canchasLibres.length === 1 ? 'lib.' : 'lib.'})
-          </span>
-          {textDetails && (
-            <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>
-              {textDetails}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '0.75rem',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              fontSize: isHero ? 'var(--font-size-sm)' : 'var(--font-size-xs)',
+              flex: 1,
+            }}
+          >
+            {isCasiEstrellaDoble ? (
+              <Users size={14} style={{ color: '#38bdf8', flexShrink: 0 }} />
+            ) : (
+              <Star size={14} style={{ color: '#eab308', fill: '#eab308', flexShrink: 0 }} />
+            )}
+            <strong style={{ color: 'var(--color-text)' }}>
+              {opt.dia} {opt.hora}
+            </strong>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+              ({opt.canchasLibres.length} {opt.canchasLibres.length === 1 ? 'lib.' : 'lib.'})
             </span>
-          )}
+            <ChevronDown
+              size={12}
+              style={{
+                color: 'var(--color-text-secondary)',
+                opacity: 0.6,
+                transform: isExpanded ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.2s ease',
+                marginLeft: '0.1rem',
+              }}
+            />
+          </div>
+
+          <div>
+            <button
+              type="button"
+              className={isHero ? 'btn-primary' : 'btn-secondary'}
+              disabled={Boolean(guardandoSlotId)}
+              style={{
+                padding: '0.3rem 0.8rem',
+                fontSize: '11px',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                minHeight: '28px',
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAsignar(opt);
+              }}
+            >
+              {isThisApplying ? (
+                <>
+                  <Loader2 size={11} className="spin" /> Asignando...
+                </>
+              ) : (
+                'Asignar'
+              )}
+            </button>
+          </div>
         </div>
 
-        <div>
-          <button
-            type="button"
-            className={isHero ? 'btn-primary' : 'btn-secondary'}
-            disabled={Boolean(guardandoSlotId)}
+        {/* Detalle desplegable con disclosure progresivo */}
+        {isExpanded && textDetails && (
+          <div
             style={{
-              padding: '0.25rem 0.75rem',
+              paddingTop: '0.35rem',
+              borderTop: '1px solid rgba(255, 255, 255, 0.06)',
               fontSize: '11px',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.25rem',
+              color: 'var(--color-text-secondary)',
+              lineHeight: 1.35,
             }}
-            onClick={() => handleAsignar(opt)}
           >
-            {isThisApplying ? (
-              <>
-                <Loader2 size={11} className="spin" /> Asignando...
-              </>
-            ) : (
-              'Asignar'
-            )}
-          </button>
-        </div>
+            {textDetails}
+          </div>
+        )}
       </div>
     );
   };
@@ -198,18 +250,45 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
           <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)' }}>
             {p1Nombre} vs {p2Nombre}
           </div>
-          {slotsEnComunOriginales.length > 0 ? (
-            <div style={{ marginTop: '0.3rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-warning)', display: 'flex', alignItems: 'flex-start', gap: '0.35rem', lineHeight: 1.35 }}>
-              <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                Coincidían en {slotsEnComunOriginales.length} {slotsEnComunOriginales.length === 1 ? 'turno original' : 'turnos originales'}, pero las canchas están 100% ocupadas en esa franja. Abajo tenés las opciones más cercanas ordenadas por menor esfuerzo.
-              </div>
+          {slotsEnComunOriginales.length > 0 && slotsEnComunDisponibles.length === 0 ? (
+            <div
+              style={{
+                marginTop: '0.35rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontSize: '11px',
+                color: 'var(--color-warning)',
+                background: 'rgba(245, 158, 11, 0.08)',
+                padding: '0.2rem 0.5rem',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+              }}
+              title="Coincidían en disponibilidad pero las canchas están 100% ocupadas en esos turnos"
+            >
+              <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+              <span>Coincidían en {slotsEnComunOriginales.length} {slotsEnComunOriginales.length === 1 ? 'turno' : 'turnos'} pero sin canchas libres</span>
             </div>
-          ) : (
-            <div style={{ marginTop: '0.3rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-              Ambas parejas no tienen ninguna ventana horaria en común. Abajo se sugieren las mejores opciones coordinables.
+          ) : slotsEnComunOriginales.length === 0 ? (
+            <div
+              style={{
+                marginTop: '0.35rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontSize: '11px',
+                color: 'var(--color-text-secondary)',
+                background: 'rgba(255, 255, 255, 0.04)',
+                padding: '0.2rem 0.5rem',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--color-border)',
+              }}
+              title="Ambas parejas no tienen ninguna ventana horaria en común declarada"
+            >
+              <Users size={12} style={{ flexShrink: 0 }} />
+              <span>Sin coincidencia horaria directa</span>
             </div>
-          )}
+          ) : null}
         </div>
 
         {error && (
@@ -266,8 +345,20 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               {/* Sugerencia Óptima (Hero) */}
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Sugerencia Óptima Recomendada
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    color: '#eab308',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '0.3rem',
+                  }}
+                >
+                  <Star size={11} style={{ fill: '#eab308' }} /> MEJOR OPCIÓN
                 </div>
                 {renderOptionRow(heroOption, true)}
               </div>
@@ -292,7 +383,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                     <span>
                       {showAlternativas
                         ? 'Ocultar alternativas'
-                        : `Ver ${alternativas.length} ${alternativas.length === 1 ? 'opción más cercana' : 'opciones más cercanas'}`}
+                        : `Ver alternativas (${alternativas.length})`}
                     </span>
                   </button>
 
