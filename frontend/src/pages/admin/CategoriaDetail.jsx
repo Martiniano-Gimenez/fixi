@@ -295,6 +295,7 @@ export default function CategoriaDetail() {
                 partidos={partidosDeZona}
                 onPartidoClick={(p) => setPartidoSeleccionado(p)}
                 onUpdateFechaHora={handleUpdateFechaHora}
+                onReprogramar={setPartidoReprogramar}
               />
             ) : (
               <div className="zona-grid">

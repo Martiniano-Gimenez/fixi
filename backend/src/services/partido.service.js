@@ -515,8 +515,18 @@ async function getPartidosByCategoria(organizadorId, categoriaId, filters = {}) 
   return await prisma.partido.findMany({
     where,
     include: {
-      pareja1: true,
-      pareja2: true,
+      categoria: { select: { id: true, nombre: true } },
+      zona: { select: { id: true, nombre: true } },
+      pareja1: {
+        include: {
+          slotsSeleccionados: true,
+        },
+      },
+      pareja2: {
+        include: {
+          slotsSeleccionados: true,
+        },
+      },
       ganador: true,
       sets: { orderBy: { numero: 'asc' } },
     },

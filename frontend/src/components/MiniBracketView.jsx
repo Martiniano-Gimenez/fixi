@@ -1,7 +1,7 @@
 import PartidoCard from './PartidoCard';
 import ZonaTable from './ZonaTable';
 
-export default function MiniBracketView({ zona, partidos, onPartidoClick, onUpdateFechaHora }) {
+export default function MiniBracketView({ zona, partidos, onPartidoClick, onUpdateFechaHora, onReprogramar }) {
   const p1 = partidos.find((p) => p.posicionEnRonda === 1);
   const p2 = partidos.find((p) => p.posicionEnRonda === 2);
   const pGanadores = partidos.find((p) => p.posicionEnRonda === 3);
@@ -42,6 +42,7 @@ export default function MiniBracketView({ zona, partidos, onPartidoClick, onUpda
                 onClick={p1 ? () => onPartidoClick(p1) : undefined}
                 onCargarResultado={onPartidoClick}
                 onUpdateFechaHora={onUpdateFechaHora}
+                onReprogramar={onReprogramar}
               />
             </div>
 
@@ -63,6 +64,7 @@ export default function MiniBracketView({ zona, partidos, onPartidoClick, onUpda
                 onClick={p2 ? () => onPartidoClick(p2) : undefined}
                 onCargarResultado={onPartidoClick}
                 onUpdateFechaHora={onUpdateFechaHora}
+                onReprogramar={onReprogramar}
               />
             </div>
           </div>
@@ -91,6 +93,7 @@ export default function MiniBracketView({ zona, partidos, onPartidoClick, onUpda
                 }
                 onCargarResultado={onPartidoClick}
                 onUpdateFechaHora={onUpdateFechaHora}
+                onReprogramar={onReprogramar}
               />
             </div>
 
@@ -116,6 +119,7 @@ export default function MiniBracketView({ zona, partidos, onPartidoClick, onUpda
                 }
                 onCargarResultado={onPartidoClick}
                 onUpdateFechaHora={onUpdateFechaHora}
+                onReprogramar={onReprogramar}
               />
             </div>
           </div>

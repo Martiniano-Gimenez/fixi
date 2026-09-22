@@ -447,8 +447,18 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
       partidos: {
         orderBy: { posicionEnRonda: 'asc' },
         include: {
-          pareja1: true,
-          pareja2: true,
+          categoria: { select: { id: true, nombre: true } },
+          faseEliminatoria: { select: { id: true, nombre: true, ronda: true } },
+          pareja1: {
+            include: {
+              slotsSeleccionados: true,
+            },
+          },
+          pareja2: {
+            include: {
+              slotsSeleccionados: true,
+            },
+          },
           ganador: true,
           sets: { orderBy: { numero: 'asc' } },
         },

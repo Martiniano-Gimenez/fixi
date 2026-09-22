@@ -6,7 +6,7 @@ import EditBracketMatchModal from '../../components/EditBracketMatchModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import BracketLines from '../../components/BracketLines';
-import { ChevronLeft, GitBranch, Settings, Trophy, Edit2, Plus, Clock } from 'lucide-react';
+import { ChevronLeft, GitBranch, Settings, Trophy, Edit2, Plus, Clock, AlertTriangle } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
 import './EliminatoriaView.css';
 
@@ -219,7 +219,6 @@ export default function EliminatoriaView() {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                                   <Clock size={11} style={{ color: 'var(--color-primary)' }} />
                                   {formatDiaHorario(partido.fechaHora)}
-                                  {partido.canchaNumero ? ` · Cancha ${partido.canchaNumero}` : ''}
                                 </div>
                                 {isJugable && partido.estado === 'PENDIENTE' && (
                                   <button
@@ -234,6 +233,23 @@ export default function EliminatoriaView() {
                                     <Clock size={11} />
                                   </button>
                                 )}
+                              </div>
+                            ) : isJugable && partido.estado === 'PENDIENTE' ? (
+                              <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-warning)', fontWeight: 600 }}>
+                                  <AlertTriangle size={10} /> Sin horario
+                                </div>
+                                <button
+                                  className="btn-icon"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPartidoReprogramar(partido);
+                                  }}
+                                  title="Asignar horario"
+                                  style={{ padding: '0.2rem', color: 'var(--color-text-secondary)' }}
+                                >
+                                  <Clock size={11} />
+                                </button>
                               </div>
                             ) : null}
 

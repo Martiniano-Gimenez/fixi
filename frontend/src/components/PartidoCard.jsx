@@ -103,16 +103,8 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onUpd
         }
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
-          paddingBottom: '0.4rem',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      <div className={`partido-card-header ${handleClick ? 'has-actions' : ''}`}>
+        <div className="partido-card-info">
           <span
             style={{
               fontSize: '10px',
@@ -129,18 +121,23 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onUpd
           </span>
 
           {partido.fechaHora ? (
-            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                color: 'var(--color-text-secondary)',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap',
+              }}
+            >
               <Clock size={12} style={{ color: 'var(--color-primary)' }} />
               {formatDiaHorario(partido.fechaHora)}
-              {partido.canchaNumero ? (
-                <span style={{ color: 'var(--color-text-tertiary)' }}>
-                  · Cancha {partido.canchaNumero}
-                </span>
-              ) : null}
             </span>
           ) : null}
 
-          {partido.sinHorarioAsignado && (
+          {(!partido.fechaHora || partido.sinHorarioAsignado) && (
             <span
               style={{
                 fontSize: '9.5px',
@@ -152,6 +149,7 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onUpd
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '3px',
+                whiteSpace: 'nowrap',
               }}
             >
               <AlertTriangle size={10} /> Sin horario
@@ -160,8 +158,8 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onUpd
         </div>
 
         {handleClick ? (
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-            {isJugable && partido.estado === 'PENDIENTE' && partido.fechaHora && onReprogramar && (
+          <div className="partido-card-actions">
+            {isJugable && partido.estado === 'PENDIENTE' && onReprogramar && (
               <button
                 type="button"
                 className="btn-secondary"
@@ -169,17 +167,23 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onUpd
                   e.stopPropagation();
                   onReprogramar(partido);
                 }}
-                title="Reprogramar horario y cancha"
+                title={partido.fechaHora ? "Reprogramar horario" : "Asignar horario"}
                 style={{
-                  padding: '0.2rem 0.4rem',
+                  margin: 0,
+                  height: '24px',
+                  padding: '0 0.5rem',
                   fontSize: '11px',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '0.2rem',
+                  justifyContent: 'center',
+                  gap: '0.25rem',
                   borderRadius: 'var(--radius-sm)',
+                  boxSizing: 'border-box',
+                  lineHeight: 1,
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <Clock size={11} /> Reprogramar
+                <Clock size={11} /> {partido.fechaHora ? 'Reprogramar' : 'Asignar horario'}
               </button>
             )}
             <button
@@ -190,13 +194,18 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onUpd
                 handleClick();
               }}
               style={{
-                padding: '0.2rem 0.55rem',
+                margin: 0,
+                height: '24px',
+                padding: '0 0.55rem',
                 fontSize: '11px',
                 display: 'inline-flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '0.3rem',
-                width: 'auto',
                 borderRadius: 'var(--radius-sm)',
+                boxSizing: 'border-box',
+                lineHeight: 1,
+                whiteSpace: 'nowrap',
               }}
             >
               {isFinalizado ? (
