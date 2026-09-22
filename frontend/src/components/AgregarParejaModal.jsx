@@ -199,7 +199,8 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
         boxSizing: 'border-box',
       }}
     >
-      <div
+      <form
+        onSubmit={handleSubmit}
         className="card"
         style={{
           width: '100%',
@@ -212,6 +213,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
           background: 'var(--color-bg-card)',
           border: '1px solid var(--color-border)',
           overflow: 'hidden',
+          margin: 0,
         }}
       >
         {/* Header Fijo */}
@@ -294,7 +296,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
             </div>
           )}
 
-          <form id="agregar-pareja-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
             {/* Paso 1: Jugadores */}
             <div>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: '0.45rem' }}>
@@ -374,7 +376,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
                 <div>• Se regenerarán únicamente los partidos de esta zona y se programarán automáticamente sus horarios sin modificar otras zonas ni el cuadro eliminatorio.</div>
               </div>
             )}
-          </form>
+          </div>
         </div>
 
         {/* Footer Fijo */}
@@ -402,7 +404,6 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
           </button>
           <button
             type="submit"
-            form="agregar-pareja-form"
             className="btn-primary"
             disabled={!jugador1.trim() || !jugador2.trim() || !zonaDestinoId || loading}
             style={{
@@ -425,7 +426,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
             )}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
