@@ -1461,6 +1461,393 @@ async function limpiarResultadosZonas(organizadorId, categoriaId) {
   return { message: 'Resultados de zonas reseteados.' };
 }
 
+/**
+ * Evalúa compatibilidad pairwise entre parejas de una zona en función de sus slots.
+ * Retorna true si hay al menos un par con slots incompatibles (requiereArmadoManual = true).
+ * Si alguna pareja no tiene slots seleccionados (disponibilidad libre), no genera conflicto.
+ */
+function evaluarCompatibilidadZona(parejasConSlots) {
+  for (let i = 0; i < parejasConSlots.length; i++) {
+    for (let j = i + 1; j < parejasConSlots.length; j++) {
+      const s1 = parejasConSlots[i].slots;
+      const s2 = parejasConSlots[j].slots;
+      if (s1 && s2 && s1.length > 0 && s2.length > 0) {
+        const shared = s1.filter((slot) => s2.includes(slot));
+        if (shared.length === 0) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Regenera de forma segura los partidos de una zona afectada.
+ * - Recalcula formato y clasifican según la cantidad actual de parejas (4: MINI_BRACKET, 2 o 3: ROUND_ROBIN).
+ * - Reevalúa y persiste requiereArmadoManual según compatibilidad horaria real.
+ * - Elimina los partidos PENDIENTE anteriores de la zona (y sus SetPartido asociados).
+ * - Crea los nuevos partidos mediante generarPartidosZonaHelper.
+ */
+async function regenerarPartidosZona(tx, categoriaId, zonaId) {
+  const zonaParejas = await tx.zonaPareja.findMany({
+    where: { zonaId },
+    include: {
+      pareja: {
+        include: { slotsSeleccionados: true },
+      },
+    },
+  });
+
+  const size = zonaParejas.length;
+  if (size < 2 || size > 4) {
+    const error = new Error(`La zona tiene ${size} parejas. Solo se permiten zonas de 2, 3 o 4 parejas.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const formato = size === 4 ? 'MINI_BRACKET' : 'ROUND_ROBIN';
+  const clasifican = size === 4 ? 3 : 2;
+
+  const parejasParaCompat = zonaParejas.map((zp) => ({
+    id: zp.pareja.id,
+    slots: (zp.pareja.slotsSeleccionados || []).map((s) => s.slotId),
+  }));
+  const requiereArmadoManual = evaluarCompatibilidadZona(parejasParaCompat);
+
+  await tx.zona.update({
+    where: { id: zonaId },
+    data: {
+      formato,
+      clasifican,
+      requiereArmadoManual,
+    },
+  });
+
+  const existingPartidos = await tx.partido.findMany({
+    where: { zonaId },
+    select: { id: true },
+  });
+  const ids = existingPartidos.map((p) => p.id);
+  if (ids.length > 0) {
+    await tx.setPartido.deleteMany({
+      where: { partidoId: { in: ids } },
+    });
+    await tx.partido.deleteMany({
+      where: { id: { in: ids } },
+    });
+  }
+
+  const parejasEnEstaZona = zonaParejas.map((zp) => zp.pareja);
+  await generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size, parejasEnEstaZona);
+}
+
+/**
+ * Mueve una pareja de una zona de origen a una zona de destino post-inicio de torneo.
+ * Operación transaccional con guards estrictos de estado (solo si todos los partidos están PENDIENTE).
+ */
+async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOrigenId, zonaDestinoId }) {
+  if (!categoriaId || !parejaId || !zonaOrigenId || !zonaDestinoId) {
+    const error = new Error('Faltan parámetros requeridos: parejaId, zonaOrigenId y zonaDestinoId son obligatorios.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (zonaOrigenId === zonaDestinoId) {
+    const error = new Error('La zona de origen y la de destino deben ser diferentes.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // 1. Validaciones previas
+  const categoria = await getCategoriaById(organizadorId, categoriaId);
+  if (categoria.estado !== 'EN_CURSO') {
+    const error = new Error('La categoría debe estar en estado EN_CURSO para mover parejas.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (categoria.torneo?.estado !== 'EN_CURSO') {
+    const error = new Error('El torneo debe estar en estado EN_CURSO para mover parejas.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const zonaOrigen = await prisma.zona.findUnique({
+    where: { id: zonaOrigenId },
+    include: {
+      zonaParejas: true,
+      partidos: true,
+    },
+  });
+  if (!zonaOrigen || zonaOrigen.categoriaId !== categoriaId) {
+    const error = new Error('La zona de origen no pertenece a esta categoría.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const zonaDestino = await prisma.zona.findUnique({
+    where: { id: zonaDestinoId },
+    include: {
+      zonaParejas: true,
+      partidos: true,
+    },
+  });
+  if (!zonaDestino || zonaDestino.categoriaId !== categoriaId) {
+    const error = new Error('La zona de destino no pertenece a esta categoría.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const perteneceOrigen = zonaOrigen.zonaParejas.some((zp) => zp.parejaId === parejaId);
+  if (!perteneceOrigen) {
+    const error = new Error('La pareja no pertenece a la zona de origen especificada.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (zonaOrigen.zonaParejas.length <= 2) {
+    const error = new Error(`No se puede mover la pareja: la ${zonaOrigen.nombre} quedaría con menos de 2 parejas.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (zonaDestino.zonaParejas.length >= 4) {
+    const error = new Error(`No se puede mover la pareja: la ${zonaDestino.nombre} ya tiene el máximo permitido de 4 parejas.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const partidoNoPendienteOrigen = zonaOrigen.partidos.find((p) => p.estado !== 'PENDIENTE');
+  if (partidoNoPendienteOrigen) {
+    const error = new Error(`No se puede modificar la ${zonaOrigen.nombre} porque tiene partidos en curso o finalizados.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const partidoNoPendienteDestino = zonaDestino.partidos.find((p) => p.estado !== 'PENDIENTE');
+  if (partidoNoPendienteDestino) {
+    const error = new Error(`No se puede modificar la ${zonaDestino.nombre} porque tiene partidos en curso o finalizados.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // 2. Transacción atómica
+  return await prisma.$transaction(async (tx) => {
+    // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
+    const catCheck = await tx.categoria.findUnique({
+      where: { id: categoriaId },
+      include: { torneo: true },
+    });
+    if (!catCheck || catCheck.estado !== 'EN_CURSO' || catCheck.torneo?.estado !== 'EN_CURSO') {
+      const error = new Error('La categoría o el torneo ya no se encuentran en estado EN_CURSO.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const partidosNoPendientes = await tx.partido.findMany({
+      where: {
+        zonaId: { in: [zonaOrigenId, zonaDestinoId] },
+        estado: { not: 'PENDIENTE' },
+      },
+    });
+    if (partidosNoPendientes.length > 0) {
+      const error = new Error('Operación cancelada: una o más zonas involucradas tienen partidos en curso o finalizados.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const zpOrigen = await tx.zonaPareja.findUnique({
+      where: { zonaId_parejaId: { zonaId: zonaOrigenId, parejaId } },
+    });
+    if (!zpOrigen) {
+      const error = new Error('La pareja ya no se encuentra en la zona de origen.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const countOrigen = await tx.zonaPareja.count({ where: { zonaId: zonaOrigenId } });
+    if (countOrigen <= 2) {
+      const error = new Error('La zona de origen quedaría con menos de 2 parejas.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const countDestino = await tx.zonaPareja.count({ where: { zonaId: zonaDestinoId } });
+    if (countDestino >= 4) {
+      const error = new Error('La zona de destino ya tiene 4 parejas.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    // Ejecutar reubicación
+    await tx.zonaPareja.delete({
+      where: { zonaId_parejaId: { zonaId: zonaOrigenId, parejaId } },
+    });
+
+    await tx.zonaPareja.create({
+      data: {
+        zonaId: zonaDestinoId,
+        parejaId,
+        pg: 0,
+        pp: 0,
+        sf: 0,
+        sc: 0,
+        gf: 0,
+        gc: 0,
+        puntos: 0,
+        posicion: 0,
+      },
+    });
+
+    // Regenerar partidos de ambas zonas
+    await regenerarPartidosZona(tx, categoriaId, zonaOrigenId);
+    await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
+
+    // Asignar horarios a los partidos nuevos dentro de la transacción externa
+    await asignarHorariosAutomatico(organizadorId, [categoriaId], tx);
+
+    return {
+      message: 'Pareja movida de zona correctamente.',
+      categoriaId,
+      zonaOrigenId,
+      zonaDestinoId,
+      parejaId,
+    };
+  });
+}
+
+/**
+ * Agrega una nueva pareja a una zona existente post-inicio de torneo (alta tardía).
+ * Crea la pareja y su asignación en la zona, regenera partidos y reasigna horarios atómicamente.
+ */
+async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, jugador1, jugador2 }) {
+  if (!categoriaId || !zonaDestinoId || !jugador1 || !jugador2) {
+    const error = new Error('Faltan parámetros requeridos: zonaDestinoId, jugador1 y jugador2 son obligatorios.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const j1 = String(jugador1).trim();
+  const j2 = String(jugador2).trim();
+  if (!j1 || !j2) {
+    const error = new Error('Los nombres de los jugadores no pueden estar vacíos.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // 1. Validaciones previas
+  const categoria = await getCategoriaById(organizadorId, categoriaId);
+  if (categoria.estado !== 'EN_CURSO') {
+    const error = new Error('La categoría debe estar en estado EN_CURSO para agregar parejas.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (categoria.torneo?.estado !== 'EN_CURSO') {
+    const error = new Error('El torneo debe estar en estado EN_CURSO para agregar parejas.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const zonaDestino = await prisma.zona.findUnique({
+    where: { id: zonaDestinoId },
+    include: {
+      zonaParejas: true,
+      partidos: true,
+    },
+  });
+  if (!zonaDestino || zonaDestino.categoriaId !== categoriaId) {
+    const error = new Error('La zona de destino no pertenece a esta categoría.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (zonaDestino.zonaParejas.length >= 4) {
+    const error = new Error(`No se puede agregar la pareja: la ${zonaDestino.nombre} ya tiene el máximo permitido de 4 parejas.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const partidoNoPendienteDestino = zonaDestino.partidos.find((p) => p.estado !== 'PENDIENTE');
+  if (partidoNoPendienteDestino) {
+    const error = new Error(`No se puede modificar la ${zonaDestino.nombre} porque tiene partidos en curso o finalizados.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // 2. Transacción atómica
+  return await prisma.$transaction(async (tx) => {
+    // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
+    const catCheck = await tx.categoria.findUnique({
+      where: { id: categoriaId },
+      include: { torneo: true },
+    });
+    if (!catCheck || catCheck.estado !== 'EN_CURSO' || catCheck.torneo?.estado !== 'EN_CURSO') {
+      const error = new Error('La categoría o el torneo ya no se encuentran en estado EN_CURSO.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const partidosNoPendientes = await tx.partido.findMany({
+      where: {
+        zonaId: zonaDestinoId,
+        estado: { not: 'PENDIENTE' },
+      },
+    });
+    if (partidosNoPendientes.length > 0) {
+      const error = new Error('Operación cancelada: la zona de destino tiene partidos en curso o finalizados.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const countDestino = await tx.zonaPareja.count({ where: { zonaId: zonaDestinoId } });
+    if (countDestino >= 4) {
+      const error = new Error('La zona de destino ya tiene 4 parejas.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    // Crear la nueva Pareja en la categoría
+    const totalParejasCat = await tx.pareja.count({ where: { categoriaId } });
+    const nuevaPareja = await tx.pareja.create({
+      data: {
+        categoriaId,
+        jugador1: j1,
+        jugador2: j2,
+        orden: totalParejasCat + 1,
+      },
+    });
+
+    // Asociar pareja a la zona destino
+    await tx.zonaPareja.create({
+      data: {
+        zonaId: zonaDestinoId,
+        parejaId: nuevaPareja.id,
+        pg: 0,
+        pp: 0,
+        sf: 0,
+        sc: 0,
+        gf: 0,
+        gc: 0,
+        puntos: 0,
+        posicion: 0,
+      },
+    });
+
+    // Regenerar partidos de la zona destino
+    await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
+
+    // Asignar horarios a los partidos nuevos dentro de la transacción externa
+    await asignarHorariosAutomatico(organizadorId, [categoriaId], tx);
+
+    return {
+      message: 'Pareja agregada a la zona correctamente.',
+      categoriaId,
+      zonaDestinoId,
+      pareja: nuevaPareja,
+    };
+  });
+}
+
 module.exports = {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -1475,4 +1862,10 @@ module.exports = {
   proximaFechaPorDia,
   slotIdToMsWindow,
   asignarHorariosModoLluviaMCF,
+  evaluarCompatibilidadZona,
+  regenerarPartidosZona,
+  generarPartidosZonaHelper,
+  moverParejaDeZona,
+  agregarParejaAZona,
 };
+

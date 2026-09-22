@@ -153,7 +153,14 @@ organizadores que hoy llevan todo en papel.
   - **Despeje de Cabecera y Menú Overflow `⋮` (`CategoriaDetail.jsx`):**
     - Supresión de encabezados redundantes *"Posiciones — Zona {letra}"* y *"Partidos — Zona {letra}"*, conectando directamente las tarjetas con los tabs superiores de selección de zona.
     - Mapeo de estados legibles mediante `estadoLabel()` ("Borrador", "En curso", "Finalizado").
-    - Reorganización de acciones destructivas/secundarias (*"Limpiar Resultados"*, *"Reiniciar Categoría"*) dentro de un menú contextual desplegable `⋮` (`MoreVertical`) con detector click-outside y toque táctil seguro (`mousedown`/`touchstart`), manteniendo limpia la cabecera.
+    - Reorganización de acciones destructivas/secundarias (*"Limpiar Resultados"*, *"Reiniciar Categoría"*) y operaciones de ajuste seguro (*"Mover Pareja de Zona"*, *"Agregar Pareja a Zona"*) dentro de un menú contextual desplegable `⋮` (`MoreVertical`) con detector click-outside y toque táctil seguro (`mousedown`/`touchstart`), manteniendo limpia la cabecera.
+- **Operaciones Seguras de Zonas Post-Inicio (Mover Pareja y Alta Tardía):**
+  - Dos endpoints atómicos dedicados en backend (`POST /api/categorias/:id/zonas/mover-pareja` y `POST /api/categorias/:id/zonas/agregar-pareja`) para corregir errores de asignación o incorporar parejas de último momento con el torneo en curso.
+  - Guards estrictos de estado repetidos atómicamente dentro de `prisma.$transaction`: la operación se bloquea si cualquiera de las zonas involucradas tiene al menos un partido `FINALIZADO` o `EN_CURSO` (solo permitido si todos los partidos de esas zonas están `PENDIENTE`).
+  - Blindaje total de playoffs y zonas testigo: no altera partidos de fase eliminatoria ni partidos de zonas ajenas a la operación.
+  - Invariantes de formato y límites de zona: bloquea si una zona quedaría con menos de 2 parejas o superaría el máximo de 4 parejas. Recalcula formato (`ROUND_ROBIN` / `MINI_BRACKET`) y cupos de clasificación (2 o 3) según el nuevo tamaño.
+  - Reasignación horaria automática mediante `asignarHorariosAutomatico(..., tx)` componible dentro de la misma transacción externa.
+  - Modales en frontend (`MoverParejaModal` y `AgregarParejaModal`) integrados al menú `⋮` de `CategoriaDetail.jsx`.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo

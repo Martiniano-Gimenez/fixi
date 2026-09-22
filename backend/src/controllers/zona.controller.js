@@ -34,8 +34,43 @@ async function limpiarResultadosZonas(req, res, next) {
   }
 }
 
+async function moverPareja(req, res, next) {
+  try {
+    const organizadorId = getOrgId(req);
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const { parejaId, zonaOrigenId, zonaDestinoId } = req.body;
+    const result = await zonaService.moverParejaDeZona(organizadorId, categoriaId, {
+      parejaId,
+      zonaOrigenId,
+      zonaDestinoId,
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function agregarPareja(req, res, next) {
+  try {
+    const organizadorId = getOrgId(req);
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const { zonaDestinoId, jugador1, jugador2 } = req.body;
+    const result = await zonaService.agregarParejaAZona(organizadorId, categoriaId, {
+      zonaDestinoId,
+      jugador1,
+      jugador2,
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getZonasByCategoria,
   getZonasByTorneo: getZonasByCategoria,
   limpiarResultadosZonas,
+  moverPareja,
+  agregarPareja,
 };
+

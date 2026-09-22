@@ -83,6 +83,23 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 - **Alternativas que consideré y descarté:** Agregar un botón de "Guardar" individual (descartado por ensuciar la UI) o quitar la recarga general de datos (descartado por problemas de sincronización).
 - **Resultado final:** Edición fluida de fechas sin interrupciones.
 
+### Operaciones Seguras de Zonas Post-Inicio (`moverParejaDeZona` y `agregarParejaAZona`)
+- **Problema o necesidad que motivó el trabajo:** Tras auditar y eliminar el antiguo "Editor Manual de Zonas" (`reestructurarZonas`) por considerarlo destructivo (borraba sin control el cuadro eliminatorio completo, partidos finalizados y sets), persistía la necesidad real de permitir al organizador realizar ajustes acotados con el torneo en curso:
+  1. Corregir una asignación errónea de zona (mover una pareja de una zona a otra).
+  2. Registrar un alta tardía (una pareja que llega el día del torneo y debe sumarse a una zona existente).
+- **Qué decidí y por qué:** Diseñé una arquitectura transaccional segura y atómica basada en dos endpoints separados y especializados:
+  1. `POST /api/categorias/:id/zonas/mover-pareja` (`parejaId`, `zonaOrigenId`, `zonaDestinoId`).
+  2. `POST /api/categorias/:id/zonas/agregar-pareja` (`jugador1`, `jugador2`, `zonaDestinoId`), que crea la pareja y la asigna en un único paso sin requerir estados intermedios.
+  - **Guard de estado y defensa TOCTOU:** Ambas operaciones verifican que la categoría y el torneo se encuentren en `EN_CURSO`, y que **todos los partidos de las zonas involucradas estén en `PENDIENTE`**. Si existe al menos un partido `FINALIZADO` o `EN_CURSO`, la operación se rechaza inmediatamente (HTTP 400). Esta verificación se ejecuta antes de la transacción y se repite de forma atómica como primera consulta dentro de `prisma.$transaction` para cerrar cualquier ventana de condición de carrera.
+  - **Invariantes estructurales:** Se valida estrictamente que la zona origen no quede con menos de 2 parejas (lo que rompería el sistema al dejarla sin partidos) y que la zona destino no exceda el máximo de 4 parejas.
+  - **Blindaje absoluto de fase eliminatoria y zonas testigo:** Ninguna operación toca partidos con `faseEliminatoriaId != null` ni partidos pertenecientes a otras zonas no involucradas.
+  - **Recálculo de formato y scheduling automático:** Las zonas afectadas recalculan su formato (`ROUND_ROBIN` para 2 o 3 parejas, `MINI_BRACKET` para 4 parejas) y cupos de clasificación (2 o 3). Sus partidos se regeneran y se integran al scheduler `asignarHorariosAutomatico(..., tx)`, que se ejecuta dentro de la misma transacción externa (`externalTx`) garantizando atomicidad y consistencia sin deadlocks.
+  - **Frontend amigable:** Se desarrollaron los componentes `MoverParejaModal.jsx` y `AgregarParejaModal.jsx`, accesibles desde el menú `⋮` de `CategoriaDetail.jsx`, con validaciones en tiempo real y deshabilitación inteligente de opciones inválidas.
+- **Alternativas que consideré y descarté:**
+  - *Mantener un modal libre de drag-and-drop de todas las zonas:* Descartado porque permitía reestructuraciones globales masivas e inconsistentes que comprometían el cronograma del club.
+  - *Requerir que la pareja exista previamente antes de agregarla a la zona:* Descartado porque la regla del ABM original prohibía crear parejas fuera de BORRADOR; recibir los nombres en el payload simplifica el flujo operativo del organizador en un solo paso seguro.
+- **Resultado final:** Operaciones seguras, auditables y validadas mediante tests de integración automatizados (`test-operaciones-zonas.js`) que confirman la preservación del 100% de los fixtures eliminatorios y la correcta reprogramación de las zonas afectadas.
+
 ---
 
 ## 4. Fase Eliminatoria (Brackets)

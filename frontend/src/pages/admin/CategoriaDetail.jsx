@@ -7,6 +7,9 @@ import {
   Trash2,
   MoreVertical,
   Eraser,
+  ArrowRightLeft,
+  UserPlus,
+  CheckCircle2,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { estadoLabel } from '../../utils/estadoLabels';
@@ -16,6 +19,8 @@ import MiniBracketView from '../../components/MiniBracketView';
 import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
+import MoverParejaModal from '../../components/MoverParejaModal';
+import AgregarParejaModal from '../../components/AgregarParejaModal';
 
 export default function CategoriaDetail() {
   const { torneoId, id } = useParams();
@@ -38,6 +43,9 @@ export default function CategoriaDetail() {
   const [limpiandoZonas, setLimpiandoZonas] = useState(false);
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
+  const [moverModalOpen, setMoverModalOpen] = useState(false);
+  const [agregarModalOpen, setAgregarModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   const [menuAccionesOpen, setMenuAccionesOpen] = useState(false);
   const menuAccionesRef = useRef(null);
 
@@ -220,6 +228,33 @@ export default function CategoriaDetail() {
 
                 {menuAccionesOpen && (
                   <div className="actions-menu-panel" role="menu">
+                    {categoria.estado === 'EN_CURSO' && (
+                      <>
+                        <button
+                          type="button"
+                          className="actions-menu-item"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuAccionesOpen(false);
+                            setMoverModalOpen(true);
+                          }}
+                        >
+                          <ArrowRightLeft size={15} /> Mover Pareja de Zona
+                        </button>
+                        <button
+                          type="button"
+                          className="actions-menu-item"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuAccionesOpen(false);
+                            setAgregarModalOpen(true);
+                          }}
+                        >
+                          <UserPlus size={15} /> Agregar Pareja a Zona
+                        </button>
+                        <div style={{ height: '1px', background: 'var(--color-border)', margin: '0.25rem 0' }} />
+                      </>
+                    )}
                     <button
                       type="button"
                       className="actions-menu-item"
@@ -383,6 +418,60 @@ export default function CategoriaDetail() {
         onConfirm={handleReiniciar}
         onCancel={() => setReiniciarModalOpen(false)}
       />
+
+      {/* Modal de Mover Pareja de Zona */}
+      <MoverParejaModal
+        isOpen={moverModalOpen}
+        onClose={() => setMoverModalOpen(false)}
+        categoriaId={id}
+        zonas={zonas}
+        partidos={partidos}
+        onSuccess={(msg) => {
+          fetchData();
+          setToastMessage(msg);
+          setTimeout(() => setToastMessage(''), 5000);
+        }}
+      />
+
+      {/* Modal de Agregar Pareja a Zona */}
+      <AgregarParejaModal
+        isOpen={agregarModalOpen}
+        onClose={() => setAgregarModalOpen(false)}
+        categoriaId={id}
+        zonas={zonas}
+        partidos={partidos}
+        onSuccess={(msg) => {
+          fetchData();
+          setToastMessage(msg);
+          setTimeout(() => setToastMessage(''), 5000);
+        }}
+      />
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            right: '2rem',
+            background: 'var(--color-bg-card)',
+            color: 'var(--color-text)',
+            border: '1px solid var(--color-primary)',
+            boxShadow: 'var(--shadow-xl)',
+            borderRadius: 'var(--border-radius-md)',
+            padding: '0.85rem 1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.6rem',
+            zIndex: 1200,
+            fontSize: 'var(--font-size-sm)',
+            animation: 'fadeIn 0.3s ease',
+          }}
+        >
+          <CheckCircle2 size={18} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }
