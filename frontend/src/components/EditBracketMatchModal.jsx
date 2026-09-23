@@ -20,17 +20,44 @@ export default function EditBracketMatchModal({
     if (partido) {
       setOrigen1(partido.origenPareja1 || '');
       setOrigen2(partido.origenPareja2 || '');
+      setError('');
     }
   }, [partido]);
 
-  // Mapa de origen -> posicionEnRonda de partidos ajenos al actual en la misma ronda
+  // Mapa de origen -> { posicionEnRonda, finalizado, partidoId } de partidos ajenos al actual en la misma ronda
   const orígenesEnUsoOtrosPartidos = new Map();
   partidosRonda.forEach((p) => {
     if (p.id !== partido?.id) {
-      if (p.origenPareja1) orígenesEnUsoOtrosPartidos.set(p.origenPareja1, p.posicionEnRonda);
-      if (p.origenPareja2) orígenesEnUsoOtrosPartidos.set(p.origenPareja2, p.posicionEnRonda);
+      const info = {
+        posicionEnRonda: p.posicionEnRonda,
+        finalizado: p.estado === 'FINALIZADO',
+        partidoId: p.id,
+      };
+      if (p.origenPareja1) orígenesEnUsoOtrosPartidos.set(p.origenPareja1, info);
+      if (p.origenPareja2) orígenesEnUsoOtrosPartidos.set(p.origenPareja2, info);
     }
   });
+
+  // Detectar movimientos / swaps pendientes hacia este partido
+  const movimientos = [];
+  if (origen1 && orígenesEnUsoOtrosPartidos.has(origen1)) {
+    const info = orígenesEnUsoOtrosPartidos.get(origen1);
+    movimientos.push({
+      origen: origen1,
+      posicionDestino: 'Posición 1',
+      origenPartidoNum: info.posicionEnRonda,
+      finalizado: info.finalizado,
+    });
+  }
+  if (origen2 && orígenesEnUsoOtrosPartidos.has(origen2)) {
+    const info = orígenesEnUsoOtrosPartidos.get(origen2);
+    movimientos.push({
+      origen: origen2,
+      posicionDestino: 'Posición 2',
+      origenPartidoNum: info.posicionEnRonda,
+      finalizado: info.finalizado,
+    });
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -41,16 +68,10 @@ export default function EditBracketMatchModal({
       return;
     }
 
-    if (origen1 && orígenesEnUsoOtrosPartidos.has(origen1)) {
+    const conflictoFinalizado = movimientos.find((m) => m.finalizado);
+    if (conflictoFinalizado) {
       setError(
-        `El origen "${origen1}" ya está asignado en el Partido #${orígenesEnUsoOtrosPartidos.get(origen1)} de esta ronda.`
-      );
-      return;
-    }
-
-    if (origen2 && orígenesEnUsoOtrosPartidos.has(origen2)) {
-      setError(
-        `El origen "${origen2}" ya está asignado en el Partido #${orígenesEnUsoOtrosPartidos.get(origen2)} de esta ronda.`
+        `No se puede mover "${conflictoFinalizado.origen}" porque el Partido #${conflictoFinalizado.origenPartidoNum} ya está finalizado.`
       );
       return;
     }
@@ -60,6 +81,7 @@ export default function EditBracketMatchModal({
       await api.patch(`/partidos/${partido.id}/bracket`, {
         origenPareja1: origen1 || null,
         origenPareja2: origen2 || null,
+        liberarEnOtros: movimientos.length > 0,
       });
       if (typeof onSuccess === 'function') onSuccess();
       if (typeof onSaved === 'function') onSaved();
@@ -78,6 +100,25 @@ export default function EditBracketMatchModal({
       originOptions.push(`${i}° ${z.nombre}`);
     }
   });
+
+  const renderOption = (opt) => {
+    const info = orígenesEnUsoOtrosPartidos.get(opt);
+    const estaEnUso = Boolean(info);
+    const estaFinalizado = info?.finalizado;
+
+    let label = opt;
+    if (estaFinalizado) {
+      label = `${opt} (Partido #${info.posicionEnRonda} finalizado)`;
+    } else if (estaEnUso) {
+      label = `${opt} (en uso en Partido #${info.posicionEnRonda})`;
+    }
+
+    return (
+      <option key={opt} value={opt} disabled={estaFinalizado}>
+        {label}
+      </option>
+    );
+  };
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
@@ -129,15 +170,7 @@ export default function EditBracketMatchModal({
               }}
             >
               <option value="">-- Sin Definir / Vacío --</option>
-              {originOptions.map((opt) => {
-                const enUsoEnPartidoNum = orígenesEnUsoOtrosPartidos.get(opt);
-                const estaEnOtroPartido = enUsoEnPartidoNum !== undefined;
-                return (
-                  <option key={opt} value={opt} disabled={estaEnOtroPartido}>
-                    {estaEnOtroPartido ? `${opt} (en uso en Partido #${enUsoEnPartidoNum})` : opt}
-                  </option>
-                );
-              })}
+              {originOptions.map(renderOption)}
             </select>
           </div>
 
@@ -159,17 +192,38 @@ export default function EditBracketMatchModal({
               }}
             >
               <option value="">-- Sin Definir / Vacío --</option>
-              {originOptions.map((opt) => {
-                const enUsoEnPartidoNum = orígenesEnUsoOtrosPartidos.get(opt);
-                const estaEnOtroPartido = enUsoEnPartidoNum !== undefined;
-                return (
-                  <option key={opt} value={opt} disabled={estaEnOtroPartido}>
-                    {estaEnOtroPartido ? `${opt} (en uso en Partido #${enUsoEnPartidoNum})` : opt}
-                  </option>
-                );
-              })}
+              {originOptions.map(renderOption)}
             </select>
           </div>
+
+          {movimientos.length > 0 && (
+            <div
+              style={{
+                padding: '0.75rem',
+                backgroundColor: 'rgba(234, 179, 8, 0.1)',
+                border: '1px solid rgba(234, 179, 8, 0.35)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 'var(--font-size-xs)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.4rem',
+              }}
+            >
+              <div style={{ fontWeight: 600, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span>⚠️</span> Reasignación de cruces (Swap)
+              </div>
+              <p style={{ margin: 0, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+                Al guardar, se liberará automáticamente la posición en los partidos correspondientes:
+              </p>
+              <ul style={{ margin: 0, paddingLeft: '1.25rem', color: 'var(--color-text)', lineHeight: 1.4 }}>
+                {movimientos.map((m, idx) => (
+                  <li key={idx}>
+                    <strong>{m.origen}</strong> se moverá desde el <strong>Partido #{m.origenPartidoNum}</strong> a este partido ({m.posicionDestino}).
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
             <button
@@ -186,7 +240,11 @@ export default function EditBracketMatchModal({
               disabled={loading}
               style={{ flex: 1 }}
             >
-              {loading ? 'Guardando...' : 'Guardar'}
+              {loading
+                ? 'Guardando...'
+                : movimientos.length > 0
+                ? 'Confirmar y Guardar'
+                : 'Guardar'}
             </button>
           </div>
         </form>

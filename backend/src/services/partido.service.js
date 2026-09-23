@@ -487,7 +487,7 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
     throw error;
   }
 
-  const { origenPareja1, origenPareja2 } = data;
+  const { origenPareja1, origenPareja2, liberarEnOtros } = data;
 
   const nuevoOrigen1 = origenPareja1 !== undefined ? (origenPareja1 || null) : partido.origenPareja1;
   const nuevoOrigen2 = origenPareja2 !== undefined ? (origenPareja2 || null) : partido.origenPareja2;
@@ -498,50 +498,130 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
     throw error;
   }
 
-  // Validar que los orígenes no estén ya asignados en otro partido de la misma ronda
+  // Detectar colisiones con otros partidos de la misma ronda
+  let partidosEnConflicto = [];
   if (nuevoOrigen1 || nuevoOrigen2) {
     const otrosPartidos = await prisma.partido.findMany({
       where: {
         faseEliminatoriaId: partido.faseEliminatoriaId,
         id: { not: partidoId },
       },
-      select: {
-        id: true,
-        posicionEnRonda: true,
-        origenPareja1: true,
-        origenPareja2: true,
-      },
     });
 
-    for (const p of otrosPartidos) {
-      if (nuevoOrigen1 && (p.origenPareja1 === nuevoOrigen1 || p.origenPareja2 === nuevoOrigen1)) {
+    partidosEnConflicto = otrosPartidos.filter((p) => {
+      const match1 = nuevoOrigen1 && (p.origenPareja1 === nuevoOrigen1 || p.origenPareja2 === nuevoOrigen1);
+      const match2 = nuevoOrigen2 && (p.origenPareja1 === nuevoOrigen2 || p.origenPareja2 === nuevoOrigen2);
+      return match1 || match2;
+    });
+
+    // Si algún partido en colisión está FINALIZADO, nunca se puede modificar
+    for (const p of partidosEnConflicto) {
+      if (p.estado === 'FINALIZADO') {
         const error = new Error(
-          `El origen "${nuevoOrigen1}" ya está asignado en el Partido #${p.posicionEnRonda} de esta ronda.`
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-      if (nuevoOrigen2 && (p.origenPareja1 === nuevoOrigen2 || p.origenPareja2 === nuevoOrigen2)) {
-        const error = new Error(
-          `El origen "${nuevoOrigen2}" ya está asignado en el Partido #${p.posicionEnRonda} de esta ronda.`
+          `No se puede mover el origen porque el Partido #${p.posicionEnRonda} ya está finalizado.`
         );
         error.statusCode = 400;
         throw error;
       }
     }
+
+    // Si hay colisión y no se autorizó la liberación, arrojar error descriptivo
+    if (partidosEnConflicto.length > 0 && !liberarEnOtros) {
+      const primerConflicto = partidosEnConflicto[0];
+      const origenConflictivo =
+        (nuevoOrigen1 && (primerConflicto.origenPareja1 === nuevoOrigen1 || primerConflicto.origenPareja2 === nuevoOrigen1))
+          ? nuevoOrigen1
+          : nuevoOrigen2;
+      const error = new Error(
+        `El origen "${origenConflictivo}" ya está asignado en el Partido #${primerConflicto.posicionEnRonda} de esta ronda.`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
   }
 
-  const updateData = {};
+  // Preparar update del partido actual
+  const updateDataActual = {};
+  let pareja1IdActual = partido.pareja1Id;
+  let pareja2IdActual = partido.pareja2Id;
+
   if (origenPareja1 !== undefined) {
-    updateData.origenPareja1 = origenPareja1 || null;
+    updateDataActual.origenPareja1 = nuevoOrigen1;
+    if (!nuevoOrigen1) {
+      pareja1IdActual = null;
+    }
   }
   if (origenPareja2 !== undefined) {
-    updateData.origenPareja2 = origenPareja2 || null;
+    updateDataActual.origenPareja2 = nuevoOrigen2;
+    if (!nuevoOrigen2) {
+      pareja2IdActual = null;
+    }
+  }
+
+  // Si hay partidos en conflicto y liberarEnOtros está activo, ejecutar transacción atómica
+  if (partidosEnConflicto.length > 0 && liberarEnOtros) {
+    return await prisma.$transaction(async (tx) => {
+      // Liberar en los partidos en conflicto y rastrear parejas físicas a transferir
+      for (const p of partidosEnConflicto) {
+        const updateConflicto = {};
+        if (nuevoOrigen1 && p.origenPareja1 === nuevoOrigen1) {
+          updateConflicto.origenPareja1 = null;
+          if (p.pareja1Id) {
+            pareja1IdActual = p.pareja1Id;
+            updateConflicto.pareja1Id = null;
+          }
+        }
+        if (nuevoOrigen1 && p.origenPareja2 === nuevoOrigen1) {
+          updateConflicto.origenPareja2 = null;
+          if (p.pareja2Id) {
+            pareja1IdActual = p.pareja2Id;
+            updateConflicto.pareja2Id = null;
+          }
+        }
+        if (nuevoOrigen2 && p.origenPareja1 === nuevoOrigen2) {
+          updateConflicto.origenPareja1 = null;
+          if (p.pareja1Id) {
+            pareja2IdActual = p.pareja1Id;
+            updateConflicto.pareja1Id = null;
+          }
+        }
+        if (nuevoOrigen2 && p.origenPareja2 === nuevoOrigen2) {
+          updateConflicto.origenPareja2 = null;
+          if (p.pareja2Id) {
+            pareja2IdActual = p.pareja2Id;
+            updateConflicto.pareja2Id = null;
+          }
+        }
+
+        await tx.partido.update({
+          where: { id: p.id },
+          data: updateConflicto,
+        });
+      }
+
+      updateDataActual.pareja1Id = pareja1IdActual;
+      updateDataActual.pareja2Id = pareja2IdActual;
+
+      const updated = await tx.partido.update({
+        where: { id: partidoId },
+        data: updateDataActual,
+      });
+
+      return updated;
+    });
+  }
+
+  // Sin colisiones: actualizar directamente
+  if (origenPareja1 !== undefined && !nuevoOrigen1) {
+    updateDataActual.pareja1Id = null;
+  }
+  if (origenPareja2 !== undefined && !nuevoOrigen2) {
+    updateDataActual.pareja2Id = null;
   }
 
   const updated = await prisma.partido.update({
     where: { id: partidoId },
-    data: updateData,
+    data: updateDataActual,
   });
 
   return updated;
