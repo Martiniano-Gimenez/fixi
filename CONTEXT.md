@@ -181,15 +181,22 @@ organizadores que hoy llevan todo en papel.
   - **Nivelación Geométrica de Botones:** Corrección del desnivel vertical causado por el `margin-top: var(--space-2)` heredado de `.btn-primary`, estableciendo `margin: 0`, altura idéntica de `24px`, `boxSizing: 'border-box'`, `lineHeight: 1` y centrado flex en ambos botones.
   - **Diseño Mobile-First y Remoción de Cancha (≤ 600px):** Se eliminó la indicación de cancha (`· Cancha X`) en las tarjetas para despejar espacio visual, asegurando el día y horario con `whiteSpace: 'nowrap'`. Para pantallas móviles ($\le 600\text{px}$), el encabezado conmuta a un layout de 2 filas: la fila superior distribuye el badge a la izquierda y el horario a la derecha (`justify-content: space-between`); la fila inferior expande los botones con `flex: 1` a lo ancho de la tarjeta sin desbordar. Blindaje global contra scroll horizontal con `overflow-x: hidden` en `html, body`.
 - **Rediseño UI/UX de Asignación de Horarios, Jerarquía Dinámica y Blindaje de Dominio (`AsignarHorarioModal.jsx`):**
-  - **Jerarquía Visual y Reducción de Ruido en Sugerencias (Sección A):**
+  - **Jerarquía Visual y Reducción de Ruido en Sugerencias (Sección A para Zonas):**
     - Supresión de párrafos explicativos largos sustituyéndolos por un badge contextual sutil `Sin coincidencia horaria directa` renderizado condicionalmente (únicamente si no existe coincidencia directa de tipo estrella mutua entre las parejas, evitando falsos positivos cuando sí la hay).
     - Encabezado ultra-compacto `★ MEJOR OPCIÓN` (o `MEJOR OPCIÓN DISPONIBLE` cuando no es estrella) con hero card simplificada en chips visuales de día, hora y cancha, y botón de acción primario directo *"Asignar este turno"*.
     - Revelado progresivo inline (*progressive disclosure*): botón *"Ver detalle"* (`ChevronDown` / `ChevronUp`) para inspeccionar el esfuerzo de adaptación por pareja (minutos de estiramiento $\pm Nm$) bajo demanda sin sobrecargar la vista inicial.
     - Acordeón colapsable cerrado por defecto para *"Otras opciones coordinables (N)"*, reduciendo drásticamente la altura vertical del modal y la fatiga de decisión.
-  - **Grilla de Turnos del Club con Terciles Dinámicos y Bloques Cronológicos (Sección B):**
-    - Eliminación de notas en cursiva redundantes bajo el toggle *"Mostrar todos los turnos del club"*.
-    - **Jerarquía Visual Relativa por Terciles:** La distinción de canchas libres (alto, medio y bajo contraste) se calcula de forma dinámica mediante terciles sobre los valores reales de libertad del set actual de turnos (`maxLibertad`), en lugar de umbrales fijos hardcodeados (como "4+"), garantizando alto contraste incluso en categorías o clubes con baja disponibilidad. Incluye fallback adaptativo para sets con menos de 3 valores distintos (bicolor o neutro).
-    - **Separadores Sutiles de Bloque (`.slot-block-divider`):** Detección automática de saltos temporales mayores a 90 minutos entre turnos consecutivos para renderizar separadores tenues con guiones que aíslan visualmente la mañana, la tarde y la noche.
+  - **Grilla Plana Adaptada para Eliminatorias / Playoffs:**
+    - Para partidos de eliminatoria (`esPartidoEliminatoria`), se omite el ranking de estiramiento artificial de zonas (`rankedSlots = []`), suprimiendo badges de coincidencia y la falsa "MEJOR OPCIÓN".
+    - Despliegue directo de una grilla cronológica plana y limpia con los turnos que poseen canchas libres reales para el día de juego (Sábado noche en Dieciseisavos, Domingo en playoffs regulares).
+    - Fallbacks honestos para nombres de cruces: `"1° Zona A vs 2° Zona B"` si no hay parejas físicas, o `"Cruce pendiente de definir"` si tampoco hay orígenes (erradicando el falso "Pareja 1 vs Pareja 2").
+  - **Visualización Destacada de Horario y Cancha Actual en Reprogramación:**
+    - Si `partido.fechaHora` existe, se muestra bajo el nombre del cruce una línea destacada tipo badge neutral con ícono `Clock`: `Actualmente: Sábado 11:30 · Cancha X` (utilizando `partido.canchaNumero`). Si el partido no tiene horario, no se renderiza.
+  - **Exclusión Dinámica del Turno Idéntico Actual (Anti-Redundancia):**
+    - En la raíz de `slotsValidos`, para el slot coincidente con el horario actual (`coincideConHorarioActual`) se descuenta la cancha física asignada (`c !== partido.canchaNumero`). Si no hay otras canchas libres a esa hora, el slot se excluye al 100% de `slotsValidos` (no aparece en Hero, ni en alternativas, ni en la grilla plana de bracket). Si hay otra cancha libre disponible, se ofrece únicamente para reasignación de pista en la misma franja.
+  - **Grilla de Turnos del Club y Separadores de Bloque (`agruparSlotsEnBloques`):**
+    - Eliminación de la jerarquía artificial de terciles (`tier-high`, `tier-low`), unificando todos los chips de turno al estilo base limpio `.slot-chip`.
+    - Separadores sutiles entre franjas discontinuas cuando el salto temporal entre turnos consecutivos supera los 90 minutos.
   - **Filtrado Contextual Estricto por Tipo de Partido:**
     - Erradicación de turnos dominicales en partidos de zona (`partido.zonaId || partido.zona`), restringiendo estrictamente las sugerencias y la grilla general a Viernes y Sábado.
     - Para partidos de fase eliminatoria (`partido.faseEliminatoriaId || partido.faseEliminatoria`), se restringe a Domingo, con excepción de los Dieciseisavos de Final (`faseEliminatoria.ronda >= 32` o nombre conteniendo "dieciseisavos"), que admiten la franja nocturna del Sábado ($\ge 18:00$ hs y trasnoche) además del Domingo.
@@ -210,7 +217,8 @@ organizadores que hoy llevan todo en papel.
     - En `index.css`, se definió `.partidos-pendientes-grid` con `grid-template-columns: 1fr` en `@media (max-width: 480px)` (resolviendo el desborde horizontal que provocaba el antiguo `minmax(310px, 1fr)` en viewports $\le 410$px al restar los márgenes de página, banner y acordeón).
     - Botón de acción expandido simétricamente al 100% de la tarjeta (`flex: 1; width: 100%; justify-content: center;`) en pantallas móviles, eliminando la asimetría flotante a la derecha y facilitando el toque táctil con una sola mano.
     - Reducción calibrada de padding del banner a `0.85rem 0.65rem` y tipografía adaptable en el título (`0.95rem`).
-- **Normalización, Validación y Reasignación Atómica en Cuadros Eliminatorios (`EditBracketMatchModal.jsx`, `EliminatoriaView.jsx` y `partido.service.js`):**
+- **Normalización, Validación, Reasignación y Reprogramación en Cuadros Eliminatorios (`EditBracketMatchModal.jsx`, `EliminatoriaView.jsx` y `partido.service.js`):**
+  - **Acceso Directo a Reprogramación en Tarjetas de Bracket:** Botón de reloj (`Clock` de `lucide-react`) integrado en la cabecera de cada tarjeta del bracket junto a `Settings` para todos los partidos no finalizados (`!isFinalizado`), permitiendo asignar o reprogramar tanto cruces jugables como partidos pendientes en estado *"Esperando..."*.
   - Migración definitiva del diálogo de asignación manual de cruces eliminatorios ("Editar Cruce") desde el viejo esquema de popover inline (280px con `position: static`) al estándar del proyecto (`.modal-overlay` + `.modal-content` con `maxWidth: 400px` y `backdrop-filter: blur(6px)`).
   - Soporte de prop `isOpen`, cierre intuitivo al hacer clic en el backdrop y botón `btn-link-action` con ícono `X` de `lucide-react`.
   - Limpieza de estilos inline huérfanos de `zIndex` condicional en tarjetas y wrappers de partidos en el bracket.
@@ -219,6 +227,7 @@ organizadores que hoy llevan todo en papel.
     - Con `liberarEnOtros: true`, la operación se ejecuta en un `prisma.$transaction` atómico: libera la posición en los partidos origen (`origenPareja = null`, `parejaId = null`), transfiere la pareja física (`parejaXId`) si ya estaba clasificada al partido actual, y actualiza el cruce destino sin estados intermedios.
     - En frontend (`EditBracketMatchModal.jsx`), las opciones ocupadas no se bloquean (salvo si el partido asignatario está finalizado) y muestran la etiqueta `(en uso en Partido #X)`. Un banner de advertencia reactivo (`⚠️ Reasignación de cruces`) detalla los movimientos pendientes y el botón conmuta a *"Confirmar y Guardar"* enviando `liberarEnOtros: true`.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
+- **Configuración de Red Local LAN:** Servidor de desarrollo Vite configurado con `host: true` en `vite.config.js` para auditorías y pruebas directas en tiempo real desde dispositivos móviles en la red Wi-Fi local.
 
 ## Reglas de trabajo
 - Trabajar en ramas por feature (`feature/nombre-ticket`), nunca directo a main.
