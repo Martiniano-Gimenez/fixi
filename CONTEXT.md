@@ -210,13 +210,14 @@ organizadores que hoy llevan todo en papel.
     - En `index.css`, se definió `.partidos-pendientes-grid` con `grid-template-columns: 1fr` en `@media (max-width: 480px)` (resolviendo el desborde horizontal que provocaba el antiguo `minmax(310px, 1fr)` en viewports $\le 410$px al restar los márgenes de página, banner y acordeón).
     - Botón de acción expandido simétricamente al 100% de la tarjeta (`flex: 1; width: 100%; justify-content: center;`) en pantallas móviles, eliminando la asimetría flotante a la derecha y facilitando el toque táctil con una sola mano.
     - Reducción calibrada de padding del banner a `0.85rem 0.65rem` y tipografía adaptable en el título (`0.95rem`).
-- **Normalización y Validación de Modales en Cuadros Eliminatorios (`EditBracketMatchModal.jsx`, `EliminatoriaView.jsx` y `partido.service.js`):**
+- **Normalización, Validación y Reasignación Atómica en Cuadros Eliminatorios (`EditBracketMatchModal.jsx`, `EliminatoriaView.jsx` y `partido.service.js`):**
   - Migración definitiva del diálogo de asignación manual de cruces eliminatorios ("Editar Cruce") desde el viejo esquema de popover inline (280px con `position: static`) al estándar del proyecto (`.modal-overlay` + `.modal-content` con `maxWidth: 400px` y `backdrop-filter: blur(6px)`).
   - Soporte de prop `isOpen`, cierre intuitivo al hacer clic en el backdrop y botón `btn-link-action` con ícono `X` de `lucide-react`.
   - Limpieza de estilos inline huérfanos de `zIndex` condicional en tarjetas y wrappers de partidos en el bracket.
-  - **Validación Estricta de Unicidad de Orígenes por Ronda (Frontend + Backend):**
-    - En backend (`PATCH /partidos/:id/bracket`), rechazo HTTP 400 si `origenPareja1 === origenPareja2` o si alguno ya está ocupado en otro partido de la misma ronda (`where: { faseEliminatoriaId, id: { not: partidoId } }`), reportando el partido asignatario (`en el Partido #X`).
-    - En frontend (`EliminatoriaView.jsx` y `EditBracketMatchModal.jsx`), inyección directa de `partidosRonda` desde memoria, deshabilitación de opciones ocupadas con etiqueta explicativa (`(en uso en Partido #X)`), preservación de los orígenes del propio partido para reasignación libre (swap sin autobloqueo) y validación preventiva en submit.
+  - **Validación de Unicidad y Swap Atómico de Orígenes por Ronda (Frontend + Backend):**
+    - En backend (`PATCH /partidos/:id/bracket`), rechazo HTTP 400 si `origenPareja1 === origenPareja2` o si alguno colisiona con otro partido de la misma ronda y no se envía `liberarEnOtros: true`. Si algún partido en colisión está `FINALIZADO`, se rechaza siempre con HTTP 400.
+    - Con `liberarEnOtros: true`, la operación se ejecuta en un `prisma.$transaction` atómico: libera la posición en los partidos origen (`origenPareja = null`, `parejaId = null`), transfiere la pareja física (`parejaXId`) si ya estaba clasificada al partido actual, y actualiza el cruce destino sin estados intermedios.
+    - En frontend (`EditBracketMatchModal.jsx`), las opciones ocupadas no se bloquean (salvo si el partido asignatario está finalizado) y muestran la etiqueta `(en uso en Partido #X)`. Un banner de advertencia reactivo (`⚠️ Reasignación de cruces`) detalla los movimientos pendientes y el botón conmuta a *"Confirmar y Guardar"* enviando `liberarEnOtros: true`.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo

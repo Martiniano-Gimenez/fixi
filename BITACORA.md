@@ -1075,9 +1075,41 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+### Sesión 40: Reasignación e Intercambio Atómico de Orígenes en Cuadros Eliminatorios (Swap en Backend y Frontend)
+
+- **Objetivo:** Permitir al organizador mover o hacer swap de orígenes de zona ("1° Zona A") entre partidos de la misma ronda de playoffs sin bloqueos estáticos, liberando atómicamente la posición en el partido original y transfiriendo la pareja física si ya estaba clasificada, con aviso reactivo consolidado en el modal y confirmación en un clic.
+- **Problema o necesidad que motivó el trabajo:**
+  1. Tras la validación de unicidad de la Sesión 39, los selectores de `EditBracketMatchModal.jsx` deshabilitaban por completo las opciones ya asignadas a otro partido de la ronda. En la operativa real de armar o ajustar un cuadro, los organizadores necesitan frecuentemente reasignar o mover un origen de un cruce a otro; el bloqueo total obligaba a un tedioso proceso manual de dos pasos (vaciar primero el cruce origen y recién entonces editar el cruce destino).
+  2. Si el partido original ya tenía la pareja física asignada (`parejaXId` poblado porque concluyó la fase de grupos y se computó el clasificado), mover el origen sin transferir la pareja física creaba cruces inconsistentes o duplicados.
+  3. Si un partido de la ronda ya se encontraba en estado `FINALIZADO`, cualquier intento de mover su origen debía rechazarse de plano para preservar la integridad histórica del torneo.
+- **Qué decidí y por qué:**
+  1. **Backend Transaccional y Atómico (`partido.service.js`):**
+     - En `updateBracketMatch`, se incorporó el parámetro booleano `liberarEnOtros`.
+     - Se detectan los partidos en conflicto de la ronda. Si alguno de ellos está `FINALIZADO`, se aborta inmediatamente con HTTP 400 (`"No se puede mover el origen porque el Partido #X ya está finalizado."`).
+     - Si hay conflicto y `liberarEnOtros: true`, la operación se ejecuta dentro de un `prisma.$transaction`:
+       - En cada partido en conflicto, se vacía el origen (`origenParejaX = null`) y, si tenía pareja física asignada (`parejaXId`), se transfiere al partido actual y se desvincula del original (`parejaXId = null`). El partido original retorna ordenadamente a estado `"Esperando..."`.
+       - El partido actual se actualiza con los nuevos orígenes y las parejas físicas transferidas, garantizando consistencia y atomicidad sin estados intermedios inconsistentes.
+     - Si hay conflicto y `liberarEnOtros` es `false`, se preserva el rechazo descriptivo HTTP 400 preexistente.
+  2. **Frontend con Feedback Reactivo y Confirmación Unificada (`EditBracketMatchModal.jsx`):**
+     - Se modificó la construcción de `orígenesEnUsoOtrosPartidos` para rastrear `{ posicionEnRonda, finalizado, partidoId }`.
+     - En los `<select>`, las opciones ocupadas por otros partidos ya **no se deshabilitan**, excepto si el partido que las ocupa está `FINALIZADO` (`${opt} (Partido #${posicionEnRonda} finalizado)` con `disabled={true}`). Las demás permanecen seleccionables con la etiqueta explicativa `${opt} (en uso en Partido #${posicionEnRonda})`.
+     - Se computa reactivamente el array `movimientos` con los orígenes seleccionados en Posición 1 y Posición 2 que requieren liberación en otros cruces.
+     - Si `movimientos.length > 0`, se renderiza un banner visual de advertencia (`⚠️ Reasignación de cruces (Swap)`) que detalla con precisión cada reasignación ("*1° Zona A se moverá desde el Partido #2 a este partido (Posición 1)*").
+     - El botón de guardado conmuta dinámicamente su texto a **"Confirmar y Guardar"** y envía `liberarEnOtros: true` al endpoint.
+- **Validación y verificación:**
+  - Creación y ejecución de script de test de integración transaccional dedicado (`test-bracket-swap.js`) verificando:
+    1. Rechazo HTTP 400 descriptivo cuando `liberarEnOtros: false`.
+    2. Swap atómico exitoso con transferencia de pareja física (`pareja1Id`) y vaciado a null en el partido anterior.
+    3. Bloqueo estricto con HTTP 400 ante partidos colisionados en estado `FINALIZADO`.
+  - Suite completa de eliminatorias en backend (`test-eliminatoria-scheduler-completo.js`) con 100% de aserciones aprobadas.
+  - Build de producción con Vite (`npm run build`) en frontend exitoso en 902ms sin errores de tipado ni advertencias.
+- **Resultado final:** Cuadros eliminatorios con flujo de reasignación ágil, intuitivo y 100% atómico, con blindaje transaccional en base de datos y total claridad visual para el organizador.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 39 sesiones de trabajo, sumando un aproximado total de entre 95.5 y 113.5 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 40 sesiones de trabajo, sumando un aproximado total de entre 96.5 y 115 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -1120,6 +1152,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 39 s
 | **37** | ~1.5 a 2 horas | Simplificación, jerarquía visual y optimización mobile en `PartidosPendientesSection`: eliminación de subtítulo del banner, erradicación de alertas pasivas de saturación y chip de viables, chip de zona alineado al margen sin sangría excesiva, botón primario verde deportivo (`btn-primary`), y layout responsive mobile para pantallas $\le 410\text{px}$ (grid a 1 columna y botón full-width táctil). |
 | **38** | ~1 a 1.5 horas | Auditoría y normalización de modal "Editar Cruce" en cuadros eliminatorios (`EditBracketMatchModal.jsx` y `EliminatoriaView.jsx`): detección y corrección de bug de posicionamiento por residuo histórico de popover, migración a patrón estándar `.modal-overlay` + `.modal-content` (400px), soporte de prop `isOpen`, limpieza de estilos huérfanos de zIndex y armonización visual con tokens semánticos y `lucide-react`. |
 | **39** | ~1 a 1.5 horas | Validación de unicidad de orígenes en eliminatorias (Frontend + Backend en `EditBracketMatchModal`, `EliminatoriaView` y `partido.service.js`): rechazo HTTP 400 con mensaje descriptivo de partido en uso, inyección de `partidosRonda`, opciones deshabilitadas con etiqueta `(en uso en Partido #X)`, preservación del propio partido (swap libre sin autobloqueo) y suite de regresión aprobada. |
-| **Total** | **~95.5 a 113.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía en detalle de torneo y de categorías, tablas de posiciones responsivas sin scroll forzado, operaciones seguras post-inicio con modales ergonómicos, blindaje de ciclo de vida en parejas y disponibilidad, asignación directa de horarios en tarjetas de partidos con nivelación visual y optimización mobile-first sin desborde, rediseño de asignación/reprogramación con disclosure progresivo y consistencia de dominio, simplificación y elevación visual en partidos pendientes con diseño responsive adaptativo, normalización ergonómica de modales en cuadros eliminatorios con validación estricta de unicidad de cruces, y menús móviles universales. |
+| **40** | ~1 a 1.5 horas | Reasignación e intercambio atómico de orígenes (swap) en cuadros eliminatorios (Frontend + Backend): transacción atómica en Prisma (`liberarEnOtros: true`) con transferencia de pareja física clasificada, bloqueo en partidos finalizados, aviso reactivo consolidado de movimientos y confirmación en 1 clic. |
+| **Total** | **~96.5 a 115 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía en detalle de torneo y de categorías, tablas de posiciones responsivas sin scroll forzado, operaciones seguras post-inicio con modales ergonómicos, blindaje de ciclo de vida en parejas y disponibilidad, asignación directa de horarios en tarjetas de partidos con nivelación visual y optimización mobile-first sin desborde, rediseño de asignación/reprogramación con disclosure progresivo y consistencia de dominio, simplificación y elevación visual en partidos pendientes con diseño responsive adaptativo, normalización ergonómica de modales en cuadros eliminatorios con validación estricta de unicidad de cruces, intercambio atómico de orígenes (swap) con transferencia de parejas clasificadas, y menús móviles universales. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
