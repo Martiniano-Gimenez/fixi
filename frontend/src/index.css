@@ -675,6 +675,25 @@ ul, ol {
   animation: slideUp 200ms ease;
 }
 
+@media (max-width: 480px) {
+  .modal-overlay {
+    padding: 0.5rem;
+  }
+  .modal-content {
+    padding: 1rem 0.75rem;
+    border-radius: var(--radius-md);
+  }
+}
+
+@media (max-width: 380px) {
+  .modal-overlay {
+    padding: 0.25rem;
+  }
+  .modal-content {
+    padding: 0.85rem 0.55rem;
+  }
+}
+
 .info-row {
   display: flex;
   justify-content: space-between;
@@ -1452,6 +1471,7 @@ tr:nth-child(1) .pos-number {
   text-align: center;
   transition: all 0.15s ease;
   font-family: var(--font-display);
+  white-space: nowrap;
 }
 .slot-chip:hover {
   border-color: var(--color-primary);

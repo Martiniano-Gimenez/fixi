@@ -266,7 +266,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         key={opt.slotId}
         onClick={() => setExpandedSlotId((prev) => (prev === opt.slotId ? null : opt.slotId))}
         style={{
-          padding: isHero ? '0.6rem 0.75rem' : '0.45rem 0.6rem',
+          padding: isHero ? '0.55rem 0.65rem' : '0.45rem 0.55rem',
           background: isHero ? 'rgba(255, 255, 255, 0.03)' : 'rgba(255, 255, 255, 0.01)',
           border: isHero ? '1px solid rgba(234, 179, 8, 0.35)' : '1px solid var(--color-border)',
           borderRadius: 'var(--radius-sm)',
@@ -282,16 +282,17 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            gap: '0.75rem',
+            gap: '0.4rem',
           }}
         >
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.45rem',
+              gap: '0.35rem',
               fontSize: isHero ? 'var(--font-size-sm)' : 'var(--font-size-xs)',
               flex: 1,
+              minWidth: 0,
             }}
           >
             {isCasiEstrellaDoble ? (
@@ -299,37 +300,38 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             ) : (
               <Star size={14} style={{ color: '#eab308', fill: '#eab308', flexShrink: 0 }} />
             )}
-            <strong style={{ color: 'var(--color-text)' }}>
+            <strong style={{ color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
               {opt.dia} {opt.hora}
             </strong>
-            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-              ({opt.canchasLibres.length} {opt.canchasLibres.length === 1 ? 'lib.' : 'lib.'})
+            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+              ({opt.canchasLibres.length} lib.)
             </span>
             <ChevronDown
               size={12}
               style={{
+                flexShrink: 0,
                 color: 'var(--color-text-secondary)',
                 opacity: 0.6,
                 transform: isExpanded ? 'rotate(180deg)' : 'none',
                 transition: 'transform 0.2s ease',
-                marginLeft: '0.1rem',
               }}
             />
           </div>
 
-          <div>
+          <div style={{ flexShrink: 0 }}>
             <button
               type="button"
               className={isHero ? 'btn-primary' : 'btn-secondary'}
               disabled={Boolean(guardandoSlotId)}
               style={{
-                padding: '0.3rem 0.8rem',
+                padding: '0.25rem 0.65rem',
                 fontSize: '11px',
                 fontWeight: 600,
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '0.25rem',
                 minHeight: '28px',
+                whiteSpace: 'nowrap',
               }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -356,6 +358,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
               fontSize: '11px',
               color: 'var(--color-text-secondary)',
               lineHeight: 1.35,
+              wordBreak: 'break-word',
             }}
           >
             {textDetails}
@@ -369,16 +372,16 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '640px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.6rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.5rem' }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-text)' }}>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text)', lineHeight: 1.25 }}>
               {partido.fechaHora ? 'Reprogramar horario y cancha' : 'Asignar horario y cancha libre'}
             </h3>
             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
               {partido.categoria?.nombre} · {partido.zona?.nombre || 'Zona'}
             </span>
           </div>
-          <button type="button" className="btn-link-action" onClick={onClose} style={{ color: 'var(--color-text-secondary)' }}>
+          <button type="button" className="btn-link-action" onClick={onClose} style={{ color: 'var(--color-text-secondary)', padding: '0.25rem' }}>
             <X size={18} />
           </button>
         </div>
