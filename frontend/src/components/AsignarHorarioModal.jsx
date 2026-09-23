@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { Star, Users, ChevronDown, ChevronUp, Loader2, AlertTriangle, X } from 'lucide-react';
-import { formatAjusteTiempo, minutosCronologicosJornada } from '../utils/dateUtils';
+import { Clock, Star, Users, ChevronDown, ChevronUp, Loader2, AlertTriangle, X } from 'lucide-react';
+import { formatAjusteTiempo, formatDiaHorario, minutosCronologicosJornada } from '../utils/dateUtils';
 import { rankearSlotsParaPartido } from '../utils/rankingSlots';
 
 const HORA_INICIO_NOCHE_DIECISEISAVOS = 18; // 18:00hs: inicio de franja nocturna post-zonas para Dieciseisavos
@@ -81,25 +81,56 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     return true;
   };
 
+  const coincideConHorarioActual = (s) => {
+    if (!partido.fechaHora) return false;
+    if (s.fechaIso) {
+      const diff = Math.abs(new Date(s.fechaIso).getTime() - new Date(partido.fechaHora).getTime());
+      if (diff < 60000) return true;
+    }
+    const fechaActualStr = formatDiaHorario(partido.fechaHora);
+    const normalizar = (str) =>
+      (str || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+    return normalizar(fechaActualStr) === normalizar(`${s.dia} ${s.hora}`);
+  };
+
   // FILTRADO ESTRICTO DE FACTIBILIDAD Y CONTEXTO:
-  // 1. Hay al menos una cancha libre
-  // 2. Corresponde al día permitido según el contexto del partido
-  // 3. Ninguna de las 2 parejas tiene otro partido en simultáneo
-  const slotsValidos = rawSlots.filter((s) => {
-    if (!s.canchasLibres || s.canchasLibres.length === 0) return false;
-    if (!esSlotPermitidoPorContexto(s)) return false;
-    const p1Ocupada = partido.pareja1Id && (s.parejasOcupadasIds || []).includes(partido.pareja1Id);
-    const p2Ocupada = partido.pareja2Id && (s.parejasOcupadasIds || []).includes(partido.pareja2Id);
-    if (p1Ocupada || p2Ocupada) return false;
-    return true;
-  });
+  // 1. Excluir la cancha que el propio partido ya tiene asignada a esa misma hora (no ofrecer lo que ya tiene)
+  // 2. Hay al menos una cancha libre
+  // 3. Corresponde al día permitido según el contexto del partido
+  // 4. Ninguna de las 2 parejas tiene otro partido en simultáneo
+  const slotsValidos = rawSlots
+    .map((s) => {
+      const esMismoHorario = coincideConHorarioActual(s);
+      if (esMismoHorario) {
+        const canchasLibresAjustadas = partido.canchaNumero
+          ? (s.canchasLibres || []).filter((c) => c !== partido.canchaNumero)
+          : [];
+        return {
+          ...s,
+          canchasLibres: canchasLibresAjustadas,
+        };
+      }
+      return s;
+    })
+    .filter((s) => {
+      if (!s.canchasLibres || s.canchasLibres.length === 0) return false;
+      if (!esSlotPermitidoPorContexto(s)) return false;
+      const p1Ocupada = partido.pareja1Id && (s.parejasOcupadasIds || []).includes(partido.pareja1Id);
+      const p2Ocupada = partido.pareja2Id && (s.parejasOcupadasIds || []).includes(partido.pareja2Id);
+      if (p1Ocupada || p2Ocupada) return false;
+      return true;
+    });
 
   const slotsEnComunDisponibles = slotsEnComunOriginales.filter((id) =>
     slotsValidos.some((s) => s.slotId === id)
   );
 
-  // Ranking inteligente idéntico a preCheck (certeza -> menor distancia total -> balance)
-  const rankedSlots = rankearSlotsParaPartido(slotsValidos, slotsP1, slotsP2);
+  // Ranking inteligente idéntico a preCheck (solo necesario en fase de zonas)
+  const rankedSlots = esPartidoEliminatoria ? [] : rankearSlotsParaPartido(slotsValidos, slotsP1, slotsP2);
 
   const heroOption = rankedSlots[0];
   const alternativas = rankedSlots.slice(1, 6);
@@ -112,20 +143,27 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   const p1Nombre = partido.pareja1 ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}` : 'Pareja 1';
   const p2Nombre = partido.pareja2 ? `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}` : 'Pareja 2';
 
-  // Jerarquía visual dinámica por disponibilidad (terciles sobre valores presentes)
-  const allLibresCounts = slotsValidos.map((s) => s.canchasLibres?.length || 0);
-  const maxLibres = allLibresCounts.length > 0 ? Math.max(...allLibresCounts) : 0;
-  const minLibres = allLibresCounts.length > 0 ? Math.min(...allLibresCounts) : 0;
+  // Texto del cruce con fallbacks honestos para eliminatorias y zonas
+  let cruceTexto = '';
+  if (partido.pareja1 && partido.pareja2) {
+    cruceTexto = `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2} vs ${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}`;
+  } else if (partido.pareja1 || partido.pareja2) {
+    const definida = partido.pareja1
+      ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}`
+      : `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}`;
+    const pendiente = partido.pareja1
+      ? (partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando clasificado...')
+      : (partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando clasificado...');
+    cruceTexto = `${definida} vs ${pendiente}`;
+  } else if (partido.origenPareja1 || partido.origenPareja2) {
+    cruceTexto = `${partido.origenPareja1 || 'Esperando...'} vs ${partido.origenPareja2 || 'Esperando...'}`;
+  } else {
+    cruceTexto = esPartidoEliminatoria ? 'Cruce pendiente de definir' : 'Pareja 1 vs Pareja 2';
+  }
 
-  const getDisponibilidadTier = (canchasCount) => {
-    const range = maxLibres - minLibres;
-    // Si la dispersión es <= 1 (ej. todos 2, o 6 y 5), no penalizamos: todos quedan estándar
-    if (range <= 1) return 'tier-mid';
-    // Si la dispersión es >= 2, distribuimos según terciles relativos (fallback limpio a 2 niveles si hay pocos datos)
-    if (canchasCount >= minLibres + (range * 2) / 3) return 'tier-high';
-    if (canchasCount <= minLibres + range / 3) return 'tier-low';
-    return 'tier-mid';
-  };
+  const contextoNombre = esPartidoEliminatoria
+    ? (partido.faseEliminatoria?.nombre || (partido.posicionEnRonda ? `Partido #${partido.posicionEnRonda}` : 'Playoffs'))
+    : (partido.zona?.nombre || 'Zona');
 
   const agruparSlotsEnBloques = (slots) => {
     if (!slots || slots.length === 0) return [];
@@ -156,14 +194,13 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
 
   const renderSlotChip = (s) => {
     const isApplying = guardandoSlotId === s.slotId;
-    const tierClass = getDisponibilidadTier(s.canchasLibres?.length || 0);
 
     return (
       <button
         key={s.slotId}
         type="button"
         disabled={Boolean(guardandoSlotId)}
-        className={`slot-chip ${tierClass}`}
+        className="slot-chip"
         style={{
           padding: '0.25rem 0.5rem',
           fontSize: '11px',
@@ -378,7 +415,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
               {partido.fechaHora ? 'Reprogramar horario y cancha' : 'Asignar horario y cancha libre'}
             </h3>
             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-              {partido.categoria?.nombre} · {partido.zona?.nombre || 'Zona'}
+              {partido.categoria?.nombre} · {contextoNombre}
             </span>
           </div>
           <button type="button" className="btn-link-action" onClick={onClose} style={{ color: 'var(--color-text-secondary)', padding: '0.25rem' }}>
@@ -389,47 +426,76 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         {/* Info del partido */}
         <div style={{ padding: '0.65rem 0.85rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', marginBottom: '0.85rem' }}>
           <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)' }}>
-            {p1Nombre} vs {p2Nombre}
+            {cruceTexto}
           </div>
-          {slotsEnComunOriginales.length > 0 && slotsEnComunDisponibles.length === 0 ? (
+
+          {partido.fechaHora && (
             <div
               style={{
-                marginTop: '0.35rem',
+                marginTop: '0.45rem',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '0.35rem',
-                fontSize: '11px',
-                color: 'var(--color-warning)',
-                background: 'rgba(245, 158, 11, 0.08)',
-                padding: '0.2rem 0.5rem',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid rgba(245, 158, 11, 0.25)',
-              }}
-              title="Coincidían en disponibilidad pero las canchas están 100% ocupadas en esos turnos"
-            >
-              <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-              <span>Coincidían en {slotsEnComunOriginales.length} {slotsEnComunOriginales.length === 1 ? 'turno' : 'turnos'} pero sin canchas libres</span>
-            </div>
-          ) : slotsEnComunOriginales.length === 0 ? (
-            <div
-              style={{
-                marginTop: '0.35rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                fontSize: '11px',
+                gap: '0.4rem',
+                fontSize: '11.5px',
                 color: 'var(--color-text-secondary)',
                 background: 'rgba(255, 255, 255, 0.04)',
-                padding: '0.2rem 0.5rem',
-                borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--color-border)',
+                padding: '0.25rem 0.6rem',
+                borderRadius: 'var(--radius-sm)',
               }}
-              title="Ambas parejas no tienen ninguna ventana horaria en común declarada"
             >
-              <Users size={12} style={{ flexShrink: 0 }} />
-              <span>Sin coincidencia horaria directa</span>
+              <Clock size={12} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+              <span>
+                <strong style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Actualmente:</strong>{' '}
+                <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>
+                  {formatDiaHorario(partido.fechaHora)}
+                  {partido.canchaNumero ? ` · Cancha ${partido.canchaNumero}` : ''}
+                </span>
+              </span>
             </div>
-          ) : null}
+          )}
+
+          {!esPartidoEliminatoria && (
+            slotsEnComunOriginales.length > 0 && slotsEnComunDisponibles.length === 0 ? (
+              <div
+                style={{
+                  marginTop: '0.35rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontSize: '11px',
+                  color: 'var(--color-warning)',
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                }}
+                title="Coincidían en disponibilidad pero las canchas están 100% ocupadas en esos turnos"
+              >
+                <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                <span>Coincidían en {slotsEnComunOriginales.length} {slotsEnComunOriginales.length === 1 ? 'turno' : 'turnos'} pero sin canchas libres</span>
+              </div>
+            ) : slotsEnComunOriginales.length === 0 ? (
+              <div
+                style={{
+                  marginTop: '0.35rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontSize: '11px',
+                  color: 'var(--color-text-secondary)',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-border)',
+                }}
+                title="Ambas parejas no tienen ninguna ventana horaria en común declarada"
+              >
+                <Users size={12} style={{ flexShrink: 0 }} />
+                <span>Sin coincidencia horaria directa</span>
+              </div>
+            ) : null
+          )}
         </div>
 
         {error && (
@@ -444,7 +510,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             <div className="loading" style={{ padding: '2rem' }}>
               <Loader2 size={18} className="spin" /> Consultando canchas y disponibilidad en tiempo real...
             </div>
-          ) : rankedSlots.length === 0 ? (
+          ) : slotsValidos.length === 0 ? (
             <div
               style={{
                 padding: '1.25rem',
@@ -459,30 +525,55 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
               <AlertTriangle size={22} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
                 <strong style={{ color: 'var(--color-warning)', fontSize: 'var(--font-size-sm)', display: 'block', marginBottom: '0.3rem' }}>
-                  No hay turnos disponibles donde haya cancha libre y ambas parejas no estén jugando
+                  {esPartidoEliminatoria
+                    ? 'No hay turnos con cancha disponible para este cruce de playoffs'
+                    : 'No hay turnos disponibles donde haya cancha libre y ambas parejas no estén jugando'}
                 </strong>
                 <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-                  En todos los turnos del torneo las canchas están 100% ocupadas por otros partidos o alguna de las dos parejas ya tiene un partido asignado en simultáneo.
+                  {esPartidoEliminatoria
+                    ? 'Todas las canchas del club están 100% ocupadas en los horarios correspondientes a esta fase.'
+                    : 'En todos los turnos del torneo las canchas están 100% ocupadas por otros partidos o alguna de las dos parejas ya tiene un partido asignado en simultáneo.'}
                 </p>
-                <div style={{ marginTop: '0.6rem' }}>
-                  <Link
-                    to={`/admin/torneos/${torneoId}/categorias/${partido.categoriaId || partido.categoria?.id}/parejas`}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.3rem',
-                      fontSize: 'var(--font-size-xs)',
-                      color: 'var(--color-primary)',
-                      textDecoration: 'none',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Ir a Gestionar Parejas de {partido.categoria?.nombre || 'la Categoría'} →
-                  </Link>
-                </div>
+                {!esPartidoEliminatoria && (
+                  <div style={{ marginTop: '0.6rem' }}>
+                    <Link
+                      to={`/admin/torneos/${torneoId}/categorias/${partido.categoriaId || partido.categoria?.id}/parejas`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                        fontSize: 'var(--font-size-xs)',
+                        color: 'var(--color-primary)',
+                        textDecoration: 'none',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Ir a Gestionar Parejas de {partido.categoria?.nombre || 'la Categoría'} →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : esPartidoEliminatoria ? (
+            /* Vista simplificada para Eliminatorias / Bracket: lista plana directa sin Hero ficticio ni estiramientos */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.15rem' }}>
+                Turnos con cancha libre para este cruce ({slotsValidos.length}):
+              </div>
+              <div
+                style={{
+                  padding: '0.55rem 0.75rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                {esDieciseisavos && sabadoViables.length > 0 && renderDiaBloques('Sábado (noche)', sabadoViables)}
+                {domingoViables.length > 0 && renderDiaBloques('Domingo', domingoViables)}
               </div>
             </div>
           ) : (
+            /* Vista clásica para Partidos de Zona con ranking de cercanía y disponibilidad */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               {/* Sugerencia Óptima (Hero) */}
               <div>

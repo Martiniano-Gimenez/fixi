@@ -184,7 +184,7 @@ export default function EliminatoriaView() {
                                   {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
                                 </span>
                                 {!isFinalizado && (
-                                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <button
                                       className="btn-icon"
                                       title="Editar cruce"
@@ -207,6 +207,28 @@ export default function EliminatoriaView() {
                                     >
                                       <Settings size={13} strokeWidth={2} />
                                     </button>
+                                    <button
+                                      className="btn-icon"
+                                      title={partido.fechaHora ? "Reprogramar horario y cancha" : "Asignar horario y cancha"}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPartidoReprogramar(partido);
+                                      }}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '2px',
+                                        color: 'var(--color-text-muted)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        transition: 'color 0.2s',
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+                                    >
+                                      <Clock size={13} strokeWidth={2} />
+                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -219,38 +241,14 @@ export default function EliminatoriaView() {
                                   <Clock size={11} style={{ color: 'var(--color-primary)' }} />
                                   {formatDiaHorario(partido.fechaHora)}
                                 </div>
-                                {isJugable && partido.estado === 'PENDIENTE' && (
-                                  <button
-                                    className="btn-icon"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setPartidoReprogramar(partido);
-                                    }}
-                                    title="Reprogramar horario"
-                                    style={{ padding: '0.2rem', color: 'var(--color-text-secondary)' }}
-                                  >
-                                    <Clock size={11} />
-                                  </button>
-                                )}
                               </div>
-                            ) : isJugable && partido.estado === 'PENDIENTE' ? (
+                            ) : (
                               <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-warning)', fontWeight: 600 }}>
                                   <AlertTriangle size={10} /> Sin horario
                                 </div>
-                                <button
-                                  className="btn-icon"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPartidoReprogramar(partido);
-                                  }}
-                                  title="Asignar horario"
-                                  style={{ padding: '0.2rem', color: 'var(--color-text-secondary)' }}
-                                >
-                                  <Clock size={11} />
-                                </button>
                               </div>
-                            ) : null}
+                            )}
 
                             <div className="parejas-list">
                               <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
