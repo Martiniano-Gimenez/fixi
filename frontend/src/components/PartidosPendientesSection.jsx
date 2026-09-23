@@ -106,30 +106,23 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
   };
 
   return (
-    <div
-      className="card"
-      style={{
-        marginBottom: '1.5rem',
-        border: '1px solid rgba(245, 158, 11, 0.4)',
-        background: 'rgba(245, 158, 11, 0.03)',
-        padding: '1.1rem',
-      }}
-    >
+    <div className="card partidos-pendientes-banner">
       {/* Encabezado */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: '1rem',
+          alignItems: 'center',
+          gap: '0.75rem',
           marginBottom: '1rem',
           borderBottom: '1px solid rgba(245, 158, 11, 0.15)',
           paddingBottom: '0.75rem',
+          flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <AlertTriangle size={22} color="var(--color-warning)" style={{ flexShrink: 0 }} />
-          <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-warning)', fontWeight: 600 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <AlertTriangle size={20} color="var(--color-warning)" style={{ flexShrink: 0 }} />
+          <h3 className="partidos-pendientes-title">
             Partidos pendientes de asignación de horario ({partidosPendientes.length})
           </h3>
         </div>
@@ -228,15 +221,7 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
 
               {/* Contenido expandible */}
               {isExpanded && (
-                <div
-                  style={{
-                    padding: '0.75rem',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
-                    gap: '0.65rem',
-                    borderTop: '1px solid var(--color-border)',
-                  }}
-                >
+                <div className="partidos-pendientes-grid">
                   {grupo.partidos.map((p) => {
                     const p1Nombre = p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : 'Por definirse';
                     const p2Nombre = p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : 'Por definirse';
@@ -247,7 +232,7 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                       <div
                         key={p.id}
                         style={{
-                          padding: '0.75rem 0.85rem',
+                          padding: '0.75rem',
                           background: 'var(--color-bg-input)',
                           borderRadius: 'var(--radius-sm)',
                           border: '1px solid var(--color-border)',
@@ -259,13 +244,26 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                         }}
                       >
                         <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                            <span className="badge" style={{ background: 'var(--color-surface)', fontSize: '11px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: '0.35rem' }}>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                fontSize: '10.5px',
+                                fontWeight: 600,
+                                color: 'var(--color-text-secondary)',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '4px',
+                                padding: '1px 6px',
+                                letterSpacing: '0.3px',
+                                lineHeight: 1.4,
+                              }}
+                            >
                               {p.zona?.nombre || 'Zona'}
                             </span>
                           </div>
 
-                          <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.2rem' }}>
+                          <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.2rem', lineHeight: 1.35, wordBreak: 'break-word' }}>
                             {p1Nombre} vs {p2Nombre}
                           </div>
 
@@ -277,20 +275,10 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                         </div>
 
                         {/* Botón de acción primario verde deportivo */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.4rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        <div className="partidos-pendientes-btn-wrap">
                           <button
                             type="button"
-                            className="btn-primary"
-                            style={{
-                              padding: '0.35rem 0.75rem',
-                              fontSize: 'var(--font-size-xs)',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.3rem',
-                              width: 'auto',
-                              margin: 0,
-                              cursor: 'pointer',
-                            }}
+                            className="btn-primary partidos-pendientes-btn"
                             onClick={() => setPartidoParaAsignar(p)}
                           >
                             <Clock size={13} />
