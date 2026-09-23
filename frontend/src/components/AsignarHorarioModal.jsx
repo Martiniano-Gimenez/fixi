@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { Star, Users, ChevronDown, ChevronUp, Loader2, AlertTriangle, X } from 'lucide-react';
-import { formatAjusteTiempo } from '../utils/dateUtils';
+import { formatAjusteTiempo, minutosCronologicosJornada } from '../utils/dateUtils';
 import { rankearSlotsParaPartido } from '../utils/rankingSlots';
+
+const HORA_INICIO_NOCHE_DIECISEISAVOS = 18; // 18:00hs: inicio de franja nocturna post-zonas para Dieciseisavos
 
 export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose, onAssigned }) {
   const [loadingCanchas, setLoadingCanchas] = useState(false);
@@ -50,11 +52,42 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
 
   const rawSlots = dataCanchas?.slots || [];
 
-  // FILTRADO ESTRICTO DE FACTIBILIDAD:
+  // Discriminación contextual por tipo de partido (Zona vs Eliminatoria vs Dieciseisavos)
+  const esPartidoZona = Boolean(partido.zonaId || partido.zona);
+  const esPartidoEliminatoria = Boolean(partido.faseEliminatoriaId || partido.faseEliminatoria);
+  const esDieciseisavos =
+    esPartidoEliminatoria &&
+    Boolean(
+      (partido.faseEliminatoria?.ronda && partido.faseEliminatoria.ronda >= 32) ||
+      partido.faseEliminatoria?.nombre?.toLowerCase().includes('dieciseisavos')
+    );
+
+  const esSlotPermitidoPorContexto = (s) => {
+    if (esPartidoZona) {
+      // Partidos de zona: estrictamente Viernes y Sábado
+      return s.dia === 'Viernes' || s.dia === 'Sabado';
+    }
+    if (esDieciseisavos) {
+      // Dieciseisavos: Sábado noche (a partir de 18:00hs o trasnoche) o Domingo
+      if (s.dia === 'Sabado') {
+        return minutosCronologicosJornada(s.hora) >= HORA_INICIO_NOCHE_DIECISEISAVOS * 60;
+      }
+      return s.dia === 'Domingo';
+    }
+    if (esPartidoEliminatoria) {
+      // Eliminatorias regulares (Octavos a Final): estrictamente Domingo
+      return s.dia === 'Domingo';
+    }
+    return true;
+  };
+
+  // FILTRADO ESTRICTO DE FACTIBILIDAD Y CONTEXTO:
   // 1. Hay al menos una cancha libre
-  // 2. Ninguna de las 2 parejas tiene otro partido en simultáneo
+  // 2. Corresponde al día permitido según el contexto del partido
+  // 3. Ninguna de las 2 parejas tiene otro partido en simultáneo
   const slotsValidos = rawSlots.filter((s) => {
     if (!s.canchasLibres || s.canchasLibres.length === 0) return false;
+    if (!esSlotPermitidoPorContexto(s)) return false;
     const p1Ocupada = partido.pareja1Id && (s.parejasOcupadasIds || []).includes(partido.pareja1Id);
     const p2Ocupada = partido.pareja2Id && (s.parejasOcupadasIds || []).includes(partido.pareja2Id);
     if (p1Ocupada || p2Ocupada) return false;
@@ -94,22 +127,21 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     return 'tier-mid';
   };
 
-  const toMinutes = (hora) => {
-    if (!hora) return 0;
-    const [h, m] = hora.split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
-
   const agruparSlotsEnBloques = (slots) => {
     if (!slots || slots.length === 0) return [];
-    const sorted = [...slots].sort((a, b) => toMinutes(a.hora) - toMinutes(b.hora));
+    const getTimeMs = (s) => (s.fechaIso ? new Date(s.fechaIso).getTime() : minutosCronologicosJornada(s.hora));
+    const sorted = [...slots].sort((a, b) => getTimeMs(a) - getTimeMs(b));
     const bloques = [];
     let bloqueActual = [sorted[0]];
 
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const curr = sorted[i];
-      const diff = toMinutes(curr.hora) - toMinutes(prev.hora);
+      const diff =
+        curr.fechaIso && prev.fechaIso
+          ? (new Date(curr.fechaIso).getTime() - new Date(prev.fechaIso).getTime()) / (60 * 1000)
+          : minutosCronologicosJornada(curr.hora) - minutosCronologicosJornada(prev.hora);
+
       // Salto discontinuo si la diferencia entre inicios de turno supera 90 minutos
       if (diff > 90) {
         bloques.push(bloqueActual);

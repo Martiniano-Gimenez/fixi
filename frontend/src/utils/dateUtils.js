@@ -114,3 +114,21 @@ export function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
   };
 }
 
+/**
+ * Convierte una hora en formato "HH:MM" a minutos transcurridos desde el inicio de la jornada lógica.
+ * En torneos de pádel, las horas de madrugada (00:00 a 05:59) corresponden a la trasnoche
+ * de la jornada anterior, por lo que se les suma 24 horas (1440 minutos) para ubicarlas
+ * cronológicamente al final del día (después de las 23:45) y no al inicio.
+ *
+ * @param {string} hora - Formato "HH:MM"
+ * @returns {number} Minutos cronológicos acumulados en la jornada
+ */
+export function minutosCronologicosJornada(hora) {
+  if (!hora || typeof hora !== 'string') return 0;
+  const [h, m] = hora.split(':').map(Number);
+  const hourNum = isNaN(h) ? 0 : h;
+  const minNum = isNaN(m) ? 0 : m;
+  const effectiveHour = hourNum < 6 ? hourNum + 24 : hourNum;
+  return effectiveHour * 60 + minNum;
+}
+
