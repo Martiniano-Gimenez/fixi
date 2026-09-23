@@ -329,6 +329,9 @@ export default function EliminatoriaView() {
           isOpen={Boolean(editBracketModal)}
           partido={editBracketModal}
           zonas={zonas}
+          partidosRonda={
+            fases.find((f) => f.id === editBracketModal.faseEliminatoriaId)?.partidos || []
+          }
           onClose={() => setEditBracketModal(null)}
           onSuccess={() => {
             setEditBracketModal(null);

@@ -489,6 +489,48 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
 
   const { origenPareja1, origenPareja2 } = data;
 
+  const nuevoOrigen1 = origenPareja1 !== undefined ? (origenPareja1 || null) : partido.origenPareja1;
+  const nuevoOrigen2 = origenPareja2 !== undefined ? (origenPareja2 || null) : partido.origenPareja2;
+
+  if (nuevoOrigen1 && nuevoOrigen2 && nuevoOrigen1 === nuevoOrigen2) {
+    const error = new Error('No podés asignar el mismo origen en ambos lados del partido.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Validar que los orígenes no estén ya asignados en otro partido de la misma ronda
+  if (nuevoOrigen1 || nuevoOrigen2) {
+    const otrosPartidos = await prisma.partido.findMany({
+      where: {
+        faseEliminatoriaId: partido.faseEliminatoriaId,
+        id: { not: partidoId },
+      },
+      select: {
+        id: true,
+        posicionEnRonda: true,
+        origenPareja1: true,
+        origenPareja2: true,
+      },
+    });
+
+    for (const p of otrosPartidos) {
+      if (nuevoOrigen1 && (p.origenPareja1 === nuevoOrigen1 || p.origenPareja2 === nuevoOrigen1)) {
+        const error = new Error(
+          `El origen "${nuevoOrigen1}" ya está asignado en el Partido #${p.posicionEnRonda} de esta ronda.`
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+      if (nuevoOrigen2 && (p.origenPareja1 === nuevoOrigen2 || p.origenPareja2 === nuevoOrigen2)) {
+        const error = new Error(
+          `El origen "${nuevoOrigen2}" ya está asignado en el Partido #${p.posicionEnRonda} de esta ronda.`
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+  }
+
   const updateData = {};
   if (origenPareja1 !== undefined) {
     updateData.origenPareja1 = origenPareja1 || null;

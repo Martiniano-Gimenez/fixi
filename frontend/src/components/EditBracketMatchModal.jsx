@@ -2,7 +2,15 @@ import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { X } from 'lucide-react';
 
-export default function EditBracketMatchModal({ isOpen = true, partido, zonas = [], onClose, onSuccess, onSaved }) {
+export default function EditBracketMatchModal({
+  isOpen = true,
+  partido,
+  zonas = [],
+  partidosRonda = [],
+  onClose,
+  onSuccess,
+  onSaved,
+}) {
   const [origen1, setOrigen1] = useState('');
   const [origen2, setOrigen2] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,12 +23,35 @@ export default function EditBracketMatchModal({ isOpen = true, partido, zonas = 
     }
   }, [partido]);
 
+  // Mapa de origen -> posicionEnRonda de partidos ajenos al actual en la misma ronda
+  const orígenesEnUsoOtrosPartidos = new Map();
+  partidosRonda.forEach((p) => {
+    if (p.id !== partido?.id) {
+      if (p.origenPareja1) orígenesEnUsoOtrosPartidos.set(p.origenPareja1, p.posicionEnRonda);
+      if (p.origenPareja2) orígenesEnUsoOtrosPartidos.set(p.origenPareja2, p.posicionEnRonda);
+    }
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     if (origen1 && origen2 && origen1 === origen2) {
       setError('No podés asignar el mismo origen en ambos lados del partido.');
+      return;
+    }
+
+    if (origen1 && orígenesEnUsoOtrosPartidos.has(origen1)) {
+      setError(
+        `El origen "${origen1}" ya está asignado en el Partido #${orígenesEnUsoOtrosPartidos.get(origen1)} de esta ronda.`
+      );
+      return;
+    }
+
+    if (origen2 && orígenesEnUsoOtrosPartidos.has(origen2)) {
+      setError(
+        `El origen "${origen2}" ya está asignado en el Partido #${orígenesEnUsoOtrosPartidos.get(origen2)} de esta ronda.`
+      );
       return;
     }
 
@@ -98,11 +129,15 @@ export default function EditBracketMatchModal({ isOpen = true, partido, zonas = 
               }}
             >
               <option value="">-- Sin Definir / Vacío --</option>
-              {originOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
+              {originOptions.map((opt) => {
+                const enUsoEnPartidoNum = orígenesEnUsoOtrosPartidos.get(opt);
+                const estaEnOtroPartido = enUsoEnPartidoNum !== undefined;
+                return (
+                  <option key={opt} value={opt} disabled={estaEnOtroPartido}>
+                    {estaEnOtroPartido ? `${opt} (en uso en Partido #${enUsoEnPartidoNum})` : opt}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -124,11 +159,15 @@ export default function EditBracketMatchModal({ isOpen = true, partido, zonas = 
               }}
             >
               <option value="">-- Sin Definir / Vacío --</option>
-              {originOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
+              {originOptions.map((opt) => {
+                const enUsoEnPartidoNum = orígenesEnUsoOtrosPartidos.get(opt);
+                const estaEnOtroPartido = enUsoEnPartidoNum !== undefined;
+                return (
+                  <option key={opt} value={opt} disabled={estaEnOtroPartido}>
+                    {estaEnOtroPartido ? `${opt} (en uso en Partido #${enUsoEnPartidoNum})` : opt}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
