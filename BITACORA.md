@@ -1047,9 +1047,37 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+### Sesión 39: Validación de Unicidad de Orígenes en Cuadros Eliminatorios (Frontend + Backend en `EditBracketMatchModal`, `EliminatoriaView` y `partido.service.js`)
+
+- **Objetivo:** Erradicar la duplicación indebida de posiciones de origen de zonas en los cruces de playoffs mediante validación de unicidad en dos capas (backend como fuente de verdad y frontend proactivo), deshabilitando opciones ocupadas con indicación explícita del partido asignatario y preservando la reasignación en el propio partido.
+- **Problema o necesidad que motivó el trabajo:**
+  1. En `EditBracketMatchModal.jsx`, los selectores de "Posición 1" y "Posición 2" permitían elegir orígenes (ej. "1° Zona A") que ya estaban asignados en otro partido de la misma ronda, permitiendo que una misma pareja quedara duplicada en dos cruces simultáneos.
+  2. *Auditoría técnica:*
+     - El componente `EditBracketMatchModal` operaba aislado, recibiendo únicamente el `partido` en edición y la lista de `zonas`, sin visibilidad de los demás cruces de la fase.
+     - En `EliminatoriaView.jsx`, la lista de partidos de todas las fases ya residía completa en memoria (`fases.partidos`), posibilitando pasar los partidos de la ronda directamente sin costo de red.
+     - El alcance de la validación se delimitó estrictamente a la **misma ronda** (`faseEliminatoriaId`), ya que por diseño legítimo del torneo los orígenes se propagan a rondas subsiguientes (Cuartos, Semis, Final) al avanzar los ganadores o BYEs.
+     - En el backend (`PATCH /partidos/:id/bracket`), `updateBracketMatch` carecía por completo de validaciones de unicidad, persistiendo duplicados sin rechazo.
+- **Qué decidí y por qué:**
+  1. **Blindaje en Backend (`partido.service.js`):**
+     - Se implementó la verificación de unicidad interna (`nuevoOrigen1 !== nuevoOrigen2`) y externa contra los demás partidos de la misma ronda (`where: { faseEliminatoriaId, id: { not: partidoId } }`).
+     - Ante colisiones, el backend responde HTTP 400 con mensaje preciso: `El origen "X" ya está asignado en el Partido #Y de esta ronda.`, manteniendo el guard estricto previo `if (!partido.faseEliminatoriaId)` para garantizar integridad del modelo.
+  2. **Inyección de Contexto en `EliminatoriaView.jsx`:**
+     - Se pasó `partidosRonda={fases.find(f => f.id === editBracketModal.faseEliminatoriaId)?.partidos || []}` como prop a `EditBracketMatchModal`.
+  3. **UX Proactiva y Preservación del Propio Partido en `EditBracketMatchModal.jsx`:**
+     - Se construyó el mapa `orígenesEnUsoOtrosPartidos` filtrando estrictamente `p.id !== partido?.id`.
+     - En los `<select>`, las opciones ocupadas por otros partidos quedan deshabilitadas (`disabled={true}`) con etiqueta informativa: `${opt} (en uso en Partido #${posicionEnRonda})`.
+     - Los orígenes asignados al propio partido no se bloquean, permitiendo re-guardar sin cambios o invertir Posición 1 y Posición 2 libremente sin autobloqueo.
+     - Se añadió validación preventiva en `handleSubmit` antes de invocar a la API.
+- **Validación y verificación:**
+  - Build de producción frontend con Vite (`npm run build`) exitoso en 592ms.
+  - Ejecución de la suite de tests de eliminatorias `test-eliminatoria-scheduler-completo.js` en backend con 100% de aserciones aprobadas.
+- **Resultado final:** Cuadros eliminatorios blindados contra duplicaciones de parejas tanto en la interfaz de usuario como en la base de datos, con feedback claro y ergonómico para el organizador.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 38 sesiones de trabajo, sumando un aproximado total de entre 94.5 y 112 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 39 sesiones de trabajo, sumando un aproximado total de entre 95.5 y 113.5 horas de programación, refactorización, depuración y testeo.
 
 | Sesión | Tiempo estimado | Temas cubiertos |
 |--------|-----------------|------------------|
@@ -1091,6 +1119,7 @@ El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 38 s
 | **36** | ~2 a 2.5 horas | Rediseño UI/UX de `AsignarHorarioModal` (jerarquía visual, badge condicional `Sin coincidencia directa`, hero card simplificada, disclosure progresivo inline, terciles dynámicos para disponibilidad de canchas y separadores de bloque $> 90\text{m}$), filtrado contextual estricto por tipo de partido (zonas solo V/S vs eliminatorias D/S noche), orden cronológico continuo de trasnoche (`minutosCronologicosJornada`) y optimización responsive para celulares estrechos ($\le 373\text{px}$). |
 | **37** | ~1.5 a 2 horas | Simplificación, jerarquía visual y optimización mobile en `PartidosPendientesSection`: eliminación de subtítulo del banner, erradicación de alertas pasivas de saturación y chip de viables, chip de zona alineado al margen sin sangría excesiva, botón primario verde deportivo (`btn-primary`), y layout responsive mobile para pantallas $\le 410\text{px}$ (grid a 1 columna y botón full-width táctil). |
 | **38** | ~1 a 1.5 horas | Auditoría y normalización de modal "Editar Cruce" en cuadros eliminatorios (`EditBracketMatchModal.jsx` y `EliminatoriaView.jsx`): detección y corrección de bug de posicionamiento por residuo histórico de popover, migración a patrón estándar `.modal-overlay` + `.modal-content` (400px), soporte de prop `isOpen`, limpieza de estilos huérfanos de zIndex y armonización visual con tokens semánticos y `lucide-react`. |
-| **Total** | **~94.5 a 112 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía en detalle de torneo y de categorías, tablas de posiciones responsivas sin scroll forzado, operaciones seguras post-inicio con modales ergonómicos, blindaje de ciclo de vida en parejas y disponibilidad, asignación directa de horarios en tarjetas de partidos con nivelación visual y optimización mobile-first sin desborde, rediseño de asignación/reprogramación con disclosure progresivo y consistencia de dominio, simplificación y elevación visual en partidos pendientes con diseño responsive adaptativo, normalización ergonómica de modales en cuadros eliminatorios, y menús móviles universales. |
+| **39** | ~1 a 1.5 horas | Validación de unicidad de orígenes en eliminatorias (Frontend + Backend en `EditBracketMatchModal`, `EliminatoriaView` y `partido.service.js`): rechazo HTTP 400 con mensaje descriptivo de partido en uso, inyección de `partidosRonda`, opciones deshabilitadas con etiqueta `(en uso en Partido #X)`, preservación del propio partido (swap libre sin autobloqueo) y suite de regresión aprobada. |
+| **Total** | **~95.5 a 113.5 hrs** | Implementación Full-Stack integral con jerarquía de torneos y categorías, scheduling continuo en tres pasadas con prioridad manual y dependencias mini-bracket, pre-check transaccional con snapshot estable e incremental, asistente de resolución de cruces, modo día de torneo en vivo con reprogramación por lluvia aislada por día (Opción B) y protección causal de eliminatorias, brackets visualizables desde el minuto cero, scheduling completo de playoffs al inicio con descansos y sincronización universal de rondas dominicales, prioridad automática de playoffs por parejas clasificadas, backfill inteligente de eliminatorias con preservación de bloques sincronizados, modo lluvia independiente por día (V/S/D), refactor UI/UX deportivo de alta jerarquía en detalle de torneo y de categorías, tablas de posiciones responsivas sin scroll forzado, operaciones seguras post-inicio con modales ergonómicos, blindaje de ciclo de vida en parejas y disponibilidad, asignación directa de horarios en tarjetas de partidos con nivelación visual y optimización mobile-first sin desborde, rediseño de asignación/reprogramación con disclosure progresivo y consistencia de dominio, simplificación y elevación visual en partidos pendientes con diseño responsive adaptativo, normalización ergonómica de modales en cuadros eliminatorios con validación estricta de unicidad de cruces, y menús móviles universales. |
 
 > **Nota:** esta tabla cubre únicamente las sesiones de codificación y depuración técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
