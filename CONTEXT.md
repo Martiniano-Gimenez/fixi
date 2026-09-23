@@ -90,7 +90,7 @@ organizadores que hoy llevan todo en papel.
   - **Sliding TTL (Touch-on-access) y Resiliencia:** Sesión con expiración renovable de 60 minutos con cada acción. Si el usuario cierra el modal y regresa, el progreso se mantiene intacto. En caso de reinicio de servidor, se notifica explícitamente (`sesionReiniciada`).
   - **Re-sorteo Explícito:** Botón y modal de advertencia pedagógica para *"Re-sortear zonas desde cero"* (`forceReset: true`) cuando el organizador desee barajar el torneo desde cero voluntariamente.
   - **Resolución en 1 click y Deshacer (Undo):** Identificación automática de Hero Option y casi-estrellas, actualización atómica doble (`setDisponibilidadDoble`) y toast flotante de deshacer por 7s (`removerDisponibilidadDoble`). Auto-guardado en 1 click para chips estrella en `InlineDisponibilidadEditor`.
-- Salida de emergencia condicional y gestión de partidos sin horario (`PartidosPendientesSection`): acordeón categorizado con filtrado en tiempo real que evalúa canchas libres antes de renderizar insignias de estrella (`★`), diferenciando cruces con turnos compatibles libres de cruces con horarios originales saturados.
+- Salida de emergencia condicional y gestión de partidos sin horario (`PartidosPendientesSection.jsx` en `TorneoDetail` y `TorneoEnVivo`): acordeón categorizado ordenado con heurística MCF (Most Constrained First). Banner depurado sin textos explicativos redundantes, tarjetas minimalistas con chip de zona alineado al margen, parejas y botón primario verde deportivo (`btn-primary`) que se adapta al 100% en pantallas móviles ($\le 480$px y $\le 410$px sin desborde horizontal).
 - **Asignar Horario Post-Inicio con Experiencia Unificada (`AsignarHorarioModal` + `rankingSlots`):** Presentación de sugerencia Hero recomendada y alternativas ordenadas por cercanía a lo declarado originalmente. Escritura directa a `Partido` (`fechaHora` + `canchaNumero`) sin contaminar `SlotPareja`, asignación en **1 click** a la primera cancha libre y grilla desplegable completa de turnos viables del club.
 - Reprogramación de horarios de partidos asignados (`AsignarHorarioModal`): escritura atómica segura que excluye la ocupación anterior del propio partido al validar disponibilidad (`ignorePartidoId`), permitiendo reasignaciones limpias sin colisiones.
 - **Modo Día de Torneo — En Vivo (`TorneoEnVivo.jsx`, `/admin/torneos/:id/en-vivo`):**
@@ -198,6 +198,18 @@ organizadores que hoy llevan todo en papel.
   - **Optimización Responsive para Celulares Estrechos ($\le 373\text{px}$):**
     - Reducción del padding perimetral del modal en `@media (max-width: 480px)` (`padding: 1rem 0.75rem`) y `@media (max-width: 380px)` (`padding: 0.85rem 0.55rem`), recuperando hasta 45px de ancho horizontal útil.
     - Prevención de quiebres verticales de texto con `white-space: nowrap` en cabeceras de día, horarios y botones, y `flex-shrink: 0` en chips para erradicar wrap indeseado en teléfonos compactos (ej. iPhone SE / Galaxy Mini).
+- **Simplificación y Jerarquía Visual en Partidos Pendientes (`PartidosPendientesSection.jsx` e `index.css`):**
+  - **Eliminación de Ruido en Cabecera:** Supresión del subtítulo explicativo *"Cruces que iniciaron sin horario..."*, dejando el título de advertencia con contador total como único encabezado conciso y directo.
+  - **Tarjetas Minimalistas y Libres de Alertas Pasivas:**
+    - Erradicación de la línea intermedia de textos de saturación (*"Turnos originales saturados..."* y *"Sin coincidencia previa de horario"*), dejando que sea el flujo interno de `AsignarHorarioModal` quien comunique el estado si corresponde.
+    - Remoción del badge de conteo de viables (`N turnos viables`), reduciendo la sobrecarga de datos en la vista resumen.
+    - Borde izquierdo (`borderLeft`) reservado con color rojo (`#ef4444`) únicamente para partidos críticos (`slotsViablesCount <= 1`) y borde neutro (`var(--color-border)`) para el resto, eliminando la competencia visual del tono ámbar/naranja.
+    - Corrección de sangría del chip de Zona (`Zona A`, `Zona B`): eliminación de la clase `.badge` (que imponía 12px de padding lateral y desalineaba el texto) reemplazada por un tag con padding compacto de `1px 6px` y borde sutil, alineando perfectamente el chip al margen izquierdo interior junto a los nombres de las parejas.
+  - **Elevación de Acción a Verde Primario Deportivo:** Migración del botón *"Asignar horario y cancha →"* de estilo secundario ámbar a `btn-primary` con fondo verde semántico `var(--color-primary)` (`#00d084`), texto de alto contraste `var(--bg-body)` e ícono de reloj centrado.
+  - **Optimización Responsive Mobile-First ($\le 410\text{px}$):**
+    - En `index.css`, se definió `.partidos-pendientes-grid` con `grid-template-columns: 1fr` en `@media (max-width: 480px)` (resolviendo el desborde horizontal que provocaba el antiguo `minmax(310px, 1fr)` en viewports $\le 410$px al restar los márgenes de página, banner y acordeón).
+    - Botón de acción expandido simétricamente al 100% de la tarjeta (`flex: 1; width: 100%; justify-content: center;`) en pantallas móviles, eliminando la asimetría flotante a la derecha y facilitando el toque táctil con una sola mano.
+    - Reducción calibrada de padding del banner a `0.85rem 0.65rem` y tipografía adaptable en el título (`0.95rem`).
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 
 ## Reglas de trabajo
