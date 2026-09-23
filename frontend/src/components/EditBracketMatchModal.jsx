@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { X } from 'lucide-react';
 
-export default function EditBracketMatchModal({ partido, zonas = [], onClose, onSuccess, onSaved }) {
+export default function EditBracketMatchModal({ isOpen = true, partido, zonas = [], onClose, onSuccess, onSaved }) {
   const [origen1, setOrigen1] = useState('');
   const [origen2, setOrigen2] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,7 +39,7 @@ export default function EditBracketMatchModal({ partido, zonas = [], onClose, on
     }
   };
 
-  if (!partido) return null;
+  if (!isOpen || !partido) return null;
 
   const originOptions = [];
   zonas.forEach((z) => {
@@ -48,88 +49,109 @@ export default function EditBracketMatchModal({ partido, zonas = [], onClose, on
   });
 
   return (
-    <div
-      className="auth-card"
-      style={{
-        width: '280px',
-        padding: '1.25rem',
-        background: '#111827',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 0 15px rgba(34, 197, 94, 0.2)',
-        border: '2px solid var(--color-primary)',
-        borderRadius: 'var(--radius-md)',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-        <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-primary)', textTransform: 'uppercase' }}>
-          Editar Cruce
-        </h4>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
-        >
-          &times;
-        </button>
-      </div>
-
-      {error && <div className="error-message" style={{ padding: '0.4rem', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{error}</div>}
-
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.25rem' }}>
-            Posición 1 (Arriba)
-          </label>
-          <select
-            value={origen1}
-            onChange={(e) => setOrigen1(e.target.value)}
-            style={{ width: '100%', padding: '0.35rem', fontSize: '0.8rem', background: '#1f2937', color: 'white', border: '1px solid #374151', borderRadius: '4px' }}
-          >
-            <option value="">-- Sin Definir / Vacío --</option>
-            {originOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.25rem' }}>
-            Posición 2 (Abajo)
-          </label>
-          <select
-            value={origen2}
-            onChange={(e) => setOrigen2(e.target.value)}
-            style={{ width: '100%', padding: '0.35rem', fontSize: '0.8rem', background: '#1f2937', color: 'white', border: '1px solid #374151', borderRadius: '4px' }}
-          >
-            <option value="">-- Sin Definir / Vacío --</option>
-            {originOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+      <div className="modal-content" style={{ maxWidth: '400px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.75rem' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-text)', lineHeight: 1.25 }}>
+              Editar Cruce
+            </h3>
+            {partido.posicionEnRonda && (
+              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                Partido #{partido.posicionEnRonda}
+              </span>
+            )}
+          </div>
           <button
             type="button"
-            className="btn-secondary"
+            className="btn-link-action"
             onClick={onClose}
-            style={{ flex: 1, padding: '0.35rem', fontSize: '0.75rem' }}
+            style={{ color: 'var(--color-text-secondary)', padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            aria-label="Cerrar modal"
           >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={loading}
-            style={{ flex: 1, padding: '0.35rem', fontSize: '0.75rem' }}
-          >
-            {loading ? '...' : 'Guardar'}
+            <X size={18} />
           </button>
         </div>
-      </form>
+
+        {error && (
+          <div className="error-message" style={{ marginBottom: '1rem', padding: '0.5rem 0.75rem', fontSize: 'var(--font-size-sm)' }}>
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.35rem', fontWeight: 600 }}>
+              Posición 1 (Arriba)
+            </label>
+            <select
+              value={origen1}
+              onChange={(e) => setOrigen1(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.75rem',
+                fontSize: 'var(--font-size-sm)',
+                background: 'var(--color-bg-input)',
+                color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <option value="">-- Sin Definir / Vacío --</option>
+              {originOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.35rem', fontWeight: 600 }}>
+              Posición 2 (Abajo)
+            </label>
+            <select
+              value={origen2}
+              onChange={(e) => setOrigen2(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.75rem',
+                fontSize: 'var(--font-size-sm)',
+                background: 'var(--color-bg-input)',
+                color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <option value="">-- Sin Definir / Vacío --</option>
+              {originOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={onClose}
+              style={{ flex: 1 }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={loading}
+              style={{ flex: 1 }}
+            >
+              {loading ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

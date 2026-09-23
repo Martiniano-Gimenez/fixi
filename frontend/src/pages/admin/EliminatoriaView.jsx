@@ -171,13 +171,12 @@ export default function EliminatoriaView() {
                     const p2esGanador = isFinalizado && partido.ganadorId === partido.pareja2Id;
 
                     return (
-                      <div key={partido.id} className="bracket-match-wrapper" style={{ position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}>
+                      <div key={partido.id} className="bracket-match-wrapper">
                         <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div
                             className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
                             onClick={() => handleClickPartido(partido)}
                             title={isJugable ? (isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado') : 'Esperando clasificados'}
-                            style={{ position: 'relative', zIndex: editBracketModal?.id === partido.id ? 100 : 1 }}
                           >
                             <div className="match-card-header">
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
