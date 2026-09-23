@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../api/client';
-import { AlertTriangle, ChevronDown, ChevronUp, Clock, Layers, Star, Zap, Check, AlertCircle } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Clock, Layers, AlertCircle } from 'lucide-react';
 import AsignarHorarioModal from './AsignarHorarioModal';
 
 export default function PartidosPendientesSection({ torneoId, torneoEstado, onPartidosActualizados }) {
@@ -127,16 +127,11 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
           paddingBottom: '0.75rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
-          <AlertTriangle size={22} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '2px' }} />
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-warning)', fontWeight: 600 }}>
-              Partidos pendientes de asignación de horario ({partidosPendientes.length})
-            </h3>
-            <p style={{ margin: '0.2rem 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-              Cruces que iniciaron sin horario y deben coordinarse en las canchas libres del club
-            </p>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <AlertTriangle size={22} color="var(--color-warning)" style={{ flexShrink: 0 }} />
+          <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-warning)', fontWeight: 600 }}>
+            Partidos pendientes de asignación de horario ({partidosPendientes.length})
+          </h3>
         </div>
 
         {/* Acción discreta Expandir / Colapsar todas */}
@@ -246,10 +241,7 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                     const p1Nombre = p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : 'Por definirse';
                     const p2Nombre = p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : 'Por definirse';
                     const viables = p.slotsViablesCount ?? 0;
-                    const coincidencias = p.slotsEnComunCount ?? 0;
-
                     const esCritico = viables <= 1;
-                    const esUrgente = viables === 2 || viables === 3;
 
                     return (
                       <div
@@ -259,9 +251,7 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                           background: 'var(--color-bg-input)',
                           borderRadius: 'var(--radius-sm)',
                           border: '1px solid var(--color-border)',
-                          borderLeft: `3px solid ${
-                            esCritico ? '#ef4444' : esUrgente ? '#f59e0b' : 'var(--color-border)'
-                          }`,
+                          borderLeft: `3px solid ${esCritico ? '#ef4444' : 'var(--color-border)'}`,
                           display: 'flex',
                           flexDirection: 'column',
                           justifyContent: 'space-between',
@@ -269,73 +259,14 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                         }}
                       >
                         <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                             <span className="badge" style={{ background: 'var(--color-surface)', fontSize: '11px' }}>
                               {p.zona?.nombre || 'Zona'}
                             </span>
-
-                            {/* Badge de Urgencia Most Constrained First con Lucide Icons */}
-                            <span
-                              className="badge"
-                              style={{
-                                fontSize: '10.5px',
-                                padding: '2px 6px',
-                                background: esCritico
-                                  ? 'rgba(239, 68, 68, 0.15)'
-                                  : esUrgente
-                                  ? 'rgba(245, 158, 11, 0.15)'
-                                  : 'var(--color-surface)',
-                                color: esCritico ? '#ef4444' : esUrgente ? '#f59e0b' : 'var(--color-text-secondary)',
-                                border: esCritico
-                                  ? '1px solid rgba(239, 68, 68, 0.3)'
-                                  : esUrgente
-                                  ? '1px solid rgba(245, 158, 11, 0.3)'
-                                  : '1px solid var(--color-border)',
-                                fontWeight: esCritico || esUrgente ? 600 : 400,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                              }}
-                              title="Turnos donde hay cancha libre y ambas parejas están desocupadas"
-                            >
-                              {viables === 0 ? (
-                                <>
-                                  <Zap size={11} /> Sin turnos libres
-                                </>
-                              ) : viables === 1 ? (
-                                <>
-                                  <Zap size={11} /> 1 turno viable
-                                </>
-                              ) : esUrgente ? (
-                                <>
-                                  <Clock size={11} /> {viables} turnos viables
-                                </>
-                              ) : (
-                                <>
-                                  <Check size={11} /> {viables} turnos viables
-                                </>
-                              )}
-                            </span>
                           </div>
 
-                          <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.3rem' }}>
+                          <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.2rem' }}>
                             {p1Nombre} vs {p2Nombre}
-                          </div>
-
-                          {/* Indicador de coincidencia y estrellas disponibles */}
-                          <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            {p.slotsValidosConEstrellaCount > 0 ? (
-                              <span style={{ color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '2px', fontWeight: 500 }}>
-                                <Star size={11} fill="currentColor" /> {p.slotsValidosConEstrellaCount}{' '}
-                                {p.slotsValidosConEstrellaCount === 1 ? 'turno compatible libre' : 'turnos compatibles libres'}
-                              </span>
-                            ) : p.slotsEnComunCount > 0 ? (
-                              <span style={{ color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                <AlertTriangle size={11} /> Turnos originales saturados (coordinar nuevo horario)
-                              </span>
-                            ) : (
-                              <span>Sin coincidencia previa de horario</span>
-                            )}
                           </div>
 
                           {viables === 0 && (
@@ -345,21 +276,20 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                           )}
                         </div>
 
-                        {/* Botón de acción neutro / advertencia */}
+                        {/* Botón de acción primario verde deportivo */}
                         <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.4rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
                           <button
                             type="button"
-                            className="btn-secondary"
+                            className="btn-primary"
                             style={{
                               padding: '0.35rem 0.75rem',
                               fontSize: 'var(--font-size-xs)',
-                              color: 'var(--color-warning)',
-                              borderColor: 'rgba(245, 158, 11, 0.4)',
-                              background: 'rgba(245, 158, 11, 0.06)',
-                              fontWeight: 600,
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '0.3rem',
+                              width: 'auto',
+                              margin: 0,
+                              cursor: 'pointer',
                             }}
                             onClick={() => setPartidoParaAsignar(p)}
                           >
