@@ -866,13 +866,13 @@ export default function TorneoEnVivo() {
                 </span>
               )}
             </div>
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0 }}>
-              {isTabBajoOverride
-                ? 'Partidos de esta jornada reprogramados sobre las canchas disponibles.'
-                : anyDayHasLluvia
-                  ? 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'
-                  : 'Todas las canchas del club habilitadas.'}
-            </p>
+            {(isTabBajoOverride || anyDayHasLluvia) && (
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0 }}>
+                {isTabBajoOverride
+                  ? 'Partidos de esta jornada reprogramados sobre las canchas disponibles.'
+                  : 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'}
+              </p>
+            )}
           </div>
 
           {/* Selector y Acciones */}
@@ -1595,29 +1595,35 @@ export default function TorneoEnVivo() {
       </div>
 
       {/* ─── 7. Partidos en Curso y Próximos ──────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+      <div
+        style={{
+          display: partidosEnCursoFiltrados.length === 0 ? 'flex' : 'grid',
+          flexDirection: partidosEnCursoFiltrados.length === 0 ? 'column' : undefined,
+          gridTemplateColumns: partidosEnCursoFiltrados.length === 0 ? undefined : 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: partidosEnCursoFiltrados.length === 0 ? '1rem' : '1.5rem',
+        }}
+      >
         {/* Partidos en Juego */}
         <div>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Flame size={18} style={{ color: 'var(--color-primary)' }} />
+          <h3
+            style={{
+              fontSize: partidosEnCursoFiltrados.length === 0 ? '0.95rem' : '1.05rem',
+              fontWeight: partidosEnCursoFiltrados.length === 0 ? 600 : 700,
+              marginBottom: partidosEnCursoFiltrados.length === 0 ? 0 : '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              color: partidosEnCursoFiltrados.length === 0 ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
+            }}
+          >
+            <Flame
+              size={partidosEnCursoFiltrados.length === 0 ? 16 : 18}
+              style={{ color: partidosEnCursoFiltrados.length === 0 ? 'var(--color-text-muted)' : 'var(--color-primary)' }}
+            />
             Partidos en Juego ({partidosEnCursoFiltrados.length})
           </h3>
 
-          {partidosEnCursoFiltrados.length === 0 ? (
-            <div
-              style={{
-                background: 'var(--bg-card-start)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '2rem 1rem',
-                textAlign: 'center',
-                color: 'var(--color-text-muted)',
-                fontSize: 'var(--font-size-sm)',
-              }}
-            >
-              No hay partidos en juego para esta jornada.
-            </div>
-          ) : (
+          {partidosEnCursoFiltrados.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {partidosEnCursoFiltrados.map((p) => {
                 const sets = p.sets || [];
@@ -1775,30 +1781,25 @@ export default function TorneoEnVivo() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '480px', overflowY: 'auto' }}>
               {proximosFiltrados.map((p) => (
-                <div
-                  key={p.id}
-                  style={{
-                    background: 'var(--bg-card-start)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '0.85rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.pareja1} <span style={{ color: 'var(--color-text-muted)' }}>vs</span> {p.pareja2}
+                <div key={p.id} className="proximo-partido-card">
+                  <div className="proximo-partido-main">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 'var(--font-size-sm)',
+                          fontWeight: 600,
+                          lineHeight: 1.35,
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {p.pareja1} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs</span> {p.pareja2}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginTop: '0.15rem' }}>
+                        {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                      {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''}
-                    </div>
-                  </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div
                         style={{
                           fontSize: 'var(--font-size-xs)',
@@ -1813,11 +1814,13 @@ export default function TorneoEnVivo() {
                       >
                         Cancha {p.canchaNumero}
                       </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: '#60a5fa', fontWeight: 600 }}>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: '#60a5fa', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {formatDiaHorario(p.fechaHora)}
                       </div>
                     </div>
+                  </div>
 
+                  <div className="proximo-partido-actions">
                     {/* Botón iniciar partido (Marcar En Juego) */}
                     <button
                       type="button"
@@ -1830,18 +1833,20 @@ export default function TorneoEnVivo() {
                         borderRadius: 'var(--radius-sm)',
                         color: 'var(--color-primary)',
                         cursor: updatingPartidoId === p.id ? 'not-allowed' : 'pointer',
-                        padding: '0.4rem 0.55rem',
+                        padding: '0.35rem 0.6rem',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '0.25rem',
+                        gap: '0.3rem',
                         fontSize: 'var(--font-size-xs)',
-                        fontWeight: 700,
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
                         transition: 'var(--transition-fast)',
                         opacity: updatingPartidoId === p.id ? 0.6 : 1,
                       }}
                     >
-                      <Play size={14} fill="currentColor" />
+                      <Play size={13} fill="currentColor" />
+                      <span>En juego</span>
                     </button>
 
                     {/* Botón cargar resultado inline */}
@@ -1855,14 +1860,19 @@ export default function TorneoEnVivo() {
                         borderRadius: 'var(--radius-sm)',
                         color: 'var(--color-text-secondary)',
                         cursor: 'pointer',
-                        padding: '0.4rem',
+                        padding: '0.35rem 0.6rem',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        gap: '0.3rem',
+                        fontSize: 'var(--font-size-xs)',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
                         transition: 'var(--transition-fast)',
                       }}
                     >
-                      <ClipboardList size={16} />
+                      <ClipboardList size={14} />
+                      <span>Resultado</span>
                     </button>
                   </div>
                 </div>
