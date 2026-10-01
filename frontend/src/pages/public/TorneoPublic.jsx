@@ -161,8 +161,7 @@ export default function TorneoPublic() {
   // Categoría activa y colecciones derivadas
   const activeCategoria = data?.categorias?.find((c) => c.id === activeCatId) || data?.categorias?.[0];
   const zonas = activeCategoria?.zonas || [];
-  const activeZona = activeZoneId ? zonas.find((z) => z.id === activeZoneId) : null;
-  const zonasAMostrar = activeZoneId ? (activeZona ? [activeZona] : zonas) : zonas;
+  const zonasAMostrar = activeZoneId ? zonas.filter((z) => z.id === activeZoneId) : zonas;
   const eliminatoria = activeCategoria?.eliminatoria || [];
 
   // Resetear filtros al cambiar de categoría
@@ -202,7 +201,7 @@ export default function TorneoPublic() {
     } else {
       setActivePhase('zonas');
     }
-  }, [activeCatId]);
+  }, [activeCategoria?.id]);
 
   const handleCategorySelect = (catId, e) => {
     setActiveCatId(catId);
