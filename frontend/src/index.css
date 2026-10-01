@@ -1127,14 +1127,18 @@ tr:nth-child(1) .pos-number {
   .zona-table .col-pts,
   .zona-table .col-pj,
   .zona-table .col-pg,
-  .zona-table .col-pp,
-  .zona-table .col-sets,
-  .zona-table .col-games {
+  .zona-table .col-pp {
     width: auto;
   }
 
+  .zona-table .col-sets,
+  .zona-table .col-games {
+    width: auto;
+    white-space: nowrap;
+  }
+
   .zona-table .team-name {
-    max-width: 110px;
+    max-width: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2315,6 +2319,120 @@ tr:nth-child(1) .pos-number {
   max-width: 100% !important;
   min-width: 0 !important;
 }
+
+/* ─── Posiciones de Grupo en Mobile (Filas Deportivas sin scroll horizontal) ─── */
+.public-posiciones-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.public-pos-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--color-bg-input, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.public-pos-card.clasifica {
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-primary-light, rgba(0, 208, 132, 0.06));
+}
+
+.public-pos-rank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  flex-shrink: 0;
+}
+
+.public-pos-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1.1;
+  color: var(--color-text);
+}
+
+.public-pos-card.clasifica .public-pos-num {
+  color: var(--color-primary);
+}
+
+.public-pos-arrow {
+  color: var(--color-primary);
+  font-size: 0.6rem;
+  line-height: 1;
+  margin-top: 2px;
+  text-shadow: 0 0 6px var(--color-accent-glow);
+}
+
+.public-pos-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.public-pos-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--color-text);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.public-pos-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  flex-wrap: wrap;
+  line-height: 1.2;
+}
+
+.public-pos-dot {
+  opacity: 0.4;
+  font-weight: 700;
+}
+
+.public-pos-pts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 44px;
+  flex-shrink: 0;
+}
+
+.public-pos-pts-val {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--color-primary);
+}
+
+.public-pos-pts-lbl {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
 
 
 

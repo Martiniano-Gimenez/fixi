@@ -547,53 +547,111 @@ export default function TorneoPublic() {
                   <span className="badge badge-en_curso">Clasifican {activeZona.clasifican}</span>
                 </div>
 
-                  {/* Tabla de posiciones */}
-                  <div className="table-responsive" style={{ marginBottom: '1.5rem' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Pos</th>
-                          <th>Pareja</th>
-                          <th className="text-center" title="Puntos">Pts</th>
-                          <th className="text-center hide-on-mobile" title="Partidos Jugados">PJ</th>
-                          <th className="text-center" title="Partidos Ganados">PG</th>
-                          <th className="text-center hide-on-mobile" title="Partidos Perdidos">PP</th>
-                          <th className="text-center" title="Sets a Favor / En Contra">Sets</th>
-                          <th className="text-center" title="Games a Favor / En Contra">Games</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeZona.tabla.map((row, idx) => {
-                          const clasifica = idx < activeZona.clasifican;
-                          return (
-                            <tr
-                              key={idx}
-                              style={{
-                                backgroundColor: clasifica ? 'var(--color-primary-light)' : 'transparent',
-                                borderLeft: clasifica ? '4px solid var(--color-primary)' : '4px solid transparent',
-                              }}
-                            >
-                              <td><span className="pos-number">{idx + 1}</span></td>
-                              <td className="team-name">
-                                {clasifica && (
-                                  <span style={{ color: 'var(--color-primary)', marginRight: '0.25rem', textShadow: '0 0 5px var(--color-accent-glow)' }}>
-                                    ▲
-                                  </span>
-                                )}
+                  {/* Posiciones de la zona: Mobile (filas sin scroll) vs Desktop (tabla tradicional) */}
+                  {isMobile ? (
+                    <div className="public-posiciones-list" style={{ marginBottom: '1.5rem' }}>
+                      {activeZona.tabla.map((row, idx) => {
+                        const clasifica = idx < activeZona.clasifican;
+                        return (
+                          <div
+                            key={idx}
+                            className={`public-pos-card ${clasifica ? 'clasifica' : ''}`}
+                          >
+                            <div className="public-pos-rank">
+                              <span className="public-pos-num">{idx + 1}</span>
+                              {clasifica && (
+                                <span className="public-pos-arrow" title="Zona de clasificación">
+                                  ▲
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="public-pos-info">
+                              <div className="public-pos-name" title={row.pareja}>
                                 {row.pareja}
-                              </td>
-                              <td className="text-center stat-pts">{row.puntos}</td>
-                              <td className="text-center hide-on-mobile">{row.pj}</td>
-                              <td className="text-center stat-highlight">{row.pg}</td>
-                              <td className="text-center hide-on-mobile">{row.pp}</td>
-                              <td className="text-center">{row.sf} - {row.sc}</td>
-                              <td className="text-center">{row.gf} - {row.gc}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                              </div>
+                              <div className="public-pos-stats">
+                                <span>{row.pj} PJ</span>
+                                <span className="public-pos-dot">·</span>
+                                <span>{row.pg} PG</span>
+                                <span className="public-pos-dot">·</span>
+                                <span>Sets {row.sf}-{row.sc}</span>
+                                <span className="public-pos-dot">·</span>
+                                <span>Games {row.gf}-{row.gc}</span>
+                              </div>
+                            </div>
+
+                            <div className="public-pos-pts">
+                              <span className="public-pos-pts-val">{row.puntos}</span>
+                              <span className="public-pos-pts-lbl">PTS</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="table-responsive" style={{ marginBottom: '1.5rem' }}>
+                      <table className="zona-table">
+                        <thead>
+                          <tr>
+                            <th className="col-pos" title="Posición">
+                              <span className="sr-only">Pos</span>
+                              <span aria-hidden="true" className="th-short">#</span>
+                            </th>
+                            <th className="col-pareja">Pareja</th>
+                            <th className="col-pts text-center" title="Puntos">
+                              <span className="sr-only">Pts</span>
+                              <span aria-hidden="true" className="th-short">P</span>
+                            </th>
+                            <th className="col-pj text-center hide-on-mobile" title="Partidos Jugados">PJ</th>
+                            <th className="col-pg text-center" title="Partidos Ganados">
+                              <span className="sr-only">PG</span>
+                              <span aria-hidden="true" className="th-short">G</span>
+                            </th>
+                            <th className="col-pp text-center hide-on-mobile" title="Partidos Perdidos">PP</th>
+                            <th className="col-sets text-center" title="Sets a Favor / En Contra">
+                              <span className="sr-only">Sets</span>
+                              <span aria-hidden="true" className="th-short">S</span>
+                            </th>
+                            <th className="col-games text-center" title="Games a Favor / En Contra">
+                              <span className="sr-only">Games</span>
+                              <span aria-hidden="true" className="th-short">Gm</span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeZona.tabla.map((row, idx) => {
+                            const clasifica = idx < activeZona.clasifican;
+                            return (
+                              <tr
+                                key={idx}
+                                style={{
+                                  backgroundColor: clasifica ? 'var(--color-primary-light)' : 'transparent',
+                                  borderLeft: clasifica ? '4px solid var(--color-primary)' : '4px solid transparent',
+                                }}
+                              >
+                                <td className="col-pos"><span className="pos-number">{idx + 1}</span></td>
+                                <td className="col-pareja team-name" title={row.pareja}>
+                                  {clasifica && (
+                                    <span style={{ color: 'var(--color-primary)', marginRight: '0.25rem', textShadow: '0 0 5px var(--color-accent-glow)' }}>
+                                      ▲
+                                    </span>
+                                  )}
+                                  {row.pareja}
+                                </td>
+                                <td className="col-pts text-center stat-pts">{row.puntos}</td>
+                                <td className="col-pj text-center hide-on-mobile">{row.pj}</td>
+                                <td className="col-pg text-center stat-highlight">{row.pg}</td>
+                                <td className="col-pp text-center hide-on-mobile">{row.pp}</td>
+                                <td className="col-sets text-center">{row.sf} - {row.sc}</td>
+                                <td className="col-games text-center">{row.gf} - {row.gc}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
                   {/* Partidos de la zona */}
                   {activeZona.partidos.length > 0 && (
