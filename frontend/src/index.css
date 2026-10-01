@@ -2234,5 +2234,88 @@ tr:nth-child(1) .pos-number {
   color: var(--color-text-muted);
 }
 
+/* Cuadro Eliminatorio Dual (Mobile Tabs / Desktop Scroll) */
+.public-bracket-mobile {
+  width: 100%;
+}
+
+.public-bracket-tabs {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.6rem;
+  margin-bottom: 1.25rem;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.public-bracket-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.public-bracket-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.public-bracket-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.public-bracket-tab.active {
+  background: var(--color-primary);
+  color: #0b0e14;
+  border-color: var(--color-primary);
+  font-weight: 700;
+  box-shadow: 0 0 10px var(--color-accent-glow);
+}
+
+.public-bracket-tab-badge {
+  font-size: 0.65rem;
+  opacity: 0.8;
+  font-weight: 700;
+}
+
+.public-bracket-tab.active .public-bracket-tab-badge {
+  opacity: 1;
+}
+
+.public-bracket-mobile-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.public-bracket-mobile .bracket-match-wrapper.mobile-full {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.public-bracket-mobile .match-card-wrapper {
+  width: 100%;
+}
+
+.public-page .public-bracket-mobile .match-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+
 
 

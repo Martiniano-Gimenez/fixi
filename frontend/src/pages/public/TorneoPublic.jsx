@@ -2,22 +2,131 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
-import { Award, AlertTriangle, Users, Trophy, Calendar, RefreshCw, Layers, Clock, Search, X } from 'lucide-react';
+import { Award, AlertTriangle, Users, Trophy, Calendar, Layers, Clock, Search, X } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import '../admin/EliminatoriaView.css';
 
 const POLL_INTERVAL = 15000; // 15 seconds
 
+function PublicMatchCard({ partido, isMobile = false }) {
+  const isFinalizado = partido.estado === 'FINALIZADO';
+  const isJugable = !!(partido.pareja1 && partido.pareja2);
+  const isVacio = !partido.pareja1 && !partido.pareja2 && !isFinalizado;
+  const p1esGanador = isFinalizado && partido.ganador === partido.pareja1;
+  const p2esGanador = isFinalizado && partido.ganador === partido.pareja2;
+
+  return (
+    <div key={partido.id} className={`bracket-match-wrapper ${isMobile ? 'mobile-full' : ''}`}>
+      <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', width: isMobile ? '100%' : undefined }}>
+        <div
+          className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''} ${isVacio ? 'match-card-empty' : ''}`}
+          style={{ cursor: 'default', width: isMobile ? '100%' : undefined }}
+        >
+          <div className="match-card-header">
+            <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
+              {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
+            </span>
+          </div>
+
+          {partido.fechaHora && (
+            <div
+              style={{
+                fontSize: '0.7rem',
+                color: 'var(--color-text-secondary)',
+                textAlign: 'center',
+                marginBottom: '0.4rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+              }}
+            >
+              <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
+              {formatDiaHorario(partido.fechaHora)}
+            </div>
+          )}
+
+          <div className="parejas-list">
+            <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
+              <div className="pareja-info">
+                {partido.pareja1 ? (
+                  <span className="pareja-nombre">{partido.pareja1}</span>
+                ) : (
+                  <span className="pareja-esperando">
+                    {partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando...'}
+                  </span>
+                )}
+              </div>
+              {partido.sets && partido.sets.length > 0 && (
+                <div className="sets-container">
+                  {partido.sets.map((set, idx) => (
+                    <span key={idx} className="set-score">
+                      {set.gamesPareja1}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={`pareja-row ${p2esGanador ? 'ganador' : ''}`}>
+              <div className="pareja-info">
+                {partido.pareja2 ? (
+                  <span className="pareja-nombre">{partido.pareja2}</span>
+                ) : (
+                  <span className="pareja-esperando">
+                    {partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando...'}
+                  </span>
+                )}
+              </div>
+              {partido.sets && partido.sets.length > 0 && (
+                <div className="sets-container">
+                  {partido.sets.map((set, idx) => (
+                    <span key={idx} className="set-score">
+                      {set.gamesPareja2}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TorneoPublic() {
   const { slug } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [lastUpdate, setLastUpdate] = useState(null);
   const [activeCatId, setActiveCatId] = useState(null);
   const [activeZoneId, setActiveZoneId] = useState(null);
+  const [activeRoundId, setActiveRoundId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 768px)').matches;
+  });
+
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 768px)');
+    const onChange = (e) => setIsMobile(e.matches);
+    if (mql.addEventListener) {
+      mql.addEventListener('change', onChange);
+    } else {
+      mql.addListener(onChange);
+    }
+    return () => {
+      if (mql.removeEventListener) {
+        mql.removeEventListener('change', onChange);
+      } else {
+        mql.removeListener(onChange);
+      }
+    };
+  }, []);
 
   const intervalRef = useRef(null);
   const publicBracketRef = useRef(null);
@@ -28,7 +137,6 @@ export default function TorneoPublic() {
     try {
       const result = await api.get(`/public/${slug}`);
       setData(result);
-      setLastUpdate(new Date());
       setError(null);
 
       // Si no hay categoría seleccionada, seleccionar la primera
@@ -69,10 +177,29 @@ export default function TorneoPublic() {
     }
   }, [activeCatId, zonas.length]);
 
-  // Limpiar búsqueda al cambiar de categoría
+  // Limpiar búsqueda y resetear tab de ronda al cambiar de categoría
   useEffect(() => {
     setSearchTerm('');
+    setActiveRoundId(null);
   }, [activeCatId]);
+
+  // Ronda más avanzada con al menos 1 cruce definido por defecto
+  const rondaMasAvanzadaConParejas = useMemo(() => {
+    if (!eliminatoria || eliminatoria.length === 0) return null;
+    for (let i = eliminatoria.length - 1; i >= 0; i--) {
+      const fase = eliminatoria[i];
+      const tieneDefinido = fase.partidos.some(
+        (p) => Boolean(p.pareja1 && p.pareja2) || p.estado === 'FINALIZADO'
+      );
+      if (tieneDefinido) return fase.id;
+    }
+    return eliminatoria[0].id;
+  }, [eliminatoria]);
+
+  const activeFaseMobile =
+    eliminatoria.find((f) => f.id === activeRoundId) ||
+    eliminatoria.find((f) => f.id === rondaMasAvanzadaConParejas) ||
+    eliminatoria[0];
 
   // Lista deduplicada de parejas en todas las zonas de la categoría activa
   const parejasPorZona = useMemo(() => {
@@ -667,158 +794,91 @@ export default function TorneoPublic() {
                 <Trophy size={22} strokeWidth={2} />
                 Cuadro Eliminatorio
               </h2>
-              <div className="bracket-container" style={{ padding: '1rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
-                <div className="bracket-scroll" ref={publicBracketRef} style={{ position: 'relative' }}>
-                  {eliminatoria.map((fase, faseIdx) => {
-                    const total = fase.partidos.length;
-                    const definidos = fase.partidos.filter(
-                      (p) => Boolean(p.pareja1 && p.pareja2) || p.estado === 'FINALIZADO'
-                    ).length;
+              {isMobile ? (
+                /* MODO MOBILE: Tabs horizontales por ronda + stack vertical 100% ancho */
+                <div className="public-bracket-mobile">
+                  {/* Selector de tabs de ronda */}
+                  <div className="public-bracket-tabs" role="tablist" aria-label="Rondas eliminatorias">
+                    {eliminatoria.map((fase) => {
+                      const isActive = (activeFaseMobile ? activeFaseMobile.id : activeRoundId) === fase.id;
 
-                    const tieneData = fase.partidos.some(
-                      (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
-                    );
+                      return (
+                        <button
+                          key={fase.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          className={`public-bracket-tab ${isActive ? 'active' : ''}`}
+                          onClick={() => setActiveRoundId(fase.id)}
+                        >
+                          <span className="public-bracket-tab-name">{fase.nombre}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                    let roundClass = 'ronda-con-datos';
-                    if (!tieneData) {
-                      if (faseIdx === 0) {
-                        roundClass = 'ronda-parcial';
-                      } else {
-                        const prevFase = eliminatoria[faseIdx - 1];
-                        const prevTieneData = prevFase?.partidos.some(
-                          (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
-                        );
-                        roundClass = prevTieneData ? 'ronda-parcial' : 'ronda-vacia';
-                      }
-                    }
-
-                    return (
-                      <div key={fase.id} className={`ronda-section bracket-section ${roundClass}`}>
-                        <div className="ronda-header-row">
-                          <h3 className="ronda-title">{fase.nombre}</h3>
-                          <span className="ronda-progress-badge">
-                            {definidos}/{total} definidos
-                          </span>
-                        </div>
-                        <div className="ronda-matches bracket-matches-column">
-                          {fase.partidos.map((partido) => {
-                            const isFinalizado = partido.estado === 'FINALIZADO';
-                            const isJugable = !!(partido.pareja1 && partido.pareja2);
-                            const isVacio = !partido.pareja1 && !partido.pareja2 && !isFinalizado;
-                            const p1esGanador = isFinalizado && partido.ganador === partido.pareja1;
-                            const p2esGanador = isFinalizado && partido.ganador === partido.pareja2;
-
-                            return (
-                              <div key={partido.id} className="bracket-match-wrapper">
-                                <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center' }}>
-                                  <div
-                                    className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''} ${isVacio ? 'match-card-empty' : ''}`}
-                                    style={{ cursor: 'default' }}
-                                  >
-                                    <div className="match-card-header">
-                                      <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
-                                        {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
-                                      </span>
-                                    </div>
-
-                                    {partido.fechaHora && (
-                                      <div
-                                        style={{
-                                          fontSize: '0.7rem',
-                                          color: 'var(--color-text-secondary)',
-                                          textAlign: 'center',
-                                          marginBottom: '0.4rem',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          gap: '4px',
-                                        }}
-                                      >
-                                        <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-                                        {formatDiaHorario(partido.fechaHora)}
-                                      </div>
-                                    )}
-
-                                  <div className="parejas-list">
-                                    <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
-                                      <div className="pareja-info">
-                                        {partido.pareja1 ? (
-                                          <span className="pareja-nombre">{partido.pareja1}</span>
-                                        ) : (
-                                          <span className="pareja-esperando">
-                                            {partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando...'}
-                                          </span>
-                                        )}
-                                      </div>
-                                      {partido.sets && partido.sets.length > 0 && (
-                                        <div className="sets-container">
-                                          {partido.sets.map((set, idx) => (
-                                            <span key={idx} className="set-score">
-                                              {set.gamesPareja1}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className={`pareja-row ${p2esGanador ? 'ganador' : ''}`}>
-                                      <div className="pareja-info">
-                                        {partido.pareja2 ? (
-                                          <span className="pareja-nombre">{partido.pareja2}</span>
-                                        ) : (
-                                          <span className="pareja-esperando">
-                                            {partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando...'}
-                                          </span>
-                                        )}
-                                      </div>
-                                      {partido.sets && partido.sets.length > 0 && (
-                                        <div className="sets-container">
-                                          {partido.sets.map((set, idx) => (
-                                            <span key={idx} className="set-score">
-                                              {set.gamesPareja2}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                  {/* Partidos de la ronda activa en stack vertical */}
+                  {activeFaseMobile && (
+                    <div className="public-bracket-mobile-content">
+                      <div className="public-bracket-mobile-matches">
+                        {activeFaseMobile.partidos.map((partido) => (
+                          <PublicMatchCard key={partido.id} partido={partido} isMobile={true} />
+                        ))}
                       </div>
                     </div>
-                  );
-                })}
-                  <BracketLines scrollContainerRef={publicBracketRef} fases={eliminatoria} />
+                  )}
                 </div>
-              </div>
+              ) : (
+                /* MODO DESKTOP: Bracket horizontal con scroll tradicional y BracketLines */
+                <div className="bracket-container" style={{ padding: '1rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+                  <div className="bracket-scroll" ref={publicBracketRef} style={{ position: 'relative' }}>
+                    {eliminatoria.map((fase, faseIdx) => {
+                      const total = fase.partidos.length;
+                      const definidos = fase.partidos.filter(
+                        (p) => Boolean(p.pareja1 && p.pareja2) || p.estado === 'FINALIZADO'
+                      ).length;
+
+                      const tieneData = fase.partidos.some(
+                        (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
+                      );
+
+                      let roundClass = 'ronda-con-datos';
+                      if (!tieneData) {
+                        if (faseIdx === 0) {
+                          roundClass = 'ronda-parcial';
+                        } else {
+                          const prevFase = eliminatoria[faseIdx - 1];
+                          const prevTieneData = prevFase?.partidos.some(
+                            (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
+                          );
+                          roundClass = prevTieneData ? 'ronda-parcial' : 'ronda-vacia';
+                        }
+                      }
+
+                      return (
+                        <div key={fase.id} className={`ronda-section bracket-section ${roundClass}`}>
+                          <div className="ronda-header-row">
+                            <h3 className="ronda-title">{fase.nombre}</h3>
+                            <span className="ronda-progress-badge">
+                              {definidos}/{total} definidos
+                            </span>
+                          </div>
+                          <div className="ronda-matches bracket-matches-column">
+                            {fase.partidos.map((partido) => (
+                              <PublicMatchCard key={partido.id} partido={partido} isMobile={false} />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <BracketLines scrollContainerRef={publicBracketRef} fases={eliminatoria} />
+                  </div>
+                </div>
+              )}
             </section>
           )}
         </>
       )}
-
-      {/* Footer con indicador de actualización en vivo */}
-      <div
-        style={{
-          textAlign: 'center',
-          color: 'var(--color-text-muted)',
-          fontSize: 'var(--font-size-xs)',
-          paddingTop: '2rem',
-          borderTop: '1px solid var(--color-border)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: '0.5rem',
-        }}
-      >
-        <RefreshCw size={12} className="spin" />
-        <span>
-          Actualización en vivo cada 15s
-          {lastUpdate && ` · Última: ${lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
-        </span>
-      </div>
     </div>
   );
 }
