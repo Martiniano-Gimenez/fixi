@@ -21,8 +21,9 @@
   --color-bg-input: #12151c;
   
   --color-text: #f1f3f5;
-  --color-text-secondary: #8b949e;
-  --color-text-muted: #64748b;
+  --color-text-secondary: #9da5ae;
+  --color-text-muted: #7a8599;
+  --color-sticky-bg: rgba(10, 12, 16, 0.92);
   --color-border: #2a313c;
 
   /* Tipografía */
@@ -646,7 +647,6 @@ ul, ol {
   background: var(--color-primary-light);
   color: var(--color-success);
   border-color: var(--color-primary-light);
-  box-shadow: 0 0 10px var(--color-accent-glow);
 }
 
 .badge-finalizado {
@@ -2339,7 +2339,7 @@ tr:nth-child(1) .pos-number {
   color: #0b0e14;
   border-color: var(--color-primary);
   font-weight: 700;
-  box-shadow: 0 0 10px var(--color-accent-glow);
+  box-shadow: 0 0 8px var(--color-accent-glow);
 }
 
 .public-bracket-tab-badge {
