@@ -1920,20 +1920,219 @@ tr:nth-child(1) .pos-number {
    VISTA PÚBLICA DEL TORNEO (Mobile-First / Dark Premium Deportivo)
    ========================================================================== */
 
-/* Navegación rápida entre zonas (Punto 1) */
-.public-zone-chips {
-  margin-top: 1.25rem;
+/* Header compacto de la vista pública (No sticky) */
+.public-tournament-header {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.public-tournament-title {
+  font-size: var(--font-size-xl);
+  margin-bottom: 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  line-height: 1.2;
+}
+
+.public-tournament-meta {
   display: flex;
   justify-content: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
+  gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.public-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.public-meta-item strong {
+  color: var(--color-text);
+}
+
+/* Barra Sticky: Categorías + Control Segmentado */
+.public-sticky-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--color-sticky-bg, rgba(10, 12, 16, 0.92));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.45rem var(--space-4);
+  margin-left: calc(-1 * var(--space-4));
+  margin-right: calc(-1 * var(--space-4));
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  justify-content: center;
+  max-height: 96px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 769px) {
+  .public-sticky-nav {
+    margin-left: calc(-1 * var(--space-8));
+    margin-right: calc(-1 * var(--space-8));
+    padding-left: var(--space-8);
+    padding-right: var(--space-8);
+  }
+}
+
+/* Chips de Categoría (Scroll horizontal, degradé y sin barra) */
+.public-cat-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.15rem 0.25rem;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+}
+
+.public-cat-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.public-cat-chip {
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.public-cat-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.public-cat-chip.active {
+  background: var(--color-primary);
+  color: #0b0e14;
+  border-color: var(--color-primary);
+  font-weight: 700;
+  box-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+.public-cat-chip:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Control Segmentado (Tabs Reales: Zonas / Eliminatoria) */
+.public-segmented-control {
+  display: flex;
+  align-items: center;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.public-segment-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.public-segment-btn:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.public-segment-btn.active {
+  background: var(--color-primary);
+  color: #0b0e14;
+  font-weight: 700;
+}
+
+.public-segment-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.public-segment-subtext {
+  font-size: 0.65rem;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.public-segment-btn.active .public-segment-subtext {
+  color: rgba(11, 14, 20, 0.85);
+  font-weight: 600;
+}
+
+/* Navegación entre Zonas (Scroll horizontal, alto táctil min 40px, degradé) */
+.public-zone-chips {
+  margin: 0.35rem 0 0.75rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.25rem 0.25rem;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+}
+
+.public-zone-chips::-webkit-scrollbar {
+  display: none;
 }
 
 .public-zone-chip {
+  min-height: 40px;
+  padding: 0.45rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: var(--font-size-xs);
   font-weight: 600;
-  padding: 0.35rem 0.8rem;
   border-radius: var(--radius-full, 9999px);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1942,6 +2141,7 @@ tr:nth-child(1) .pos-number {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   user-select: none;
+  flex-shrink: 0;
 }
 
 .public-zone-chip:hover {
@@ -1956,116 +2156,12 @@ tr:nth-child(1) .pos-number {
   color: #0b0e14;
   border-color: var(--color-primary);
   font-weight: 700;
-  box-shadow: 0 0 12px var(--color-accent-glow);
+  box-shadow: 0 0 8px var(--color-accent-glow);
 }
 
 .public-zone-chip:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
-}
-
-/* Stepper de Fases (Punto 6) */
-.public-phase-stepper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  max-width: 440px;
-  margin: 1.5rem auto 2rem auto;
-  padding: 0.5rem 0.75rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-}
-
-.public-phase-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  background: none;
-  border: none;
-  color: var(--color-text);
-  cursor: pointer;
-  padding: 0.4rem 0.6rem;
-  border-radius: var(--radius-md);
-  transition: all 0.2s ease;
-  text-align: left;
-}
-
-.public-phase-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.public-phase-btn:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-.public-phase-indicator {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--color-text-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  transition: all 0.2s ease;
-}
-
-.public-phase-btn.active .public-phase-indicator {
-  background: var(--color-primary);
-  color: #0b0e14;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 10px var(--color-accent-glow);
-}
-
-.public-phase-btn.completed .public-phase-indicator {
-  background: var(--color-success, #10b981);
-  color: #ffffff;
-  border-color: var(--color-success, #10b981);
-}
-
-.public-phase-btn.waiting .public-phase-indicator {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-muted);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.public-phase-label {
-  display: flex;
-  flex-direction: column;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.public-phase-subtext {
-  font-size: 0.65rem;
-  font-weight: 400;
-  color: var(--color-text-muted);
-  margin-top: 1px;
-}
-
-.public-phase-btn.active .public-phase-subtext {
-  color: var(--color-primary);
-}
-
-.public-phase-connector {
-  flex: 1;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.1);
-  margin: 0 0.5rem;
-  min-width: 16px;
-  transition: background 0.3s ease;
-}
-
-.public-phase-connector.completed {
-  background: var(--color-success, #10b981);
 }
 
 /* Rondas de Bracket y Atenuación (Punto 4) - Scoped a .public-page */
@@ -2161,7 +2257,7 @@ tr:nth-child(1) .pos-number {
 .public-search-wrap {
   position: relative;
   max-width: 440px;
-  margin: 1.25rem auto 0 auto;
+  margin: 0.5rem auto 1.25rem auto;
   width: 100%;
 }
 
