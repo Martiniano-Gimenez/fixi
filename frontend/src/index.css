@@ -1894,3 +1894,345 @@ tr:nth-child(1) .pos-number {
   }
 }
 
+/* ==========================================================================
+   VISTA PÚBLICA DEL TORNEO (Mobile-First / Dark Premium Deportivo)
+   ========================================================================== */
+
+/* Navegación rápida entre zonas (Punto 1) */
+.public-zone-chips {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.public-zone-chip {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-full, 9999px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.public-zone-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.public-zone-chip.active {
+  background: var(--color-primary);
+  color: #0b0e14;
+  border-color: var(--color-primary);
+  font-weight: 700;
+  box-shadow: 0 0 12px var(--color-accent-glow);
+}
+
+.public-zone-chip:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Stepper de Fases (Punto 6) */
+.public-phase-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 440px;
+  margin: 1.5rem auto 2rem auto;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.public-phase-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.public-phase-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.public-phase-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.public-phase-indicator {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: all 0.2s ease;
+}
+
+.public-phase-btn.active .public-phase-indicator {
+  background: var(--color-primary);
+  color: #0b0e14;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 10px var(--color-accent-glow);
+}
+
+.public-phase-btn.completed .public-phase-indicator {
+  background: var(--color-success, #10b981);
+  color: #ffffff;
+  border-color: var(--color-success, #10b981);
+}
+
+.public-phase-btn.waiting .public-phase-indicator {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-muted);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.public-phase-label {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.public-phase-subtext {
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+.public-phase-btn.active .public-phase-subtext {
+  color: var(--color-primary);
+}
+
+.public-phase-connector {
+  flex: 1;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 0.5rem;
+  min-width: 16px;
+  transition: background 0.3s ease;
+}
+
+.public-phase-connector.completed {
+  background: var(--color-success, #10b981);
+}
+
+/* Rondas de Bracket y Atenuación (Punto 4) - Scoped a .public-page */
+.public-page .ronda-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  padding: 0 0.25rem;
+}
+
+.public-page .ronda-header-row .ronda-title {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.public-page .ronda-progress-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+.public-page .ronda-section.ronda-con-datos {
+  opacity: 1;
+}
+
+.public-page .ronda-section.ronda-parcial {
+  opacity: 0.75;
+}
+
+.public-page .ronda-section.ronda-vacia {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
+.public-page .ronda-section.ronda-vacia:hover {
+  opacity: 0.8;
+  filter: grayscale(0);
+}
+
+.public-page .match-card.match-card-empty {
+  opacity: 0.6;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* Buscador de Parejas (Categoría Activa) */
+.public-search-wrap {
+  position: relative;
+  max-width: 440px;
+  margin: 1.25rem auto 0 auto;
+  width: 100%;
+}
+
+.public-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.public-search-icon {
+  position: absolute;
+  left: 0.9rem;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  transition: color 0.2s ease;
+}
+
+.public-search-input {
+  width: 100%;
+  padding: 0.55rem 2.2rem 0.55rem 2.4rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full, 9999px);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.public-search-input:focus {
+  border-color: var(--color-primary);
+  background: var(--color-bg-input);
+  box-shadow: 0 0 12px var(--color-accent-glow);
+}
+
+.public-search-box:focus-within .public-search-icon {
+  color: var(--color-primary);
+}
+
+.public-search-clear {
+  position: absolute;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.public-search-clear:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--color-text);
+}
+
+.public-search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 50;
+  padding: 0.4rem;
+  backdrop-filter: blur(12px);
+}
+
+.public-search-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.8rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.public-search-item:hover,
+.public-search-item:focus-visible {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+.public-search-team {
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.public-search-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-primary);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.public-search-empty {
+  padding: 1rem 0.8rem;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+
+

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
-import { Award, AlertTriangle, Users, Trophy, Calendar, RefreshCw, Layers, Clock } from 'lucide-react';
+import { Award, AlertTriangle, Users, Trophy, Calendar, RefreshCw, Layers, Clock, Search, X } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import '../admin/EliminatoriaView.css';
@@ -16,9 +16,13 @@ export default function TorneoPublic() {
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [activeCatId, setActiveCatId] = useState(null);
+  const [activeZoneId, setActiveZoneId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const intervalRef = useRef(null);
   const publicBracketRef = useRef(null);
+  const gruposRef = useRef(null);
+  const eliminatoriaRef = useRef(null);
 
   const fetchData = async () => {
     try {
@@ -47,6 +51,80 @@ export default function TorneoPublic() {
     return () => clearInterval(intervalRef.current);
   }, [slug]);
 
+  // Categoría activa y colecciones derivadas
+  const activeCategoria = data?.categorias?.find((c) => c.id === activeCatId) || data?.categorias?.[0];
+  const zonas = activeCategoria?.zonas || [];
+  const activeZona = zonas.find((z) => z.id === activeZoneId) || zonas[0];
+  const eliminatoria = activeCategoria?.eliminatoria || [];
+
+  // Sincronizar activeZoneId cuando cambia la categoría o cargan las zonas
+  useEffect(() => {
+    if (zonas.length > 0) {
+      setActiveZoneId((prev) => {
+        const stillExists = zonas.some((z) => z.id === prev);
+        return stillExists ? prev : zonas[0].id;
+      });
+    } else {
+      setActiveZoneId(null);
+    }
+  }, [activeCatId, zonas.length]);
+
+  // Limpiar búsqueda al cambiar de categoría
+  useEffect(() => {
+    setSearchTerm('');
+  }, [activeCatId]);
+
+  // Lista deduplicada de parejas en todas las zonas de la categoría activa
+  const parejasPorZona = useMemo(() => {
+    if (!zonas || zonas.length === 0) return [];
+    const seen = new Set();
+    const list = [];
+
+    zonas.forEach((z) => {
+      // 1. De la tabla de posiciones de la zona
+      z.tabla?.forEach((row) => {
+        const nombre = row.pareja?.trim();
+        if (nombre) {
+          const key = `${nombre.toLowerCase()}_${z.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            list.push({ parejaNombre: nombre, zonaId: z.id, zonaNombre: z.nombre });
+          }
+        }
+      });
+
+      // 2. De los partidos por si hubiera parejas no listadas aún en tabla
+      z.partidos?.forEach((p) => {
+        [p.pareja1, p.pareja2].forEach((pNombre) => {
+          const nombre = pNombre?.trim();
+          if (nombre) {
+            const key = `${nombre.toLowerCase()}_${z.id}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              list.push({ parejaNombre: nombre, zonaId: z.id, zonaNombre: z.nombre });
+            }
+          }
+        });
+      });
+    });
+
+    return list;
+  }, [zonas]);
+
+  // Normalización sin acentos y case-insensitive
+  const normalize = (text) =>
+    (text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  // Coincidencias de búsqueda en tiempo real
+  const resultadosBusqueda = useMemo(() => {
+    const q = normalize(searchTerm.trim());
+    if (!q) return [];
+    return parejasPorZona.filter((item) => normalize(item.parejaNombre).includes(q));
+  }, [parejasPorZona, searchTerm]);
+
   if (loading) {
     return (
       <div className="public-page" style={{ textAlign: 'center', paddingTop: '4rem' }}>
@@ -72,9 +150,20 @@ export default function TorneoPublic() {
   if (!data) return null;
 
   const { torneo, categorias = [] } = data;
-  const activeCategoria = categorias.find((c) => c.id === activeCatId) || categorias[0];
-  const zonas = activeCategoria?.zonas || [];
-  const eliminatoria = activeCategoria?.eliminatoria || [];
+
+  const todosPartidosGrupos = zonas.flatMap((z) => z.partidos || []);
+  const gruposCompletados =
+    todosPartidosGrupos.length > 0 &&
+    todosPartidosGrupos.every((p) => p.estado === 'FINALIZADO');
+  const gruposEnCurso = todosPartidosGrupos.some((p) => p.estado === 'EN_CURSO');
+
+  const todosPartidosElim = eliminatoria.flatMap((f) => f.partidos || []);
+  const eliminatoriaFinalizada =
+    todosPartidosElim.length > 0 &&
+    todosPartidosElim.every((p) => p.estado === 'FINALIZADO');
+  const eliminatoriaIniciada = todosPartidosElim.some(
+    (p) => p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || (p.pareja1 && p.pareja2)
+  );
 
   return (
     <div className="public-page">
@@ -170,17 +259,6 @@ export default function TorneoPublic() {
                     }}
                   >
                     <span>{c.nombre}</span>
-                    <span
-                      style={{
-                        fontSize: '0.7rem',
-                        opacity: isActive ? 0.9 : 0.6,
-                        background: isActive ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.08)',
-                        padding: '0.1rem 0.35rem',
-                        borderRadius: '10px',
-                      }}
-                    >
-                      {c.totalParejas}p
-                    </span>
                   </button>
                 );
               })}
@@ -188,40 +266,120 @@ export default function TorneoPublic() {
           </div>
         )}
 
-        {/* Navegación rápida entre zonas de la categoría activa */}
+        {/* Buscador de parejas de la categoría activa */}
+        {zonas.length > 0 && (
+          <div className="public-search-wrap">
+            <div className="public-search-box">
+              <Search size={16} className="public-search-icon" aria-hidden="true" />
+              <input
+                type="text"
+                className="public-search-input"
+                placeholder="Buscar pareja o jugador..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                aria-label="Buscar pareja o jugador en esta categoría"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  className="public-search-clear"
+                  onClick={() => setSearchTerm('')}
+                  aria-label="Limpiar búsqueda"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Lista de resultados desplegable */}
+            {searchTerm.trim() && (
+              <div className="public-search-results" role="listbox" aria-label="Resultados de búsqueda">
+                {resultadosBusqueda.length > 0 ? (
+                  resultadosBusqueda.map((res) => (
+                    <button
+                      key={`${res.parejaNombre}-${res.zonaId}`}
+                      type="button"
+                      className="public-search-item"
+                      onClick={() => {
+                        setActiveZoneId(res.zonaId);
+                        setSearchTerm('');
+                      }}
+                      aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
+                    >
+                      <span className="public-search-team">{res.parejaNombre}</span>
+                      <span className="public-search-badge">{res.zonaNombre}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="public-search-empty">
+                    No se encontraron parejas con ese nombre
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Navegación rápida entre zonas de la categoría activa (Tabs) */}
         {zonas.length > 1 && (
-          <div
-            style={{
-              marginTop: '1.25rem',
-              display: 'flex',
-              justifyContent: 'center',
-              gap: '0.5rem',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-            }}
-          >
-            {zonas.map((z, idx) => (
-              <span key={z.id} style={{ display: 'flex', alignItems: 'center' }}>
-                <a
-                  href={`#zona-${z.id}`}
-                  style={{
-                    fontSize: 'var(--font-size-xs)',
-                    fontWeight: 'bold',
-                    padding: '0.25rem 0.5rem',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(255,255,255,0.05)',
-                    color: 'var(--color-primary)',
-                    textDecoration: 'none',
-                  }}
+          <div className="public-zone-chips" role="navigation" aria-label="Navegación entre zonas">
+            {zonas.map((z) => {
+              const isActive = (activeZona ? activeZona.id : activeZoneId) === z.id;
+              return (
+                <button
+                  key={z.id}
+                  type="button"
+                  className={`public-zone-chip ${isActive ? 'active' : ''}`}
+                  onClick={() => setActiveZoneId(z.id)}
+                  aria-label={`Ver ${z.nombre}`}
+                  aria-current={isActive ? 'true' : undefined}
                 >
                   {z.nombre}
-                </a>
-                {idx < zonas.length - 1 && (
-                  <span style={{ color: 'var(--color-text-muted)', margin: '0 0.4rem' }}>·</span>
-                )}
-              </span>
-            ))}
+                </button>
+              );
+            })}
           </div>
+        )}
+
+        {/* Stepper de fases (si la categoría tiene grupos y eliminatoria) */}
+        {zonas.length > 0 && eliminatoria.length > 0 && (
+          <nav className="public-phase-stepper" aria-label="Fases del torneo">
+            <button
+              type="button"
+              className={`public-phase-btn ${gruposCompletados ? 'completed' : gruposEnCurso ? 'in-progress' : 'active'}`}
+              onClick={() => gruposRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              aria-label="Ir a Fase de Grupos"
+            >
+              <span className="public-phase-indicator">
+                {gruposCompletados ? '✓' : '1'}
+              </span>
+              <span className="public-phase-label">
+                Fase de Grupos
+                <span className="public-phase-subtext">
+                  {gruposCompletados ? 'Completada' : gruposEnCurso ? 'En juego' : 'En disputa'}
+                </span>
+              </span>
+            </button>
+
+            <div className={`public-phase-connector ${gruposCompletados ? 'completed' : ''}`} aria-hidden="true" />
+
+            <button
+              type="button"
+              className={`public-phase-btn ${eliminatoriaFinalizada ? 'completed' : eliminatoriaIniciada ? 'active' : 'waiting'}`}
+              onClick={() => eliminatoriaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              aria-label="Ir a Cuadro Eliminatorio"
+            >
+              <span className="public-phase-indicator">
+                {eliminatoriaFinalizada ? '✓' : '2'}
+              </span>
+              <span className="public-phase-label">
+                Cuadro Eliminatorio
+                <span className="public-phase-subtext">
+                  {eliminatoriaFinalizada ? 'Finalizado' : eliminatoriaIniciada ? 'En disputa' : 'Por comenzar'}
+                </span>
+              </span>
+            </button>
+          </nav>
         )}
       </div>
 
@@ -241,9 +399,10 @@ export default function TorneoPublic() {
       ) : (
         <>
           {/* Zonas de la categoría */}
-          {zonas.length > 0 && (
+          {zonas.length > 0 && activeZona && (
             <section style={{ marginBottom: '3rem' }}>
               <h2
+                ref={gruposRef}
                 style={{
                   marginBottom: '1.5rem',
                   fontSize: 'var(--font-size-2xl)',
@@ -253,14 +412,13 @@ export default function TorneoPublic() {
                 }}
               >
                 <Users size={22} strokeWidth={2} />
-                Fase de Grupos — Categoría {activeCategoria.nombre}
+                Fase de Grupos
               </h2>
-              {zonas.map((zona) => (
-                <div id={`zona-${zona.id}`} key={zona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ margin: 0 }}>{zona.nombre}</h3>
-                    <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
-                  </div>
+              <div id={`zona-${activeZona.id}`} key={activeZona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ margin: 0 }}>{activeZona.nombre}</h3>
+                  <span className="badge badge-en_curso">Clasifican {activeZona.clasifican}</span>
+                </div>
 
                   {/* Tabla de posiciones */}
                   <div className="table-responsive" style={{ marginBottom: '1.5rem' }}>
@@ -278,8 +436,8 @@ export default function TorneoPublic() {
                         </tr>
                       </thead>
                       <tbody>
-                        {zona.tabla.map((row, idx) => {
-                          const clasifica = idx < zona.clasifican;
+                        {activeZona.tabla.map((row, idx) => {
+                          const clasifica = idx < activeZona.clasifican;
                           return (
                             <tr
                               key={idx}
@@ -311,15 +469,15 @@ export default function TorneoPublic() {
                   </div>
 
                   {/* Partidos de la zona */}
-                  {zona.partidos.length > 0 && (
+                  {activeZona.partidos.length > 0 && (
                     <div>
                       <h4 style={{ color: 'var(--color-text-secondary)', marginBottom: '0.75rem', fontSize: 'var(--font-size-sm)' }}>
                         Partidos
                       </h4>
                       <div className="partidos-public-grid">
-                        {zona.partidos.map((p) => {
+                        {activeZona.partidos.map((p) => {
                           let partidoLabel = '';
-                          if (zona.formato === 'MINI_BRACKET') {
+                          if (activeZona.formato === 'MINI_BRACKET') {
                             if (p.posicionEnRonda === 1) partidoLabel = 'Ronda 1 — Partido 1';
                             if (p.posicionEnRonda === 2) partidoLabel = 'Ronda 1 — Partido 2';
                             if (p.posicionEnRonda === 3) partidoLabel = '1° y 2° Puesto (Ganador vs Ganador)';
@@ -376,7 +534,6 @@ export default function TorneoPublic() {
                                 >
                                   <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
                                   {formatDiaHorario(p.fechaHora)}
-                                  {p.canchaNumero && ` · Cancha ${p.canchaNumero}`}
                                 </div>
                               )}
                               <div
@@ -491,7 +648,6 @@ export default function TorneoPublic() {
                     </div>
                   )}
                 </div>
-              ))}
             </section>
           )}
 
@@ -499,6 +655,7 @@ export default function TorneoPublic() {
           {eliminatoria.length > 0 && (
             <section style={{ marginBottom: '3rem' }}>
               <h2
+                ref={eliminatoriaRef}
                 style={{
                   marginBottom: '1.5rem',
                   fontSize: 'var(--font-size-2xl)',
@@ -508,53 +665,79 @@ export default function TorneoPublic() {
                 }}
               >
                 <Trophy size={22} strokeWidth={2} />
-                Cuadro Eliminatorio — Categoría {activeCategoria.nombre}
+                Cuadro Eliminatorio
               </h2>
               <div className="bracket-container" style={{ padding: '1rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
                 <div className="bracket-scroll" ref={publicBracketRef} style={{ position: 'relative' }}>
-                  {eliminatoria.map((fase) => (
-                    <div key={fase.id} className="ronda-section bracket-section">
-                      <h3 className="ronda-title">{fase.nombre}</h3>
-                      <div className="ronda-matches bracket-matches-column">
-                        {fase.partidos.map((partido) => {
-                          const isFinalizado = partido.estado === 'FINALIZADO';
-                          const isJugable = !!(partido.pareja1 && partido.pareja2);
-                          const p1esGanador = isFinalizado && partido.ganador === partido.pareja1;
-                          const p2esGanador = isFinalizado && partido.ganador === partido.pareja2;
+                  {eliminatoria.map((fase, faseIdx) => {
+                    const total = fase.partidos.length;
+                    const definidos = fase.partidos.filter(
+                      (p) => Boolean(p.pareja1 && p.pareja2) || p.estado === 'FINALIZADO'
+                    ).length;
 
-                          return (
-                            <div key={partido.id} className="bracket-match-wrapper">
-                              <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center' }}>
-                                <div className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`} style={{ cursor: 'default' }}>
-                                  <div className="match-card-header">
-                                    <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
-                                      {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
-                                    </span>
-                                    {partido.canchaNumero && (
-                                      <span style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)' }}>
-                                        Cancha {partido.canchaNumero}
+                    const tieneData = fase.partidos.some(
+                      (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
+                    );
+
+                    let roundClass = 'ronda-con-datos';
+                    if (!tieneData) {
+                      if (faseIdx === 0) {
+                        roundClass = 'ronda-parcial';
+                      } else {
+                        const prevFase = eliminatoria[faseIdx - 1];
+                        const prevTieneData = prevFase?.partidos.some(
+                          (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
+                        );
+                        roundClass = prevTieneData ? 'ronda-parcial' : 'ronda-vacia';
+                      }
+                    }
+
+                    return (
+                      <div key={fase.id} className={`ronda-section bracket-section ${roundClass}`}>
+                        <div className="ronda-header-row">
+                          <h3 className="ronda-title">{fase.nombre}</h3>
+                          <span className="ronda-progress-badge">
+                            {definidos}/{total} definidos
+                          </span>
+                        </div>
+                        <div className="ronda-matches bracket-matches-column">
+                          {fase.partidos.map((partido) => {
+                            const isFinalizado = partido.estado === 'FINALIZADO';
+                            const isJugable = !!(partido.pareja1 && partido.pareja2);
+                            const isVacio = !partido.pareja1 && !partido.pareja2 && !isFinalizado;
+                            const p1esGanador = isFinalizado && partido.ganador === partido.pareja1;
+                            const p2esGanador = isFinalizado && partido.ganador === partido.pareja2;
+
+                            return (
+                              <div key={partido.id} className="bracket-match-wrapper">
+                                <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center' }}>
+                                  <div
+                                    className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''} ${isVacio ? 'match-card-empty' : ''}`}
+                                    style={{ cursor: 'default' }}
+                                  >
+                                    <div className="match-card-header">
+                                      <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
+                                        {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
                                       </span>
-                                    )}
-                                  </div>
-
-                                  {partido.fechaHora && (
-                                    <div
-                                      style={{
-                                        fontSize: '0.7rem',
-                                        color: 'var(--color-text-secondary)',
-                                        textAlign: 'center',
-                                        marginBottom: '0.4rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '4px',
-                                      }}
-                                    >
-                                      <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-                                      {formatDiaHorario(partido.fechaHora)}
-                                      {partido.canchaNumero && ` · Cancha ${partido.canchaNumero}`}
                                     </div>
-                                  )}
+
+                                    {partido.fechaHora && (
+                                      <div
+                                        style={{
+                                          fontSize: '0.7rem',
+                                          color: 'var(--color-text-secondary)',
+                                          textAlign: 'center',
+                                          marginBottom: '0.4rem',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '4px',
+                                        }}
+                                      >
+                                        <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
+                                        {formatDiaHorario(partido.fechaHora)}
+                                      </div>
+                                    )}
 
                                   <div className="parejas-list">
                                     <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
@@ -606,7 +789,8 @@ export default function TorneoPublic() {
                         })}
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
                   <BracketLines scrollContainerRef={publicBracketRef} fases={eliminatoria} />
                 </div>
               </div>
