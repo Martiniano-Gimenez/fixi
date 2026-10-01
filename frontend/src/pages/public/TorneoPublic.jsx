@@ -102,7 +102,8 @@ export default function TorneoPublic() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeCatId, setActiveCatId] = useState(null);
-  const [activeZoneId, setActiveZoneId] = useState(null);
+  const [activeZoneId, setActiveZoneId] = useState(null); // null = "Todas"
+  const [activePhase, setActivePhase] = useState('zonas'); // 'zonas' | 'eliminatoria'
   const [activeRoundId, setActiveRoundId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -130,8 +131,6 @@ export default function TorneoPublic() {
 
   const intervalRef = useRef(null);
   const publicBracketRef = useRef(null);
-  const gruposRef = useRef(null);
-  const eliminatoriaRef = useRef(null);
 
   const fetchData = async () => {
     try {
@@ -162,26 +161,68 @@ export default function TorneoPublic() {
   // Categoría activa y colecciones derivadas
   const activeCategoria = data?.categorias?.find((c) => c.id === activeCatId) || data?.categorias?.[0];
   const zonas = activeCategoria?.zonas || [];
-  const activeZona = zonas.find((z) => z.id === activeZoneId) || zonas[0];
+  const activeZona = activeZoneId ? zonas.find((z) => z.id === activeZoneId) : null;
+  const zonasAMostrar = activeZoneId ? (activeZona ? [activeZona] : zonas) : zonas;
   const eliminatoria = activeCategoria?.eliminatoria || [];
 
-  // Sincronizar activeZoneId cuando cambia la categoría o cargan las zonas
-  useEffect(() => {
-    if (zonas.length > 0) {
-      setActiveZoneId((prev) => {
-        const stillExists = zonas.some((z) => z.id === prev);
-        return stillExists ? prev : zonas[0].id;
-      });
-    } else {
-      setActiveZoneId(null);
-    }
-  }, [activeCatId, zonas.length]);
-
-  // Limpiar búsqueda y resetear tab de ronda al cambiar de categoría
+  // Resetear filtros al cambiar de categoría
   useEffect(() => {
     setSearchTerm('');
     setActiveRoundId(null);
+    setActiveZoneId(null); // "Todas" por defecto al cambiar de categoría
   }, [activeCatId]);
+
+  // Si la zona seleccionada deja de existir en una actualización por polling, volver a "Todas" (null)
+  useEffect(() => {
+    if (activeZoneId !== null && !zonas.some((z) => z.id === activeZoneId)) {
+      setActiveZoneId(null);
+    }
+  }, [zonas, activeZoneId]);
+
+  // Inicializar activePhase según la fase en disputa al cambiar categoría o cargar datos
+  useEffect(() => {
+    if (!activeCategoria) return;
+
+    const catZonas = activeCategoria.zonas || [];
+    const catElim = activeCategoria.eliminatoria || [];
+
+    if (catZonas.length > 0 && catElim.length > 0) {
+      const todosGrupos = catZonas.flatMap((z) => z.partidos || []);
+      const gCompletados =
+        todosGrupos.length > 0 && todosGrupos.every((p) => p.estado === 'FINALIZADO');
+      const todosElim = catElim.flatMap((f) => f.partidos || []);
+      const eIniciada = todosElim.some(
+        (p) => p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || Boolean(p.pareja1 && p.pareja2)
+      );
+
+      // Pestaña inicial según la fase actual del torneo
+      setActivePhase(eIniciada || gCompletados ? 'eliminatoria' : 'zonas');
+    } else if (catElim.length > 0) {
+      setActivePhase('eliminatoria');
+    } else {
+      setActivePhase('zonas');
+    }
+  }, [activeCatId]);
+
+  const handleCategorySelect = (catId, e) => {
+    setActiveCatId(catId);
+    e?.currentTarget?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  };
+
+  const handleZoneSelect = (zoneId, e) => {
+    setActiveZoneId(zoneId);
+    e?.currentTarget?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  };
+
+  const handleSearchResultClick = (res) => {
+    setActivePhase('zonas');
+    setActiveZoneId(res.zonaId);
+    setSearchTerm('');
+    setTimeout(() => {
+      const chip = document.querySelector(`[data-zone-id="${res.zonaId}"]`);
+      chip?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }, 60);
+  };
 
   // Ronda más avanzada con al menos 1 cruce definido por defecto
   const rondaMasAvanzadaConParejas = useMemo(() => {
@@ -294,37 +335,21 @@ export default function TorneoPublic() {
 
   return (
     <div className="public-page">
-      {/* Header del Torneo */}
-      <div
-        style={{
-          textAlign: 'center',
-          marginBottom: '2rem',
-          paddingBottom: '1.5rem',
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        <h1
-          style={{
-            fontSize: 'var(--font-size-3xl)',
-            marginBottom: '0.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem',
-          }}
-        >
-          <Award size={30} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-          {torneo.nombre}
+      {/* Header del Torneo (no sticky) */}
+      <header className="public-tournament-header">
+        <h1 className="public-tournament-title">
+          <Award size={24} strokeWidth={2} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+          <span>{torneo.nombre}</span>
         </h1>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="public-tournament-meta">
           <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{estadoLabel(torneo.estado)}</span>
-          <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Club: <strong style={{ color: 'var(--color-text)' }}>{torneo.organizador}</strong>
+          <span className="public-meta-item">
+            Club: <strong>{torneo.organizador}</strong>
           </span>
           {torneo.fecha && (
-            <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-              <Calendar size={14} />
+            <span className="public-meta-item">
+              <Calendar size={13} />
               {new Date(torneo.fecha).toLocaleDateString('es-AR', {
                 day: '2-digit',
                 month: 'long',
@@ -333,182 +358,146 @@ export default function TorneoPublic() {
             </span>
           )}
         </div>
+      </header>
 
-        {/* Selector de Categorías (Pestañas superiores) */}
-        {categorias.length > 0 && (
-          <div style={{ marginTop: '1.5rem' }}>
-            <div
-              style={{
-                fontSize: 'var(--font-size-xs)',
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-                color: 'var(--color-text-secondary)',
-                marginBottom: '0.6rem',
-                fontWeight: 'bold',
-              }}
-            >
-              Categorías
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-                gap: '0.5rem',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-              }}
-            >
+      {/* Barra Sticky: Categorías + Control Segmentado */}
+      {(categorias.length > 0 || (zonas.length > 0 && eliminatoria.length > 0)) && (
+        <div className="public-sticky-nav">
+          {/* Selector de Categorías (Pestañas horizontales con scroll, sin wrap, con degradé) */}
+          {categorias.length > 0 && (
+            <div className="public-cat-chips" role="tablist" aria-label="Categorías">
               {categorias.map((c) => {
                 const isActive = activeCategoria?.id === c.id;
                 return (
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => setActiveCatId(c.id)}
-                    style={{
-                      padding: '0.5rem 1.15rem',
-                      borderRadius: 'var(--radius-md)',
-                      fontSize: 'var(--font-size-sm)',
-                      fontWeight: isActive ? '700' : '500',
-                      background: isActive ? 'var(--color-primary)' : 'var(--color-surface)',
-                      color: isActive ? '#000000' : 'var(--color-text)',
-                      border: isActive
-                        ? '1px solid var(--color-primary)'
-                        : '1px solid var(--color-border)',
-                      boxShadow: isActive ? '0 0 15px rgba(34, 197, 94, 0.4)' : 'none',
-                      cursor: 'pointer',
-                      transition: 'all var(--transition-fast)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      width: 'auto',
-                    }}
+                    role="tab"
+                    aria-selected={isActive}
+                    className={`public-cat-chip ${isActive ? 'active' : ''}`}
+                    onClick={(e) => handleCategorySelect(c.id, e)}
                   >
                     <span>{c.nombre}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Navegación rápida entre zonas de la categoría activa (Tabs) */}
-        {zonas.length > 1 && (
-          <div className="public-zone-chips" role="navigation" aria-label="Navegación entre zonas">
-            {zonas.map((z) => {
-              const isActive = (activeZona ? activeZona.id : activeZoneId) === z.id;
-              return (
-                <button
-                  key={z.id}
-                  type="button"
-                  className={`public-zone-chip ${isActive ? 'active' : ''}`}
-                  onClick={() => setActiveZoneId(z.id)}
-                  aria-label={`Ver ${z.nombre}`}
-                  aria-current={isActive ? 'true' : undefined}
-                >
-                  {z.nombre}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Buscador de parejas de la categoría activa */}
-        {zonas.length > 0 && (
-          <div className="public-search-wrap">
-            <div className="public-search-box">
-              <Search size={16} className="public-search-icon" aria-hidden="true" />
-              <input
-                type="text"
-                className="public-search-input"
-                placeholder="Buscar pareja o jugador..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label="Buscar pareja o jugador en esta categoría"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  className="public-search-clear"
-                  onClick={() => setSearchTerm('')}
-                  aria-label="Limpiar búsqueda"
-                >
-                  <X size={14} />
-                </button>
-              )}
+          {/* Control Segmentado (Tabs reales: Zonas / Eliminatoria) */}
+          {zonas.length > 0 && eliminatoria.length > 0 && (
+            <div className="public-segmented-control" role="tablist" aria-label="Fase del torneo">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activePhase === 'zonas'}
+                className={`public-segment-btn ${activePhase === 'zonas' ? 'active' : ''}`}
+                onClick={() => setActivePhase('zonas')}
+              >
+                <span>Zonas</span>
+                <span className="public-segment-subtext">
+                  {gruposCompletados ? '· Completada' : gruposEnCurso ? '· En juego' : '· En disputa'}
+                </span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activePhase === 'eliminatoria'}
+                className={`public-segment-btn ${activePhase === 'eliminatoria' ? 'active' : ''}`}
+                onClick={() => setActivePhase('eliminatoria')}
+              >
+                <span>Eliminatoria</span>
+                <span className="public-segment-subtext">
+                  {eliminatoriaFinalizada ? '· Finalizado' : eliminatoriaIniciada ? '· En disputa' : '· Por comenzar'}
+                </span>
+              </button>
             </div>
+          )}
+        </div>
+      )}
 
-            {/* Lista de resultados desplegable */}
-            {searchTerm.trim() && (
-              <div className="public-search-results" role="listbox" aria-label="Resultados de búsqueda">
-                {resultadosBusqueda.length > 0 ? (
-                  resultadosBusqueda.map((res) => (
-                    <button
-                      key={`${res.parejaNombre}-${res.zonaId}`}
-                      type="button"
-                      className="public-search-item"
-                      onClick={() => {
-                        setActiveZoneId(res.zonaId);
-                        setSearchTerm('');
-                      }}
-                      aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
-                    >
-                      <span className="public-search-team">{res.parejaNombre}</span>
-                      <span className="public-search-badge">{res.zonaNombre}</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="public-search-empty">
-                    No se encontraron parejas con ese nombre
-                  </div>
-                )}
-              </div>
+      {/* Navegación rápida entre zonas (Solo en pestaña Zonas, no sticky, alto táctil min 40px, con "Todas") */}
+      {activePhase === 'zonas' && zonas.length > 1 && (
+        <div className="public-zone-chips" role="navigation" aria-label="Navegación entre zonas">
+          <button
+            type="button"
+            className={`public-zone-chip ${activeZoneId === null ? 'active' : ''}`}
+            onClick={(e) => handleZoneSelect(null, e)}
+            aria-label="Ver todas las zonas"
+            aria-current={activeZoneId === null ? 'true' : undefined}
+            data-zone-id="all"
+          >
+            Todas
+          </button>
+          {zonas.map((z) => {
+            const isActive = activeZoneId === z.id;
+            return (
+              <button
+                key={z.id}
+                type="button"
+                className={`public-zone-chip ${isActive ? 'active' : ''}`}
+                onClick={(e) => handleZoneSelect(z.id, e)}
+                aria-label={`Ver ${z.nombre}`}
+                aria-current={isActive ? 'true' : undefined}
+                data-zone-id={z.id}
+              >
+                {z.nombre}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Buscador de parejas de la categoría activa (No sticky, en ambas pestañas) */}
+      {zonas.length > 0 && (
+        <div className="public-search-wrap">
+          <div className="public-search-box">
+            <Search size={16} className="public-search-icon" aria-hidden="true" />
+            <input
+              type="text"
+              className="public-search-input"
+              placeholder="Buscar pareja o jugador..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label="Buscar pareja o jugador en esta categoría"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                className="public-search-clear"
+                onClick={() => setSearchTerm('')}
+                aria-label="Limpiar búsqueda"
+              >
+                <X size={14} />
+              </button>
             )}
           </div>
-        )}
 
-        {/* Stepper de fases (si la categoría tiene grupos y eliminatoria) */}
-        {zonas.length > 0 && eliminatoria.length > 0 && (
-          <nav className="public-phase-stepper" aria-label="Fases del torneo">
-            <button
-              type="button"
-              className={`public-phase-btn ${gruposCompletados ? 'completed' : gruposEnCurso ? 'in-progress' : 'active'}`}
-              onClick={() => gruposRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              aria-label="Ir a Zonas"
-            >
-              <span className="public-phase-indicator">
-                {gruposCompletados ? '✓' : '1'}
-              </span>
-              <span className="public-phase-label">
-                Zonas
-                <span className="public-phase-subtext">
-                  {gruposCompletados ? 'Completada' : gruposEnCurso ? 'En juego' : 'En disputa'}
-                </span>
-              </span>
-            </button>
-
-            <div className={`public-phase-connector ${gruposCompletados ? 'completed' : ''}`} aria-hidden="true" />
-
-            <button
-              type="button"
-              className={`public-phase-btn ${eliminatoriaFinalizada ? 'completed' : eliminatoriaIniciada ? 'active' : 'waiting'}`}
-              onClick={() => eliminatoriaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              aria-label="Ir a Eliminatoria"
-            >
-              <span className="public-phase-indicator">
-                {eliminatoriaFinalizada ? '✓' : '2'}
-              </span>
-              <span className="public-phase-label">
-                Eliminatoria
-                <span className="public-phase-subtext">
-                  {eliminatoriaFinalizada ? 'Finalizado' : eliminatoriaIniciada ? 'En disputa' : 'Por comenzar'}
-                </span>
-              </span>
-            </button>
-          </nav>
-        )}
-      </div>
+          {/* Lista de resultados desplegable */}
+          {searchTerm.trim() && (
+            <div className="public-search-results" role="listbox" aria-label="Resultados de búsqueda">
+              {resultadosBusqueda.length > 0 ? (
+                resultadosBusqueda.map((res) => (
+                  <button
+                    key={`${res.parejaNombre}-${res.zonaId}`}
+                    type="button"
+                    className="public-search-item"
+                    onClick={() => handleSearchResultClick(res)}
+                    aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
+                  >
+                    <span className="public-search-team">{res.parejaNombre}</span>
+                    <span className="public-search-badge">{res.zonaNombre}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="public-search-empty">
+                  No se encontraron parejas con ese nombre
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Contenido de la Categoría Activa */}
       {!activeCategoria ? (
@@ -525,33 +514,33 @@ export default function TorneoPublic() {
         </div>
       ) : (
         <>
-          {/* Zonas de la categoría */}
-          {zonas.length > 0 && activeZona && (
+          {/* Zonas de la categoría (Solo en pestaña Zonas) */}
+          {activePhase === 'zonas' && zonas.length > 0 && (
             <section className="public-zonas-section" style={{ marginBottom: '3rem' }}>
               <h2
-                ref={gruposRef}
                 style={{
-                  marginBottom: '1.5rem',
-                  fontSize: 'var(--font-size-2xl)',
+                  marginBottom: '1rem',
+                  fontSize: 'var(--font-size-xl)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.5rem',
                 }}
               >
-                <Users size={22} strokeWidth={2} />
+                <Users size={20} strokeWidth={2} />
                 Zonas
               </h2>
-              <div id={`zona-${activeZona.id}`} key={activeZona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ margin: 0 }}>{activeZona.nombre}</h3>
-                  <span className="badge badge-en_curso">Clasifican {activeZona.clasifican}</span>
-                </div>
+              {zonasAMostrar.map((zona) => (
+                <div id={`zona-${zona.id}`} key={zona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>{zona.nombre}</h3>
+                    <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
+                  </div>
 
                   {/* Posiciones de la zona: Mobile (filas sin scroll) vs Desktop (tabla tradicional) */}
                   {isMobile ? (
                     <div className="public-posiciones-list" style={{ marginBottom: '1.5rem' }}>
-                      {activeZona.tabla.map((row, idx) => {
-                        const clasifica = idx < activeZona.clasifican;
+                      {zona.tabla.map((row, idx) => {
+                        const clasifica = idx < zona.clasifican;
                         return (
                           <div
                             key={idx}
@@ -620,8 +609,8 @@ export default function TorneoPublic() {
                           </tr>
                         </thead>
                         <tbody>
-                          {activeZona.tabla.map((row, idx) => {
-                            const clasifica = idx < activeZona.clasifican;
+                          {zona.tabla.map((row, idx) => {
+                            const clasifica = idx < zona.clasifican;
                             return (
                               <tr
                                 key={idx}
@@ -654,15 +643,15 @@ export default function TorneoPublic() {
                   )}
 
                   {/* Partidos de la zona */}
-                  {activeZona.partidos.length > 0 && (
+                  {zona.partidos.length > 0 && (
                     <div>
                       <h4 style={{ color: 'var(--color-text-secondary)', marginBottom: '0.75rem', fontSize: 'var(--font-size-sm)' }}>
                         Partidos
                       </h4>
                       <div className="partidos-public-grid">
-                        {activeZona.partidos.map((p) => {
+                        {zona.partidos.map((p) => {
                           let partidoLabel = '';
-                          if (activeZona.formato === 'MINI_BRACKET') {
+                          if (zona.formato === 'MINI_BRACKET') {
                             if (p.posicionEnRonda === 1) partidoLabel = 'Ronda 1 — Partido 1';
                             if (p.posicionEnRonda === 2) partidoLabel = 'Ronda 1 — Partido 2';
                             if (p.posicionEnRonda === 3) partidoLabel = '1° y 2° Puesto (Ganador vs Ganador)';
@@ -833,23 +822,23 @@ export default function TorneoPublic() {
                     </div>
                   )}
                 </div>
+              ))}
             </section>
           )}
 
-          {/* Fase Eliminatoria de la categoría */}
-          {eliminatoria.length > 0 && (
+          {/* Fase Eliminatoria de la categoría (Solo en pestaña Eliminatoria) */}
+          {activePhase === 'eliminatoria' && eliminatoria.length > 0 && (
             <section className="public-eliminatoria-section" style={{ marginBottom: '3rem' }}>
               <h2
-                ref={eliminatoriaRef}
                 style={{
-                  marginBottom: '1.5rem',
-                  fontSize: 'var(--font-size-2xl)',
+                  marginBottom: '1rem',
+                  fontSize: 'var(--font-size-xl)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.5rem',
                 }}
               >
-                <Trophy size={22} strokeWidth={2} />
+                <Trophy size={20} strokeWidth={2} />
                 Eliminatoria
               </h2>
               {isMobile ? (
