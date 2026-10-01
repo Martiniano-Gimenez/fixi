@@ -130,10 +130,28 @@ organizadores que hoy llevan todo en papel.
   - **Reducción de Ruido Visual en Categorías:** El chip de estado de la categoría se oculta si coincide con el estado global del torneo (`cat.estado !== torneo.estado`), reservando el badge verde únicamente para discrepancias relevantes. El botón destructivo de eliminar categoría permanece invisible (opacidad 0) hasta que el cursor hace hover o el foco de teclado entra a la tarjeta (`:focus-within` y mobile touch fallback), estandarizando su hit-area con borde sutil consistente.
   - **Estilo Outline y Micro-Progreso:** Botón *"Administrar"* estilizado en outline (`.btn-outline`) con saturación y borde verde desaturados para no rivalizar con el badge de estado ni con el CTA primario. Incorporación de mini barra de progreso deportiva (`.progress-bar-mini`, 4px verde esmeralda con glow) unida a la métrica de partidos jugados.
   - **Accesibilidad Global (`:focus-visible`):** Contorno de navegación por teclado accesible y visible sin alterar clics de mouse.
-- **Blindaje y Soporte Dual de Vista Pública (`/torneo/:slug` y `/torneos/:slug`):**
-  - Enrutamiento dual en `App.jsx` que atiende indistintamente rutas en singular o plural, evitando pantallas en blanco por errores tipográficos o enlaces compartidos desde *"Día de Torneo"*.
-  - Inclusión de estilos de cuadros eliminatorios (`EliminatoriaView.css`) en `TorneoPublic.jsx`, garantizando que llaves, columnas y tarjetas se rendericen con su diseño premium completo en cualquier pestaña nueva o ventana privada.
-  - Fallback visual para categorías vacías sin zonas ni eliminatorias y unificación de navegación vía `<Link>`.
+- **Rediseño Integral y Blindaje Mobile de la Vista Pública (`TorneoPublic.jsx` e `index.css`):**
+  - **Enrutamiento Dual y Blindaje:** Soporte idéntico en `App.jsx` para `/torneo/:slug` y `/torneos/:slug`, inclusión de estilos de llaves eliminatorias (`EliminatoriaView.css`) en pestañas anónimas o nuevos accesos, fallback visual para categorías vacías y unificación de navegación vía `<Link>`.
+  - **Remoción Absoluta de Canchas:** Las tarjetas de partidos (tanto en Fase de Grupos como en Eliminatorias) eliminaron por completo `"· Cancha X"`, mostrando únicamente día y horario (`Clock` + `formatDiaHorario`) para no sobrecargar visualmente al espectador.
+  - **Navegación por Pestañas de Zona (DOM Inteligente):** Reemplazo del scroll continuo vertical con `IntersectionObserver` por chips de selección de zona (`.public-zone-chip`). Solo la zona activa se renderiza en el DOM, optimizando rendimiento y eliminando saltos bruscos.
+  - **Stepper de Fases Accesible:** Stepper superior con botones nativos `<button>` (`role="tab"`, `aria-label`) para alternar con scroll suave entre Fase de Grupos y Cuadro Eliminatorio.
+  - **Atenuación Progresiva del Bracket y Badges de Progreso:** Clasificación visual de rondas (`.ronda-con-datos`, `.ronda-parcial`, `.ronda-vacia`) e indicador de avance `${definidos}/${total} definidos` en desktop, 100% compatible con torneos de eliminación directa pura sin zonas.
+  - **Buscador de Parejas en Tiempo Real:** Input con ícono de búsqueda y botón limpiar (`X`), con filtrado instantáneo e insensible a mayúsculas y acentos (`normalize("NFD")`) sobre todas las parejas de la categoría activa. Deduplica por nombre y zona (`Set`), y al hacer clic conmuta directamente a la pestaña de la zona correspondiente sin scroll innecesario. Reseteo automático al cambiar de categoría.
+  - **Selector de Categorías Limpio:** Eliminación de los badges con cantidad de parejas (ej. `23p`) en los botones de selección de categoría.
+  - **Cuadro Eliminatorio Dual (Mobile Tabs / Desktop Scroll):**
+    - *En Mobile ($\le 768\text{px}$):* Selector horizontal de tabs por ronda (`Octavos de Final`, `Cuartos de Final`, `Semifinal`, `Final`). Renderizado exclusivo de la ronda activa en un stack vertical al 100% de ancho sin líneas SVG (`BracketLines`).
+    - *Selección Automática Inteligente:* Detección reactiva de mobile (`window.matchMedia`), conmutando por defecto a la ronda más avanzada con partidos definidos (`rondaMasAvanzadaConParejas`).
+    - *Sincronización Atómica entre Categorías:* `useEffect` reactivo escuchando `activeCatId` que resetea `activeRoundId` a `null`, evitando que queden IDs huérfanos entre categorías con distinta profundidad de llaves eliminatorias.
+    - *Sub-componente `PublicMatchCard`:* Extracción de tarjeta reutilizable con paridad visual total (ganadores, vacíos, estados, desglose de sets).
+    - *En Desktop ($> 768\text{px}$):* Cuadro tradicional completo con scroll horizontal y conectores SVG (`BracketLines`).
+  - **Limpieza de Footer:** Supresión del bloque inferior de texto `"Actualización en vivo cada 15s · Última..."` y su spinner giratorio, manteniendo el polling de fondo activo y silencioso cada 15s (`POLL_INTERVAL`).
+  - **Posiciones de Grupo en Mobile tipo Filas Deportivas (Cero Scroll Horizontal):**
+    - En mobile ($\le 768\text{px}$), se erradicó el scroll horizontal adoptando un layout de filas deportivas estilo Flashscore/Sofascore (`.public-pos-card`) al 100% de ancho:
+      - *Izquierda:* Posición destacada (`# 1`) con flecha `▲` verde y borde lateral esmeralda si clasifica.
+      - *Centro:* Nombre de la pareja legible y completo en negrita, con renglón secundario en texto fino: `0 PJ · 0 PG · Sets 0-0 · Games 0-0`.
+      - *Derecha:* Puntos destacados en tamaño grande (`0 PTS`).
+    - Cero quiebres de línea en nombres de parejas y valores de sets/games, cero scroll horizontal y legibilidad garantizada en cualquier pantalla estrecha ($\le 393\text{px}$).
+    - En desktop ($> 768\text{px}$), se mantiene la tabla clásica de 8 columnas (`Pos, Pareja, Pts, PJ, PG, PP, Sets, Games`) con la clase `.zona-table`.
 - **Refactor UI/UX y Jerarquía Visual en Detalle de Categoría (`CategoriaDetail.jsx` y `ZonaTable.jsx`):**
   - **Tabla de Posiciones Deportiva Responsive y Compacta (`ZonaTable.jsx`):**
     - Eliminación de scroll horizontal innecesario en tablets y pantallas intermedias mediante `table-layout: fixed` con anchos proporcionales y celda de Pareja elástica (`width: auto`, sin truncado artificial con ellipsis para evitar recortes prematuros de nombres como *"Barbieri / Lobos"*).
