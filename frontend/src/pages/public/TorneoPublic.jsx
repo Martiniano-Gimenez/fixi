@@ -393,6 +393,27 @@ export default function TorneoPublic() {
           </div>
         )}
 
+        {/* Navegación rápida entre zonas de la categoría activa (Tabs) */}
+        {zonas.length > 1 && (
+          <div className="public-zone-chips" role="navigation" aria-label="Navegación entre zonas">
+            {zonas.map((z) => {
+              const isActive = (activeZona ? activeZona.id : activeZoneId) === z.id;
+              return (
+                <button
+                  key={z.id}
+                  type="button"
+                  className={`public-zone-chip ${isActive ? 'active' : ''}`}
+                  onClick={() => setActiveZoneId(z.id)}
+                  aria-label={`Ver ${z.nombre}`}
+                  aria-current={isActive ? 'true' : undefined}
+                >
+                  {z.nombre}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Buscador de parejas de la categoría activa */}
         {zonas.length > 0 && (
           <div className="public-search-wrap">
@@ -447,27 +468,6 @@ export default function TorneoPublic() {
           </div>
         )}
 
-        {/* Navegación rápida entre zonas de la categoría activa (Tabs) */}
-        {zonas.length > 1 && (
-          <div className="public-zone-chips" role="navigation" aria-label="Navegación entre zonas">
-            {zonas.map((z) => {
-              const isActive = (activeZona ? activeZona.id : activeZoneId) === z.id;
-              return (
-                <button
-                  key={z.id}
-                  type="button"
-                  className={`public-zone-chip ${isActive ? 'active' : ''}`}
-                  onClick={() => setActiveZoneId(z.id)}
-                  aria-label={`Ver ${z.nombre}`}
-                  aria-current={isActive ? 'true' : undefined}
-                >
-                  {z.nombre}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
         {/* Stepper de fases (si la categoría tiene grupos y eliminatoria) */}
         {zonas.length > 0 && eliminatoria.length > 0 && (
           <nav className="public-phase-stepper" aria-label="Fases del torneo">
@@ -475,13 +475,13 @@ export default function TorneoPublic() {
               type="button"
               className={`public-phase-btn ${gruposCompletados ? 'completed' : gruposEnCurso ? 'in-progress' : 'active'}`}
               onClick={() => gruposRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              aria-label="Ir a Fase de Grupos"
+              aria-label="Ir a Zonas"
             >
               <span className="public-phase-indicator">
                 {gruposCompletados ? '✓' : '1'}
               </span>
               <span className="public-phase-label">
-                Fase de Grupos
+                Zonas
                 <span className="public-phase-subtext">
                   {gruposCompletados ? 'Completada' : gruposEnCurso ? 'En juego' : 'En disputa'}
                 </span>
@@ -494,13 +494,13 @@ export default function TorneoPublic() {
               type="button"
               className={`public-phase-btn ${eliminatoriaFinalizada ? 'completed' : eliminatoriaIniciada ? 'active' : 'waiting'}`}
               onClick={() => eliminatoriaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              aria-label="Ir a Cuadro Eliminatorio"
+              aria-label="Ir a Eliminatoria"
             >
               <span className="public-phase-indicator">
                 {eliminatoriaFinalizada ? '✓' : '2'}
               </span>
               <span className="public-phase-label">
-                Cuadro Eliminatorio
+                Eliminatoria
                 <span className="public-phase-subtext">
                   {eliminatoriaFinalizada ? 'Finalizado' : eliminatoriaIniciada ? 'En disputa' : 'Por comenzar'}
                 </span>
@@ -527,7 +527,7 @@ export default function TorneoPublic() {
         <>
           {/* Zonas de la categoría */}
           {zonas.length > 0 && activeZona && (
-            <section style={{ marginBottom: '3rem' }}>
+            <section className="public-zonas-section" style={{ marginBottom: '3rem' }}>
               <h2
                 ref={gruposRef}
                 style={{
@@ -539,7 +539,7 @@ export default function TorneoPublic() {
                 }}
               >
                 <Users size={22} strokeWidth={2} />
-                Fase de Grupos
+                Zonas
               </h2>
               <div id={`zona-${activeZona.id}`} key={activeZona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -838,7 +838,7 @@ export default function TorneoPublic() {
 
           {/* Fase Eliminatoria de la categoría */}
           {eliminatoria.length > 0 && (
-            <section style={{ marginBottom: '3rem' }}>
+            <section className="public-eliminatoria-section" style={{ marginBottom: '3rem' }}>
               <h2
                 ref={eliminatoriaRef}
                 style={{
@@ -850,7 +850,7 @@ export default function TorneoPublic() {
                 }}
               >
                 <Trophy size={22} strokeWidth={2} />
-                Cuadro Eliminatorio
+                Eliminatoria
               </h2>
               {isMobile ? (
                 /* MODO MOBILE: Tabs horizontales por ronda + stack vertical 100% ancho */
@@ -888,14 +888,9 @@ export default function TorneoPublic() {
                 </div>
               ) : (
                 /* MODO DESKTOP: Bracket horizontal con scroll tradicional y BracketLines */
-                <div className="bracket-container" style={{ padding: '1rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+                <div className="bracket-container public-bracket-desktop" style={{ padding: '1rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
                   <div className="bracket-scroll" ref={publicBracketRef} style={{ position: 'relative' }}>
                     {eliminatoria.map((fase, faseIdx) => {
-                      const total = fase.partidos.length;
-                      const definidos = fase.partidos.filter(
-                        (p) => Boolean(p.pareja1 && p.pareja2) || p.estado === 'FINALIZADO'
-                      ).length;
-
                       const tieneData = fase.partidos.some(
                         (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
                       );
@@ -917,9 +912,6 @@ export default function TorneoPublic() {
                         <div key={fase.id} className={`ronda-section bracket-section ${roundClass}`}>
                           <div className="ronda-header-row">
                             <h3 className="ronda-title">{fase.nombre}</h3>
-                            <span className="ronda-progress-badge">
-                              {definidos}/{total} definidos
-                            </span>
                           </div>
                           <div className="ronda-matches bracket-matches-column">
                             {fase.partidos.map((partido) => (

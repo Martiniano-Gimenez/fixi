@@ -526,6 +526,24 @@ ul, ol {
   margin: 0 auto;
 }
 
+@media (min-width: 1024px) {
+  .public-page {
+    max-width: 1440px;
+  }
+
+  .public-page .public-zonas-section {
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+@media (min-width: 1600px) {
+  .public-page {
+    max-width: 1560px;
+  }
+}
+
 /* ─── Admin Components ──────────────────────────────────── */
 .flex-header {
   display: flex;
@@ -2101,6 +2119,42 @@ tr:nth-child(1) .pos-number {
   border-style: dashed;
   border-color: rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.015);
+}
+
+/* Bracket Horizontal en Desktop - Ajuste responsive para visualizar todo el cuadro (incluida la Final) sin scroll forzado */
+@media (min-width: 769px) {
+  .public-page .public-bracket-desktop {
+    overflow-x: auto;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1.25rem 1rem !important;
+  }
+
+  .public-page .public-bracket-desktop .bracket-scroll {
+    display: flex;
+    gap: clamp(1rem, 1.8vw, 2.25rem);
+    width: 100%;
+    justify-content: center;
+    min-width: min-content;
+  }
+
+  .public-page .public-bracket-desktop .bracket-section {
+    flex: 1 1 0px;
+    min-width: 185px;
+    max-width: 280px;
+  }
+
+  .public-page .public-bracket-desktop .ronda-header-row .ronda-title {
+    font-size: clamp(0.75rem, 0.9vw, 0.9rem);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    text-align: center;
+  }
+
+  .public-page .public-bracket-desktop .match-card {
+    padding: 0.75rem 0.85rem;
+  }
 }
 
 /* Buscador de Parejas (Categoría Activa) */

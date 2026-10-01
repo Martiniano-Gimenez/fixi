@@ -254,6 +254,20 @@ organizadores que hoy llevan todo en papel.
   - **Tarjetas Responsivas en 2 Filas sin Truncamiento de Nombres (`.proximo-partido-*`):**
     - En mobile ($\le 640\text{px}$), la tarjeta se divide en 2 filas: Fila 1 para nombres de parejas con `lineHeight: 1.35`, `wordBreak: 'break-word'` (sin `whiteSpace: nowrap` ni `ellipsis`), compartiendo espacio solo con Cancha y Horario (más de 275px de ancho útil para nombres); Fila 2 con separador sutil (`borderTop: 1px solid rgba(255, 255, 255, 0.05)`) y botones de acción alineados a la derecha para fácil pulsación con el pulgar.
     - En desktop ($> 640\text{px}$), la tarjeta se mantiene en 1 sola fila horizontal compacta (~65px de alto), agrupando Cancha/Horario y ambos botones a la derecha para rellenar armoniosamente el ancho disponible sin huecos centrales vacíos ni filas innecesarias.
+- **Vista Pública Deportiva y Mobile-First (`TorneoPublic.jsx` e `index.css`):**
+  - **Nomenclatura Concisa y Unificada:** Reemplazo integral de "Fase de grupos" por "Zonas" y "Cuadro eliminatorio" por "Eliminatoria" en navegación, stepper y encabezados de sección.
+  - **Jerarquía Superior y Flujo de Búsqueda:** Selector de categorías $\rightarrow$ pestañas de zonas (`.public-zone-chips`) $\rightarrow$ buscador de parejas (`.public-search-wrap`) $\rightarrow$ stepper de fases. La búsqueda en tiempo real filtra insensible a tildes/mayúsculas y conmuta automáticamente a la pestaña de la zona correspondiente.
+  - **Bracket Dual con Adaptabilidad Completa en Escritorio:**
+    - En mobile ($\le 768\text{px}$): Selector de rondas en tabs horizontales con stack vertical de tarjetas al 100% de ancho (`.public-bracket-mobile`), eliminando scroll horizontal.
+    - En desktop ($> 768\text{px}$): `.public-page` se amplía a `max-width: 1440px` (y `1560px` en $\ge 1600\text{px}$), mientras que las zonas se mantienen contenidas a `1000px`. El bracket de escritorio (`.public-bracket-desktop`) implementa columnas flexibles (`flex: 1 1 0px; min-width: 185px; max-width: 280px;`) con separación fluida (`gap: clamp(1rem, 1.8vw, 2.25rem);`) y centrado espacial (`justify-content: center;`), permitiendo ver todas las rondas (desde Octavos hasta la Final) simultáneamente en pantalla sin scroll forzado hacia la derecha. Conectores SVG dinámicos calculados matemáticamente con `BracketLines.jsx`.
+    - Eliminación de badges superfluos (`"0/4 definidos"`) en las cabeceras de ronda.
+  - **Tablas de Posiciones Deportivas sin Scroll Horizontal:** Filas estilo Sofascore/Flashscore (`.public-pos-card`) en celulares y tabla tradicional de 8 columnas en pantallas de escritorio.
+- **Refinamiento Minimalista en Día de Torneo (`TorneoEnVivo.jsx`):**
+  - Título principal limpio: `"Día de Torneo"` (sin emojis ni "— En Vivo").
+  - Supresión de indicadores pasivos de polling (`• Actualización automática cada 30s`).
+  - Solapa de domingo simplificada a la fecha correspondiente sin sufijo `(Playoffs)`.
+  - Encabezado unificado a `"Eliminatoria"` junto al trofeo en la jornada de definición, suprimiendo textos extensos y redundantes.
+  - Tarjetas de categoría limpias: eliminación del badge "Cuadro armado" y de la leyenda "Cruces iniciales definidos..." en estado `ESPERANDO_ZONAS`.
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 - **Configuración de Red Local LAN:** Servidor de desarrollo Vite configurado con `host: true` en `vite.config.js` para auditorías y pruebas directas en tiempo real desde dispositivos móviles en la red Wi-Fi local.
 

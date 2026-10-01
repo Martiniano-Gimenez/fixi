@@ -226,7 +226,7 @@ export default function TorneoEnVivo() {
           if (info && !map.has(info.key)) {
             map.set(info.key, {
               key: info.key,
-              label: info.diaNombre === 'Domingo' ? `${info.label} (Playoffs)` : info.label,
+              label: info.label,
               diaNombre: info.diaNombre,
               diaNumero: info.diaNumero,
               totalPartidos: 0,
@@ -247,7 +247,7 @@ export default function TorneoEnVivo() {
       if (!map.has(info.key)) {
         map.set(info.key, {
           key: info.key,
-          label: info.diaNombre === 'Domingo' ? `${info.label} (Playoffs)` : info.label,
+          label: info.label,
           diaNombre: info.diaNombre,
           diaNumero: info.diaNumero,
           totalPartidos: 0,
@@ -513,7 +513,7 @@ export default function TorneoEnVivo() {
           </Link>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h1 style={{ fontSize: '1.35rem', fontWeight: 700 }}>🏟️ Día de Torneo — En Vivo</h1>
+              <h1 style={{ fontSize: '1.35rem', fontWeight: 700 }}>Día de Torneo</h1>
               <span
                 style={{
                   display: 'inline-flex',
@@ -542,7 +542,7 @@ export default function TorneoEnVivo() {
               </span>
             </div>
             <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-              {torneo.nombre} • Actualización automática cada 30s
+              {torneo.nombre}
             </p>
           </div>
         </div>
@@ -1299,18 +1299,9 @@ export default function TorneoEnVivo() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <Trophy size={22} style={{ color: esDomingo ? '#f59e0b' : 'var(--color-primary)' }} />
-              <div>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
-                  {esDomingo
-                    ? 'Cuadros Eliminatorios — Definición del Domingo'
-                    : 'Cuadros Eliminatorios (Brackets)'}
-                </h3>
-                <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                  {esDomingo
-                    ? 'Seguimiento de cruces, avance de llaves y campeones del torneo.'
-                    : 'Visualizá las llaves de cada categoría, el progreso de cruces y la asignación de clasificados.'}
-                </p>
-              </div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
+                Eliminatoria
+              </h3>
             </div>
           </div>
 
@@ -1385,14 +1376,7 @@ export default function TorneoEnVivo() {
                         >
                           <Zap size={11} /> ¡Zonas listas!
                         </span>
-                      ) : cat.estadoEliminatoria === 'ESPERANDO_ZONAS' ? (
-                        <span
-                          className="badge badge-info"
-                          style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
-                        >
-                          <Clock size={11} /> Cuadro armado
-                        </span>
-                      ) : cat.estadoEliminatoria === 'EN_CURSO' ? (
+                      ) : cat.estadoEliminatoria === 'ESPERANDO_ZONAS' ? null : cat.estadoEliminatoria === 'EN_CURSO' ? (
                         <span
                           className="badge badge-warning"
                           style={{
@@ -1447,13 +1431,9 @@ export default function TorneoEnVivo() {
                     )}
 
                     {/* Info de Eliminatoria */}
-                    {cat.tieneEliminatoria && (
+                    {cat.tieneEliminatoria && cat.estadoEliminatoria !== 'ESPERANDO_ZONAS' && cat.totalPartidosEliminatoria > 0 && (
                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginTop: '0.45rem' }}>
-                        {cat.estadoEliminatoria === 'ESPERANDO_ZONAS' ? (
-                          <span>Cruces iniciales definidos. Se completan automáticamente al finalizar zonas.</span>
-                        ) : cat.totalPartidosEliminatoria > 0 ? (
-                          <span>{cat.primeraRondaNombre || 'Eliminatoria'}: {cat.partidosEliminatoriaFinalizados}/{cat.totalPartidosEliminatoria} jugados</span>
-                        ) : null}
+                        <span>{cat.primeraRondaNombre || 'Eliminatoria'}: {cat.partidosEliminatoriaFinalizados}/{cat.totalPartidosEliminatoria} jugados</span>
                       </div>
                     )}
                   </div>
