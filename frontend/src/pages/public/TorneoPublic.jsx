@@ -2,90 +2,139 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
-import { Award, AlertTriangle, Users, Trophy, Calendar, Layers, Clock, Search, X } from 'lucide-react';
-import { formatDiaHorario } from '../../utils/dateUtils';
+import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X } from 'lucide-react';
+import { formatPartidoHorario } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import '../admin/EliminatoriaView.css';
 
 const POLL_INTERVAL = 15000; // 15 seconds
 
-function PublicMatchCard({ partido, isMobile = false }) {
+function PublicMatchCard({ partido, label = '', isMobile = false }) {
   const isFinalizado = partido.estado === 'FINALIZADO';
-  const isJugable = !!(partido.pareja1 && partido.pareja2);
+  const isEnCurso = partido.estado === 'EN_CURSO';
+  const hasBothPairs = Boolean(partido.pareja1 && partido.pareja2);
   const isVacio = !partido.pareja1 && !partido.pareja2 && !isFinalizado;
-  const p1esGanador = isFinalizado && partido.ganador === partido.pareja1;
-  const p2esGanador = isFinalizado && partido.ganador === partido.pareja2;
+
+  // Verificación de ganador: id prioritario, fallback a nombre
+  const p1esGanador = isFinalizado && (
+    partido.ganadorId != null && partido.pareja1Id != null
+      ? partido.ganadorId === partido.pareja1Id
+      : Boolean(partido.ganador && partido.pareja1 && partido.ganador === partido.pareja1)
+  );
+  const p2esGanador = isFinalizado && (
+    partido.ganadorId != null && partido.pareja2Id != null
+      ? partido.ganadorId === partido.pareja2Id
+      : Boolean(partido.ganador && partido.pareja2 && partido.ganador === partido.pareja2)
+  );
+
+  // Chip de estado: si falta cualquiera de las dos parejas y no está finalizado, "Esperando"
+  let statusText = 'Pendiente';
+  let statusClass = 'pendiente';
+  if (isFinalizado) {
+    statusText = 'Finalizado';
+    statusClass = 'finalizado';
+  } else if (isEnCurso) {
+    statusText = 'En juego';
+    statusClass = 'en-juego';
+  } else if (!hasBothPairs) {
+    statusText = 'Esperando';
+    statusClass = 'esperando';
+  } else {
+    statusText = 'Pendiente';
+    statusClass = 'pendiente';
+  }
+
+  // Horario formateado en America/Argentina/Cordoba (ej. "Vie · 19:30")
+  const horario = formatPartidoHorario(partido.fechaHora);
+
+  // Sets del partido (W.O. / retiro no muestra sets ni ceros)
+  const tieneSets = Array.isArray(partido.sets) && partido.sets.length > 0;
+
+  // Nombres con fallback "Esperando..."
+  const nombreP1 = partido.pareja1 || (partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando...');
+  const nombreP2 = partido.pareja2 || (partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando...');
+
+  const row1Class = p1esGanador
+    ? 'winner'
+    : isFinalizado && p2esGanador
+    ? 'loser'
+    : !partido.pareja1
+    ? 'esperando'
+    : '';
+
+  const row2Class = p2esGanador
+    ? 'winner'
+    : isFinalizado && p1esGanador
+    ? 'loser'
+    : !partido.pareja2
+    ? 'esperando'
+    : '';
+
+  const cardStateClass = isFinalizado ? 'finalizado' : isEnCurso ? 'en-curso' : isVacio ? 'vacio' : '';
 
   return (
-    <div key={partido.id} className={`bracket-match-wrapper ${isMobile ? 'mobile-full' : ''}`}>
+    <div key={partido.id} className={`bracket-match-wrapper pub-match-card-wrapper ${isMobile ? 'mobile-full' : ''}`}>
       <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', width: isMobile ? '100%' : undefined }}>
-        <div
-          className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''} ${isVacio ? 'match-card-empty' : ''}`}
-          style={{ cursor: 'default', width: isMobile ? '100%' : undefined }}
-        >
-          <div className="match-card-header">
-            <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
-              {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
+        <div className={`match-card pub-match-card ${cardStateClass}`}>
+          {label && <span className="pub-match-label">{label}</span>}
+
+          <div className="pub-match-header">
+            {horario ? (
+              <span className="pub-match-time">
+                <Clock size={11} strokeWidth={2} className="pub-match-time-icon" aria-hidden="true" />
+                {horario}
+              </span>
+            ) : (
+              <span />
+            )}
+
+            <span className={`pub-match-status ${statusClass}`}>
+              {isEnCurso && <span className="pub-match-dot" aria-hidden="true" />}
+              {statusText}
             </span>
           </div>
 
-          {partido.fechaHora && (
-            <div
-              style={{
-                fontSize: '0.7rem',
-                color: 'var(--color-text-secondary)',
-                textAlign: 'center',
-                marginBottom: '0.4rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-              }}
-            >
-              <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-              {formatDiaHorario(partido.fechaHora)}
-            </div>
-          )}
-
-          <div className="parejas-list">
-            <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
-              <div className="pareja-info">
-                {partido.pareja1 ? (
-                  <span className="pareja-nombre">{partido.pareja1}</span>
-                ) : (
-                  <span className="pareja-esperando">
-                    {partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando...'}
-                  </span>
-                )}
-              </div>
-              {partido.sets && partido.sets.length > 0 && (
-                <div className="sets-container">
-                  {partido.sets.map((set, idx) => (
-                    <span key={idx} className="set-score">
-                      {set.gamesPareja1}
-                    </span>
-                  ))}
+          <div className="pub-match-body">
+            <div className={`pub-match-row ${row1Class}`}>
+              <span className="pub-match-name" title={nombreP1}>
+                {nombreP1}
+              </span>
+              {tieneSets && (
+                <div className="pub-match-sets" aria-label="Sets pareja 1">
+                  {partido.sets.map((set, idx) => {
+                    const isHigher = set.gamesPareja1 > set.gamesPareja2;
+                    const isLower = set.gamesPareja1 < set.gamesPareja2;
+                    return (
+                      <span
+                        key={idx}
+                        className={`pub-match-set ${isHigher ? 'higher' : isLower ? 'lower' : ''}`}
+                      >
+                        {set.gamesPareja1}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
             </div>
 
-            <div className={`pareja-row ${p2esGanador ? 'ganador' : ''}`}>
-              <div className="pareja-info">
-                {partido.pareja2 ? (
-                  <span className="pareja-nombre">{partido.pareja2}</span>
-                ) : (
-                  <span className="pareja-esperando">
-                    {partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando...'}
-                  </span>
-                )}
-              </div>
-              {partido.sets && partido.sets.length > 0 && (
-                <div className="sets-container">
-                  {partido.sets.map((set, idx) => (
-                    <span key={idx} className="set-score">
-                      {set.gamesPareja2}
-                    </span>
-                  ))}
+            <div className={`pub-match-row ${row2Class}`}>
+              <span className="pub-match-name" title={nombreP2}>
+                {nombreP2}
+              </span>
+              {tieneSets && (
+                <div className="pub-match-sets" aria-label="Sets pareja 2">
+                  {partido.sets.map((set, idx) => {
+                    const isHigher = set.gamesPareja2 > set.gamesPareja1;
+                    const isLower = set.gamesPareja2 < set.gamesPareja1;
+                    return (
+                      <span
+                        key={idx}
+                        className={`pub-match-set ${isHigher ? 'higher' : isLower ? 'lower' : ''}`}
+                      >
+                        {set.gamesPareja2}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -657,164 +706,11 @@ export default function TorneoPublic() {
                             if (p.posicionEnRonda === 4) partidoLabel = '3° y 4° Puesto (Perdedor vs Perdedor · Clasificación)';
                           }
                           return (
-                            <div
+                            <PublicMatchCard
                               key={p.id}
-                              style={{
-                                background: 'var(--color-bg-input)',
-                                border: `1px solid ${
-                                  p.estado === 'FINALIZADO'
-                                    ? 'var(--color-primary)'
-                                    : p.estado === 'EN_CURSO'
-                                    ? 'var(--color-success)'
-                                    : 'var(--color-border)'
-                                }`,
-                                borderRadius: 'var(--radius-md)',
-                                padding: '0.75rem',
-                                position: 'relative',
-                                animation: p.estado === 'EN_CURSO' ? 'pulse-border 2s infinite' : 'none',
-                              }}
-                            >
-                              {partidoLabel && (
-                                <div
-                                  style={{
-                                    fontSize: 'var(--font-size-xs)',
-                                    fontWeight: 'bold',
-                                    color: p.posicionEnRonda === 4 ? 'var(--color-accent)' : 'var(--color-primary)',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.5px',
-                                    textAlign: 'center',
-                                    marginBottom: '0.5rem',
-                                  }}
-                                >
-                                  {partidoLabel}
-                                </div>
-                              )}
-                              {p.fechaHora && (
-                                <div
-                                  style={{
-                                    textAlign: 'center',
-                                    fontSize: '0.7rem',
-                                    color: 'var(--color-text-secondary)',
-                                    fontWeight: 'bold',
-                                    marginBottom: '0.4rem',
-                                    borderBottom: '1px solid var(--color-border)',
-                                    paddingBottom: '0.2rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '4px',
-                                  }}
-                                >
-                                  <Clock size={11} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-                                  {formatDiaHorario(p.fechaHora)}
-                                </div>
-                              )}
-                              <div
-                                style={{
-                                  fontSize: 'var(--font-size-sm)',
-                                  textAlign: 'center',
-                                  fontWeight: p.ganador === p.pareja1 && p.ganador ? 'bold' : 'normal',
-                                  color:
-                                    p.ganador === p.pareja1 && p.ganador
-                                      ? 'var(--color-primary)'
-                                      : p.pareja1
-                                      ? 'var(--color-text)'
-                                      : 'var(--color-text-muted)',
-                                  fontStyle: p.pareja1 ? 'normal' : 'italic',
-                                }}
-                              >
-                                {p.pareja1 || p.origenPareja1 || 'Por definirse'}
-                              </div>
-
-                              {(p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') && p.sets && p.sets.length > 0 ? (
-                                <div
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    gap: '0.35rem',
-                                    margin: '0.35rem 0',
-                                    flexWrap: 'wrap',
-                                  }}
-                                >
-                                  {p.estado === 'EN_CURSO' && (
-                                    <span
-                                      style={{
-                                        width: '100%',
-                                        textAlign: 'center',
-                                        fontSize: '0.65rem',
-                                        color: 'var(--color-success)',
-                                        fontWeight: 'bold',
-                                        marginBottom: '0.1rem',
-                                      }}
-                                    >
-                                      ● En juego
-                                    </span>
-                                  )}
-                                  {p.sets.map((s, i) => {
-                                    const p1Won = s.gamesPareja1 > s.gamesPareja2;
-                                    const p2Won = s.gamesPareja2 > s.gamesPareja1;
-                                    return (
-                                      <span
-                                        key={i}
-                                        style={{
-                                          background: 'var(--color-bg)',
-                                          border: '1px solid var(--color-border)',
-                                          padding: '0.1rem 0.4rem',
-                                          borderRadius: '3px',
-                                          fontSize: 'var(--font-size-xs)',
-                                        }}
-                                      >
-                                        <span
-                                          style={{
-                                            fontWeight: p1Won ? 'bold' : 'normal',
-                                            color: p1Won ? 'var(--color-primary)' : 'inherit',
-                                          }}
-                                        >
-                                          {s.gamesPareja1}
-                                        </span>
-                                        {'-'}
-                                        <span
-                                          style={{
-                                            fontWeight: p2Won ? 'bold' : 'normal',
-                                            color: p2Won ? 'var(--color-primary)' : 'inherit',
-                                          }}
-                                        >
-                                          {s.gamesPareja2}
-                                        </span>
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    textAlign: 'center',
-                                    color: 'var(--color-text-secondary)',
-                                    fontSize: 'var(--font-size-xs)',
-                                    margin: '0.25rem 0',
-                                  }}
-                                >
-                                  vs
-                                </div>
-                              )}
-
-                              <div
-                                style={{
-                                  fontSize: 'var(--font-size-sm)',
-                                  textAlign: 'center',
-                                  fontWeight: p.ganador === p.pareja2 && p.ganador ? 'bold' : 'normal',
-                                  color:
-                                    p.ganador === p.pareja2 && p.ganador
-                                      ? 'var(--color-primary)'
-                                      : p.pareja2
-                                      ? 'var(--color-text)'
-                                      : 'var(--color-text-muted)',
-                                  fontStyle: p.pareja2 ? 'normal' : 'italic',
-                                }}
-                              >
-                                {p.pareja2 || p.origenPareja2 || 'Por definirse'}
-                              </div>
-                            </div>
+                              partido={p}
+                              label={partidoLabel}
+                            />
                           );
                         })}
                       </div>

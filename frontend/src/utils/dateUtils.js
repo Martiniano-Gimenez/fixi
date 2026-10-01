@@ -18,6 +18,34 @@ export function formatDiaHorario(fechaHora) {
 }
 
 /**
+ * Formatea una fecha/hora ISO en formato compacto para tarjeta de partido: "Vie · 19:30"
+ * Utiliza timeZone 'America/Argentina/Cordoba'. Si fechaHora es null o inválida, retorna ''.
+ * @param {string | Date} fechaHora
+ * @returns {string}
+ */
+export function formatPartidoHorario(fechaHora) {
+  if (!fechaHora) return '';
+  const d = new Date(fechaHora);
+  if (isNaN(d.getTime())) return '';
+
+  const dayStr = new Intl.DateTimeFormat('es-AR', {
+    weekday: 'short',
+    timeZone: 'America/Argentina/Cordoba',
+  }).format(d);
+  const cleanDay = dayStr.replace('.', '');
+  const capitalizedDay = cleanDay.charAt(0).toUpperCase() + cleanDay.slice(1);
+
+  const timeStr = new Intl.DateTimeFormat('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'America/Argentina/Cordoba',
+  }).format(d);
+
+  return `${capitalizedDay} · ${timeStr}`;
+}
+
+/**
  * Formatea un ajuste de tiempo en minutos con signo (+/-) y formato de horas si es >= 60m.
  * Ejemplos:
  *  45 -> "+45m"
