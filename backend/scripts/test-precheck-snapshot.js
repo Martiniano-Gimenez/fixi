@@ -105,6 +105,7 @@ async function runTests() {
 
     console.log(`   Acción 1: Resolviendo primer cruce P${p1Target1.orden} vs P${p2Target1.orden} con slot 'Viernes-19:00'...`);
     await disponibilidadService.setDisponibilidadDoble(
+      organizador.id,
       p1Target1.id,
       ['Viernes-19:00'],
       p2Target1.id,
@@ -128,6 +129,7 @@ async function runTests() {
 
     console.log(`   Acción 2: Resolviendo segundo cruce P${p1Target2.orden} vs P${p2Target2.orden} con slot 'Viernes-20:15'...`);
     await disponibilidadService.setDisponibilidadDoble(
+      organizador.id,
       p1Target2.id,
       ['Viernes-20:15'],
       p2Target2.id,

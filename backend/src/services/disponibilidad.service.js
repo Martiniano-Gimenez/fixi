@@ -1,18 +1,11 @@
 const prisma = require('../lib/prisma');
 const { getSlotsValidosSet } = require('./slots.service');
 
-async function getDisponibilidad(parejaId) {
-  const slots = await prisma.slotPareja.findMany({
-    where: { parejaId },
-    select: { slotId: true },
-  });
-  return slots.map((s) => s.slotId);
-}
-
-async function setDisponibilidad(parejaId, slotIds) {
+async function getParejaAndVerifyPermisos(organizadorId, parejaId) {
   const pareja = await prisma.pareja.findUnique({
     where: { id: parejaId },
     include: {
+      slotsSeleccionados: { select: { slotId: true } },
       categoria: {
         include: {
           torneo: {
@@ -28,6 +21,27 @@ async function setDisponibilidad(parejaId, slotIds) {
     error.statusCode = 404;
     throw error;
   }
+
+  if (pareja.categoria?.torneo?.organizadorId !== organizadorId) {
+    const error = new Error('No tenés permisos para acceder a esta pareja.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return pareja;
+}
+
+async function getDisponibilidad(organizadorId, parejaId) {
+  await getParejaAndVerifyPermisos(organizadorId, parejaId);
+  const slots = await prisma.slotPareja.findMany({
+    where: { parejaId },
+    select: { slotId: true },
+  });
+  return slots.map((s) => s.slotId);
+}
+
+async function setDisponibilidad(organizadorId, parejaId, slotIds) {
+  const pareja = await getParejaAndVerifyPermisos(organizadorId, parejaId);
 
   if (pareja.categoria?.estado === 'FINALIZADO') {
     const error = new Error('No se puede modificar la disponibilidad de una categoría finalizada.');
@@ -62,7 +76,7 @@ async function setDisponibilidad(parejaId, slotIds) {
   return slotsFiltrados;
 }
 
-async function setDisponibilidadDoble(parejaId1, slotsToAdd1 = [], parejaId2, slotsToAdd2 = []) {
+async function setDisponibilidadDoble(organizadorId, parejaId1, slotsToAdd1 = [], parejaId2, slotsToAdd2 = []) {
   if (!parejaId1 || !parejaId2) {
     const error = new Error('Se requieren los IDs de ambas parejas.');
     error.statusCode = 400;
@@ -70,39 +84,9 @@ async function setDisponibilidadDoble(parejaId1, slotsToAdd1 = [], parejaId2, sl
   }
 
   const [pareja1, pareja2] = await Promise.all([
-    prisma.pareja.findUnique({
-      where: { id: parejaId1 },
-      include: {
-        slotsSeleccionados: { select: { slotId: true } },
-        categoria: {
-          include: {
-            torneo: {
-              include: { organizador: true },
-            },
-          },
-        },
-      },
-    }),
-    prisma.pareja.findUnique({
-      where: { id: parejaId2 },
-      include: {
-        slotsSeleccionados: { select: { slotId: true } },
-        categoria: {
-          include: {
-            torneo: {
-              include: { organizador: true },
-            },
-          },
-        },
-      },
-    }),
+    getParejaAndVerifyPermisos(organizadorId, parejaId1),
+    getParejaAndVerifyPermisos(organizadorId, parejaId2),
   ]);
-
-  if (!pareja1 || !pareja2) {
-    const error = new Error('Una o ambas parejas no fueron encontradas.');
-    error.statusCode = 404;
-    throw error;
-  }
 
   if (pareja1.categoria?.estado === 'FINALIZADO' || pareja2.categoria?.estado === 'FINALIZADO') {
     const error = new Error('No se puede modificar la disponibilidad de una categoría finalizada.');
@@ -166,12 +150,17 @@ async function setDisponibilidadDoble(parejaId1, slotsToAdd1 = [], parejaId2, sl
   };
 }
 
-async function removerDisponibilidadDoble(parejaId1, slotsToRemove1 = [], parejaId2, slotsToRemove2 = []) {
+async function removerDisponibilidadDoble(organizadorId, parejaId1, slotsToRemove1 = [], parejaId2, slotsToRemove2 = []) {
   if (!parejaId1 || !parejaId2) {
     const error = new Error('Se requieren los IDs de ambas parejas.');
     error.statusCode = 400;
     throw error;
   }
+
+  await Promise.all([
+    getParejaAndVerifyPermisos(organizadorId, parejaId1),
+    getParejaAndVerifyPermisos(organizadorId, parejaId2),
+  ]);
 
   const rem1 = Array.isArray(slotsToRemove1) ? slotsToRemove1 : [slotsToRemove1].filter(Boolean);
   const rem2 = Array.isArray(slotsToRemove2) ? slotsToRemove2 : [slotsToRemove2].filter(Boolean);
@@ -209,4 +198,5 @@ module.exports = {
   setDisponibilidad,
   setDisponibilidadDoble,
   removerDisponibilidadDoble,
+  getParejaAndVerifyPermisos,
 };
