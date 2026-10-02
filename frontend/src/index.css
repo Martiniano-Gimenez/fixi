@@ -1923,6 +1923,167 @@ tr:nth-child(1) .pos-number {
    VISTA PÚBLICA DEL TORNEO (Mobile-First / Dark Premium Deportivo)
    ========================================================================== */
 
+/* ─── Skeleton de Carga (Primera Carga) ─────────────────────────── */
+.public-skeleton-title {
+  height: 28px;
+  width: min(260px, 75%);
+  margin: 0 auto 0.5rem auto;
+  border-radius: var(--radius-sm);
+}
+
+.public-skeleton-meta {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.public-skeleton-meta-chip {
+  height: 22px;
+  width: 72px;
+  border-radius: var(--radius-sm);
+}
+
+.public-skeleton-meta-chip:nth-child(2) {
+  width: 88px;
+}
+
+.public-skeleton-meta-chip:nth-child(3) {
+  width: 96px;
+}
+
+.public-skeleton-cat-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  overflow: hidden;
+  padding: 8px 4px;
+}
+
+.public-skeleton-cat-chip {
+  height: 32px;
+  width: 68px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.public-skeleton-cat-chip:nth-child(2) {
+  width: 56px;
+}
+
+.public-skeleton-cat-chip:nth-child(3) {
+  width: 64px;
+}
+
+.public-skeleton-cat-chip:nth-child(4) {
+  width: 60px;
+}
+
+.public-skeleton-segmented {
+  display: flex;
+  align-items: center;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  width: 100%;
+  max-width: 360px;
+  height: 36px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  gap: 2px;
+}
+
+@media (min-width: 521px) {
+  .public-skeleton-segmented {
+    max-width: 480px;
+  }
+}
+
+.public-skeleton-segment-tab {
+  flex: 1;
+  height: 100%;
+  border-radius: calc(var(--radius-md) - 2px);
+}
+
+.public-skeleton-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.public-skeleton-card {
+  background: var(--bg-card-start, #12151c);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.85rem;
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.public-skeleton-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.public-skeleton-card-time {
+  width: 65px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.public-skeleton-card-status {
+  width: 52px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.public-skeleton-card-row {
+  height: 18px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.3rem;
+  width: 82%;
+}
+
+.public-skeleton-card-row:last-child {
+  margin-bottom: 0;
+  width: 68%;
+}
+
+.public-skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  background-size: 200% 100%;
+  animation: public-skeleton-shimmer 1.8s infinite linear;
+}
+
+@keyframes public-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-skeleton-shimmer {
+    animation: none;
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
 /* Header compacto de la vista pública (No sticky) */
 .public-tournament-header {
   text-align: center;

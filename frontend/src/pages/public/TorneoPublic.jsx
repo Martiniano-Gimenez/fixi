@@ -188,6 +188,53 @@ function PublicMatchCard({ partido, label = '', isMobile = false, isFav = false 
   );
 }
 
+function TorneoPublicSkeleton() {
+  return (
+    <div className="public-page" role="status" aria-busy="true">
+      <span className="sr-only">Cargando torneo</span>
+
+      {/* Header Skeleton */}
+      <header className="public-tournament-header" aria-hidden="true">
+        <div className="public-skeleton-title public-skeleton-shimmer" />
+        <div className="public-skeleton-meta">
+          <div className="public-skeleton-meta-chip public-skeleton-shimmer" />
+          <div className="public-skeleton-meta-chip public-skeleton-shimmer" />
+          <div className="public-skeleton-meta-chip public-skeleton-shimmer" />
+        </div>
+      </header>
+
+      {/* Sticky Nav Skeleton: Chips + Control Segmentado */}
+      <div className="public-sticky-nav" aria-hidden="true">
+        <div className="public-skeleton-cat-chips">
+          <div className="public-skeleton-cat-chip public-skeleton-shimmer" />
+          <div className="public-skeleton-cat-chip public-skeleton-shimmer" />
+          <div className="public-skeleton-cat-chip public-skeleton-shimmer" />
+          <div className="public-skeleton-cat-chip public-skeleton-shimmer" />
+        </div>
+        <div className="public-skeleton-segmented">
+          <div className="public-skeleton-segment-tab public-skeleton-shimmer" />
+          <div className="public-skeleton-segment-tab public-skeleton-shimmer" />
+          <div className="public-skeleton-segment-tab public-skeleton-shimmer" />
+        </div>
+      </div>
+
+      {/* 3 Tarjetas de Partido Skeleton */}
+      <div className="public-skeleton-cards" aria-hidden="true">
+        {[1, 2, 3].map((id) => (
+          <div key={id} className="public-skeleton-card">
+            <div className="public-skeleton-card-header">
+              <div className="public-skeleton-card-time public-skeleton-shimmer" />
+              <div className="public-skeleton-card-status public-skeleton-shimmer" />
+            </div>
+            <div className="public-skeleton-card-row public-skeleton-shimmer" />
+            <div className="public-skeleton-card-row public-skeleton-shimmer" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TorneoPublic() {
   const { slug } = useParams();
   const [data, setData] = useState(null);
@@ -766,14 +813,7 @@ export default function TorneoPublic() {
   }, [zonas, eliminatoria, showFinalizados, favParejaId, filtroParejaHorarios]);
 
   if (loading) {
-    return (
-      <div className="public-page" style={{ textAlign: 'center', paddingTop: '4rem' }}>
-        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
-          <Award size={36} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-        </div>
-        <p style={{ color: 'var(--color-text-secondary)' }}>Cargando torneo...</p>
-      </div>
-    );
+    return <TorneoPublicSkeleton />;
   }
 
   if (error) {
