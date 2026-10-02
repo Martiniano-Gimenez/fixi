@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
@@ -583,12 +583,22 @@ export default function TorneoPublic() {
                 <Users size={20} strokeWidth={2} />
                 Zonas
               </h2>
-              {zonasAMostrar.map((zona) => (
-                <div id={`zona-${zona.id}`} key={zona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ margin: 0 }}>{zona.nombre}</h3>
-                    <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
-                  </div>
+              {zonasAMostrar.map((zona, zIdx) => (
+                <Fragment key={zona.id}>
+                  {isMobile && activeZoneId === null && zIdx > 0 && (
+                    <hr className="public-zona-separator" />
+                  )}
+                  <div
+                    id={`zona-${zona.id}`}
+                    className={isMobile ? 'public-zona-mobile' : 'torneo-card'}
+                    style={{ marginBottom: '2rem' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <h3 style={{ margin: 0 }}>{zona.nombre}</h3>
+                      {!isMobile && (
+                        <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
+                      )}
+                    </div>
 
                   {/* Posiciones de la zona: Mobile (mini tabla con encabezados alineados) vs Desktop (tabla tradicional) */}
                   {isMobile ? (
@@ -746,7 +756,8 @@ export default function TorneoPublic() {
                     </div>
                   )}
                 </div>
-              ))}
+              </Fragment>
+            ))}
             </section>
           )}
 
