@@ -1,4 +1,4 @@
-# Plan de Arquitectura — Pádel Torneos MVP
+# Plan de Arquitectura — Fixi MVP
 
 > [!NOTE]
 > **Estado**: ✅ Aprobado por el usuario. Todas las decisiones confirmadas.

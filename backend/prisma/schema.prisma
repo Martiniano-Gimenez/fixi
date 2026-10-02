@@ -1,4 +1,4 @@
-// Pádel Torneos — Schema completo del MVP (Adaptado para SQLite en Local)
+// Fixi — Schema completo del MVP (Adaptado para SQLite en Local)
 // Docs: https://pris.ly/d/prisma-schema
 
 generator client {

@@ -1,4 +1,4 @@
-# Contexto del proyecto — Pádel Torneos
+# Contexto del proyecto — Fixi
 
 ## Qué es
 App web de seguimiento de torneos de pádel amateur en tiempo real, para

@@ -1,4 +1,4 @@
-# Pádel Torneos
+# Fixi
 
 Aplicación web para el seguimiento en tiempo real de torneos de pádel amateur.
 
