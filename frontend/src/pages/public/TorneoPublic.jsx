@@ -9,6 +9,12 @@ import '../admin/EliminatoriaView.css';
 
 const POLL_INTERVAL = 15000; // 15 seconds
 
+function formatDiff(val) {
+  if (val > 0) return `+${val}`;
+  if (val < 0) return `\u2212${Math.abs(val)}`;
+  return '0';
+}
+
 function PublicMatchCard({ partido, label = '', isMobile = false }) {
   const isFinalizado = partido.estado === 'FINALIZADO';
   const isEnCurso = partido.estado === 'EN_CURSO';
@@ -584,48 +590,71 @@ export default function TorneoPublic() {
                     <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
                   </div>
 
-                  {/* Posiciones de la zona: Mobile (filas sin scroll) vs Desktop (tabla tradicional) */}
+                  {/* Posiciones de la zona: Mobile (mini tabla con encabezados alineados) vs Desktop (tabla tradicional) */}
                   {isMobile ? (
-                    <div className="public-posiciones-list" style={{ marginBottom: '1.5rem' }}>
-                      {zona.tabla.map((row, idx) => {
-                        const clasifica = idx < zona.clasifican;
-                        return (
-                          <div
-                            key={idx}
-                            className={`public-pos-card ${clasifica ? 'clasifica' : ''}`}
-                          >
-                            <div className="public-pos-rank">
-                              <span className="public-pos-num">{idx + 1}</span>
-                              {clasifica && (
-                                <span className="public-pos-arrow" title="Zona de clasificación">
-                                  ▲
-                                </span>
-                              )}
-                            </div>
+                    (() => {
+                      const zonaSinJugar = Array.isArray(zona.tabla) && zona.tabla.length > 0 && zona.tabla.every((row) => (row.pj || 0) === 0);
 
-                            <div className="public-pos-info">
-                              <div className="public-pos-name" title={row.pareja}>
-                                {row.pareja}
-                              </div>
-                              <div className="public-pos-stats">
-                                <span>{row.pj} PJ</span>
-                                <span className="public-pos-dot">·</span>
-                                <span>{row.pg} PG</span>
-                                <span className="public-pos-dot">·</span>
-                                <span>Sets {row.sf}-{row.sc}</span>
-                                <span className="public-pos-dot">·</span>
-                                <span>Games {row.gf}-{row.gc}</span>
-                              </div>
-                            </div>
+                      return (
+                        <div className="public-tabla-wrap" style={{ marginBottom: '1.5rem' }}>
+                          <table className="public-tabla-mobile">
+                            <thead>
+                              <tr>
+                                <th className="col-pos">#</th>
+                                <th className="col-pareja">Pareja</th>
+                                {zonaSinJugar ? (
+                                  <th className="col-estado text-right" style={{ textAlign: 'right' }}>Estado</th>
+                                ) : (
+                                  <>
+                                    <th className="col-stat text-center" title="Partidos Jugados">PJ</th>
+                                    <th className="col-stat text-center" title="Partidos Ganados">PG</th>
+                                    <th className="col-stat-diff text-center" title="Diferencia de Sets">DS</th>
+                                    <th className="col-stat-diff text-center" title="Diferencia de Games">DG</th>
+                                    <th className="col-pts text-center" title="Puntos">PTS</th>
+                                  </>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {zona.tabla.map((row, idx) => {
+                                const clasifica = idx < zona.clasifican;
+                                const ds = (row.sf || 0) - (row.sc || 0);
+                                const dg = (row.gf || 0) - (row.gc || 0);
 
-                            <div className="public-pos-pts">
-                              <span className="public-pos-pts-val">{row.puntos}</span>
-                              <span className="public-pos-pts-lbl">PTS</span>
-                            </div>
+                                return (
+                                  <tr key={idx} className={clasifica ? 'clasifica' : ''}>
+                                    <td className="col-pos">{idx + 1}</td>
+                                    <td className="col-pareja">
+                                      <span className="public-tabla-nombre" title={row.pareja}>
+                                        {row.pareja}
+                                      </span>
+                                    </td>
+                                    {zonaSinJugar ? (
+                                      <td className="col-estado text-right" style={{ textAlign: 'right' }}>
+                                        <span className="public-tabla-sin-jugar">Sin jugar</span>
+                                      </td>
+                                    ) : (
+                                      <>
+                                        <td className="col-stat text-center">{row.pj}</td>
+                                        <td className="col-stat text-center">{row.pg}</td>
+                                        <td className="col-stat-diff text-center">{formatDiff(ds)}</td>
+                                        <td className="col-stat-diff text-center">{formatDiff(dg)}</td>
+                                        <td className="col-pts text-center">
+                                          <span className="public-tabla-pts-val">{row.puntos}</span>
+                                        </td>
+                                      </>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          <div className="public-clasifican-legend">
+                            Clasifican {zona.clasifican}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="table-responsive" style={{ marginBottom: '1.5rem' }}>
                       <table className="zona-table">
