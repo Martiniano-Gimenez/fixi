@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
 import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X, Star, Play } from 'lucide-react';
-import { formatPartidoHorario } from '../../utils/dateUtils';
+import { formatPartidoHorario, getDiaCalendarioCordoba } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import '../admin/EliminatoriaView.css';
 
@@ -38,7 +38,7 @@ function formatDiff(val) {
   return '0';
 }
 
-function PublicMatchCard({ partido, label = '', isMobile = false }) {
+function PublicMatchCard({ partido, label = '', isMobile = false, isFav = false }) {
   const isFinalizado = partido.estado === 'FINALIZADO';
   const isEnCurso = partido.estado === 'EN_CURSO';
   const hasBothPairs = Boolean(partido.pareja1 && partido.pareja2);
@@ -100,11 +100,12 @@ function PublicMatchCard({ partido, label = '', isMobile = false }) {
     : '';
 
   const cardStateClass = isFinalizado ? 'finalizado' : isEnCurso ? 'en-curso' : isVacio ? 'vacio' : '';
+  const favClass = isFav ? 'fav-match' : '';
 
   return (
     <div key={partido.id} className={`bracket-match-wrapper pub-match-card-wrapper ${isMobile ? 'mobile-full' : ''}`}>
       <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', width: isMobile ? '100%' : undefined }}>
-        <div className={`match-card pub-match-card ${cardStateClass}`}>
+        <div className={`match-card pub-match-card ${cardStateClass} ${favClass}`}>
           {label && <span className="pub-match-label">{label}</span>}
 
           <div className="pub-match-header">
@@ -181,7 +182,8 @@ export default function TorneoPublic() {
   const [error, setError] = useState(null);
   const [activeCatId, setActiveCatId] = useState(null);
   const [activeZoneId, setActiveZoneId] = useState(null); // null = "Todas"
-  const [activePhase, setActivePhase] = useState('zonas'); // 'zonas' | 'eliminatoria'
+  const [activePhase, setActivePhase] = useState('zonas'); // 'zonas' | 'eliminatoria' | 'horarios'
+  const [showFinalizados, setShowFinalizados] = useState(false);
   const [activeRoundId, setActiveRoundId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [favParejaId, setFavParejaId] = useState(null);
@@ -306,6 +308,14 @@ export default function TorneoPublic() {
 
     const catZonas = activeCategoria.zonas || [];
     const catElim = activeCategoria.eliminatoria || [];
+    const totalPartidos =
+      catZonas.reduce((acc, z) => acc + (z.partidos?.length || 0), 0) +
+      catElim.reduce((acc, f) => acc + (f.partidos?.length || 0), 0);
+
+    // Si el usuario ya está en Horarios y la categoría tiene partidos, mantener 'horarios'
+    if (activePhase === 'horarios' && totalPartidos > 0) {
+      return;
+    }
 
     if (catZonas.length > 0 && catElim.length > 0) {
       const todosGrupos = catZonas.flatMap((z) => z.partidos || []);
@@ -639,6 +649,93 @@ export default function TorneoPublic() {
     return null;
   }, [favParejaId, activeCategoria, zonas, eliminatoria]);
 
+  // Agrupamiento y ordenamiento de partidos para la pestaña Horarios
+  const horariosData = useMemo(() => {
+    const todos = [];
+
+    // 1. Partidos de Zonas con etiqueta corta
+    zonas.forEach((z) => {
+      z.partidos?.forEach((p) => {
+        let origenLabel = z.nombre;
+        if (z.formato === 'MINI_BRACKET') {
+          if (p.posicionEnRonda === 1 || p.posicionEnRonda === 2) {
+            origenLabel = `${z.nombre} · Ronda 1`;
+          } else if (p.posicionEnRonda === 3) {
+            origenLabel = `${z.nombre} · 1° y 2° Puesto`;
+          } else if (p.posicionEnRonda === 4) {
+            origenLabel = `${z.nombre} · 3° y 4° Puesto`;
+          }
+        }
+        todos.push({
+          ...p,
+          origenLabel,
+          isFav: Boolean(favParejaId && (p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)),
+        });
+      });
+    });
+
+    // 2. Partidos de Eliminatoria con etiqueta corta (nombre de fase)
+    eliminatoria.forEach((f) => {
+      f.partidos?.forEach((p) => {
+        todos.push({
+          ...p,
+          origenLabel: f.nombre,
+          isFav: Boolean(favParejaId && (p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)),
+        });
+      });
+    });
+
+    const totalPartidos = todos.length;
+
+    // 3. Filtrar finalizados si showFinalizados es false
+    const filtrados = showFinalizados
+      ? todos
+      : todos.filter((p) => p.estado !== 'FINALIZADO');
+
+    // 4. Separar partidos EN_CURSO (van SOLO a "En juego")
+    const enJuego = filtrados.filter((p) => p.estado === 'EN_CURSO');
+    enJuego.sort((a, b) => {
+      if (a.fechaHora && b.fechaHora) {
+        return new Date(a.fechaHora) - new Date(b.fechaHora);
+      }
+      if (a.fechaHora) return -1;
+      if (b.fechaHora) return 1;
+      return (a.posicionEnRonda ?? a.posicion ?? 0) - (b.posicionEnRonda ?? b.posicion ?? 0);
+    });
+
+    // 5. Partidos restantes (no EN_CURSO)
+    const restantes = filtrados.filter((p) => p.estado !== 'EN_CURSO');
+
+    const conFecha = restantes.filter((p) => Boolean(p.fechaHora));
+    conFecha.sort((a, b) => new Date(a.fechaHora) - new Date(b.fechaHora));
+
+    const sinFecha = restantes.filter((p) => !p.fechaHora);
+    sinFecha.sort((a, b) => (a.posicionEnRonda ?? a.posicion ?? 0) - (b.posicionEnRonda ?? b.posicion ?? 0));
+
+    // 6. Agrupar conFecha por día calendario en America/Argentina/Cordoba
+    const diasMap = new Map();
+    conFecha.forEach((p) => {
+      const info = getDiaCalendarioCordoba(p.fechaHora);
+      if (!info) return;
+      if (!diasMap.has(info.key)) {
+        diasMap.set(info.key, {
+          key: info.key,
+          diaNombre: info.diaNombre,
+          partidos: [],
+        });
+      }
+      diasMap.get(info.key).partidos.push(p);
+    });
+
+    return {
+      totalPartidos,
+      partidosFiltradosCount: filtrados.length,
+      enJuego,
+      gruposDias: Array.from(diasMap.values()),
+      sinFecha,
+    };
+  }, [zonas, eliminatoria, showFinalizados, favParejaId]);
+
   if (loading) {
     return (
       <div className="public-page" style={{ textAlign: 'center', paddingTop: '4rem' }}>
@@ -679,6 +776,13 @@ export default function TorneoPublic() {
     (p) => p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || (p.pareja1 && p.pareja2)
   );
 
+  const tieneZonasTab = zonas.length > 0;
+  const tieneElimTab = eliminatoria.length > 0;
+  const tieneHorariosTab = (todosPartidosGrupos.length + todosPartidosElim.length) > 0;
+
+  const availableTabsCount = (tieneZonasTab ? 1 : 0) + (tieneElimTab ? 1 : 0) + (tieneHorariosTab ? 1 : 0);
+  const showSegmentedControl = availableTabsCount >= 2;
+
   return (
     <div className="public-page">
       {/* Header del Torneo (no sticky) */}
@@ -707,7 +811,7 @@ export default function TorneoPublic() {
       </header>
 
       {/* Barra Sticky: Categorías + Control Segmentado */}
-      {(categorias.length > 0 || (zonas.length > 0 && eliminatoria.length > 0)) && (
+      {(categorias.length > 0 || showSegmentedControl) && (
         <div className="public-sticky-nav">
           {/* Selector de Categorías (Pestañas horizontales con scroll, sin wrap, con degradé) */}
           {categorias.length > 0 && (
@@ -730,33 +834,48 @@ export default function TorneoPublic() {
             </div>
           )}
 
-          {/* Control Segmentado (Tabs reales: Zonas / Eliminatoria) */}
-          {zonas.length > 0 && eliminatoria.length > 0 && (
+          {/* Control Segmentado (Tabs reales: Zonas / Eliminatoria / Horarios) */}
+          {showSegmentedControl && (
             <div className="public-segmented-control" role="tablist" aria-label="Fase del torneo">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activePhase === 'zonas'}
-                className={`public-segment-btn ${activePhase === 'zonas' ? 'active' : ''}`}
-                onClick={() => setActivePhase('zonas')}
-              >
-                <span>Zonas</span>
-                <span className="public-segment-subtext">
-                  {gruposCompletados ? '· Completada' : gruposEnCurso ? '· En juego' : '· En disputa'}
-                </span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activePhase === 'eliminatoria'}
-                className={`public-segment-btn ${activePhase === 'eliminatoria' ? 'active' : ''}`}
-                onClick={() => setActivePhase('eliminatoria')}
-              >
-                <span>Eliminatoria</span>
-                <span className="public-segment-subtext">
-                  {eliminatoriaFinalizada ? '· Finalizado' : eliminatoriaIniciada ? '· En disputa' : '· Por comenzar'}
-                </span>
-              </button>
+              {tieneZonasTab && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activePhase === 'zonas'}
+                  className={`public-segment-btn ${activePhase === 'zonas' ? 'active' : ''}`}
+                  onClick={() => setActivePhase('zonas')}
+                >
+                  <span>Zonas</span>
+                  <span className="public-segment-subtext">
+                    {gruposCompletados ? '· Completada' : gruposEnCurso ? '· En juego' : '· En disputa'}
+                  </span>
+                </button>
+              )}
+              {tieneElimTab && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activePhase === 'eliminatoria'}
+                  className={`public-segment-btn ${activePhase === 'eliminatoria' ? 'active' : ''}`}
+                  onClick={() => setActivePhase('eliminatoria')}
+                >
+                  <span>Eliminatoria</span>
+                  <span className="public-segment-subtext">
+                    {eliminatoriaFinalizada ? '· Finalizado' : eliminatoriaIniciada ? '· En disputa' : '· Por comenzar'}
+                  </span>
+                </button>
+              )}
+              {tieneHorariosTab && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activePhase === 'horarios'}
+                  className={`public-segment-btn ${activePhase === 'horarios' ? 'active' : ''}`}
+                  onClick={() => setActivePhase('horarios')}
+                >
+                  <span>Horarios</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -833,8 +952,8 @@ export default function TorneoPublic() {
         </div>
       )}
 
-      {/* Buscador de parejas de la categoría activa (Solo en pestaña Zonas) */}
-      {activePhase === 'zonas' && zonas.length > 0 && (
+      {/* Buscador de parejas de la categoría activa (Visible en Zonas y Horarios) */}
+      {(activePhase === 'zonas' || activePhase === 'horarios') && zonas.length > 0 && (
         <div className="public-search-wrap">
           <div className="public-search-box">
             <Search size={16} className="public-search-icon" aria-hidden="true" />
@@ -1119,6 +1238,7 @@ export default function TorneoPublic() {
                               key={p.id}
                               partido={p}
                               label={partidoLabel}
+                              isFav={Boolean(favParejaId && (p.pareja1Id === favParejaId || p.pareja2Id === favParejaId))}
                             />
                           );
                         })}
@@ -1174,7 +1294,12 @@ export default function TorneoPublic() {
                     <div className="public-bracket-mobile-content">
                       <div className="public-bracket-mobile-matches">
                         {activeFaseMobile.partidos.map((partido) => (
-                          <PublicMatchCard key={partido.id} partido={partido} isMobile={true} />
+                          <PublicMatchCard
+                            key={partido.id}
+                            partido={partido}
+                            isMobile={true}
+                            isFav={Boolean(favParejaId && (partido.pareja1Id === favParejaId || partido.pareja2Id === favParejaId))}
+                          />
                         ))}
                       </div>
                     </div>
@@ -1209,7 +1334,12 @@ export default function TorneoPublic() {
                           </div>
                           <div className="ronda-matches bracket-matches-column">
                             {fase.partidos.map((partido) => (
-                              <PublicMatchCard key={partido.id} partido={partido} isMobile={false} />
+                              <PublicMatchCard
+                                key={partido.id}
+                                partido={partido}
+                                isMobile={false}
+                                isFav={Boolean(favParejaId && (partido.pareja1Id === favParejaId || partido.pareja2Id === favParejaId))}
+                              />
                             ))}
                           </div>
                         </div>
@@ -1218,6 +1348,99 @@ export default function TorneoPublic() {
                     <BracketLines scrollContainerRef={publicBracketRef} fases={eliminatoria} />
                   </div>
                 </div>
+              )}
+            </section>
+          )}
+
+          {/* Cronograma Horarios (Solo en pestaña Horarios) */}
+          {activePhase === 'horarios' && (
+            <section className="public-horarios-section" aria-label="Cronograma de partidos">
+              {/* Barra de acciones: Toggle "Ver finalizados" */}
+              {horariosData.totalPartidos > 0 && (
+                <div className="public-horarios-header">
+                  <button
+                    type="button"
+                    className={`public-filter-chip ${showFinalizados ? 'active' : ''}`}
+                    onClick={() => setShowFinalizados((prev) => !prev)}
+                    aria-pressed={showFinalizados}
+                  >
+                    Ver finalizados
+                  </button>
+                </div>
+              )}
+
+              {/* Estados vacíos */}
+              {horariosData.totalPartidos === 0 ? (
+                <div className="public-horarios-empty">
+                  <Clock size={32} className="public-horarios-empty-icon" aria-hidden="true" />
+                  <p>No hay partidos programados.</p>
+                </div>
+              ) : horariosData.partidosFiltradosCount === 0 ? (
+                <div className="public-horarios-empty">
+                  <Clock size={32} className="public-horarios-empty-icon" aria-hidden="true" />
+                  <p>No hay partidos pendientes.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Sección "En juego" destacada al principio */}
+                  {horariosData.enJuego.length > 0 && (
+                    <div className="public-horarios-live-section">
+                      <div className="public-horarios-live-badge">
+                        <span className="pub-match-dot" aria-hidden="true" />
+                        <span>En juego</span>
+                      </div>
+                      <div className="partidos-public-grid">
+                        {horariosData.enJuego.map((p) => (
+                          <PublicMatchCard
+                            key={p.id}
+                            partido={p}
+                            label={p.origenLabel}
+                            isMobile={isMobile}
+                            isFav={p.isFav}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grupos por día */}
+                  {horariosData.gruposDias.map((grupo) => (
+                    <div key={grupo.key} className="public-horarios-day-group">
+                      <h3 className="public-horarios-day-title">{grupo.diaNombre}</h3>
+                      <div className="partidos-public-grid">
+                        {grupo.partidos.map((p) => (
+                          <PublicMatchCard
+                            key={p.id}
+                            partido={p}
+                            label={p.origenLabel}
+                            isMobile={isMobile}
+                            isFav={p.isFav}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Partidos sin fechaHora: "Horario por confirmar" al final */}
+                  {horariosData.sinFecha.length > 0 && (
+                    <div className="public-horarios-tbd-section">
+                      <h3 className="public-horarios-day-title public-horarios-tbd-title">
+                        Horario por confirmar
+                      </h3>
+                      <div className="partidos-public-grid">
+                        {horariosData.sinFecha.map((p) => (
+                          <PublicMatchCard
+                            key={p.id}
+                            partido={p}
+                            label={p.origenLabel}
+                            isMobile={isMobile}
+                            isFav={p.isFav}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}
