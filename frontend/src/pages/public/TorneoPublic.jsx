@@ -930,9 +930,6 @@ export default function TorneoPublic() {
                               })}
                             </tbody>
                           </table>
-                          <div className="public-clasifican-legend">
-                            Clasifican {zona.clasifican}
-                          </div>
                         </div>
                       );
                     })()
