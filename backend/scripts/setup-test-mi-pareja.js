@@ -248,14 +248,14 @@ async function main() {
     }
   });
 
-  // Partido con falta de rival: p10 vs null (Esperando rival: 2° Zona B)
+  // Match 1: 1° Zona A vs 2° Zona B (Leone / Díaz clasificó 1° en Zona A, Zona B sigue en juego)
   await prisma.partido.create({
     data: {
       categoriaId: cat1.id,
       faseEliminatoriaId: faseCuartos.id,
-      pareja1Id: p10.id,
+      pareja1Id: null,
       pareja2Id: null,
-      origenPareja1: '1° Zona C',
+      origenPareja1: '1° Zona A',
       origenPareja2: '2° Zona B',
       estado: 'PENDIENTE',
       posicionEnRonda: 1,
@@ -264,17 +264,49 @@ async function main() {
     }
   });
 
-  // Partido pendiente sin horario: p11 vs p12 (Horario por confirmar)
+  // Match 2: 1° Zona B vs 2° Zona A (López / Martínez clasificó 2° en Zona A, sin horario aún)
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat1.id,
+      faseEliminatoriaId: faseCuartos.id,
+      pareja1Id: null,
+      pareja2Id: null,
+      origenPareja1: '1° Zona B',
+      origenPareja2: '2° Zona A',
+      estado: 'PENDIENTE',
+      posicionEnRonda: 2,
+      fechaHora: null,
+      canchaNumero: null,
+    }
+  });
+
+  // Match 3: p10 vs null (Esperando rival con pareja1Id explícito)
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat1.id,
+      faseEliminatoriaId: faseCuartos.id,
+      pareja1Id: p10.id,
+      pareja2Id: null,
+      origenPareja1: '1° Zona D',
+      origenPareja2: '2° Zona C',
+      estado: 'PENDIENTE',
+      posicionEnRonda: 3,
+      fechaHora: new Date('2026-10-16T18:00:00Z'),
+      canchaNumero: 2,
+    }
+  });
+
+  // Match 4: p11 vs p12 (Partido pendiente con ambas parejas asignadas)
   await prisma.partido.create({
     data: {
       categoriaId: cat1.id,
       faseEliminatoriaId: faseCuartos.id,
       pareja1Id: p11.id,
       pareja2Id: p12.id,
-      origenPareja1: '1° Zona B',
-      origenPareja2: '2° Zona A',
+      origenPareja1: '1° Zona C',
+      origenPareja2: '2° Zona D',
       estado: 'PENDIENTE',
-      posicionEnRonda: 2,
+      posicionEnRonda: 4,
       fechaHora: null,
       canchaNumero: null,
     }

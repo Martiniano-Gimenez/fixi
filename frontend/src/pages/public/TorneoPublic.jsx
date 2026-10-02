@@ -336,6 +336,10 @@ export default function TorneoPublic() {
   };
 
   const handleSearchResultClick = (res) => {
+    if (res.parejaId) {
+      setFavParejaId(res.parejaId);
+      setFavPareja(slug, activeCatId, res.parejaId);
+    }
     setActivePhase('zonas');
     setActiveZoneId(res.zonaId);
     setSearchTerm('');
@@ -540,8 +544,7 @@ export default function TorneoPublic() {
       }
     }
 
-    // Prioridad 3: Estado "Clasificó pero eliminatoria todavía no lo tiene"
-    // Buscar la zona de mi pareja
+    // Prioridad 3: Zona finalizada y clasificado -> Buscar cruce en eliminatoria por origenPareja
     const miZona = zonas.find((z) =>
       z.tabla?.some((row) => row.parejaId === favParejaId)
     );
@@ -552,17 +555,114 @@ export default function TorneoPublic() {
       // REGLA CRÍTICA: usar posición de la fila dentro de tabla[] ya ordenada (idx + 1 <= zona.clasifican)
       const clasifico = filaIdx !== -1 && filaIdx + 1 <= miZona.clasifican;
 
-      // Verificar que aún no tenga partidos en eliminatoria
-      const tieneEnEliminatoria = eliminatoria.some((f) =>
-        f.partidos?.some((p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)
-      );
+      if (zonaTerminada && clasifico) {
+        // Etiqueta exacta de origen generada al inicio del torneo (ej: "1° Zona A")
+        const miOrigen = `${filaIdx + 1}° ${miZona.nombre}`;
 
-      if (zonaTerminada && clasifico && !tieneEnEliminatoria) {
+        // Buscar en las fases eliminatorias el partido no finalizado que tenga a mi pareja por origen
+        let cruceEncontrado = null;
+        for (const f of eliminatoria) {
+          const match = f.partidos?.find(
+            (p) =>
+              (p.origenPareja1 === miOrigen || p.origenPareja2 === miOrigen) &&
+              p.estado !== 'FINALIZADO'
+          );
+          if (match) {
+            cruceEncontrado = { ...match, faseNombre: f.nombre };
+            break;
+          }
+        }
+
+        if (cruceEncontrado) {
+          const esLado1 = cruceEncontrado.origenPareja1 === miOrigen;
+          let rivalTexto = null;
+          let rivalEsParejaFinal = false;
+
+          const rivalNombre = esLado1 ? cruceEncontrado.pareja2 : cruceEncontrado.pareja1;
+          const rivalOrigen = esLado1 ? cruceEncontrado.origenPareja2 : cruceEncontrado.origenPareja1;
+
+          if (rivalNombre) {
+            rivalTexto = rivalNombre;
+            rivalEsParejaFinal = true;
+          } else if (rivalOrigen) {
+            // Intentar resolver si la zona del rival ya terminó sus partidos (ej: "2° Zona B")
+            const originMatch = rivalOrigen.match(/^(\d+)°\s+(.+)$/);
+            if (originMatch) {
+              const rPos = parseInt(originMatch[1], 10);
+              const rZonaNombre = originMatch[2];
+              const rZona = zonas.find((z) => z.nombre === rZonaNombre);
+              if (
+                rZona &&
+                rZona.partidos?.length > 0 &&
+                rZona.partidos.every((p) => p.estado === 'FINALIZADO')
+              ) {
+                const filaRival = rZona.tabla?.[rPos - 1];
+                if (filaRival?.pareja) {
+                  rivalTexto = filaRival.pareja;
+                  rivalEsParejaFinal = true;
+                }
+              }
+            }
+            if (!rivalTexto) {
+              rivalTexto = rivalOrigen; // Ej: "2° Zona B"
+              rivalEsParejaFinal = false;
+            }
+          } else {
+            rivalTexto = 'Rival por definirse';
+            rivalEsParejaFinal = false;
+          }
+
+          const canchaTexto = cruceEncontrado.canchaNumero ? `Cancha ${cruceEncontrado.canchaNumero}` : null;
+          const meta = [canchaTexto, cruceEncontrado.faseNombre].filter(Boolean).join(' · ');
+
+          if (cruceEncontrado.estado === 'EN_CURSO') {
+            return {
+              tipo: 'en-curso',
+              badge: 'Jugando ahora',
+              rival: `vs. ${rivalTexto}`,
+              meta,
+              partidoId: cruceEncontrado.id,
+            };
+          }
+
+          if (rivalEsParejaFinal) {
+            if (cruceEncontrado.fechaHora) {
+              return {
+                tipo: 'programado',
+                badge: formatPartidoHorario(cruceEncontrado.fechaHora),
+                rival: `vs. ${rivalTexto}`,
+                meta,
+                partidoId: cruceEncontrado.id,
+              };
+            } else {
+              return {
+                tipo: 'sin-horario',
+                badge: 'Horario por confirmar',
+                rival: `vs. ${rivalTexto}`,
+                meta,
+                partidoId: cruceEncontrado.id,
+              };
+            }
+          } else {
+            // Esperando rival de otra zona
+            const horario = cruceEncontrado.fechaHora ? formatPartidoHorario(cruceEncontrado.fechaHora) : null;
+            const metaEsperando = [canchaTexto, cruceEncontrado.faseNombre].filter(Boolean).join(' · ');
+            return {
+              tipo: 'esperando-rival',
+              badge: horario || 'Esperando rival',
+              rival: `vs. ${rivalTexto}`,
+              meta: metaEsperando || cruceEncontrado.faseNombre || 'Eliminatoria',
+              partidoId: cruceEncontrado.id,
+            };
+          }
+        }
+
+        // Fallback: Clasificó pero no hay cruce generado aún en el cuadro
         return {
           tipo: 'clasificado',
           badge: '¡Clasificaste a eliminatorias!',
           rival: 'Cruce por definirse',
-          meta: 'Esperando que finalicen las demás zonas para armar el cuadro',
+          meta: 'Esperando que se arme el cuadro de eliminatorias',
         };
       }
     }
