@@ -330,6 +330,11 @@ organizadores que hoy llevan todo en papel.
   - Solapa de domingo simplificada a la fecha correspondiente sin sufijo `(Playoffs)`.
   - Encabezado unificado a `"Eliminatoria"` junto al trofeo en la jornada de definición, suprimiendo textos extensos y redundantes.
   - Tarjetas de categoría limpias: eliminación del badge "Cuadro armado" y de la leyenda "Cruces iniciales definidos..." en estado `ESPERANDO_ZONAS`.
+- **Rebranding y Centralización de Marca (`Fixi`):**
+  - Migración de la marca visible de la aplicación a **Fixi** (sin sufijos).
+  - Centralización en módulo de constantes `frontend/src/constants/app.js` (`APP_NAME = 'Fixi'`, `APP_TAGLINE = 'Torneos de pádel en vivo'`), utilizado transversalmente en `AdminLayout` (logo navbar), `PublicLayout` (footer), `Login`, `Register` y en el efecto de `document.title` de `TorneoPublic.jsx` (`"{torneo} · Fixi"` o `"Fixi"`, con cleanup al desmontar restaurando `${APP_NAME} — ${APP_TAGLINE}`).
+  - Metadatos actualizados en `index.html` con tags Open Graph (`og:type = "website"`, `og:title`, `og:description`, `og:site_name = "Fixi"`), `apple-mobile-web-app-title` y meta description concisa sin redundancias.
+  - Preservación estricta de identificadores internos, endpoints de backend, base de datos, rutas de navegación y claves de almacenamiento (`localStorage`).
 - Sistema de diseño "Dark Premium Deportivo" aplicado globalmente con tokens semánticos e iconografía 100% vectorial con `lucide-react`.
 - **Configuración de Red Local LAN:** Servidor de desarrollo Vite configurado con `host: true` en `vite.config.js` para auditorías y pruebas directas en tiempo real desde dispositivos móviles en la red Wi-Fi local.
 
