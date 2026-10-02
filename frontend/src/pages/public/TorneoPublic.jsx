@@ -2,12 +2,35 @@ import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
-import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X } from 'lucide-react';
+import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X, Star, Play } from 'lucide-react';
 import { formatPartidoHorario } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import '../admin/EliminatoriaView.css';
 
 const POLL_INTERVAL = 15000; // 15 seconds
+
+function getFavPareja(slug, catId) {
+  if (!slug || !catId) return null;
+  try {
+    return localStorage.getItem(`miPareja:${slug}:${catId}`) || null;
+  } catch {
+    return null;
+  }
+}
+
+function setFavPareja(slug, catId, parejaId) {
+  if (!slug || !catId) return;
+  try {
+    const key = `miPareja:${slug}:${catId}`;
+    if (parejaId) {
+      localStorage.setItem(key, parejaId);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Degradación silenciosa (ej. cookies/storage bloqueado en modo privado)
+  }
+}
 
 function formatDiff(val) {
   if (val > 0) return `+${val}`;
@@ -161,6 +184,50 @@ export default function TorneoPublic() {
   const [activePhase, setActivePhase] = useState('zonas'); // 'zonas' | 'eliminatoria'
   const [activeRoundId, setActiveRoundId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [favParejaId, setFavParejaId] = useState(null);
+
+  // Sincronizar favorito al cambiar de slug o categoría activa
+  useEffect(() => {
+    if (slug && activeCatId) {
+      setFavParejaId(getFavPareja(slug, activeCatId));
+    } else {
+      setFavParejaId(null);
+    }
+  }, [slug, activeCatId]);
+
+  const handleToggleFav = (parejaId) => {
+    if (!parejaId || !activeCatId || !slug) return;
+    const next = favParejaId === parejaId ? null : parejaId;
+    setFavParejaId(next);
+    setFavPareja(slug, activeCatId, next);
+  };
+
+  // Limpieza segura de favorito huérfano:
+  // Solo tras fetch exitoso con payload de la categoría activa ya cargado con contenido
+  useEffect(() => {
+    if (!data || !activeCatId || !favParejaId || !slug) return;
+    const cat = data.categorias?.find((c) => c.id === activeCatId);
+    if (!cat) return; // No limpiar durante cambio de categoría
+
+    const elimFases = cat.eliminatoria || cat.fasesEliminatorias || [];
+    const tieneZonas = Array.isArray(cat.zonas) && cat.zonas.length > 0;
+    const tieneElim = Array.isArray(elimFases) && elimFases.length > 0;
+    if (!tieneZonas && !tieneElim) return; // Categoría vacía / en preparación: no limpiar
+
+    const enZonas = cat.zonas?.some(
+      (z) =>
+        z.tabla?.some((row) => row.parejaId === favParejaId) ||
+        z.partidos?.some((p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)
+    );
+    const enElim = elimFases.some((f) =>
+      f.partidos?.some((p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)
+    );
+
+    if (!enZonas && !enElim) {
+      setFavPareja(slug, activeCatId, null);
+      setFavParejaId(null);
+    }
+  }, [data, activeCatId, favParejaId, slug]);
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -310,23 +377,27 @@ export default function TorneoPublic() {
           const key = `${nombre.toLowerCase()}_${z.id}`;
           if (!seen.has(key)) {
             seen.add(key);
-            list.push({ parejaNombre: nombre, zonaId: z.id, zonaNombre: z.nombre });
+            list.push({ parejaId: row.parejaId, parejaNombre: nombre, zonaId: z.id, zonaNombre: z.nombre });
           }
         }
       });
 
       // 2. De los partidos por si hubiera parejas no listadas aún en tabla
       z.partidos?.forEach((p) => {
-        [p.pareja1, p.pareja2].forEach((pNombre) => {
-          const nombre = pNombre?.trim();
-          if (nombre) {
-            const key = `${nombre.toLowerCase()}_${z.id}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              list.push({ parejaNombre: nombre, zonaId: z.id, zonaNombre: z.nombre });
-            }
+        if (p.pareja1?.trim()) {
+          const key = `${p.pareja1.trim().toLowerCase()}_${z.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            list.push({ parejaId: p.pareja1Id, parejaNombre: p.pareja1.trim(), zonaId: z.id, zonaNombre: z.nombre });
           }
-        });
+        }
+        if (p.pareja2?.trim()) {
+          const key = `${p.pareja2.trim().toLowerCase()}_${z.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            list.push({ parejaId: p.pareja2Id, parejaNombre: p.pareja2.trim(), zonaId: z.id, zonaNombre: z.nombre });
+          }
+        }
       });
     });
 
@@ -346,6 +417,227 @@ export default function TorneoPublic() {
     if (!q) return [];
     return parejasPorZona.filter((item) => normalize(item.parejaNombre).includes(q));
   }, [parejasPorZona, searchTerm]);
+
+  // Nombre de la pareja favorita activa (para mostrar chip en buscador)
+  const favParejaNombre = useMemo(() => {
+    if (!favParejaId || !activeCategoria) return null;
+    for (const z of zonas) {
+      const row = z.tabla?.find((r) => r.parejaId === favParejaId);
+      if (row?.pareja) return row.pareja;
+    }
+    const item = parejasPorZona.find((p) => p.parejaId === favParejaId);
+    if (item?.parejaNombre) return item.parejaNombre;
+    return null;
+  }, [favParejaId, activeCategoria, zonas, parejasPorZona]);
+
+  // Cómputo memoizado del próximo partido para la pareja favorita de la categoría
+  const proximoPartidoInfo = useMemo(() => {
+    if (!favParejaId || !activeCategoria) return null;
+
+    // 1. Recolectar todos los partidos de la categoría activa
+    const todosPartidos = [];
+    zonas.forEach((z) => {
+      z.partidos?.forEach((p) => {
+        todosPartidos.push({
+          ...p,
+          faseTipo: 'zona',
+          faseNombre: z.nombre,
+          posicionEnRonda: p.posicionEnRonda ?? 0,
+        });
+      });
+    });
+    eliminatoria.forEach((f) => {
+      f.partidos?.forEach((p) => {
+        todosPartidos.push({
+          ...p,
+          faseTipo: 'eliminatoria',
+          faseNombre: f.nombre,
+          posicionEnRonda: p.posicion ?? p.posicionEnRonda ?? 0,
+        });
+      });
+    });
+
+    // 2. Partidos donde participa la pareja favorita
+    const misPartidos = todosPartidos.filter(
+      (p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId
+    );
+
+    // Prioridad 1: Partido EN_CURSO (sin sets en vivo, solo a nivel partido)
+    const enCurso = misPartidos.find((p) => p.estado === 'EN_CURSO');
+    if (enCurso) {
+      const esP1 = enCurso.pareja1Id === favParejaId;
+      const rival = esP1 ? enCurso.pareja2 : enCurso.pareja1;
+      const rivalTexto = rival || 'Rival por definirse';
+      const meta = enCurso.faseNombre;
+
+      return {
+        tipo: 'en-curso',
+        badge: 'Jugando ahora',
+        rival: `vs. ${rivalTexto}`,
+        meta,
+        partidoId: enCurso.id,
+      };
+    }
+
+    // Prioridad 2: Partido PENDIENTE
+    const pendientes = misPartidos.filter((p) => p.estado === 'PENDIENTE');
+    if (pendientes.length > 0) {
+      // Ordenamiento determinístico:
+      // Con fechaHora: menor fechaHora (más temprano cronológicamente). NO usar Date.now().
+      // Sin fechaHora: después, menor posicionEnRonda.
+      pendientes.sort((a, b) => {
+        const hasA = Boolean(a.fechaHora);
+        const hasB = Boolean(b.fechaHora);
+        if (hasA && hasB) {
+          return new Date(a.fechaHora) - new Date(b.fechaHora);
+        }
+        if (hasA) return -1;
+        if (hasB) return 1;
+        return (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
+      });
+
+      const prox = pendientes[0];
+      const esP1 = prox.pareja1Id === favParejaId;
+      const rival = esP1 ? prox.pareja2 : prox.pareja1;
+      const origenRival = esP1 ? prox.origenPareja2 : prox.origenPareja1;
+      const rivalTexto = rival || origenRival || 'Rival por definirse';
+      const horario = prox.fechaHora ? formatPartidoHorario(prox.fechaHora) : null;
+
+      // Si el próximo partido pendiente es de fase eliminatoria -> ¡Clasificaste a eliminatorias!
+      if (prox.faseTipo === 'eliminatoria') {
+        const meta = [horario, prox.faseNombre].filter(Boolean).join(' · ');
+        return {
+          tipo: 'clasificado',
+          badge: '¡Clasificaste a eliminatorias!',
+          rival: `vs. ${rivalTexto}`,
+          meta: meta || prox.faseNombre || 'Eliminatoria',
+          partidoId: prox.id,
+        };
+      }
+
+      if (rival) {
+        // Ambas parejas definidas en zona
+        if (prox.fechaHora) {
+          return {
+            tipo: 'programado',
+            badge: horario,
+            rival: `vs. ${rival}`,
+            meta: prox.faseNombre,
+            partidoId: prox.id,
+          };
+        } else {
+          return {
+            tipo: 'sin-horario',
+            badge: 'Horario por confirmar',
+            rival: `vs. ${rival}`,
+            meta: prox.faseNombre,
+            partidoId: prox.id,
+          };
+        }
+      } else {
+        // Falta rival en zona
+        const meta = [horario, prox.faseNombre].filter(Boolean).join(' · ');
+        return {
+          tipo: 'esperando-rival',
+          badge: horario || 'Esperando rival',
+          rival: `vs. ${rivalTexto}`,
+          meta: meta || prox.faseNombre,
+          partidoId: prox.id,
+        };
+      }
+    }
+
+    // Prioridad 3: Zona finalizada / partidos jugados y clasificado -> Estado Clasificado
+    const miZona = zonas.find((z) =>
+      z.tabla?.some((row) => row.parejaId === favParejaId)
+    );
+
+    if (miZona && miZona.partidos?.length > 0) {
+      const zonaTerminada = miZona.partidos.every((p) => p.estado === 'FINALIZADO');
+      const misPartidosDeZona = miZona.partidos.filter(
+        (p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId
+      );
+      const termineMisPartidos =
+        misPartidosDeZona.length > 0 &&
+        misPartidosDeZona.every((p) => p.estado === 'FINALIZADO');
+      const filaIdx = miZona.tabla?.findIndex((r) => r.parejaId === favParejaId);
+      // REGLA CRÍTICA: usar posición de la fila dentro de tabla[] ya ordenada (idx + 1 <= zona.clasifican)
+      const clasifico = filaIdx !== -1 && filaIdx + 1 <= miZona.clasifican;
+
+      if ((zonaTerminada || termineMisPartidos) && clasifico) {
+        // Etiqueta exacta de origen generada al inicio del torneo (ej: "1° Zona A")
+        const miOrigen = `${filaIdx + 1}° ${miZona.nombre}`;
+
+        // Buscar en las fases eliminatorias el partido no finalizado que tenga a mi pareja por id o por origen
+        let cruceEncontrado = null;
+        for (const f of eliminatoria) {
+          const match = f.partidos?.find(
+            (p) =>
+              (p.pareja1Id === favParejaId ||
+                p.pareja2Id === favParejaId ||
+                p.origenPareja1 === miOrigen ||
+                p.origenPareja2 === miOrigen) &&
+              p.estado !== 'FINALIZADO'
+          );
+          if (match) {
+            cruceEncontrado = { ...match, faseNombre: f.nombre };
+            break;
+          }
+        }
+
+        let rivalTexto = null;
+        if (cruceEncontrado) {
+          const esLado1 =
+            cruceEncontrado.pareja1Id === favParejaId ||
+            cruceEncontrado.origenPareja1 === miOrigen;
+          const rivalNombre = esLado1 ? cruceEncontrado.pareja2 : cruceEncontrado.pareja1;
+          const rivalOrigen = esLado1 ? cruceEncontrado.origenPareja2 : cruceEncontrado.origenPareja1;
+
+          if (rivalNombre) {
+            rivalTexto = rivalNombre;
+          } else if (rivalOrigen) {
+            // Intentar resolver si la zona del rival ya terminó sus partidos (ej: "2° Zona B")
+            const originMatch = rivalOrigen.match(/^(\d+)°\s+(.+)$/);
+            if (originMatch) {
+              const rPos = parseInt(originMatch[1], 10);
+              const rZonaNombre = originMatch[2];
+              const rZona = zonas.find((z) => z.nombre === rZonaNombre);
+              if (
+                rZona &&
+                rZona.partidos?.length > 0 &&
+                rZona.partidos.every((p) => p.estado === 'FINALIZADO')
+              ) {
+                const filaRival = rZona.tabla?.[rPos - 1];
+                if (filaRival?.pareja) {
+                  rivalTexto = filaRival.pareja;
+                }
+              }
+            }
+            if (!rivalTexto) {
+              rivalTexto = rivalOrigen; // Ej: "2° Zona B"
+            }
+          } else {
+            rivalTexto = 'Rival por definirse';
+          }
+        }
+
+        const horario = cruceEncontrado?.fechaHora
+          ? formatPartidoHorario(cruceEncontrado.fechaHora)
+          : null;
+        const meta = [horario, cruceEncontrado?.faseNombre].filter(Boolean).join(' · ');
+
+        return {
+          tipo: 'clasificado',
+          badge: '¡Clasificaste a eliminatorias!',
+          rival: rivalTexto ? `vs. ${rivalTexto}` : 'Cruce por definirse',
+          meta: meta || cruceEncontrado?.faseNombre || 'Esperando que se arme el cuadro de eliminatorias',
+          partidoId: cruceEncontrado?.id,
+        };
+      }
+    }
+
+    return null;
+  }, [favParejaId, activeCategoria, zonas, eliminatoria]);
 
   if (loading) {
     return (
@@ -470,6 +762,45 @@ export default function TorneoPublic() {
         </div>
       )}
 
+      {/* Bloque "Tu próximo partido" (Visible en ambas fases Zonas y Eliminatoria) */}
+      {proximoPartidoInfo && (
+        <div className="public-next-match-wrap">
+          <div className={`public-next-match-card status-${proximoPartidoInfo.tipo}`}>
+            <div className="public-next-match-icon-col">
+              {proximoPartidoInfo.tipo === 'en-curso' && (
+                <div className="public-next-match-icon-pulse">
+                  <Play size={16} className="public-next-icon-play" />
+                </div>
+              )}
+              {proximoPartidoInfo.tipo === 'clasificado' && (
+                <div className="public-next-match-icon-box">
+                  <Trophy size={16} className="public-next-icon-trophy" />
+                </div>
+              )}
+              {(proximoPartidoInfo.tipo === 'programado' ||
+                proximoPartidoInfo.tipo === 'sin-horario' ||
+                proximoPartidoInfo.tipo === 'esperando-rival') && (
+                <div className="public-next-match-icon-box">
+                  <Clock size={16} className="public-next-icon-clock" />
+                </div>
+              )}
+            </div>
+
+            <div className="public-next-match-body">
+              <div className="public-next-match-header">
+                <span className="public-next-match-badge">{proximoPartidoInfo.badge}</span>
+                {proximoPartidoInfo.meta && (
+                  <span className="public-next-match-meta">{proximoPartidoInfo.meta}</span>
+                )}
+              </div>
+              <div className="public-next-match-rival" title={proximoPartidoInfo.rival}>
+                {proximoPartidoInfo.rival}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Navegación rápida entre zonas (Solo en pestaña Zonas, no sticky, alto táctil min 40px, con "Todas") */}
       {activePhase === 'zonas' && zonas.length > 1 && (
         <div className="public-zone-chips" role="navigation" aria-label="Navegación entre zonas">
@@ -502,8 +833,8 @@ export default function TorneoPublic() {
         </div>
       )}
 
-      {/* Buscador de parejas de la categoría activa (No sticky, en ambas pestañas) */}
-      {zonas.length > 0 && (
+      {/* Buscador de parejas de la categoría activa (Solo en pestaña Zonas) */}
+      {activePhase === 'zonas' && zonas.length > 0 && (
         <div className="public-search-wrap">
           <div className="public-search-box">
             <Search size={16} className="public-search-icon" aria-hidden="true" />
@@ -527,22 +858,69 @@ export default function TorneoPublic() {
             )}
           </div>
 
+          {/* Chip de pareja favorita activa cuando no hay búsqueda activa */}
+          {favParejaNombre && !searchTerm.trim() && (
+            <div className="public-fav-chip-bar">
+              <span className="public-fav-chip">
+                <Star size={13} className="public-fav-chip-star" />
+                <span className="public-fav-chip-text">
+                  Mi pareja: <strong>{favParejaNombre}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="public-fav-chip-remove"
+                  onClick={() => handleToggleFav(favParejaId)}
+                  aria-label={`Dejar de seguir a ${favParejaNombre}`}
+                  title="Quitar de favoritos"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            </div>
+          )}
+
           {/* Lista de resultados desplegable */}
           {searchTerm.trim() && (
             <div className="public-search-results" role="listbox" aria-label="Resultados de búsqueda">
               {resultadosBusqueda.length > 0 ? (
-                resultadosBusqueda.map((res) => (
-                  <button
-                    key={`${res.parejaNombre}-${res.zonaId}`}
-                    type="button"
-                    className="public-search-item"
-                    onClick={() => handleSearchResultClick(res)}
-                    aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
-                  >
-                    <span className="public-search-team">{res.parejaNombre}</span>
-                    <span className="public-search-badge">{res.zonaNombre}</span>
-                  </button>
-                ))
+                resultadosBusqueda.map((res) => {
+                  const isFav = res.parejaId && favParejaId === res.parejaId;
+                  return (
+                    <div
+                      key={`${res.parejaNombre}-${res.zonaId}`}
+                      className="public-search-item"
+                    >
+                      <button
+                        type="button"
+                        className="public-search-item-info"
+                        onClick={() => handleSearchResultClick(res)}
+                        aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
+                      >
+                        <span className="public-search-team">{res.parejaNombre}</span>
+                        <span className="public-search-badge">{res.zonaNombre}</span>
+                      </button>
+                      {res.parejaId && (
+                        <button
+                          type="button"
+                          className={`public-search-fav-btn ${isFav ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleFav(res.parejaId);
+                          }}
+                          aria-label={
+                            isFav
+                              ? `Quitar a ${res.parejaNombre} de mis favoritos`
+                              : `Marcar a ${res.parejaNombre} como mi pareja`
+                          }
+                          aria-pressed={isFav}
+                          title={isFav ? 'Quitar de favoritos' : 'Marcar como mi pareja'}
+                        >
+                          <Star size={18} className="public-fav-icon" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
               ) : (
                 <div className="public-search-empty">
                   No se encontraron parejas con ese nombre
@@ -659,9 +1037,6 @@ export default function TorneoPublic() {
                               })}
                             </tbody>
                           </table>
-                          <div className="public-clasifican-legend">
-                            Clasifican {zona.clasifican}
-                          </div>
                         </div>
                       );
                     })()
@@ -708,11 +1083,6 @@ export default function TorneoPublic() {
                               >
                                 <td className="col-pos"><span className="pos-number">{idx + 1}</span></td>
                                 <td className="col-pareja team-name" title={row.pareja}>
-                                  {clasifica && (
-                                    <span style={{ color: 'var(--color-primary)', marginRight: '0.25rem', textShadow: '0 0 5px var(--color-accent-glow)' }}>
-                                      ▲
-                                    </span>
-                                  )}
                                   {row.pareja}
                                 </td>
                                 <td className="col-pts text-center stat-pts">{row.puntos}</td>
