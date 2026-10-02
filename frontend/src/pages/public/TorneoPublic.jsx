@@ -282,9 +282,9 @@ export default function TorneoPublic() {
 
   // Categoría activa y colecciones derivadas
   const activeCategoria = data?.categorias?.find((c) => c.id === activeCatId) || data?.categorias?.[0];
-  const zonas = activeCategoria?.zonas || [];
+  const zonas = useMemo(() => activeCategoria?.zonas || [], [activeCategoria]);
   const zonasAMostrar = activeZoneId ? zonas.filter((z) => z.id === activeZoneId) : zonas;
-  const eliminatoria = activeCategoria?.eliminatoria || [];
+  const eliminatoria = useMemo(() => activeCategoria?.eliminatoria || [], [activeCategoria]);
 
   // Resetear filtros al cambiar de categoría
   useEffect(() => {
