@@ -708,11 +708,6 @@ export default function TorneoPublic() {
                               >
                                 <td className="col-pos"><span className="pos-number">{idx + 1}</span></td>
                                 <td className="col-pareja team-name" title={row.pareja}>
-                                  {clasifica && (
-                                    <span style={{ color: 'var(--color-primary)', marginRight: '0.25rem', textShadow: '0 0 5px var(--color-accent-glow)' }}>
-                                      ▲
-                                    </span>
-                                  )}
                                   {row.pareja}
                                 </td>
                                 <td className="col-pts text-center stat-pts">{row.puntos}</td>
