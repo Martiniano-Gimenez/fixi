@@ -2729,6 +2729,132 @@ tr:nth-child(1) .pos-number {
   flex-shrink: 0;
 }
 
+/* ─── Bloque "Tu próximo partido" ─────────────────────────── */
+.public-next-match-wrap {
+  margin: 0.75rem 0 1rem 0;
+  width: 100%;
+}
+
+.public-next-match-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-card-start, #12151c);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 0.5rem);
+  padding: 0.65rem 0.85rem;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.public-next-match-card.status-en-curso {
+  border-color: var(--color-primary);
+  background: linear-gradient(90deg, rgba(0, 208, 132, 0.1) 0%, var(--bg-card-start, #12151c) 100%);
+  box-shadow: 0 0 12px rgba(0, 208, 132, 0.15);
+}
+
+.public-next-match-card.status-clasificado {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: linear-gradient(90deg, var(--color-warning-bg) 0%, var(--bg-card-start, #12151c) 100%);
+}
+
+.public-next-match-icon-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.public-next-match-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.public-next-match-icon-pulse {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 208, 132, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(0, 208, 132, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 208, 132, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 208, 132, 0); }
+}
+
+.public-next-icon-play {
+  color: var(--color-primary);
+  fill: var(--color-primary);
+}
+
+.public-next-icon-trophy {
+  color: var(--color-warning);
+}
+
+.public-next-icon-clock {
+  color: var(--color-text-secondary);
+}
+
+.public-next-match-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.public-next-match-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
+  flex-wrap: wrap;
+}
+
+.public-next-match-badge {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--color-primary);
+}
+
+.public-next-match-card.status-en-curso .public-next-match-badge {
+  color: var(--color-primary);
+  text-transform: uppercase;
+}
+
+.public-next-match-card.status-clasificado .public-next-match-badge {
+  color: var(--color-warning);
+}
+
+.public-next-match-card.status-sin-horario .public-next-match-badge,
+.public-next-match-card.status-esperando-rival .public-next-match-badge {
+  color: var(--color-text-secondary);
+}
+
+.public-next-match-meta {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.public-next-match-rival {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
 .public-tabla-mobile .col-stat {
   width: 22px;
   font-size: 0.78rem;

@@ -209,8 +209,9 @@ export default function TorneoPublic() {
     const cat = data.categorias?.find((c) => c.id === activeCatId);
     if (!cat) return; // No limpiar durante cambio de categoría
 
+    const elimFases = cat.eliminatoria || cat.fasesEliminatorias || [];
     const tieneZonas = Array.isArray(cat.zonas) && cat.zonas.length > 0;
-    const tieneElim = Array.isArray(cat.fasesEliminatorias) && cat.fasesEliminatorias.length > 0;
+    const tieneElim = Array.isArray(elimFases) && elimFases.length > 0;
     if (!tieneZonas && !tieneElim) return; // Categoría vacía / en preparación: no limpiar
 
     const enZonas = cat.zonas?.some(
@@ -218,7 +219,7 @@ export default function TorneoPublic() {
         z.tabla?.some((row) => row.parejaId === favParejaId) ||
         z.partidos?.some((p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)
     );
-    const enElim = cat.fasesEliminatorias?.some((f) =>
+    const enElim = elimFases.some((f) =>
       f.partidos?.some((p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)
     );
 
@@ -417,6 +418,146 @@ export default function TorneoPublic() {
     return parejasPorZona.filter((item) => normalize(item.parejaNombre).includes(q));
   }, [parejasPorZona, searchTerm]);
 
+  // Cómputo memoizado del próximo partido para la pareja favorita de la categoría
+  const proximoPartidoInfo = useMemo(() => {
+    if (!favParejaId || !activeCategoria) return null;
+
+    // 1. Recolectar todos los partidos de la categoría activa
+    const todosPartidos = [];
+    zonas.forEach((z) => {
+      z.partidos?.forEach((p) => {
+        todosPartidos.push({
+          ...p,
+          faseTipo: 'zona',
+          faseNombre: z.nombre,
+          posicionEnRonda: p.posicionEnRonda ?? 0,
+        });
+      });
+    });
+    eliminatoria.forEach((f) => {
+      f.partidos?.forEach((p) => {
+        todosPartidos.push({
+          ...p,
+          faseTipo: 'eliminatoria',
+          faseNombre: f.nombre,
+          posicionEnRonda: p.posicion ?? p.posicionEnRonda ?? 0,
+        });
+      });
+    });
+
+    // 2. Partidos donde participa la pareja favorita
+    const misPartidos = todosPartidos.filter(
+      (p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId
+    );
+
+    // Prioridad 1: Partido EN_CURSO (sin sets en vivo, solo a nivel partido)
+    const enCurso = misPartidos.find((p) => p.estado === 'EN_CURSO');
+    if (enCurso) {
+      const esP1 = enCurso.pareja1Id === favParejaId;
+      const rival = esP1 ? enCurso.pareja2 : enCurso.pareja1;
+      const rivalTexto = rival || 'Rival por definirse';
+      const canchaTexto = enCurso.canchaNumero ? `Cancha ${enCurso.canchaNumero}` : null;
+      const meta = [canchaTexto, enCurso.faseNombre].filter(Boolean).join(' · ');
+
+      return {
+        tipo: 'en-curso',
+        badge: 'Jugando ahora',
+        rival: `vs. ${rivalTexto}`,
+        meta,
+        partidoId: enCurso.id,
+      };
+    }
+
+    // Prioridad 2: Partido PENDIENTE
+    const pendientes = misPartidos.filter((p) => p.estado === 'PENDIENTE');
+    if (pendientes.length > 0) {
+      // Ordenamiento determinístico:
+      // Con fechaHora: menor fechaHora (más temprano cronológicamente). NO usar Date.now().
+      // Sin fechaHora: después, menor posicionEnRonda.
+      pendientes.sort((a, b) => {
+        const hasA = Boolean(a.fechaHora);
+        const hasB = Boolean(b.fechaHora);
+        if (hasA && hasB) {
+          return new Date(a.fechaHora) - new Date(b.fechaHora);
+        }
+        if (hasA) return -1;
+        if (hasB) return 1;
+        return (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
+      });
+
+      const prox = pendientes[0];
+      const esP1 = prox.pareja1Id === favParejaId;
+      const rival = esP1 ? prox.pareja2 : prox.pareja1;
+      const origenRival = esP1 ? prox.origenPareja2 : prox.origenPareja1;
+      const canchaTexto = prox.canchaNumero ? `Cancha ${prox.canchaNumero}` : null;
+
+      if (rival) {
+        // Ambas parejas definidas
+        if (prox.fechaHora) {
+          const horario = formatPartidoHorario(prox.fechaHora);
+          const meta = [canchaTexto, prox.faseNombre].filter(Boolean).join(' · ');
+          return {
+            tipo: 'programado',
+            badge: horario,
+            rival: `vs. ${rival}`,
+            meta,
+            partidoId: prox.id,
+          };
+        } else {
+          const meta = [canchaTexto, prox.faseNombre].filter(Boolean).join(' · ');
+          return {
+            tipo: 'sin-horario',
+            badge: 'Horario por confirmar',
+            rival: `vs. ${rival}`,
+            meta,
+            partidoId: prox.id,
+          };
+        }
+      } else {
+        // Falta rival (esperando rival en eliminatoria)
+        const rivalTexto = origenRival || 'Rival por definirse';
+        const horario = prox.fechaHora ? formatPartidoHorario(prox.fechaHora) : null;
+        const meta = [horario, canchaTexto, prox.faseNombre].filter(Boolean).join(' · ');
+        return {
+          tipo: 'esperando-rival',
+          badge: 'Esperando rival',
+          rival: `vs. ${rivalTexto}`,
+          meta: meta || 'Eliminatoria',
+          partidoId: prox.id,
+        };
+      }
+    }
+
+    // Prioridad 3: Estado "Clasificó pero eliminatoria todavía no lo tiene"
+    // Buscar la zona de mi pareja
+    const miZona = zonas.find((z) =>
+      z.tabla?.some((row) => row.parejaId === favParejaId)
+    );
+
+    if (miZona && miZona.partidos?.length > 0) {
+      const zonaTerminada = miZona.partidos.every((p) => p.estado === 'FINALIZADO');
+      const filaIdx = miZona.tabla?.findIndex((r) => r.parejaId === favParejaId);
+      // REGLA CRÍTICA: usar posición de la fila dentro de tabla[] ya ordenada (idx + 1 <= zona.clasifican)
+      const clasifico = filaIdx !== -1 && filaIdx + 1 <= miZona.clasifican;
+
+      // Verificar que aún no tenga partidos en eliminatoria
+      const tieneEnEliminatoria = eliminatoria.some((f) =>
+        f.partidos?.some((p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)
+      );
+
+      if (zonaTerminada && clasifico && !tieneEnEliminatoria) {
+        return {
+          tipo: 'clasificado',
+          badge: '¡Clasificaste a eliminatorias!',
+          rival: 'Cruce por definirse',
+          meta: 'Esperando que finalicen las demás zonas para armar el cuadro',
+        };
+      }
+    }
+
+    return null;
+  }, [favParejaId, activeCategoria, zonas, eliminatoria]);
+
   if (loading) {
     return (
       <div className="public-page" style={{ textAlign: 'center', paddingTop: '4rem' }}>
@@ -540,6 +681,45 @@ export default function TorneoPublic() {
         </div>
       )}
 
+      {/* Bloque "Tu próximo partido" (Visible en ambas fases Zonas y Eliminatoria) */}
+      {proximoPartidoInfo && (
+        <div className="public-next-match-wrap">
+          <div className={`public-next-match-card status-${proximoPartidoInfo.tipo}`}>
+            <div className="public-next-match-icon-col">
+              {proximoPartidoInfo.tipo === 'en-curso' && (
+                <div className="public-next-match-icon-pulse">
+                  <Play size={16} className="public-next-icon-play" />
+                </div>
+              )}
+              {proximoPartidoInfo.tipo === 'clasificado' && (
+                <div className="public-next-match-icon-box">
+                  <Trophy size={16} className="public-next-icon-trophy" />
+                </div>
+              )}
+              {(proximoPartidoInfo.tipo === 'programado' ||
+                proximoPartidoInfo.tipo === 'sin-horario' ||
+                proximoPartidoInfo.tipo === 'esperando-rival') && (
+                <div className="public-next-match-icon-box">
+                  <Clock size={16} className="public-next-icon-clock" />
+                </div>
+              )}
+            </div>
+
+            <div className="public-next-match-body">
+              <div className="public-next-match-header">
+                <span className="public-next-match-badge">{proximoPartidoInfo.badge}</span>
+                {proximoPartidoInfo.meta && (
+                  <span className="public-next-match-meta">{proximoPartidoInfo.meta}</span>
+                )}
+              </div>
+              <div className="public-next-match-rival" title={proximoPartidoInfo.rival}>
+                {proximoPartidoInfo.rival}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Navegación rápida entre zonas (Solo en pestaña Zonas, no sticky, alto táctil min 40px, con "Todas") */}
       {activePhase === 'zonas' && zonas.length > 1 && (
         <div className="public-zone-chips" role="navigation" aria-label="Navegación entre zonas">
@@ -572,8 +752,8 @@ export default function TorneoPublic() {
         </div>
       )}
 
-      {/* Buscador de parejas de la categoría activa (No sticky, en ambas pestañas) */}
-      {zonas.length > 0 && (
+      {/* Buscador de parejas de la categoría activa (Solo en pestaña Zonas) */}
+      {activePhase === 'zonas' && zonas.length > 0 && (
         <div className="public-search-wrap">
           <div className="public-search-box">
             <Search size={16} className="public-search-icon" aria-hidden="true" />
