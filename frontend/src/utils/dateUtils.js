@@ -46,6 +46,35 @@ export function formatPartidoHorario(fechaHora) {
 }
 
 /**
+ * Agrupa por día calendario lógico en America/Argentina/Cordoba.
+ * Retorna { key: string, diaNombre: string } o null si fechaHora es inválida o vacía.
+ * key: "YYYY-MM-DD"
+ * diaNombre: "Viernes", "Sábado", etc. (solo el nombre del día, sin fecha numérica)
+ * @param {string | Date} fechaHora
+ * @returns {{ key: string, diaNombre: string } | null}
+ */
+export function getDiaCalendarioCordoba(fechaHora) {
+  if (!fechaHora) return null;
+  const d = new Date(fechaHora);
+  if (isNaN(d.getTime())) return null;
+
+  const key = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Cordoba',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+
+  const diaNombreRaw = new Intl.DateTimeFormat('es-AR', {
+    weekday: 'long',
+    timeZone: 'America/Argentina/Cordoba',
+  }).format(d);
+  const diaNombre = diaNombreRaw.charAt(0).toUpperCase() + diaNombreRaw.slice(1);
+
+  return { key, diaNombre };
+}
+
+/**
  * Formatea un ajuste de tiempo en minutos con signo (+/-) y formato de horas si es >= 60m.
  * Ejemplos:
  *  45 -> "+45m"
