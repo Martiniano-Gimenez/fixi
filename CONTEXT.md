@@ -307,6 +307,23 @@ organizadores que hoy llevan todo en papel.
     - **Sección "Horario por confirmar":** Partidos pendientes que aún no tienen `fechaHora` asignada se agrupan ordenadamente al final de la vista.
     - **Búsqueda y Filtro de Pareja en Horarios:** Al buscar una pareja desde el buscador mientras se está en la pestaña Horarios, la vista permanece en Horarios (no salta a Zonas) y aplica un filtro interactivo que lista todos los partidos de esa pareja (zonas y eliminatorias, incluidos finalizados). Un chip removible táctil (`.public-filter-active-chip`) muestra `"Mostrando: {Nombre} ✕"` con `max-width: 180px`, `text-overflow: ellipsis` y área táctil del botón $\ge 40\text{px}$.
     - **Coincidencia Estricta y Descarte Determinista:** El filtro compara estrictamente por ID (`pareja1Id` / `pareja2Id`), usando fallback a nombre solo si el partido carece de ID (nunca con `OR` combinado). El filtro se limpia síncronamente al cambiar de pestaña o de categoría en los manejadores de clic para evitar condiciones de carrera. Estado vacío contextual: *"Esta pareja no tiene partidos programados."* manteniendo el contador general de la categoría intacto.
+  - **Skeleton de Carga Inicial con Shimmer Accesible (`TorneoPublicSkeleton` e `index.css`):**
+    - Reemplazo del spinner/texto simple de carga por un skeleton de primera carga que replica visualmente el layout real del torneo: título, metadatos, chips de categoría, control segmentado y 3 tarjetas de partido (cabecera con hora/badge y dos filas de jugadores).
+    - Ocupa una altura equivalente en pantalla (~420px), eliminando saltos bruscos de maquetación (CLS) cuando la respuesta del servidor se completa.
+    - Animación shimmer suave con gradiente en CSS (`.public-skeleton-shimmer`). Soporte nativo para reducción de movimiento (`@media (prefers-reduced-motion: reduce)`), congelando los bloques a un gris neutro estático sin animación.
+    - Accesibilidad semántica: contenedor con `role="status"` y `aria-busy="true"`, junto con texto para lectores de pantalla mediante la utilidad `.sr-only` (`"Cargando torneo"`).
+    - Aislamiento estricto: se muestra únicamente durante la primera carga; si la llamada inicial falla, el bloque `finally` garantiza el paso a `loading: false` para mostrar la pantalla de error sin trabar el skeleton; y los ciclos subsiguientes de polling nunca vuelven a mostrar el skeleton.
+  - **Indicador Discreto de Última Actualización y Resiliencia de Red (`UltimaActualizacion`, `TorneoPublic.jsx` e `index.css`):**
+    - Ubicado en el header no-sticky (`.public-tournament-header`), directamente debajo de los metadatos del evento, sin saturar la barra sticky superior ($\le 96$px).
+    - Registro de timestamp (`lastUpdated`) exclusivamente ante respuestas exitosas de `GET /api/public/:slug`.
+    - Componente aislado con timer interno propio (`setInterval(1000)`), actualizando el segundero localmente sin re-renderizar `TorneoPublic`.
+    - Formato conciso y sin dead branches:
+      - Menos de 5 s: `"Actualizado ahora"`.
+      - 5 a 34 s: `"Actualizado hace ${diffSec} s"`.
+      - $\ge 35$ s: `"Sin actualizar hace ${diffSec} s"` (o `min` / `h`), aplicando el token semántico `--color-warning` en texto y punto.
+    - Punto de estado estático (`.public-update-dot`) verde (`--color-success`) al día y ámbar (`--color-warning`) desactualizado, sin pulsos competitivos con el estado "En juego" y con `aria-hidden="true"`.
+    - Pausa de timer en pestañas ocultas mediante `document.visibilityState`: destruye el intervalo al pasar a segundo plano y, al volver a estar visible, recalcula el contador y dispara un `fetchData()` inmediato con exclusión mutua (`inFlightRef`), refrescando la vista sin alterar el intervalo estándar de polling de 15 s.
+    - Blindaje contra stale closures con `dataRef`: el manejo de errores en polling evalúa `!dataRef.current`, impidiendo que micro-cortes de conexión o fallos de red sobreescriban la interfaz con `"Failed to fetch"`, manteniendo los datos cargados plenamente visibles mientras el indicador advierte la falta de actualización.
 - **Refinamiento Minimalista en Día de Torneo (`TorneoEnVivo.jsx`):**
   - Título principal limpio: `"Día de Torneo"` (sin emojis ni "— En Vivo").
   - Supresión de indicadores pasivos de polling (`• Actualización automática cada 30s`).
