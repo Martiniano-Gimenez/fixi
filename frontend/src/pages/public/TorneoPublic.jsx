@@ -418,6 +418,18 @@ export default function TorneoPublic() {
     return parejasPorZona.filter((item) => normalize(item.parejaNombre).includes(q));
   }, [parejasPorZona, searchTerm]);
 
+  // Nombre de la pareja favorita activa (para mostrar chip en buscador)
+  const favParejaNombre = useMemo(() => {
+    if (!favParejaId || !activeCategoria) return null;
+    for (const z of zonas) {
+      const row = z.tabla?.find((r) => r.parejaId === favParejaId);
+      if (row?.pareja) return row.pareja;
+    }
+    const item = parejasPorZona.find((p) => p.parejaId === favParejaId);
+    if (item?.parejaNombre) return item.parejaNombre;
+    return null;
+  }, [favParejaId, activeCategoria, zonas, parejasPorZona]);
+
   // Cómputo memoizado del próximo partido para la pareja favorita de la categoría
   const proximoPartidoInfo = useMemo(() => {
     if (!favParejaId || !activeCategoria) return null;
@@ -777,27 +789,69 @@ export default function TorneoPublic() {
             )}
           </div>
 
+          {/* Chip de pareja favorita activa cuando no hay búsqueda activa */}
+          {favParejaNombre && !searchTerm.trim() && (
+            <div className="public-fav-chip-bar">
+              <span className="public-fav-chip">
+                <Star size={13} className="public-fav-chip-star" />
+                <span className="public-fav-chip-text">
+                  Mi pareja: <strong>{favParejaNombre}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="public-fav-chip-remove"
+                  onClick={() => handleToggleFav(favParejaId)}
+                  aria-label={`Dejar de seguir a ${favParejaNombre}`}
+                  title="Quitar de favoritos"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            </div>
+          )}
+
           {/* Lista de resultados desplegable */}
           {searchTerm.trim() && (
             <div className="public-search-results" role="listbox" aria-label="Resultados de búsqueda">
               {resultadosBusqueda.length > 0 ? (
-                resultadosBusqueda.map((res) => (
-                  <button
-                    key={`${res.parejaNombre}-${res.zonaId}`}
-                    type="button"
-                    className="public-search-item"
-                    onClick={() => handleSearchResultClick(res)}
-                    aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
-                  >
-                    <span className="public-search-team">
-                      {res.parejaNombre}
-                      {res.parejaId && favParejaId === res.parejaId && (
-                        <Star size={13} className="public-search-fav-icon" aria-label="Mi pareja favorita" />
+                resultadosBusqueda.map((res) => {
+                  const isFav = res.parejaId && favParejaId === res.parejaId;
+                  return (
+                    <div
+                      key={`${res.parejaNombre}-${res.zonaId}`}
+                      className="public-search-item"
+                    >
+                      <button
+                        type="button"
+                        className="public-search-item-info"
+                        onClick={() => handleSearchResultClick(res)}
+                        aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
+                      >
+                        <span className="public-search-team">{res.parejaNombre}</span>
+                        <span className="public-search-badge">{res.zonaNombre}</span>
+                      </button>
+                      {res.parejaId && (
+                        <button
+                          type="button"
+                          className={`public-search-fav-btn ${isFav ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleFav(res.parejaId);
+                          }}
+                          aria-label={
+                            isFav
+                              ? `Quitar a ${res.parejaNombre} de mis favoritos`
+                              : `Marcar a ${res.parejaNombre} como mi pareja`
+                          }
+                          aria-pressed={isFav}
+                          title={isFav ? 'Quitar de favoritos' : 'Marcar como mi pareja'}
+                        >
+                          <Star size={18} className="public-fav-icon" />
+                        </button>
                       )}
-                    </span>
-                    <span className="public-search-badge">{res.zonaNombre}</span>
-                  </button>
-                ))
+                    </div>
+                  );
+                })
               ) : (
                 <div className="public-search-empty">
                   No se encontraron parejas con ese nombre
@@ -890,25 +944,9 @@ export default function TorneoPublic() {
                                   <tr key={idx} className={clasifica ? 'clasifica' : ''}>
                                     <td className="col-pos">{idx + 1}</td>
                                     <td className="col-pareja">
-                                      <div className="public-tabla-pareja-wrap">
-                                        {row.parejaId && (
-                                          <button
-                                            type="button"
-                                            className={`public-fav-btn ${favParejaId === row.parejaId ? 'active' : ''}`}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleToggleFav(row.parejaId);
-                                            }}
-                                            aria-label={favParejaId === row.parejaId ? `Quitar a ${row.pareja} de mi pareja favorita` : `Marcar a ${row.pareja} como mi pareja favorita`}
-                                            aria-pressed={favParejaId === row.parejaId}
-                                          >
-                                            <Star size={14} className="public-fav-icon" />
-                                          </button>
-                                        )}
-                                        <span className="public-tabla-nombre" title={row.pareja}>
-                                          {row.pareja}
-                                        </span>
-                                      </div>
+                                      <span className="public-tabla-nombre" title={row.pareja}>
+                                        {row.pareja}
+                                      </span>
                                     </td>
                                     {zonaSinJugar ? (
                                       <td className="col-estado text-right" style={{ textAlign: 'right' }}>
@@ -976,23 +1014,7 @@ export default function TorneoPublic() {
                               >
                                 <td className="col-pos"><span className="pos-number">{idx + 1}</span></td>
                                 <td className="col-pareja team-name" title={row.pareja}>
-                                  <div className="public-tabla-pareja-wrap">
-                                    {row.parejaId && (
-                                      <button
-                                        type="button"
-                                        className={`public-fav-btn ${favParejaId === row.parejaId ? 'active' : ''}`}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleToggleFav(row.parejaId);
-                                        }}
-                                        aria-label={favParejaId === row.parejaId ? `Quitar a ${row.pareja} de mi pareja favorita` : `Marcar a ${row.pareja} como mi pareja favorita`}
-                                        aria-pressed={favParejaId === row.parejaId}
-                                      >
-                                        <Star size={14} className="public-fav-icon" />
-                                      </button>
-                                    )}
-                                    <span>{row.pareja}</span>
-                                  </div>
+                                  {row.pareja}
                                 </td>
                                 <td className="col-pts text-center stat-pts">{row.puntos}</td>
                                 <td className="col-pj text-center hide-on-mobile">{row.pj}</td>
