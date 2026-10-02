@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
@@ -8,6 +8,12 @@ import { estadoLabel } from '../../utils/estadoLabels';
 import '../admin/EliminatoriaView.css';
 
 const POLL_INTERVAL = 15000; // 15 seconds
+
+function formatDiff(val) {
+  if (val > 0) return `+${val}`;
+  if (val < 0) return `\u2212${Math.abs(val)}`;
+  return '0';
+}
 
 function PublicMatchCard({ partido, label = '', isMobile = false }) {
   const isFinalizado = partido.estado === 'FINALIZADO';
@@ -577,55 +583,88 @@ export default function TorneoPublic() {
                 <Users size={20} strokeWidth={2} />
                 Zonas
               </h2>
-              {zonasAMostrar.map((zona) => (
-                <div id={`zona-${zona.id}`} key={zona.id} className="torneo-card" style={{ marginBottom: '2rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ margin: 0 }}>{zona.nombre}</h3>
-                    <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
-                  </div>
-
-                  {/* Posiciones de la zona: Mobile (filas sin scroll) vs Desktop (tabla tradicional) */}
-                  {isMobile ? (
-                    <div className="public-posiciones-list" style={{ marginBottom: '1.5rem' }}>
-                      {zona.tabla.map((row, idx) => {
-                        const clasifica = idx < zona.clasifican;
-                        return (
-                          <div
-                            key={idx}
-                            className={`public-pos-card ${clasifica ? 'clasifica' : ''}`}
-                          >
-                            <div className="public-pos-rank">
-                              <span className="public-pos-num">{idx + 1}</span>
-                              {clasifica && (
-                                <span className="public-pos-arrow" title="Zona de clasificación">
-                                  ▲
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="public-pos-info">
-                              <div className="public-pos-name" title={row.pareja}>
-                                {row.pareja}
-                              </div>
-                              <div className="public-pos-stats">
-                                <span>{row.pj} PJ</span>
-                                <span className="public-pos-dot">·</span>
-                                <span>{row.pg} PG</span>
-                                <span className="public-pos-dot">·</span>
-                                <span>Sets {row.sf}-{row.sc}</span>
-                                <span className="public-pos-dot">·</span>
-                                <span>Games {row.gf}-{row.gc}</span>
-                              </div>
-                            </div>
-
-                            <div className="public-pos-pts">
-                              <span className="public-pos-pts-val">{row.puntos}</span>
-                              <span className="public-pos-pts-lbl">PTS</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+              {zonasAMostrar.map((zona, zIdx) => (
+                <Fragment key={zona.id}>
+                  {isMobile && activeZoneId === null && zIdx > 0 && (
+                    <hr className="public-zona-separator" />
+                  )}
+                  <div
+                    id={`zona-${zona.id}`}
+                    className={isMobile ? 'public-zona-mobile' : 'torneo-card'}
+                    style={{ marginBottom: '2rem' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <h3 style={{ margin: 0 }}>{zona.nombre}</h3>
+                      {!isMobile && (
+                        <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
+                      )}
                     </div>
+
+                  {/* Posiciones de la zona: Mobile (mini tabla con encabezados alineados) vs Desktop (tabla tradicional) */}
+                  {isMobile ? (
+                    (() => {
+                      const zonaSinJugar = Array.isArray(zona.tabla) && zona.tabla.length > 0 && zona.tabla.every((row) => (row.pj || 0) === 0);
+
+                      return (
+                        <div className="public-tabla-wrap" style={{ marginBottom: '1.5rem' }}>
+                          <table className="public-tabla-mobile">
+                            <thead>
+                              <tr>
+                                <th className="col-pos">#</th>
+                                <th className="col-pareja">Pareja</th>
+                                {zonaSinJugar ? (
+                                  <th className="col-estado text-right" style={{ textAlign: 'right' }}>Estado</th>
+                                ) : (
+                                  <>
+                                    <th className="col-stat text-center" title="Partidos Jugados">PJ</th>
+                                    <th className="col-stat text-center" title="Partidos Ganados">PG</th>
+                                    <th className="col-stat-diff text-center" title="Diferencia de Sets">DS</th>
+                                    <th className="col-stat-diff text-center" title="Diferencia de Games">DG</th>
+                                    <th className="col-pts text-center" title="Puntos">PTS</th>
+                                  </>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {zona.tabla.map((row, idx) => {
+                                const clasifica = idx < zona.clasifican;
+                                const ds = (row.sf || 0) - (row.sc || 0);
+                                const dg = (row.gf || 0) - (row.gc || 0);
+
+                                return (
+                                  <tr key={idx} className={clasifica ? 'clasifica' : ''}>
+                                    <td className="col-pos">{idx + 1}</td>
+                                    <td className="col-pareja">
+                                      <span className="public-tabla-nombre" title={row.pareja}>
+                                        {row.pareja}
+                                      </span>
+                                    </td>
+                                    {zonaSinJugar ? (
+                                      <td className="col-estado text-right" style={{ textAlign: 'right' }}>
+                                        <span className="public-tabla-sin-jugar">Sin jugar</span>
+                                      </td>
+                                    ) : (
+                                      <>
+                                        <td className="col-stat text-center">{row.pj}</td>
+                                        <td className="col-stat text-center">{row.pg}</td>
+                                        <td className="col-stat-diff text-center">{formatDiff(ds)}</td>
+                                        <td className="col-stat-diff text-center">{formatDiff(dg)}</td>
+                                        <td className="col-pts text-center">
+                                          <span className="public-tabla-pts-val">{row.puntos}</span>
+                                        </td>
+                                      </>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          <div className="public-clasifican-legend">
+                            Clasifican {zona.clasifican}
+                          </div>
+                        </div>
+                      );
+                    })()
                   ) : (
                     <div className="table-responsive" style={{ marginBottom: '1.5rem' }}>
                       <table className="zona-table">
@@ -717,7 +756,8 @@ export default function TorneoPublic() {
                     </div>
                   )}
                 </div>
-              ))}
+              </Fragment>
+            ))}
             </section>
           )}
 
