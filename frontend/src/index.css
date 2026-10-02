@@ -3311,6 +3311,62 @@ tr:nth-child(1) .pos-number {
   margin-bottom: 1.25rem;
 }
 
+.public-horarios-active-filter {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.public-filter-active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full, 9999px);
+  padding: 0 0.25rem 0 0.75rem;
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.public-filter-chip-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.public-filter-chip-text strong {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.public-filter-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: all var(--transition-fast);
+}
+
+.public-filter-chip-remove:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.public-filter-chip-remove:active {
+  transform: scale(0.92);
+}
+
 .public-filter-chip {
   padding: 0.35rem 0.85rem;
   border-radius: var(--radius-full, 9999px);

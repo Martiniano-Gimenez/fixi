@@ -38,6 +38,19 @@ function formatDiff(val) {
   return '0';
 }
 
+function partidoPerteneceAPareja(p, filtro) {
+  if (!filtro) return true;
+  const p1Match = p.pareja1Id != null
+    ? p.pareja1Id === filtro.id
+    : Boolean(filtro.nombre && p.pareja1 === filtro.nombre);
+
+  const p2Match = p.pareja2Id != null
+    ? p.pareja2Id === filtro.id
+    : Boolean(filtro.nombre && p.pareja2 === filtro.nombre);
+
+  return p1Match || p2Match;
+}
+
 function PublicMatchCard({ partido, label = '', isMobile = false, isFav = false }) {
   const isFinalizado = partido.estado === 'FINALIZADO';
   const isEnCurso = partido.estado === 'EN_CURSO';
@@ -184,6 +197,7 @@ export default function TorneoPublic() {
   const [activeZoneId, setActiveZoneId] = useState(null); // null = "Todas"
   const [activePhase, setActivePhase] = useState('zonas'); // 'zonas' | 'eliminatoria' | 'horarios'
   const [showFinalizados, setShowFinalizados] = useState(false);
+  const [filtroParejaHorarios, setFiltroParejaHorarios] = useState(null); // { id, nombre } | null
   const [activeRoundId, setActiveRoundId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [favParejaId, setFavParejaId] = useState(null);
@@ -293,6 +307,7 @@ export default function TorneoPublic() {
     setSearchTerm('');
     setActiveRoundId(null);
     setActiveZoneId(null); // "Todas" por defecto al cambiar de categoría
+    setFiltroParejaHorarios(null);
   }, [activeCatId]);
 
   // Si la zona seleccionada deja de existir en una actualización por polling, volver a "Todas" (null)
@@ -337,6 +352,7 @@ export default function TorneoPublic() {
 
   const handleCategorySelect = (catId, e) => {
     setActiveCatId(catId);
+    setFiltroParejaHorarios(null);
     e?.currentTarget?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   };
 
@@ -346,9 +362,16 @@ export default function TorneoPublic() {
   };
 
   const handleSearchResultClick = (res) => {
+    if (activePhase === 'horarios') {
+      setFiltroParejaHorarios({ id: res.parejaId, nombre: res.parejaNombre });
+      setSearchTerm('');
+      return;
+    }
+
     setActivePhase('zonas');
     setActiveZoneId(res.zonaId);
     setSearchTerm('');
+    setFiltroParejaHorarios(null);
     setTimeout(() => {
       const chip = document.querySelector(`[data-zone-id="${res.zonaId}"]`);
       chip?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
@@ -687,12 +710,18 @@ export default function TorneoPublic() {
 
     const totalPartidos = todos.length;
 
-    // 3. Filtrar finalizados si showFinalizados es false
-    const filtrados = showFinalizados
-      ? todos
-      : todos.filter((p) => p.estado !== 'FINALIZADO');
+    // 3. Si hay filtro de pareja, filtramos los partidos
+    const partidosFiltradosPareja = filtroParejaHorarios
+      ? todos.filter((p) => partidoPerteneceAPareja(p, filtroParejaHorarios))
+      : todos;
 
-    // 4. Separar partidos EN_CURSO (van SOLO a "En juego")
+    // 4. Filtrar finalizados si no hay filtro activo y showFinalizados es false.
+    // Con filtro activo, se muestran TODOS sus partidos (finalizados incluidos).
+    const filtrados = filtroParejaHorarios
+      ? partidosFiltradosPareja
+      : (showFinalizados ? partidosFiltradosPareja : partidosFiltradosPareja.filter((p) => p.estado !== 'FINALIZADO'));
+
+    // 5. Separar partidos EN_CURSO (van SOLO a "En juego")
     const enJuego = filtrados.filter((p) => p.estado === 'EN_CURSO');
     enJuego.sort((a, b) => {
       if (a.fechaHora && b.fechaHora) {
@@ -703,7 +732,7 @@ export default function TorneoPublic() {
       return (a.posicionEnRonda ?? a.posicion ?? 0) - (b.posicionEnRonda ?? b.posicion ?? 0);
     });
 
-    // 5. Partidos restantes (no EN_CURSO)
+    // 6. Partidos restantes (no EN_CURSO)
     const restantes = filtrados.filter((p) => p.estado !== 'EN_CURSO');
 
     const conFecha = restantes.filter((p) => Boolean(p.fechaHora));
@@ -712,7 +741,7 @@ export default function TorneoPublic() {
     const sinFecha = restantes.filter((p) => !p.fechaHora);
     sinFecha.sort((a, b) => (a.posicionEnRonda ?? a.posicion ?? 0) - (b.posicionEnRonda ?? b.posicion ?? 0));
 
-    // 6. Agrupar conFecha por día calendario en America/Argentina/Cordoba
+    // 7. Agrupar conFecha por día calendario en America/Argentina/Cordoba
     const diasMap = new Map();
     conFecha.forEach((p) => {
       const info = getDiaCalendarioCordoba(p.fechaHora);
@@ -734,7 +763,7 @@ export default function TorneoPublic() {
       gruposDias: Array.from(diasMap.values()),
       sinFecha,
     };
-  }, [zonas, eliminatoria, showFinalizados, favParejaId]);
+  }, [zonas, eliminatoria, showFinalizados, favParejaId, filtroParejaHorarios]);
 
   if (loading) {
     return (
@@ -843,7 +872,10 @@ export default function TorneoPublic() {
                   role="tab"
                   aria-selected={activePhase === 'zonas'}
                   className={`public-segment-btn ${activePhase === 'zonas' ? 'active' : ''}`}
-                  onClick={() => setActivePhase('zonas')}
+                  onClick={() => {
+                    setActivePhase('zonas');
+                    setFiltroParejaHorarios(null);
+                  }}
                 >
                   <span>Zonas</span>
                   <span className="public-segment-subtext">
@@ -857,7 +889,10 @@ export default function TorneoPublic() {
                   role="tab"
                   aria-selected={activePhase === 'eliminatoria'}
                   className={`public-segment-btn ${activePhase === 'eliminatoria' ? 'active' : ''}`}
-                  onClick={() => setActivePhase('eliminatoria')}
+                  onClick={() => {
+                    setActivePhase('eliminatoria');
+                    setFiltroParejaHorarios(null);
+                  }}
                 >
                   <span>Eliminatoria</span>
                   <span className="public-segment-subtext">
@@ -871,7 +906,10 @@ export default function TorneoPublic() {
                   role="tab"
                   aria-selected={activePhase === 'horarios'}
                   className={`public-segment-btn ${activePhase === 'horarios' ? 'active' : ''}`}
-                  onClick={() => setActivePhase('horarios')}
+                  onClick={() => {
+                    setActivePhase('horarios');
+                    setFiltroParejaHorarios(null);
+                  }}
                 >
                   <span>Horarios</span>
                 </button>
@@ -1355,22 +1393,46 @@ export default function TorneoPublic() {
           {/* Cronograma Horarios (Solo en pestaña Horarios) */}
           {activePhase === 'horarios' && (
             <section className="public-horarios-section" aria-label="Cronograma de partidos">
-              {/* Barra de acciones: Toggle "Ver finalizados" */}
-              {horariosData.totalPartidos > 0 && (
+              {/* Barra de acciones: Chip de filtro activo o Toggle "Ver finalizados" */}
+              {(horariosData.totalPartidos > 0 || filtroParejaHorarios) && (
                 <div className="public-horarios-header">
-                  <button
-                    type="button"
-                    className={`public-filter-chip ${showFinalizados ? 'active' : ''}`}
-                    onClick={() => setShowFinalizados((prev) => !prev)}
-                    aria-pressed={showFinalizados}
-                  >
-                    Ver finalizados
-                  </button>
+                  {filtroParejaHorarios ? (
+                    <div className="public-horarios-active-filter">
+                      <span className="public-filter-active-chip">
+                        <span className="public-filter-chip-text" title={filtroParejaHorarios.nombre}>
+                          Mostrando: <strong>{filtroParejaHorarios.nombre}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          className="public-filter-chip-remove"
+                          onClick={() => setFiltroParejaHorarios(null)}
+                          aria-label="Quitar filtro"
+                          title="Quitar filtro"
+                        >
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`public-filter-chip ${showFinalizados ? 'active' : ''}`}
+                      onClick={() => setShowFinalizados((prev) => !prev)}
+                      aria-pressed={showFinalizados}
+                    >
+                      Ver finalizados
+                    </button>
+                  )}
                 </div>
               )}
 
               {/* Estados vacíos */}
-              {horariosData.totalPartidos === 0 ? (
+              {filtroParejaHorarios && horariosData.partidosFiltradosCount === 0 ? (
+                <div className="public-horarios-empty">
+                  <Clock size={32} className="public-horarios-empty-icon" aria-hidden="true" />
+                  <p>Esta pareja no tiene partidos programados.</p>
+                </div>
+              ) : horariosData.totalPartidos === 0 ? (
                 <div className="public-horarios-empty">
                   <Clock size={32} className="public-horarios-empty-icon" aria-hidden="true" />
                   <p>No hay partidos programados.</p>
