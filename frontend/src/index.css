@@ -2668,6 +2668,67 @@ tr:nth-child(1) .pos-number {
   word-break: break-word;
 }
 
+/* ─── Botón Favorito / Estrella en Tablas ─────────────────── */
+.public-tabla-pareja-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.public-fav-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Área táctil de 42px de ancho, limitada al alto de la fila (32px) para no solaparse con filas vecinas */
+.public-fav-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 42px;
+  height: 32px;
+  pointer-events: auto;
+}
+
+.public-fav-icon {
+  color: var(--color-text-muted);
+  fill: none;
+  transition: transform var(--transition-fast), color var(--transition-fast), fill var(--transition-fast);
+}
+
+.public-fav-btn:hover .public-fav-icon {
+  color: var(--color-text-secondary);
+}
+
+.public-fav-btn.active .public-fav-icon {
+  color: var(--color-warning);
+  fill: var(--color-warning);
+}
+
+.public-fav-btn:active .public-fav-icon {
+  transform: scale(0.88);
+}
+
+.public-search-fav-icon {
+  color: var(--color-warning);
+  fill: var(--color-warning);
+  margin-left: 0.35rem;
+  flex-shrink: 0;
+}
+
 .public-tabla-mobile .col-stat {
   width: 22px;
   font-size: 0.78rem;

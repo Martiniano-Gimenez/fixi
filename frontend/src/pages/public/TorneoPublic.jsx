@@ -376,23 +376,27 @@ export default function TorneoPublic() {
           const key = `${nombre.toLowerCase()}_${z.id}`;
           if (!seen.has(key)) {
             seen.add(key);
-            list.push({ parejaNombre: nombre, zonaId: z.id, zonaNombre: z.nombre });
+            list.push({ parejaId: row.parejaId, parejaNombre: nombre, zonaId: z.id, zonaNombre: z.nombre });
           }
         }
       });
 
       // 2. De los partidos por si hubiera parejas no listadas aún en tabla
       z.partidos?.forEach((p) => {
-        [p.pareja1, p.pareja2].forEach((pNombre) => {
-          const nombre = pNombre?.trim();
-          if (nombre) {
-            const key = `${nombre.toLowerCase()}_${z.id}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              list.push({ parejaNombre: nombre, zonaId: z.id, zonaNombre: z.nombre });
-            }
+        if (p.pareja1?.trim()) {
+          const key = `${p.pareja1.trim().toLowerCase()}_${z.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            list.push({ parejaId: p.pareja1Id, parejaNombre: p.pareja1.trim(), zonaId: z.id, zonaNombre: z.nombre });
           }
-        });
+        }
+        if (p.pareja2?.trim()) {
+          const key = `${p.pareja2.trim().toLowerCase()}_${z.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            list.push({ parejaId: p.pareja2Id, parejaNombre: p.pareja2.trim(), zonaId: z.id, zonaNombre: z.nombre });
+          }
+        }
       });
     });
 
@@ -605,7 +609,12 @@ export default function TorneoPublic() {
                     onClick={() => handleSearchResultClick(res)}
                     aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
                   >
-                    <span className="public-search-team">{res.parejaNombre}</span>
+                    <span className="public-search-team">
+                      {res.parejaNombre}
+                      {res.parejaId && favParejaId === res.parejaId && (
+                        <Star size={13} className="public-search-fav-icon" aria-label="Mi pareja favorita" />
+                      )}
+                    </span>
                     <span className="public-search-badge">{res.zonaNombre}</span>
                   </button>
                 ))
@@ -701,9 +710,25 @@ export default function TorneoPublic() {
                                   <tr key={idx} className={clasifica ? 'clasifica' : ''}>
                                     <td className="col-pos">{idx + 1}</td>
                                     <td className="col-pareja">
-                                      <span className="public-tabla-nombre" title={row.pareja}>
-                                        {row.pareja}
-                                      </span>
+                                      <div className="public-tabla-pareja-wrap">
+                                        {row.parejaId && (
+                                          <button
+                                            type="button"
+                                            className={`public-fav-btn ${favParejaId === row.parejaId ? 'active' : ''}`}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleToggleFav(row.parejaId);
+                                            }}
+                                            aria-label={favParejaId === row.parejaId ? `Quitar a ${row.pareja} de mi pareja favorita` : `Marcar a ${row.pareja} como mi pareja favorita`}
+                                            aria-pressed={favParejaId === row.parejaId}
+                                          >
+                                            <Star size={14} className="public-fav-icon" />
+                                          </button>
+                                        )}
+                                        <span className="public-tabla-nombre" title={row.pareja}>
+                                          {row.pareja}
+                                        </span>
+                                      </div>
                                     </td>
                                     {zonaSinJugar ? (
                                       <td className="col-estado text-right" style={{ textAlign: 'right' }}>
@@ -774,7 +799,23 @@ export default function TorneoPublic() {
                               >
                                 <td className="col-pos"><span className="pos-number">{idx + 1}</span></td>
                                 <td className="col-pareja team-name" title={row.pareja}>
-                                  {row.pareja}
+                                  <div className="public-tabla-pareja-wrap">
+                                    {row.parejaId && (
+                                      <button
+                                        type="button"
+                                        className={`public-fav-btn ${favParejaId === row.parejaId ? 'active' : ''}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleFav(row.parejaId);
+                                        }}
+                                        aria-label={favParejaId === row.parejaId ? `Quitar a ${row.pareja} de mi pareja favorita` : `Marcar a ${row.pareja} como mi pareja favorita`}
+                                        aria-pressed={favParejaId === row.parejaId}
+                                      >
+                                        <Star size={14} className="public-fav-icon" />
+                                      </button>
+                                    )}
+                                    <span>{row.pareja}</span>
+                                  </div>
                                 </td>
                                 <td className="col-pts text-center stat-pts">{row.puntos}</td>
                                 <td className="col-pj text-center hide-on-mobile">{row.pj}</td>
