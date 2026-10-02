@@ -1378,25 +1378,21 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   - Validación con `npm run build` exitoso (1.17s) y `npx oxlint` (0 errores, 0 warnings nuevos).
 - **Resultado final:** Experiencia sumamente ágil y personalizada para jugadores y seguidores del torneo, permitiéndoles identificar al instante cuándo juegan, contra quién y si clasificaron a la siguiente ronda, sin perderse en la inmensidad del cuadro general.
 
-### Pestaña "Horarios" en Vista Pública y Búsqueda por Pareja
-- **Problema o necesidad que motivó el trabajo:** En torneos con múltiples zonas y llaves eliminatorias, los jugadores y acompañantes debían navegar zona por zona o ronda por ronda para responder la pregunta básica: "¿Qué se está jugando ahora y qué viene después?". Además, al buscar una pareja desde la vista de horarios, el comportamiento heredado forzaba la navegación a la pestaña Zonas, perdiendo la perspectiva cronológica de los partidos de ese equipo.
-- **Qué decidí y por qué:**
+### Sesión 49 (02/10/2026) — Pestaña "Horarios" en Vista Pública y Búsqueda Interactiva por Pareja
+- **Objetivo:** Incorporar una vista cronológica completa ("Horarios") en la vista pública (`TorneoPublic.jsx`) como tercera pestaña del control segmentado, respondiendo a la necesidad de jugadores y espectadores de conocer qué partidos están en juego y qué viene a continuación, con agrupamiento por día en la zona horaria de Córdoba, toggle persistente de partidos finalizados y filtro interactivo por pareja desde el buscador sin abandonar la vista cronológica.
+- **Implementación técnica:**
   1. **Tercera Pestaña "Horarios" en Control Segmentado:** Incorporé una tercera pestaña al control segmentado sticky de la vista pública, disponible siempre que haya partidos programados en la categoría activa. Para evitar saturación en pantallas estrechas (320px–375px), el control oculta los subtextos de estado (`display: none`) mediante una media query ajustada a $\le 520\text{px}$, y se expande hasta `480px` en pantallas mayores, garantizando cero scroll horizontal o saltos de línea.
   2. **Agrupamiento y Orden Cronológico en Córdoba:** Implementé el helper `getDiaCalendarioCordoba(fechaHora)` en `dateUtils.js` utilizando `Intl.DateTimeFormat` configurado estrictamente con `timeZone: 'America/Argentina/Cordoba'`. Esto asegura que los partidos se agrupen por día de la semana (`"Viernes"`, `"Sábado"`, `"Domingo"`) sin fecha numérica y previene el bug de desfase UTC donde partidos nocturnos (ej. 23:30) caían en el día siguiente.
   3. **Partidos en Juego Destacados:** Los partidos con estado `EN_CURSO` se extraen y muestran con prioridad exclusiva al inicio de la pestaña en una sección destacada con dot pulsante verde y badge `"En juego"`, sin duplicarse en el listado del día.
   4. **Toggle de Finalizados Persistente:** Por defecto se listan partidos `EN_CURSO` y `PENDIENTE`. Un chip/toggle `"Ver finalizados"` permite incorporar los partidos concluidos, manteniendo su estado en React sin resetearse ante el ciclo de polling de 15 segundos.
   5. **Búsqueda y Filtro de Pareja en Horarios:** Al seleccionar una pareja desde el buscador mientras se está en la pestaña Horarios, la vista permanece en Horarios y aplica un filtro que muestra **todos los partidos de esa pareja** (zonas y eliminatorias, incluidos finalizados), ocultando el toggle general. Se incorpora un chip removible `"Mostrando: {Nombre} ✕"` con área táctil $\ge 40\text{px}$ y truncado elástico con ellipsis en 320px.
   6. **Coincidencia Estricta y Limpieza Determinista:** El emparejamiento compara prioritariamente por `pareja1Id` / `pareja2Id`, recurriendo al nombre solo como fallback si el partido no trae ID (sin operadores OR combinados). La limpieza del filtro se realiza de forma síncrona en los manejadores de eventos (cambio de tab o categoría), eliminando cualquier riesgo de condiciones de carrera con hooks de ciclo de vida.
-- **Implementación técnica:**
-  - Funciones utilitarias en `frontend/src/utils/dateUtils.js` (`getDiaCalendarioCordoba`).
-  - Lógica de aplanado, agrupamiento y filtrado en `useMemo` con dependencias estables en `TorneoPublic.jsx`.
-  - Reutilización de `PublicMatchCard` con etiqueta corta de origen (`label`, ej. `"Zona A"`, `"Zona B · Ronda 1"`, `"Cuartos de final"`) y acento dorado (`.fav-match`) para la pareja favorita.
-  - Estilos CSS dedicados en `index.css` utilizando variables del sistema de diseño (`--color-warning-border`, `--color-warning-bg`, `.public-horarios-*`, `.public-filter-*`).
-  - Totalmente libre de referencias a número de cancha.
+  7. **Diseño Deportivo y Consistencia Visual:** Reutilización de `PublicMatchCard` con etiqueta corta de origen (`label`, ej. `"Zona A"`, `"Zona B · Ronda 1"`, `"Cuartos de final"`), acento dorado de favorito (`.fav-match`), sección `"Horario por confirmar"` para cruces pendientes sin hora pautada y supresión absoluta de números de cancha.
 - **Validación y verificación:**
-  - Build de producción con Vite (`npm run build`) validado exitosamente.
-  - Análisis estático con `oxlint` (0 errores).
-  - Verificación de lógica horaria en Node.js para casos borde de trasnoche y zonas horarias.
+  - Build de producción con Vite (`npm run build`) validado exitosamente sin warnings.
+  - Verificación estática con `oxlint` (0 errores).
+  - Pruebas unitarias de zona horaria y cálculo de días en Node.js para casos borde de trasnoche (23:30 y 00:15).
+  - Verificación de layout responsivo en viewports móviles de 320px, 360px, 375px y monitores de escritorio.
 - **Resultado final:** Una vista cronológica impecable, fluida y mobile-first que responde al instante qué partidos están en juego y cuáles siguen a continuación, complementada con un filtro personalizado por pareja ágil y accesible.
 
 ---
