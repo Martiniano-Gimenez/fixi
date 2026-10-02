@@ -84,6 +84,7 @@ async function getTorneoPublico(req, res, next) {
         formato: z.formato,
         clasifican: z.clasifican,
         tabla: ordenarZonaParejas(z.zonaParejas, z.formato).map((zp) => ({
+          parejaId: zp.parejaId,
           pareja: `${zp.pareja.jugador1} / ${zp.pareja.jugador2}`,
           posicion: zp.posicion,
           puntos: zp.puntos,
