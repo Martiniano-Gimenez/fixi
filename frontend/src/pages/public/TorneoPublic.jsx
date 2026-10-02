@@ -336,10 +336,6 @@ export default function TorneoPublic() {
   };
 
   const handleSearchResultClick = (res) => {
-    if (res.parejaId) {
-      setFavParejaId(res.parejaId);
-      setFavPareja(slug, activeCatId, res.parejaId);
-    }
     setActivePhase('zonas');
     setActiveZoneId(res.zonaId);
     setSearchTerm('');
@@ -472,8 +468,7 @@ export default function TorneoPublic() {
       const esP1 = enCurso.pareja1Id === favParejaId;
       const rival = esP1 ? enCurso.pareja2 : enCurso.pareja1;
       const rivalTexto = rival || 'Rival por definirse';
-      const canchaTexto = enCurso.canchaNumero ? `Cancha ${enCurso.canchaNumero}` : null;
-      const meta = [canchaTexto, enCurso.faseNombre].filter(Boolean).join(' · ');
+      const meta = enCurso.faseNombre;
 
       return {
         tipo: 'en-curso',
@@ -505,13 +500,12 @@ export default function TorneoPublic() {
       const esP1 = prox.pareja1Id === favParejaId;
       const rival = esP1 ? prox.pareja2 : prox.pareja1;
       const origenRival = esP1 ? prox.origenPareja2 : prox.origenPareja1;
-      const canchaTexto = prox.canchaNumero ? `Cancha ${prox.canchaNumero}` : null;
 
       if (rival) {
         // Ambas parejas definidas
         if (prox.fechaHora) {
           const horario = formatPartidoHorario(prox.fechaHora);
-          const meta = [canchaTexto, prox.faseNombre].filter(Boolean).join(' · ');
+          const meta = prox.faseNombre;
           return {
             tipo: 'programado',
             badge: horario,
@@ -520,7 +514,7 @@ export default function TorneoPublic() {
             partidoId: prox.id,
           };
         } else {
-          const meta = [canchaTexto, prox.faseNombre].filter(Boolean).join(' · ');
+          const meta = prox.faseNombre;
           return {
             tipo: 'sin-horario',
             badge: 'Horario por confirmar',
@@ -533,10 +527,10 @@ export default function TorneoPublic() {
         // Falta rival (esperando rival en eliminatoria)
         const rivalTexto = origenRival || 'Rival por definirse';
         const horario = prox.fechaHora ? formatPartidoHorario(prox.fechaHora) : null;
-        const meta = [horario, canchaTexto, prox.faseNombre].filter(Boolean).join(' · ');
+        const meta = [horario, prox.faseNombre].filter(Boolean).join(' · ');
         return {
           tipo: 'esperando-rival',
-          badge: 'Esperando rival',
+          badge: horario || 'Esperando rival',
           rival: `vs. ${rivalTexto}`,
           meta: meta || 'Eliminatoria',
           partidoId: prox.id,
@@ -544,27 +538,36 @@ export default function TorneoPublic() {
       }
     }
 
-    // Prioridad 3: Zona finalizada y clasificado -> Buscar cruce en eliminatoria por origenPareja
+    // Prioridad 3: Zona finalizada / partidos jugados y clasificado -> Estado Clasificado
     const miZona = zonas.find((z) =>
       z.tabla?.some((row) => row.parejaId === favParejaId)
     );
 
     if (miZona && miZona.partidos?.length > 0) {
       const zonaTerminada = miZona.partidos.every((p) => p.estado === 'FINALIZADO');
+      const misPartidosDeZona = miZona.partidos.filter(
+        (p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId
+      );
+      const termineMisPartidos =
+        misPartidosDeZona.length > 0 &&
+        misPartidosDeZona.every((p) => p.estado === 'FINALIZADO');
       const filaIdx = miZona.tabla?.findIndex((r) => r.parejaId === favParejaId);
       // REGLA CRÍTICA: usar posición de la fila dentro de tabla[] ya ordenada (idx + 1 <= zona.clasifican)
       const clasifico = filaIdx !== -1 && filaIdx + 1 <= miZona.clasifican;
 
-      if (zonaTerminada && clasifico) {
+      if ((zonaTerminada || termineMisPartidos) && clasifico) {
         // Etiqueta exacta de origen generada al inicio del torneo (ej: "1° Zona A")
         const miOrigen = `${filaIdx + 1}° ${miZona.nombre}`;
 
-        // Buscar en las fases eliminatorias el partido no finalizado que tenga a mi pareja por origen
+        // Buscar en las fases eliminatorias el partido no finalizado que tenga a mi pareja por id o por origen
         let cruceEncontrado = null;
         for (const f of eliminatoria) {
           const match = f.partidos?.find(
             (p) =>
-              (p.origenPareja1 === miOrigen || p.origenPareja2 === miOrigen) &&
+              (p.pareja1Id === favParejaId ||
+                p.pareja2Id === favParejaId ||
+                p.origenPareja1 === miOrigen ||
+                p.origenPareja2 === miOrigen) &&
               p.estado !== 'FINALIZADO'
           );
           if (match) {
@@ -573,17 +576,16 @@ export default function TorneoPublic() {
           }
         }
 
+        let rivalTexto = null;
         if (cruceEncontrado) {
-          const esLado1 = cruceEncontrado.origenPareja1 === miOrigen;
-          let rivalTexto = null;
-          let rivalEsParejaFinal = false;
-
+          const esLado1 =
+            cruceEncontrado.pareja1Id === favParejaId ||
+            cruceEncontrado.origenPareja1 === miOrigen;
           const rivalNombre = esLado1 ? cruceEncontrado.pareja2 : cruceEncontrado.pareja1;
           const rivalOrigen = esLado1 ? cruceEncontrado.origenPareja2 : cruceEncontrado.origenPareja1;
 
           if (rivalNombre) {
             rivalTexto = rivalNombre;
-            rivalEsParejaFinal = true;
           } else if (rivalOrigen) {
             // Intentar resolver si la zona del rival ya terminó sus partidos (ej: "2° Zona B")
             const originMatch = rivalOrigen.match(/^(\d+)°\s+(.+)$/);
@@ -599,70 +601,28 @@ export default function TorneoPublic() {
                 const filaRival = rZona.tabla?.[rPos - 1];
                 if (filaRival?.pareja) {
                   rivalTexto = filaRival.pareja;
-                  rivalEsParejaFinal = true;
                 }
               }
             }
             if (!rivalTexto) {
               rivalTexto = rivalOrigen; // Ej: "2° Zona B"
-              rivalEsParejaFinal = false;
             }
           } else {
             rivalTexto = 'Rival por definirse';
-            rivalEsParejaFinal = false;
-          }
-
-          const canchaTexto = cruceEncontrado.canchaNumero ? `Cancha ${cruceEncontrado.canchaNumero}` : null;
-          const meta = [canchaTexto, cruceEncontrado.faseNombre].filter(Boolean).join(' · ');
-
-          if (cruceEncontrado.estado === 'EN_CURSO') {
-            return {
-              tipo: 'en-curso',
-              badge: 'Jugando ahora',
-              rival: `vs. ${rivalTexto}`,
-              meta,
-              partidoId: cruceEncontrado.id,
-            };
-          }
-
-          if (rivalEsParejaFinal) {
-            if (cruceEncontrado.fechaHora) {
-              return {
-                tipo: 'programado',
-                badge: formatPartidoHorario(cruceEncontrado.fechaHora),
-                rival: `vs. ${rivalTexto}`,
-                meta,
-                partidoId: cruceEncontrado.id,
-              };
-            } else {
-              return {
-                tipo: 'sin-horario',
-                badge: 'Horario por confirmar',
-                rival: `vs. ${rivalTexto}`,
-                meta,
-                partidoId: cruceEncontrado.id,
-              };
-            }
-          } else {
-            // Esperando rival de otra zona
-            const horario = cruceEncontrado.fechaHora ? formatPartidoHorario(cruceEncontrado.fechaHora) : null;
-            const metaEsperando = [canchaTexto, cruceEncontrado.faseNombre].filter(Boolean).join(' · ');
-            return {
-              tipo: 'esperando-rival',
-              badge: horario || 'Esperando rival',
-              rival: `vs. ${rivalTexto}`,
-              meta: metaEsperando || cruceEncontrado.faseNombre || 'Eliminatoria',
-              partidoId: cruceEncontrado.id,
-            };
           }
         }
 
-        // Fallback: Clasificó pero no hay cruce generado aún en el cuadro
+        const horario = cruceEncontrado?.fechaHora
+          ? formatPartidoHorario(cruceEncontrado.fechaHora)
+          : null;
+        const meta = [horario, cruceEncontrado?.faseNombre].filter(Boolean).join(' · ');
+
         return {
           tipo: 'clasificado',
           badge: '¡Clasificaste a eliminatorias!',
-          rival: 'Cruce por definirse',
-          meta: 'Esperando que se arme el cuadro de eliminatorias',
+          rival: rivalTexto ? `vs. ${rivalTexto}` : 'Cruce por definirse',
+          meta: meta || cruceEncontrado?.faseNombre || 'Esperando que se arme el cuadro de eliminatorias',
+          partidoId: cruceEncontrado?.id,
         };
       }
     }
