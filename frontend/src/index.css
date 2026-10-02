@@ -1196,6 +1196,7 @@ tr:nth-child(1) .pos-number {
 :root {
   --color-warning: #f59e0b;
   --color-warning-bg: rgba(245, 158, 11, 0.1);
+  --color-warning-border: rgba(245, 158, 11, 0.35);
   --color-success-bg: rgba(0, 208, 132, 0.1);
   --color-danger-bg: rgba(239, 68, 68, 0.08);
   --color-classify-bg: rgba(0, 208, 132, 0.08);
@@ -2059,6 +2060,12 @@ tr:nth-child(1) .pos-number {
   margin: 0 auto;
 }
 
+@media (min-width: 521px) {
+  .public-segmented-control {
+    max-width: 480px;
+  }
+}
+
 .public-segment-btn {
   flex: 1;
   display: flex;
@@ -2105,7 +2112,7 @@ tr:nth-child(1) .pos-number {
   font-weight: 600;
 }
 
-@media (max-width: 420px) {
+@media (max-width: 520px) {
   .public-segment-subtext {
     display: none;
   }
@@ -3078,6 +3085,16 @@ tr:nth-child(1) .pos-number {
   background: rgba(255, 255, 255, 0.015);
 }
 
+.public-page .match-card.pub-match-card.fav-match {
+  border-color: var(--color-warning-border);
+  background: linear-gradient(90deg, var(--color-warning-bg) 0%, var(--bg-card-start, #12151c) 100%);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.08);
+}
+
+.public-page .match-card.pub-match-card.en-curso.fav-match {
+  border-left: 3px solid var(--color-success);
+}
+
 /* Mini-bracket label */
 .pub-match-label {
   font-size: 0.68rem;
@@ -3281,6 +3298,114 @@ tr:nth-child(1) .pos-number {
   font-weight: 400;
   color: var(--color-text-muted);
 }
+
+/* ─── Vista Pública: Pestaña Horarios ─────────────────────────────────────── */
+.public-horarios-section {
+  margin-bottom: 3rem;
+}
+
+.public-horarios-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 1.25rem;
+}
+
+.public-filter-chip {
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-full, 9999px);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  user-select: none;
+}
+
+.public-filter-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.public-filter-chip.active {
+  background: var(--color-primary-light, rgba(0, 208, 132, 0.15));
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.public-horarios-live-section {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.public-horarios-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-success);
+  margin-bottom: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.public-horarios-day-group {
+  margin-bottom: 2rem;
+}
+
+.public-horarios-day-title {
+  font-size: var(--font-size-base, 1rem);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.public-horarios-tbd-section {
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.public-horarios-tbd-title {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.public-horarios-empty {
+  text-align: center;
+  padding: 3.5rem 1rem;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  margin: 1.5rem 0;
+}
+
+.public-horarios-empty-icon {
+  margin: 0 auto 0.75rem;
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
+.public-horarios-empty p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 
 
 
