@@ -3,6 +3,7 @@ const prisma = new PrismaClient();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const disponibilidadService = require('../src/services/disponibilidad.service');
+const partidoService = require('../src/services/partido.service');
 const { JWT_SECRET, PORT } = require('../src/config/env');
 
 const BASE_URL = `http://localhost:${PORT || 3001}/api`;
@@ -151,8 +152,24 @@ async function main() {
     }
   }
 
+  // 1.6 Org A lee partidos de Categoría A -> OK
+  const partidosA = await partidoService.getPartidosByCategoria(orgA.id, catA.id);
+  console.log(`✓ Organizador A consultó partidos de su Categoría A (${partidosA.length} partidos)`);
+
+  // 1.7 Org B intenta leer partidos de Categoría A -> DEBE LANZAR 403
+  try {
+    await partidoService.getPartidosByCategoria(orgB.id, catA.id);
+    throw new Error('FALLO DE SEGURIDAD: Org B pudo leer partidos de Categoría A ajena');
+  } catch (err) {
+    if (err.statusCode === 403) {
+      console.log('✓ [403 Bloqueado] Org B NO pudo leer partidos de Categoría A:', err.message);
+    } else {
+      throw err;
+    }
+  }
+
   // ─── PARTE 2: Pruebas a nivel de API HTTP con JWT ───────────────────
-  console.log('\n--- 2. Pruebas vía API HTTP (/api/parejas) con Tokens JWT ---');
+  console.log('\n--- 2. Pruebas vía API HTTP con Tokens JWT ---');
 
   const tokenA = jwt.sign({ id: orgA.id, email: orgA.email }, JWT_SECRET, { expiresIn: '1h' });
   const tokenB = jwt.sign({ id: orgB.id, email: orgB.email }, JWT_SECRET, { expiresIn: '1h' });
@@ -195,6 +212,26 @@ async function main() {
   console.log(`HTTP PUT Pareja A con Token A (legítimo): Status ${resPutA.status}`, dataPutA);
   if (resPutA.status !== 200) {
     throw new Error(`FALLO HTTP: Se esperaba 200 pero se recibió ${resPutA.status}`);
+  }
+
+  // 2.4 GET /api/categorias/:id/partidos con Token B sobre Categoría A -> 403 Forbidden
+  const resPartidosB = await fetch(`${BASE_URL}/categorias/${catA.id}/partidos`, {
+    headers: { Authorization: `Bearer ${tokenB}` },
+  });
+  const dataPartidosB = await resPartidosB.json();
+  console.log(`HTTP GET Partidos Cat A con Token B: Status ${resPartidosB.status}`, dataPartidosB);
+  if (resPartidosB.status !== 403) {
+    throw new Error(`FALLO DE SEGURIDAD HTTP: Se esperaba 403 pero se recibió ${resPartidosB.status}`);
+  }
+
+  // 2.5 GET /api/categorias/:id/partidos con Token A sobre Categoría A -> 200 OK
+  const resPartidosA = await fetch(`${BASE_URL}/categorias/${catA.id}/partidos`, {
+    headers: { Authorization: `Bearer ${tokenA}` },
+  });
+  const dataPartidosA = await resPartidosA.json();
+  console.log(`HTTP GET Partidos Cat A con Token A (legítimo): Status ${resPartidosA.status} (partidos: ${dataPartidosA.length})`);
+  if (resPartidosA.status !== 200) {
+    throw new Error(`FALLO HTTP: Se esperaba 200 pero se recibió ${resPartidosA.status}`);
   }
 
   // 3. Limpieza de datos de prueba

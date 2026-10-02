@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma');
+const { getCategoriaById } = require('./categoria.service');
 const { parseSlotToDate } = require('./zona.service');
 const { requireTorneoFecha } = require('../utils/dateUtils');
 
@@ -628,6 +629,8 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
 }
 
 async function getPartidosByCategoria(organizadorId, categoriaId, filters = {}) {
+  await getCategoriaById(organizadorId, categoriaId);
+
   const { zonaId, faseId } = filters;
 
   const where = { categoriaId };
