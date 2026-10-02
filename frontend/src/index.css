@@ -2120,6 +2120,37 @@ tr:nth-child(1) .pos-number {
   color: var(--color-text);
 }
 
+/* Indicador de última actualización (No sticky) */
+.public-update-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: 0.35rem;
+  transition: color var(--transition-fast);
+  line-height: 1.2;
+}
+
+.public-update-status.is-warning {
+  color: var(--color-warning);
+}
+
+.public-update-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-success);
+  flex-shrink: 0;
+  display: inline-block;
+  transition: background-color var(--transition-fast);
+}
+
+.public-update-dot.is-warning {
+  background-color: var(--color-warning);
+}
+
 /* Barra Sticky: Categorías + Control Segmentado */
 .public-sticky-nav {
   position: sticky;

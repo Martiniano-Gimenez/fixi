@@ -235,11 +235,89 @@ function TorneoPublicSkeleton() {
   );
 }
 
+function formatTiempoTranscurrido(diffSec) {
+  if (diffSec < 5) {
+    return 'Actualizado ahora';
+  }
+  if (diffSec < 35) {
+    return `Actualizado hace ${diffSec} s`;
+  }
+  if (diffSec < 60) {
+    return `Sin actualizar hace ${diffSec} s`;
+  }
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) {
+    return `Sin actualizar hace ${diffMin} min`;
+  }
+  const diffHoras = Math.floor(diffSec / 3600);
+  return `Sin actualizar hace ${diffHoras} h`;
+}
+
+function UltimaActualizacion({ timestamp }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    let timerId = null;
+
+    const startTimer = () => {
+      if (!timerId) {
+        setNow(Date.now());
+        timerId = setInterval(() => {
+          setNow(Date.now());
+        }, 1000);
+      }
+    };
+
+    const stopTimer = () => {
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        startTimer();
+      } else {
+        stopTimer();
+      }
+    };
+
+    if (document.visibilityState === 'visible') {
+      startTimer();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopTimer();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  if (!timestamp) return null;
+
+  const diffSec = Math.max(0, Math.floor((now - timestamp) / 1000));
+  const isDesactualizado = diffSec >= 35;
+  const texto = formatTiempoTranscurrido(diffSec);
+
+  return (
+    <div className={`public-update-status ${isDesactualizado ? 'is-warning' : ''}`}>
+      <span
+        className={`public-update-dot ${isDesactualizado ? 'is-warning' : ''}`}
+        aria-hidden="true"
+      />
+      <span>{texto}</span>
+    </div>
+  );
+}
+
 export default function TorneoPublic() {
   const { slug } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [activeCatId, setActiveCatId] = useState(null);
   const [activeZoneId, setActiveZoneId] = useState(null); // null = "Todas"
   const [activePhase, setActivePhase] = useState('zonas'); // 'zonas' | 'eliminatoria' | 'horarios'
@@ -314,14 +392,20 @@ export default function TorneoPublic() {
     };
   }, []);
 
+  const dataRef = useRef(null);
+  const inFlightRef = useRef(false);
   const intervalRef = useRef(null);
   const publicBracketRef = useRef(null);
 
   const fetchData = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       const result = await api.get(`/public/${slug}`);
+      dataRef.current = result;
       setData(result);
       setError(null);
+      setLastUpdated(Date.now());
 
       // Si no hay categoría seleccionada, seleccionar la primera
       if (result?.categorias?.length > 0) {
@@ -331,16 +415,30 @@ export default function TorneoPublic() {
         });
       }
     } catch (err) {
-      if (!data) setError(err.message);
+      if (!dataRef.current) setError(err.message);
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    dataRef.current = null;
     fetchData();
     intervalRef.current = setInterval(fetchData, POLL_INTERVAL);
-    return () => clearInterval(intervalRef.current);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [slug]);
 
   // Categoría activa y colecciones derivadas
@@ -877,6 +975,8 @@ export default function TorneoPublic() {
             </span>
           )}
         </div>
+
+        <UltimaActualizacion timestamp={lastUpdated} />
       </header>
 
       {/* Barra Sticky: Categorías + Control Segmentado */}
