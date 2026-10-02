@@ -500,39 +500,48 @@ export default function TorneoPublic() {
       const esP1 = prox.pareja1Id === favParejaId;
       const rival = esP1 ? prox.pareja2 : prox.pareja1;
       const origenRival = esP1 ? prox.origenPareja2 : prox.origenPareja1;
+      const rivalTexto = rival || origenRival || 'Rival por definirse';
+      const horario = prox.fechaHora ? formatPartidoHorario(prox.fechaHora) : null;
+
+      // Si el próximo partido pendiente es de fase eliminatoria -> ¡Clasificaste a eliminatorias!
+      if (prox.faseTipo === 'eliminatoria') {
+        const meta = [horario, prox.faseNombre].filter(Boolean).join(' · ');
+        return {
+          tipo: 'clasificado',
+          badge: '¡Clasificaste a eliminatorias!',
+          rival: `vs. ${rivalTexto}`,
+          meta: meta || prox.faseNombre || 'Eliminatoria',
+          partidoId: prox.id,
+        };
+      }
 
       if (rival) {
-        // Ambas parejas definidas
+        // Ambas parejas definidas en zona
         if (prox.fechaHora) {
-          const horario = formatPartidoHorario(prox.fechaHora);
-          const meta = prox.faseNombre;
           return {
             tipo: 'programado',
             badge: horario,
             rival: `vs. ${rival}`,
-            meta,
+            meta: prox.faseNombre,
             partidoId: prox.id,
           };
         } else {
-          const meta = prox.faseNombre;
           return {
             tipo: 'sin-horario',
             badge: 'Horario por confirmar',
             rival: `vs. ${rival}`,
-            meta,
+            meta: prox.faseNombre,
             partidoId: prox.id,
           };
         }
       } else {
-        // Falta rival (esperando rival en eliminatoria)
-        const rivalTexto = origenRival || 'Rival por definirse';
-        const horario = prox.fechaHora ? formatPartidoHorario(prox.fechaHora) : null;
+        // Falta rival en zona
         const meta = [horario, prox.faseNombre].filter(Boolean).join(' · ');
         return {
           tipo: 'esperando-rival',
           badge: horario || 'Esperando rival',
           rival: `vs. ${rivalTexto}`,
-          meta: meta || 'Eliminatoria',
+          meta: meta || prox.faseNombre,
           partidoId: prox.id,
         };
       }
