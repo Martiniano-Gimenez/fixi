@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { Award } from 'lucide-react';
+import { APP_NAME, APP_TAGLINE } from '../constants/app';
 
 export default function PublicLayout() {
   return (
@@ -10,7 +11,7 @@ export default function PublicLayout() {
       <footer className="public-footer">
         <p style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
           <Award size={14} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-          Pádel Torneos — Seguí el torneo en vivo
+          {APP_NAME} — {APP_TAGLINE}
         </p>
       </footer>
     </div>

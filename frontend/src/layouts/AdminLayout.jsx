@@ -1,6 +1,7 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Award, Trophy, Building2, LogOut } from 'lucide-react';
+import { APP_NAME } from '../constants/app';
 
 export default function AdminLayout() {
   const { logout } = useAuth();
@@ -23,7 +24,7 @@ export default function AdminLayout() {
         <div className="admin-header-left">
           <Link to="/admin" className="admin-logo">
             <Award size={20} strokeWidth={2} />
-            Pádel Torneos
+            {APP_NAME}
           </Link>
         </div>
 

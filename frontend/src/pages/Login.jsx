@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { Award, LogIn } from 'lucide-react';
+import { APP_NAME } from '../constants/app';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -32,7 +33,7 @@ export default function Login() {
       <div className="auth-card">
         <h1 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
           <Award size={26} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-          Pádel Torneos
+          {APP_NAME}
         </h1>
         <h2>Iniciar Sesión</h2>
         

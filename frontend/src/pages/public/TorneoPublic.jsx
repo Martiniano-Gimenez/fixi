@@ -5,6 +5,7 @@ import BracketLines from '../../components/BracketLines';
 import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X, Star, Play } from 'lucide-react';
 import { formatPartidoHorario, getDiaCalendarioCordoba } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
+import { APP_NAME, APP_TAGLINE } from '../../constants/app';
 import '../admin/EliminatoriaView.css';
 
 const POLL_INTERVAL = 15000; // 15 seconds
@@ -326,6 +327,18 @@ export default function TorneoPublic() {
   const [activeRoundId, setActiveRoundId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [favParejaId, setFavParejaId] = useState(null);
+
+  // Título de la pestaña: "{torneo} · Fixi" con datos, o "Fixi" cargando/error; restaura al desmontar
+  useEffect(() => {
+    if (data?.torneo?.nombre) {
+      document.title = `${data.torneo.nombre} · ${APP_NAME}`;
+    } else {
+      document.title = APP_NAME;
+    }
+    return () => {
+      document.title = `${APP_NAME} — ${APP_TAGLINE}`;
+    };
+  }, [data?.torneo?.nombre]);
 
   // Sincronizar favorito al cambiar de slug o categoría activa
   useEffect(() => {
