@@ -2,12 +2,35 @@ import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
-import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X } from 'lucide-react';
+import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X, Star, Play } from 'lucide-react';
 import { formatPartidoHorario } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import '../admin/EliminatoriaView.css';
 
 const POLL_INTERVAL = 15000; // 15 seconds
+
+function getFavPareja(slug, catId) {
+  if (!slug || !catId) return null;
+  try {
+    return localStorage.getItem(`miPareja:${slug}:${catId}`) || null;
+  } catch {
+    return null;
+  }
+}
+
+function setFavPareja(slug, catId, parejaId) {
+  if (!slug || !catId) return;
+  try {
+    const key = `miPareja:${slug}:${catId}`;
+    if (parejaId) {
+      localStorage.setItem(key, parejaId);
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Degradación silenciosa (ej. cookies/storage bloqueado en modo privado)
+  }
+}
 
 function formatDiff(val) {
   if (val > 0) return `+${val}`;
@@ -161,6 +184,49 @@ export default function TorneoPublic() {
   const [activePhase, setActivePhase] = useState('zonas'); // 'zonas' | 'eliminatoria'
   const [activeRoundId, setActiveRoundId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [favParejaId, setFavParejaId] = useState(null);
+
+  // Sincronizar favorito al cambiar de slug o categoría activa
+  useEffect(() => {
+    if (slug && activeCatId) {
+      setFavParejaId(getFavPareja(slug, activeCatId));
+    } else {
+      setFavParejaId(null);
+    }
+  }, [slug, activeCatId]);
+
+  const handleToggleFav = (parejaId) => {
+    if (!parejaId || !activeCatId || !slug) return;
+    const next = favParejaId === parejaId ? null : parejaId;
+    setFavParejaId(next);
+    setFavPareja(slug, activeCatId, next);
+  };
+
+  // Limpieza segura de favorito huérfano:
+  // Solo tras fetch exitoso con payload de la categoría activa ya cargado con contenido
+  useEffect(() => {
+    if (!data || !activeCatId || !favParejaId || !slug) return;
+    const cat = data.categorias?.find((c) => c.id === activeCatId);
+    if (!cat) return; // No limpiar durante cambio de categoría
+
+    const tieneZonas = Array.isArray(cat.zonas) && cat.zonas.length > 0;
+    const tieneElim = Array.isArray(cat.fasesEliminatorias) && cat.fasesEliminatorias.length > 0;
+    if (!tieneZonas && !tieneElim) return; // Categoría vacía / en preparación: no limpiar
+
+    const enZonas = cat.zonas?.some(
+      (z) =>
+        z.tabla?.some((row) => row.parejaId === favParejaId) ||
+        z.partidos?.some((p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)
+    );
+    const enElim = cat.fasesEliminatorias?.some((f) =>
+      f.partidos?.some((p) => p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)
+    );
+
+    if (!enZonas && !enElim) {
+      setFavPareja(slug, activeCatId, null);
+      setFavParejaId(null);
+    }
+  }, [data, activeCatId, favParejaId, slug]);
 
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
