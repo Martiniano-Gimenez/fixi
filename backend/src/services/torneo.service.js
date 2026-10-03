@@ -91,6 +91,20 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
 async function updateTorneo(organizadorId, torneoId, data) {
   const torneo = await getTorneoById(organizadorId, torneoId);
 
+  if (torneo.estado !== 'BORRADOR' && data.fecha !== undefined) {
+    const nuevaFecha = data.fecha ? parseFechaLocal(data.fecha) : null;
+    const fechaActual = torneo.fecha ? parseFechaLocal(torneo.fecha) : null;
+    const fechaCambio = nuevaFecha === null
+      ? fechaActual !== null
+      : (fechaActual === null || nuevaFecha.getTime() !== fechaActual.getTime());
+
+    if (fechaCambio) {
+      const error = new Error('No se puede modificar la fecha de un torneo que ya inició. Reiniciá el torneo para poder cambiarla.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
   const updateData = {};
   if (data.nombre !== undefined && data.nombre.trim()) updateData.nombre = data.nombre.trim();
   if (data.fecha !== undefined) updateData.fecha = data.fecha ? parseFechaLocal(data.fecha) : null;
