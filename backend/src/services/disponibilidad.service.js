@@ -43,8 +43,10 @@ async function getDisponibilidad(organizadorId, parejaId) {
 async function setDisponibilidad(organizadorId, parejaId, slotIds) {
   const pareja = await getParejaAndVerifyPermisos(organizadorId, parejaId);
 
-  if (pareja.categoria?.estado === 'FINALIZADO') {
-    const error = new Error('No se puede modificar la disponibilidad de una categoría finalizada.');
+  if (pareja.categoria?.estado !== 'BORRADOR') {
+    const error = new Error(
+      'La disponibilidad no se puede modificar una vez iniciada la categoría. Para cambiar un horario, reprogramá el partido.'
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -88,8 +90,10 @@ async function setDisponibilidadDoble(organizadorId, parejaId1, slotsToAdd1 = []
     getParejaAndVerifyPermisos(organizadorId, parejaId2),
   ]);
 
-  if (pareja1.categoria?.estado === 'FINALIZADO' || pareja2.categoria?.estado === 'FINALIZADO') {
-    const error = new Error('No se puede modificar la disponibilidad de una categoría finalizada.');
+  if (pareja1.categoria?.estado !== 'BORRADOR' || pareja2.categoria?.estado !== 'BORRADOR') {
+    const error = new Error(
+      'La disponibilidad no se puede modificar una vez iniciada la categoría. Para cambiar un horario, reprogramá el partido.'
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -157,10 +161,18 @@ async function removerDisponibilidadDoble(organizadorId, parejaId1, slotsToRemov
     throw error;
   }
 
-  await Promise.all([
+  const [pareja1, pareja2] = await Promise.all([
     getParejaAndVerifyPermisos(organizadorId, parejaId1),
     getParejaAndVerifyPermisos(organizadorId, parejaId2),
   ]);
+
+  if (pareja1.categoria?.estado !== 'BORRADOR' || pareja2.categoria?.estado !== 'BORRADOR') {
+    const error = new Error(
+      'La disponibilidad no se puede modificar una vez iniciada la categoría. Para cambiar un horario, reprogramá el partido.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
 
   const rem1 = Array.isArray(slotsToRemove1) ? slotsToRemove1 : [slotsToRemove1].filter(Boolean);
   const rem2 = Array.isArray(slotsToRemove2) ? slotsToRemove2 : [slotsToRemove2].filter(Boolean);
