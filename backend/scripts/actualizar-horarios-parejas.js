@@ -286,15 +286,10 @@ async function main() {
     process.exit(1);
   }
 
-  // Guard de ciclo de vida: la disponibilidad horaria solo se puede actualizar en BORRADOR
-  if (torneo.estado !== 'BORRADOR') {
-    console.error(`❌ El torneo "${torneo.nombre}" no está en BORRADOR (estado actual: ${torneo.estado}). La disponibilidad horaria queda congelada una vez iniciado el torneo.`);
-    process.exit(1);
-  }
-
-  const categoriasIniciadas = torneo.categorias.filter((c) => c.estado !== 'BORRADOR');
-  if (categoriasIniciadas.length > 0) {
-    console.error(`❌ No se puede actualizar disponibilidad: las siguientes categorías ya fueron iniciadas: ${categoriasIniciadas.map((c) => c.nombre).join(', ')}.`);
+  // Guard de ciclo de vida: la disponibilidad horaria solo se puede actualizar para categorías en BORRADOR
+  const categoriasBorrador = torneo.categorias.filter((c) => c.estado === 'BORRADOR');
+  if (categoriasBorrador.length === 0) {
+    console.error(`❌ No se puede actualizar disponibilidad: todas las categorías del torneo ya fueron iniciadas (disponibilidad congelada).`);
     process.exit(1);
   }
 
@@ -327,9 +322,20 @@ async function main() {
     const horariosRaw = String(fila[3] || '').trim();
 
     const catKey = catNombre.toLowerCase();
+    const categoria = torneo.categorias.find((c) => c.nombre.toLowerCase().trim() === catKey);
+    if (!categoria) {
+      console.warn(`⚠️ Fila ${numFila}: Categoría no encontrada "${catNombre}"`);
+      continue;
+    }
+
+    if (categoria.estado !== 'BORRADOR') {
+      console.warn(`⚠️ Fila ${numFila}: La categoría "${categoria.nombre}" ya inició (${categoria.estado}). Disponibilidad congelada (se omite).`);
+      continue;
+    }
+
     const pList = catMap.get(catKey);
     if (!pList) {
-      console.warn(`⚠️ Fila ${numFila}: Categoría no encontrada "${catNombre}"`);
+      console.warn(`⚠️ Fila ${numFila}: No se encontraron parejas para la categoría "${catNombre}"`);
       continue;
     }
 
