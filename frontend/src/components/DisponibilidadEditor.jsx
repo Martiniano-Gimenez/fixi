@@ -70,11 +70,84 @@ function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado) 
   return Array.from(result);
 }
 
+function agruparSlotsEnRangos(slotIdsDelDia, grillaDelDia = []) {
+  if (!slotIdsDelDia || slotIdsDelDia.length === 0) {
+    return 'sin horarios';
+  }
+
+  const slotsSet = new Set(slotIdsDelDia);
+  let sortedSlots = [];
+
+  if (grillaDelDia.length > 0) {
+    sortedSlots = grillaDelDia.filter((s) => slotsSet.has(s));
+    const enGrillaSet = new Set(sortedSlots);
+    for (const s of slotIdsDelDia) {
+      if (!enGrillaSet.has(s)) sortedSlots.push(s);
+    }
+  } else {
+    sortedSlots = [...slotIdsDelDia].sort((a, b) => {
+      const hA = a.split('-')[1] || '';
+      const hB = b.split('-')[1] || '';
+      return hA.localeCompare(hB);
+    });
+  }
+
+  if (sortedSlots.length === 0) return 'sin horarios';
+
+  const parseMin = (slotId) => {
+    const hora = slotId.split('-')[1] || '';
+    const [h, m] = hora.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const rangos = [];
+  let rangoStart = sortedSlots[0];
+  let rangoEnd = sortedSlots[0];
+
+  for (let i = 1; i < sortedSlots.length; i++) {
+    const prev = sortedSlots[i - 1];
+    const curr = sortedSlots[i];
+
+    let esConsecutivo = false;
+    if (grillaDelDia.length > 0) {
+      const idxPrev = grillaDelDia.indexOf(prev);
+      const idxCurr = grillaDelDia.indexOf(curr);
+      if (idxPrev !== -1 && idxCurr === idxPrev + 1) {
+        esConsecutivo = true;
+      }
+    } else {
+      const minPrev = parseMin(prev);
+      const minCurr = parseMin(curr);
+      if (minCurr === minPrev + 15) {
+        esConsecutivo = true;
+      }
+    }
+
+    if (esConsecutivo) {
+      rangoEnd = curr;
+    } else {
+      rangos.push({ start: rangoStart, end: rangoEnd });
+      rangoStart = curr;
+      rangoEnd = curr;
+    }
+  }
+  rangos.push({ start: rangoStart, end: rangoEnd });
+
+  return rangos
+    .map((r) => {
+      const hStart = r.start.split('-')[1] || '';
+      const hEnd = r.end.split('-')[1] || '';
+      return hStart === hEnd ? hStart : `${hStart} a ${hEnd}`;
+    })
+    .join(', ');
+}
+
 export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEstado, onChanged, onSlotsChanged, onClose }) {
   const [grilla, setGrilla] = useState({ viernes: [], sabado: [] });
+  const [rawSlots, setRawSlots] = useState([]);
   const [rangosViernes, setRangosViernes] = useState([]);
   const [rangosSabado, setRangosSabado] = useState([]);
-  const [loading, setLoading] = useState(categoriaEstado !== 'FINALIZADO');
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -82,7 +155,6 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
   const initialLoadedRef = useRef(false);
 
   useEffect(() => {
-    if (categoriaEstado === 'FINALIZADO') return;
     cargarDatos();
   }, [parejaId, torneoId, categoriaEstado]);
 
@@ -96,10 +168,12 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
       ]);
 
       const g = grillaData || { viernes: [], sabado: [] };
+      const s = slotsData || [];
       setGrilla(g);
+      setRawSlots(s);
 
-      const rv = reconstruirRangos(slotsData || [], g.viernes || [], 'Viernes');
-      const rs = reconstruirRangos(slotsData || [], g.sabado || [], 'Sabado');
+      const rv = reconstruirRangos(s, g.viernes || [], 'Viernes');
+      const rs = reconstruirRangos(s, g.sabado || [], 'Sabado');
 
       setRangosViernes(rv);
       setRangosSabado(rs);
@@ -120,6 +194,7 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
       const saved = await api.put(`/parejas/${parejaId}/disponibilidad`, {
         slots: slotList,
       });
+      setRawSlots(saved || []);
       setSavedSuccess(true);
       if (onChanged) onChanged(saved.length);
       if (onSlotsChanged) onSlotsChanged(saved.length);
@@ -140,33 +215,112 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
     guardarCambios(rangosViernes, newRangos);
   };
 
-  if (categoriaEstado === 'FINALIZADO') {
+  if (loading) {
+    return <div className="loading" style={{ padding: '1rem', fontSize: 'var(--font-size-xs)' }}>Cargando disponibilidad...</div>;
+  }
+
+  // Vista de SOLO LECTURA cuando la categoría ya inició (EN_CURSO) o finalizó (FINALIZADO)
+  if (categoriaEstado !== 'BORRADOR') {
+    const diasAConfigurar = [
+      { key: 'Viernes', label: 'Viernes', grillaSlots: grilla.viernes || [] },
+      { key: 'Sabado', label: 'Sábado', grillaSlots: grilla.sabado || [] },
+    ];
+    if (grilla.domingo?.length > 0 || rawSlots.some((s) => s.startsWith('Domingo-'))) {
+      diasAConfigurar.push({ key: 'Domingo', label: 'Domingo', grillaSlots: grilla.domingo || [] });
+    }
+
     return (
       <div className="disponibilidad-editor" style={{ padding: '0.25rem 0' }}>
+        {error && <div className="error-message" style={{ marginBottom: '0.75rem' }}>{error}</div>}
+
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             gap: '0.5rem',
             padding: '0.65rem 0.85rem',
-            background: 'var(--color-bg)',
+            background: 'var(--color-surface)',
             borderRadius: 'var(--radius-sm)',
             border: '1px solid var(--color-border)',
             fontSize: 'var(--font-size-xs)',
             color: 'var(--color-text-secondary)',
+            lineHeight: 1.4,
           }}
         >
-          <Info size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
-          <span>La categoría ya finalizó. No se puede modificar la disponibilidad horaria.</span>
+          <Info size={15} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--color-text-secondary)' }} />
+          <span>
+            La disponibilidad se define en la inscripción y no se modifica una vez iniciado el torneo. Si la pareja necesita otro horario, reprogramá el partido.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.75rem 0' }}>
+          {diasAConfigurar.map((d) => {
+            const slotsDia = rawSlots.filter((s) => s.startsWith(d.key + '-'));
+            const texto = agruparSlotsEnRangos(slotsDia, d.grillaSlots);
+            const tieneHorarios = slotsDia.length > 0;
+            return (
+              <div
+                key={d.key}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.55rem 0.85rem',
+                  background: 'var(--color-bg)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-border)',
+                  fontSize: 'var(--font-size-xs)',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{d.label}:</span>
+                <span
+                  style={{
+                    color: tieneHorarios ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                    fontStyle: tieneHorarios ? 'normal' : 'italic',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {texto}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: '0.5rem',
+            borderTop: '1px solid var(--color-border)',
+            fontSize: 'var(--font-size-xs)',
+            color: 'var(--color-text-secondary)',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+          }}
+        >
+          <span>
+            Total: {rawSlots.length} {rawSlots.length === 1 ? 'turno de 15 min' : 'turnos de 15 min'}
+          </span>
+          {onClose && (
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ padding: '0.25rem 0.65rem', fontSize: 'var(--font-size-xs)' }}
+              onClick={onClose}
+            >
+              Cerrar
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
-  if (loading) {
-    return <div className="loading" style={{ padding: '1rem' }}>Cargando grilla de horarios...</div>;
-  }
-
+  // Vista interactiva de edición (exclusiva de BORRADOR)
   const sinSlotsConfigurados = grilla.viernes.length === 0 && grilla.sabado.length === 0;
   const currentSlots = rangosASlots(rangosViernes, grilla.viernes, rangosSabado, grilla.sabado);
   const totalSlotsSeleccionados = currentSlots.length;
@@ -199,25 +353,6 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
               </span>
             ) : null}
           </div>
-
-          {categoriaEstado === 'EN_CURSO' && (
-            <p
-              style={{
-                margin: '-0.25rem 0 0 0',
-                fontSize: '11.5px',
-                color: 'var(--color-text-secondary)',
-                lineHeight: 1.4,
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '0.35rem',
-              }}
-            >
-              <Info size={13} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px', color: 'var(--color-text-secondary)' }} />
-              <span>
-                Actualizar esto no reprograma automáticamente los partidos ya asignados. Si la pareja necesita otro horario, usá &apos;Asignar Horario&apos; en el partido pendiente después de guardar el cambio.
-              </span>
-            </p>
-          )}
 
           {/* Grilla Viernes */}
           {grilla.viernes.length > 0 && (
