@@ -1490,6 +1490,33 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   - Tests automatizados `test-authz-disponibilidad.js` y `test-precheck-snapshot.js`: 100% exitosos con servidor activo.
 - **Resultado final:** Reducción de más de 770 líneas de código muerto, vulnerabilidades IDOR completamente selladas, guardián de JWT activo y base de código limpia y documentada.
 
+### Sesión 53 (02/10/2026) — Desacople de Edición en Cabecera de Torneo y Especialización del Modal Exclusivo de Fecha
+- **Objetivo:** Desacoplar la edición del nombre y la fecha del torneo en la cabecera de `TorneoDetail.jsx`, eliminando el botón redundante "Editar Torneo" para respetar la regla de CTA único primario y especializando el modal abierto por el chip de fecha para editar única y exclusivamente la fecha de inicio, retirando el campo de nombre y depurando código y estados no utilizados.
+- **Implementación técnica:**
+  1. **Remoción de Botón Redundante en Cabecera:** Eliminación del botón "Editar Torneo" (`Edit` + texto) de la barra de acciones superiores en `TorneoDetail.jsx`. Se preservan las acciones secundarias neutras (`btn-ghost`) y el CTA primario ("Día de Torneo" / "Iniciar Torneo"), dejando la edición del nombre canalizada a través de la edición inline rápida sobre el propio título `<h1>`.
+  2. **Especialización del Modal de Fecha:** Modificación del modal interactivo a "Editar Fecha del Torneo", retirando el campo `<input>` de nombre, el label y el estado `editNombre`. El modal conserva exclusivamente el selector de fecha y su texto de ayuda sobre slots de Viernes y Sábado.
+  3. **Payload Parcial en Submit:** En el envío del formulario se envía `{ fecha: editFecha || null }` al endpoint `PUT /api/torneos/:id`, aprovechando que `updateTorneo` en `torneo.service.js` soporta actualizaciones parciales y preserva el nombre existente sin alteraciones.
+  4. **Prevención de Auto-Focus en Mobile:** Retiro del atributo `autoFocus` del selector de fecha para evitar la apertura intrusiva del teclado o picker nativo al desplegar el modal en dispositivos móviles.
+  5. **Diseño Mobile-First en Acciones:** Ajuste de layout con `flexWrap: 'wrap'` en el pie de botones del modal (`Cancelar` / `Guardar Fecha`) y en la cabecera para pantallas $\le 480\text{px}$ y $\le 376\text{px}$.
+- **Validación y verificación:**
+  - Build de producción con Vite (`npm run build`) validado exitosamente.
+  - Verificación estática con `oxlint -D no-undef` (0 errores).
+  - Verificación visual en navegadores móviles (360px y 375px).
+- **Resultado final:** Cabecera despejada sin acciones redundantes, modal de fecha específico y ergonómico, y código frontend limpio sin variables ni estados huérfanos.
+
+### Sesión 54 (02/10/2026) — Blindaje y Guard de Fecha de Torneo Fuera de BORRADOR
+- **Objetivo:** Impedir la modificación o vaciado de la fecha de inicio de un torneo (`torneo.fecha`) una vez que ha salido del estado `BORRADOR` (`EN_CURSO` o `FINALIZADO`), protegiendo la coherencia de slots horarios, tabs de días en Día de Torneo (`TorneoEnVivo.jsx`), determinación de jornada en Modo Lluvia y scheduling dominical de playoffs, manteniendo la editabilidad plena en `BORRADOR` y restaurándola tras un reinicio de torneo.
+- **Implementación técnica:**
+  1. **Guard en Backend (`torneo.service.js`):** En `updateTorneo`, validación que consulta el estado real en la base de datos. Si `torneo.estado !== 'BORRADOR'` y `data.fecha !== undefined`, compara la fecha enviada con la actual mediante normalización determinista con `parseFechaLocal`. Si la fecha difiere o se intenta vaciar a `null`, rechaza la petición con HTTP 400 (`"No se puede modificar la fecha de un torneo que ya inició. Reiniciá el torneo para poder cambiarla."`). Si se reenvía la misma fecha o solo se modifica el nombre, se permite sin bloqueos.
+  2. **Chip de Solo Lectura en Frontend (`TorneoDetail.jsx`):** Cuando `torneo.estado !== 'BORRADOR'`, el botón interactivo de fecha se convierte en un `<span>` con dimensiones y estilos idénticos (mismo padding, border y tipografía), sin el ícono de lápiz, sin interacción de clic ni apertura de modal, y con tooltip descriptivo `title="La fecha no se puede cambiar una vez iniciado el torneo"`. En `BORRADOR` se mantiene el botón interactivo con lápiz.
+  3. **Defensa en Profundidad en Modal:** Manejo de error en el submit del modal para desplegar el mensaje de error del backend en lugar de fallar silenciosamente.
+  4. **Suite de Regresión Automatizada (`test-torneo-fecha-guard.js`):** Script de pruebas que valida exhaustivamente: `BORRADOR` (modificación y vaciado permitidos), `EN_CURSO` (bloqueo 400 ante modificación o vaciado, 200 ante misma fecha o cambio solo de nombre), `FINALIZADO` (bloqueo 400), post-reinicio a `BORRADOR` (fecha vuelve a ser editable) y multitenant (rechazo 403 a organizadores ajenos).
+- **Validación y verificación:**
+  - Ejecución de `node backend/scripts/test-torneo-fecha-guard.js` con 100% de tests aprobados.
+  - Verificación estática con `oxlint -D no-undef` en backend y frontend (0 errores).
+  - Inspección responsive en 360px y 375px sin desborde horizontal ni saltos de layout en cabecera.
+- **Resultado final:** Blindaje total de la fuente de verdad temporal del torneo post-arranque, con interfaz intuitiva que previene errores operativos sin degradar la edición rápida del nombre.
+
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
