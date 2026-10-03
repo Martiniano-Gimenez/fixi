@@ -359,88 +359,93 @@ export default function ParejasManager() {
                   {/* Botones y chips de información */}
                   <div className="pareja-chips-wrap">
                     {!isBorrador && zonaNombre && (
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          color: 'var(--color-text-secondary)',
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          borderRadius: '4px',
-                          padding: '2px 6px',
-                          letterSpacing: '0.3px',
-                          lineHeight: 1.4,
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {zonaNombre}
-                      </span>
+                      <div className="pareja-chips-fila1">
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: 'var(--color-text-secondary)',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: '4px',
+                            padding: '2px 6px',
+                            letterSpacing: '0.3px',
+                            lineHeight: 1.4,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {zonaNombre}
+                        </span>
+
+                        {partidosTotales > 0 && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              color: 'var(--color-text-secondary)',
+                              background: 'rgba(255, 255, 255, 0.03)',
+                              border: '1px solid rgba(255, 255, 255, 0.06)',
+                              borderRadius: '4px',
+                              padding: '2px 6px',
+                              lineHeight: 1.4,
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={`${partidosJugados} de ${partidosTotales} partidos de zona disputados`}
+                          >
+                            {partidosJugados}/{partidosTotales} jugados
+                          </span>
+                        )}
+                      </div>
                     )}
 
-                    {!isBorrador && zonaNombre && partidosTotales > 0 && (
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          fontSize: '11px',
-                          fontWeight: 500,
-                          color: 'var(--color-text-secondary)',
-                          background: 'rgba(255, 255, 255, 0.03)',
-                          border: '1px solid rgba(255, 255, 255, 0.06)',
-                          borderRadius: '4px',
-                          padding: '2px 6px',
-                          lineHeight: 1.4,
-                          whiteSpace: 'nowrap',
-                        }}
-                        title={`${partidosJugados} de ${partidosTotales} partidos de zona disputados`}
-                      >
-                        {partidosJugados}/{partidosTotales} jugados
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => toggleDisponibilidad(pareja.id)}
-                      className={isExpanded ? 'btn-primary' : 'btn-secondary'}
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        fontSize: 'var(--font-size-xs)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.35rem',
-                        width: 'auto',
-                        cursor: 'pointer',
-                        ...(isCritico && !isExpanded
-                          ? {
-                              background: 'var(--color-warning-bg)',
-                              borderColor: 'var(--color-warning-border)',
-                              color: 'var(--color-warning)',
-                              fontWeight: 600,
-                            }
-                          : {}),
-                      }}
-                      title={titleDisponibilidad}
-                    >
-                      {isCritico ? <AlertTriangle size={12} strokeWidth={2} /> : <Clock size={12} strokeWidth={2} />}
-                      <span>{textoDisponibilidad}</span>
-                    </button>
-
-                    {isBorrador && (
+                    <div className="pareja-chips-fila2">
                       <button
                         type="button"
-                        className="btn-danger"
-                        onClick={() => handleDelete(pareja.id)}
+                        onClick={() => toggleDisponibilidad(pareja.id)}
+                        className={isExpanded ? 'btn-primary' : 'btn-secondary'}
                         style={{
-                          padding: '0.3rem 0.5rem',
-                          background: 'transparent',
-                          borderColor: 'transparent',
+                          padding: '0.3rem 0.65rem',
+                          fontSize: 'var(--font-size-xs)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          width: 'auto',
+                          cursor: 'pointer',
+                          ...(isCritico && !isExpanded
+                            ? {
+                                background: 'var(--color-warning-bg)',
+                                borderColor: 'var(--color-warning-border)',
+                                color: 'var(--color-warning)',
+                                fontWeight: 600,
+                              }
+                            : {}),
                         }}
-                        title="Eliminar pareja"
+                        title={titleDisponibilidad}
                       >
-                        <Trash2 size={14} strokeWidth={2} style={{ color: 'var(--color-danger)' }} />
+                        {isCritico ? <AlertTriangle size={12} strokeWidth={2} /> : <Clock size={12} strokeWidth={2} />}
+                        <span>{textoDisponibilidad}</span>
                       </button>
-                    )}
+
+                      {isBorrador && (
+                        <button
+                          type="button"
+                          className="btn-danger"
+                          onClick={() => handleDelete(pareja.id)}
+                          style={{
+                            padding: '0.3rem 0.5rem',
+                            background: 'transparent',
+                            borderColor: 'transparent',
+                          }}
+                          title="Eliminar pareja"
+                        >
+                          <Trash2 size={14} strokeWidth={2} style={{ color: 'var(--color-danger)' }} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
