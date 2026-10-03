@@ -44,6 +44,12 @@ async function getParejasByCategoria(organizadorId, categoriaId) {
             select: {
               id: true,
               nombre: true,
+              formato: true,
+              _count: {
+                select: {
+                  zonaParejas: true,
+                },
+              },
               partidos: {
                 select: {
                   id: true,

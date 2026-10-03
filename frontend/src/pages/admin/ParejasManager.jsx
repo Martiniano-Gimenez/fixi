@@ -295,11 +295,21 @@ export default function ParejasManager() {
 
             const zp = pareja.zonaParejas?.[0];
             const zonaNombre = zp?.zona?.nombre;
+            const formatoZona = zp?.zona?.formato;
             const partidosZona = zp?.zona?.partidos?.filter(
               (p) => p.pareja1Id === pareja.id || p.pareja2Id === pareja.id
             ) || [];
-            const partidosTotales = partidosZona.length;
-            const partidosJugados = partidosZona.filter((p) => p.estado === 'FINALIZADO').length;
+            const partidosJugados = zp?.pj ?? partidosZona.filter((p) => p.estado === 'FINALIZADO').length;
+
+            let partidosTotales = 0;
+            if (formatoZona === 'MINI_BRACKET') {
+              partidosTotales = 2;
+            } else if (formatoZona === 'ROUND_ROBIN') {
+              const cantParejas = zp?.zona?._count?.zonaParejas || (zp?.zona?.partidos?.length === 1 ? 2 : 3);
+              partidosTotales = Math.max(1, cantParejas - 1);
+            } else {
+              partidosTotales = partidosZona.length;
+            }
 
             return (
               <div

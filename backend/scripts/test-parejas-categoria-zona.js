@@ -20,12 +20,16 @@ async function main() {
     torneoAId: null,
     catBorradorId: null,
     catIniciadaId: null,
+    catMiniBracketId: null,
     zonaId: null,
+    zonaMBId: null,
     parejaB1Id: null,
     parejaB2Id: null,
     parejaI1Id: null,
     parejaI2Id: null,
+    parejasMBIds: [],
     partidoId: null,
+    partidosMBIds: [],
   };
 
   try {
@@ -175,6 +179,101 @@ async function main() {
     });
     createdIds.partidoId = partidoFinalizado.id;
 
+    // 5. Crear Categoría EN_CURSO con 4 parejas en MINI_BRACKET
+    const catMB = await prisma.categoria.create({
+      data: {
+        nombre: 'Cat MiniBracket 4 Parejas',
+        torneoId: torneoA.id,
+        estado: 'EN_CURSO',
+      },
+    });
+    createdIds.catMiniBracketId = catMB.id;
+
+    const zonaMB = await prisma.zona.create({
+      data: {
+        categoriaId: catMB.id,
+        nombre: 'Zona MB',
+        formato: 'MINI_BRACKET',
+      },
+    });
+    createdIds.zonaMBId = zonaMB.id;
+
+    for (let i = 1; i <= 4; i++) {
+      const p = await prisma.pareja.create({
+        data: {
+          categoriaId: catMB.id,
+          jugador1: `MB ${i}A`,
+          jugador2: `MB ${i}B`,
+          orden: i,
+        },
+      });
+      createdIds.parejasMBIds.push(p.id);
+      await prisma.zonaPareja.create({
+        data: {
+          zonaId: zonaMB.id,
+          parejaId: p.id,
+          pj: 0,
+        },
+      });
+    }
+
+    // Ronda 1: P1 vs P2 (FINALIZADO), P3 vs P4 (PENDIENTE)
+    const pMB1 = await prisma.partido.create({
+      data: {
+        categoriaId: catMB.id,
+        zonaId: zonaMB.id,
+        pareja1Id: createdIds.parejasMBIds[0],
+        pareja2Id: createdIds.parejasMBIds[1],
+        ganadorId: createdIds.parejasMBIds[0],
+        estado: 'FINALIZADO',
+        posicionEnRonda: 1,
+      },
+    });
+    createdIds.partidosMBIds.push(pMB1.id);
+
+    // Actualizar pj de P1 y P2 a 1
+    await prisma.zonaPareja.updateMany({
+      where: { zonaId: zonaMB.id, parejaId: { in: [createdIds.parejasMBIds[0], createdIds.parejasMBIds[1]] } },
+      data: { pj: 1 },
+    });
+
+    const pMB2 = await prisma.partido.create({
+      data: {
+        categoriaId: catMB.id,
+        zonaId: zonaMB.id,
+        pareja1Id: createdIds.parejasMBIds[2],
+        pareja2Id: createdIds.parejasMBIds[3],
+        estado: 'PENDIENTE',
+        posicionEnRonda: 2,
+      },
+    });
+    createdIds.partidosMBIds.push(pMB2.id);
+
+    // Ronda 2: partidos con parejas null (esperando resultados)
+    const pMB3 = await prisma.partido.create({
+      data: {
+        categoriaId: catMB.id,
+        zonaId: zonaMB.id,
+        estado: 'PENDIENTE',
+        posicionEnRonda: 3,
+        origenPareja1: 'Ganador Partido 1',
+        origenPareja2: 'Ganador Partido 2',
+      },
+    });
+    createdIds.partidosMBIds.push(pMB3.id);
+
+    const pMB4 = await prisma.partido.create({
+      data: {
+        categoriaId: catMB.id,
+        zonaId: zonaMB.id,
+        estado: 'PENDIENTE',
+        posicionEnRonda: 4,
+        origenPareja1: 'Perdedor Partido 1',
+        origenPareja2: 'Perdedor Partido 2',
+      },
+    });
+    createdIds.partidosMBIds.push(pMB4.id);
+
     // ─── CASO 1: Categoría en BORRADOR ──────────────────────────────
     console.log('▶ CASO 1: Consultar parejas en categoría BORRADOR...');
     const resBorrador = await fetch(`${BASE_URL}/categorias/${catBorrador.id}/parejas`, {
@@ -214,6 +313,9 @@ async function main() {
       if (zp.zona?.nombre !== 'Zona A') {
         throw new Error(`Nombre de zona esperado 'Zona A', recibido '${zp.zona?.nombre}'`);
       }
+      if (zp.zona?.formato !== 'ROUND_ROBIN') {
+        throw new Error(`Formato de zona esperado 'ROUND_ROBIN', recibido '${zp.zona?.formato}'`);
+      }
       if (!Array.isArray(zp.zona?.partidos) || zp.zona.partidos.length !== 1) {
         throw new Error(`Esperado 1 partido en la zona, recibidos ${zp.zona?.partidos?.length}`);
       }
@@ -221,17 +323,49 @@ async function main() {
       if (partido.estado !== 'FINALIZADO') {
         throw new Error(`Estado de partido esperado FINALIZADO, recibido ${partido.estado}`);
       }
-      // Verificar filtro de partidos de la pareja
-      const partidosPareja = zp.zona.partidos.filter((match) => match.pareja1Id === p.id || match.pareja2Id === p.id);
-      const jugados = partidosPareja.filter((match) => match.estado === 'FINALIZADO').length;
-      if (partidosPareja.length !== 1 || jugados !== 1) {
-        throw new Error(`Progreso esperado 1/1 jugados para pareja ${p.id}, recibido ${jugados}/${partidosPareja.length}`);
+      // Verificar progreso según formato ROUND_ROBIN con 2 parejas
+      const cantParejas = zp.zona?._count?.zonaParejas || 2;
+      const partidosTotales = Math.max(1, cantParejas - 1);
+      const jugados = zp.pj ?? 0;
+      if (partidosTotales !== 1 || jugados !== 1) {
+        throw new Error(`Progreso esperado 1/1 jugados para pareja ${p.id}, recibido ${jugados}/${partidosTotales}`);
       }
     }
     console.log('  ✅ Categoría iniciada: zona "Zona A" y progreso 1/1 jugados correctamente verificados.');
 
-    // ─── CASO 3: Multitenant (Organizador ajeno debe recibir 403) ────
-    console.log('\n▶ CASO 3: Intento de acceso de Organizador B a categoría de Organizador A...');
+    // ─── CASO 3: Zona de 4 (MINI_BRACKET: 2 partidos totales por pareja) ───
+    console.log('\n▶ CASO 3: Consultar parejas en zona de 4 (MINI_BRACKET)...');
+    const resMB = await fetch(`${BASE_URL}/categorias/${catMB.id}/parejas`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    if (resMB.status !== 200) {
+      throw new Error(`Esperado HTTP 200 en categoría MINI_BRACKET, recibido ${resMB.status}`);
+    }
+    const parejasMB = await resMB.json();
+    if (!Array.isArray(parejasMB) || parejasMB.length !== 4) {
+      throw new Error(`Esperadas 4 parejas en MINI_BRACKET, recibidas ${parejasMB.length}`);
+    }
+    for (const p of parejasMB) {
+      const zp = p.zonaParejas[0];
+      if (zp.zona?.formato !== 'MINI_BRACKET') {
+        throw new Error(`Formato esperado MINI_BRACKET, recibido ${zp.zona?.formato}`);
+      }
+      // Calcular partidos totales según formato
+      const partidosTotales = zp.zona?.formato === 'MINI_BRACKET' ? 2 : (zp.zona?._count?.zonaParejas || 4) - 1;
+      if (partidosTotales !== 2) {
+        throw new Error(`Para MINI_BRACKET cada pareja debe mostrar 2 partidos totales, recibido ${partidosTotales}`);
+      }
+      // P1 y P2 jugaron 1 partido (1/2), P3 y P4 no jugaron (0/2)
+      const partidosJugados = zp.pj;
+      const esperadoPJ = (p.id === createdIds.parejasMBIds[0] || p.id === createdIds.parejasMBIds[1]) ? 1 : 0;
+      if (partidosJugados !== esperadoPJ) {
+        throw new Error(`Partidos jugados esperados ${esperadoPJ}, recibidos ${partidosJugados} para pareja ${p.id}`);
+      }
+    }
+    console.log('  ✅ Zona MINI_BRACKET: las 4 parejas muestran un total de 2 partidos desde el inicio (1/2 y 0/2).');
+
+    // ─── CASO 4: Multitenant (Organizador ajeno debe recibir 403) ────
+    console.log('\n▶ CASO 4: Intento de acceso de Organizador B a categoría de Organizador A...');
     const resForbidden = await fetch(`${BASE_URL}/categorias/${catIniciada.id}/parejas`, {
       headers: { Authorization: `Bearer ${tokenB}` },
     });
@@ -247,16 +381,24 @@ async function main() {
       if (createdIds.partidoId) {
         await prisma.partido.deleteMany({ where: { id: createdIds.partidoId } });
       }
+      if (createdIds.partidosMBIds.length > 0) {
+        await prisma.partido.deleteMany({ where: { id: { in: createdIds.partidosMBIds } } });
+      }
       if (createdIds.zonaId) {
         await prisma.zonaPareja.deleteMany({ where: { zonaId: createdIds.zonaId } });
         await prisma.zona.deleteMany({ where: { id: createdIds.zonaId } });
       }
-      if (createdIds.catBorradorId || createdIds.catIniciadaId) {
+      if (createdIds.zonaMBId) {
+        await prisma.zonaPareja.deleteMany({ where: { zonaId: createdIds.zonaMBId } });
+        await prisma.zona.deleteMany({ where: { id: createdIds.zonaMBId } });
+      }
+      const catIdsToDelete = [createdIds.catBorradorId, createdIds.catIniciadaId, createdIds.catMiniBracketId].filter(Boolean);
+      if (catIdsToDelete.length > 0) {
         await prisma.pareja.deleteMany({
-          where: { categoriaId: { in: [createdIds.catBorradorId, createdIds.catIniciadaId].filter(Boolean) } },
+          where: { categoriaId: { in: catIdsToDelete } },
         });
         await prisma.categoria.deleteMany({
-          where: { id: { in: [createdIds.catBorradorId, createdIds.catIniciadaId].filter(Boolean) } },
+          where: { id: { in: catIdsToDelete } },
         });
       }
       if (createdIds.torneoAId) {
