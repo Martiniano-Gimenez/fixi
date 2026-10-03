@@ -253,41 +253,59 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
           </span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.75rem 0' }}>
-          {diasAConfigurar.map((d) => {
-            const slotsDia = rawSlots.filter((s) => s.startsWith(d.key + '-'));
-            const texto = agruparSlotsEnRangos(slotsDia, d.grillaSlots);
-            const tieneHorarios = slotsDia.length > 0;
-            return (
-              <div
-                key={d.key}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.55rem 0.85rem',
-                  background: 'var(--color-bg)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--color-border)',
-                  fontSize: 'var(--font-size-xs)',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{d.label}:</span>
-                <span
+        {rawSlots.length === 0 ? (
+          <div
+            style={{
+              margin: '0.75rem 0',
+              padding: '0.75rem 0.85rem',
+              background: 'var(--color-bg)',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              fontSize: 'var(--font-size-xs)',
+              color: 'var(--color-text-secondary)',
+              fontStyle: 'italic',
+              textAlign: 'center',
+            }}
+          >
+            Sin disponibilidad declarada (se puede programar en cualquier horario)
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.75rem 0' }}>
+            {diasAConfigurar.map((d) => {
+              const slotsDia = rawSlots.filter((s) => s.startsWith(d.key + '-'));
+              const texto = agruparSlotsEnRangos(slotsDia, d.grillaSlots);
+              const tieneHorarios = slotsDia.length > 0;
+              return (
+                <div
+                  key={d.key}
                   style={{
-                    color: tieneHorarios ? 'var(--color-text)' : 'var(--color-text-secondary)',
-                    fontStyle: tieneHorarios ? 'normal' : 'italic',
-                    wordBreak: 'break-word',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.55rem 0.85rem',
+                    background: 'var(--color-bg)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                    fontSize: 'var(--font-size-xs)',
+                    flexWrap: 'wrap',
                   }}
                 >
-                  {texto}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                  <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{d.label}:</span>
+                  <span
+                    style={{
+                      color: tieneHorarios ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                      fontStyle: tieneHorarios ? 'normal' : 'italic',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {texto}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div
           style={{
@@ -303,7 +321,9 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
           }}
         >
           <span>
-            Total: {rawSlots.length} {rawSlots.length === 1 ? 'turno de 15 min' : 'turnos de 15 min'}
+            {rawSlots.length === 0
+              ? 'Disponibilidad libre (0 restricciones)'
+              : `Total: ${rawSlots.length} ${rawSlots.length === 1 ? 'turno de 15 min' : 'turnos de 15 min'}`}
           </span>
           {onClose && (
             <button
