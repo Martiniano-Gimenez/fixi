@@ -457,7 +457,7 @@ export default function TorneoDetail() {
   };
 
   const handleOpenEditTorneo = () => {
-    if (!torneo) return;
+    if (!torneo || torneo.estado !== 'BORRADOR') return;
     if (torneo.fecha) {
       const match = typeof torneo.fecha === 'string' && torneo.fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
       if (match) {
@@ -886,38 +886,67 @@ export default function TorneoDetail() {
                 flexWrap: 'wrap',
               }}
             >
-              <button
-                type="button"
-                onClick={handleOpenEditTorneo}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  background: 'transparent',
-                  border: '1px dashed var(--color-border)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '0.2rem 0.5rem',
-                  color: 'inherit',
-                  cursor: 'pointer',
-                  fontSize: 'inherit',
-                  fontFamily: 'inherit',
-                  transition: 'all 0.15s ease',
-                }}
-                className="hover-card"
-                title="Click para cambiar la fecha del torneo"
-              >
-                <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
-                <span>
-                  {torneo.fecha
-                    ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
-                        day: '2-digit',
-                        month: 'long',
-                        year: 'numeric',
-                      })
-                    : 'Fecha a confirmar'}
+              {torneo.estado === 'BORRADOR' ? (
+                <button
+                  type="button"
+                  onClick={handleOpenEditTorneo}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    background: 'transparent',
+                    border: '1px dashed var(--color-border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.2rem 0.5rem',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    fontSize: 'inherit',
+                    fontFamily: 'inherit',
+                    transition: 'all 0.15s ease',
+                  }}
+                  className="hover-card"
+                  title="Click para cambiar la fecha del torneo"
+                >
+                  <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
+                  <span>
+                    {torneo.fecha
+                      ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric',
+                        })
+                      : 'Fecha a confirmar'}
+                  </span>
+                  <Edit2 size={12} style={{ opacity: 0.7, marginLeft: '0.2rem' }} />
+                </button>
+              ) : (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    background: 'transparent',
+                    border: '1px dashed var(--color-border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.2rem 0.5rem',
+                    color: 'inherit',
+                    fontSize: 'inherit',
+                    fontFamily: 'inherit',
+                  }}
+                  title="La fecha no se puede cambiar una vez iniciado el torneo"
+                >
+                  <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
+                  <span>
+                    {torneo.fecha
+                      ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric',
+                        })
+                      : 'Fecha a confirmar'}
+                  </span>
                 </span>
-                <Edit2 size={12} style={{ opacity: 0.7, marginLeft: '0.2rem' }} />
-              </button>
+              )}
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <Layers size={15} />
                 {torneo.categorias?.length || 0} {torneo.categorias?.length === 1 ? 'categoría' : 'categorías'}
