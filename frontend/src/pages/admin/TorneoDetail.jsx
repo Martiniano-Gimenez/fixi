@@ -326,9 +326,8 @@ export default function TorneoDetail() {
   const [reiniciarModalOpen, setReiniciarModalOpen] = useState(false);
   const [reiniciando, setReiniciando] = useState(false);
 
-  // Editar Torneo y Fecha
+  // Editar Fecha del Torneo
   const [editTorneoModalOpen, setEditTorneoModalOpen] = useState(false);
-  const [editNombre, setEditNombre] = useState('');
   const [editFecha, setEditFecha] = useState('');
   const [guardandoTorneo, setGuardandoTorneo] = useState(false);
   const [editTorneoError, setEditTorneoError] = useState('');
@@ -459,7 +458,6 @@ export default function TorneoDetail() {
 
   const handleOpenEditTorneo = () => {
     if (!torneo) return;
-    setEditNombre(torneo.nombre || '');
     if (torneo.fecha) {
       const match = typeof torneo.fecha === 'string' && torneo.fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
       if (match) {
@@ -484,21 +482,16 @@ export default function TorneoDetail() {
 
   const handleGuardarTorneo = async (e) => {
     e.preventDefault();
-    if (!editNombre.trim()) {
-      setEditTorneoError('El nombre del torneo es obligatorio.');
-      return;
-    }
     setGuardandoTorneo(true);
     setEditTorneoError('');
     try {
       const updated = await api.put(`/torneos/${torneo.id}`, {
-        nombre: editNombre.trim(),
         fecha: editFecha || null,
       });
       setTorneo((prev) => ({ ...prev, ...updated }));
       setEditTorneoModalOpen(false);
     } catch (err) {
-      setEditTorneoError(err.message || 'Error al actualizar el torneo.');
+      setEditTorneoError(err.message || 'Error al actualizar la fecha del torneo.');
     } finally {
       setGuardandoTorneo(false);
     }
@@ -911,7 +904,7 @@ export default function TorneoDetail() {
                   transition: 'all 0.15s ease',
                 }}
                 className="hover-card"
-                title="Click para cambiar fecha o nombre del torneo"
+                title="Click para cambiar la fecha del torneo"
               >
                 <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
                 <span>
@@ -1190,12 +1183,12 @@ export default function TorneoDetail() {
         </div>
       )}
 
-      {/* Modal para editar torneo y fecha */}
+      {/* Modal para editar fecha del torneo */}
       {editTorneoModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '440px' }}>
             <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Edit2 size={20} style={{ color: 'var(--color-primary)' }} /> Editar Nombre y Fecha del Torneo
+              <Calendar size={20} style={{ color: 'var(--color-primary)' }} /> Editar Fecha del Torneo
             </h3>
 
             {editTorneoError && (
@@ -1205,21 +1198,6 @@ export default function TorneoDetail() {
             )}
 
             <form onSubmit={handleGuardarTorneo}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                  Nombre del torneo:
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  placeholder="Ej: Pares Agosto 2026"
-                  value={editNombre}
-                  onChange={(e) => setEditNombre(e.target.value)}
-                  style={{ width: '100%' }}
-                />
-              </div>
-
               <div style={{ marginBottom: '1.25rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
                   Fecha de inicio (Viernes):
@@ -1235,7 +1213,7 @@ export default function TorneoDetail() {
                 </p>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="btn-secondary"
@@ -1247,7 +1225,7 @@ export default function TorneoDetail() {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={guardandoTorneo || !editNombre.trim()}
+                  disabled={guardandoTorneo}
                 >
                   {guardandoTorneo ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
