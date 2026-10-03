@@ -234,6 +234,79 @@ async function main() {
     throw new Error(`FALLO HTTP: Se esperaba 200 pero se recibió ${resPartidosA.status}`);
   }
 
+  // 2.6 Validación de guard de ciclo de vida en EN_CURSO
+  await prisma.categoria.update({ where: { id: catA.id }, data: { estado: 'EN_CURSO' } });
+
+  // 2.6.1 Org A intenta modificar disponibilidad en EN_CURSO -> DEBE LANZAR 400
+  const resEnCursoA = await fetch(`${BASE_URL}/parejas/${parejaA.id}/disponibilidad`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${tokenA}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ slots: ['Viernes-16:00'] }),
+  });
+  const dataEnCursoA = await resEnCursoA.json();
+  console.log(`HTTP PUT Pareja A en EN_CURSO con Token A (debe 400): Status ${resEnCursoA.status}`, dataEnCursoA);
+  if (resEnCursoA.status !== 400) {
+    throw new Error(`FALLO GUARD: Se esperaba 400 en EN_CURSO pero se recibió ${resEnCursoA.status}`);
+  }
+
+  // 2.6.2 Org B intenta modificar Pareja A en EN_CURSO -> Multitenant prioritario DEBE LANZAR 403 (no 400)
+  const resEnCursoB = await fetch(`${BASE_URL}/parejas/${parejaA.id}/disponibilidad`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${tokenB}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ slots: ['Viernes-16:00'] }),
+  });
+  const dataEnCursoB = await resEnCursoB.json();
+  console.log(`HTTP PUT Pareja A en EN_CURSO con Token B (debe 403): Status ${resEnCursoB.status}`, dataEnCursoB);
+  if (resEnCursoB.status !== 403) {
+    throw new Error(`FALLO SEGURIDAD MULTITENANT: Se esperaba 403 pero se recibió ${resEnCursoB.status}`);
+  }
+
+  // 2.6.3 Org A lee disponibilidad en EN_CURSO -> DEBE PERMITIRSE (200 OK para solo lectura)
+  const resGetEnCursoA = await fetch(`${BASE_URL}/parejas/${parejaA.id}/disponibilidad`, {
+    headers: { Authorization: `Bearer ${tokenA}` },
+  });
+  console.log(`HTTP GET Pareja A en EN_CURSO con Token A (debe 200): Status ${resGetEnCursoA.status}`);
+  if (resGetEnCursoA.status !== 200) {
+    throw new Error(`FALLO LECTURA EN_CURSO: Se esperaba 200 pero se recibió ${resGetEnCursoA.status}`);
+  }
+
+  // 2.7 Validación de guard de ciclo de vida en FINALIZADO
+  await prisma.categoria.update({ where: { id: catA.id }, data: { estado: 'FINALIZADO' } });
+
+  // 2.7.1 Org A intenta modificar disponibilidad en FINALIZADO -> DEBE LANZAR 400
+  const resFinA = await fetch(`${BASE_URL}/parejas/${parejaA.id}/disponibilidad`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${tokenA}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ slots: ['Viernes-17:00'] }),
+  });
+  const dataFinA = await resFinA.json();
+  console.log(`HTTP PUT Pareja A en FINALIZADO con Token A (debe 400): Status ${resFinA.status}`, dataFinA);
+  if (resFinA.status !== 400) {
+    throw new Error(`FALLO GUARD: Se esperaba 400 en FINALIZADO pero se recibió ${resFinA.status}`);
+  }
+
+  // 2.7.2 Org B intenta modificar en FINALIZADO -> DEBE LANZAR 403
+  const resFinB = await fetch(`${BASE_URL}/parejas/${parejaA.id}/disponibilidad`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${tokenB}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ slots: ['Viernes-17:00'] }),
+  });
+  if (resFinB.status !== 403) {
+    throw new Error(`FALLO SEGURIDAD MULTITENANT: Se esperaba 403 pero se recibió ${resFinB.status}`);
+  }
+
   // 3. Limpieza de datos de prueba
   await prisma.slotPareja.deleteMany({ where: { parejaId: { in: [parejaA.id, parejaB.id] } } });
   await prisma.pareja.deleteMany({ where: { id: { in: [parejaA.id, parejaB.id] } } });
