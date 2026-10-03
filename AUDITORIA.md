@@ -288,7 +288,7 @@ Se analizó la consulta y el serializador en [public.controller.js](file:///c:/U
 
 ### 7.2 Secretos y credenciales en el repositorio
 
-1. **Vulnerabilidad: Archivo `.env` commiteado y trackeado en Git:**
+1. **Vulnerabilidad: Archivo `.env` commiteado y trackeado en Git:** **[CORREGIDO en commit 6647d75]**
    - **Evidencia:** `git ls-files backend/.env` retorna `backend/.env`.
    - El archivo contiene:
      ```env
@@ -299,6 +299,7 @@ Se analizó la consulta y el serializador en [public.controller.js](file:///c:/U
    - Aunque `.gitignore` incluye `.env`, Git continúa haciendo seguimiento de archivos que fueron comiteados antes de añadir la regla.
    - **Riesgo:** Alto si el repositorio se publica o comparte.
    - **Acción sugerida:** Ejecutar `git rm --cached backend/.env` y asegurar que `backend/.env.example` permanezca como única plantilla versionada.
+   - **Estado:** Corregido en commit `6647d75` (`git rm --cached backend/.env`).
 2. **Contraseñas por defecto en Seeds:**
    - [seed.js:25](file:///c:/Users/marti/Desktop/padel-torneos/backend/prisma/seed.js#L25) crea el usuario `demo@padel.com` con contraseña `123456`. Aceptable para desarrollo local, pero debe evitarse ejecutar en entornos productivos.
 
@@ -308,7 +309,7 @@ Se analizó la consulta y el serializador en [public.controller.js](file:///c:/U
 
 1. **Autenticación general:**
    - Todas las rutas administrativas en `categoria.routes.js`, `organizador.routes.js`, `pareja.routes.js`, `partido.routes.js` y `torneo.routes.js` tienen aplicado `authMiddleware` a nivel de router (`router.use(authMiddleware)`).
-2. **Vulnerabilidad de Autorización (IDOR) en `disponibilidad.controller.js`:**
+2. **Vulnerabilidad de Autorización (IDOR) en `disponibilidad.controller.js`:** **[CORREGIDO en commit d98d053]**
    - En [disponibilidad.controller.js:3-50](file:///c:/Users/marti/Desktop/padel-torneos/backend/src/controllers/disponibilidad.controller.js#L3-L50), los endpoints de disponibilidad horaria:
      - `GET /api/parejas/:id/disponibilidad`
      - `PUT /api/parejas/:id/disponibilidad`
@@ -324,6 +325,11 @@ Se analizó la consulta y el serializador en [public.controller.js](file:///c:/U
      // FALTA: if (pareja.categoria.torneo.organizadorId !== organizadorId) throw 403;
      ```
    - **Impacto:** Cualquier organizador logueado puede consultar o alterar la disponibilidad horaria de parejas de otro club si conoce o adivina el `parejaId` (que además es visible en el endpoint público).
+   - **Estado:** Corregido en commit `d98d053` (`getParejaAndVerifyPermisos` con validación de propiedad y 403/404).
+3. **Vulnerabilidad de Autorización (IDOR) en `GET /api/categorias/:id/partidos`:** **[CORREGIDO en commit ede383d]**
+   - En `partido.service.js`, `getPartidosByCategoria` recibía `organizadorId` pero no verificaba que la categoría perteneciera al organizador autenticado antes de consultar los partidos.
+   - **Impacto:** Permitía a cualquier organizador autenticado leer los partidos y slots seleccionados de parejas de categorías ajenas.
+   - **Estado:** Corregido en commit `ede383d` (validación de propiedad vía `getCategoriaById` con 403/404).
 
 ---
 
