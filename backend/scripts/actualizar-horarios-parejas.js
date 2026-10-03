@@ -286,6 +286,18 @@ async function main() {
     process.exit(1);
   }
 
+  // Guard de ciclo de vida: la disponibilidad horaria solo se puede actualizar en BORRADOR
+  if (torneo.estado !== 'BORRADOR') {
+    console.error(`❌ El torneo "${torneo.nombre}" no está en BORRADOR (estado actual: ${torneo.estado}). La disponibilidad horaria queda congelada una vez iniciado el torneo.`);
+    process.exit(1);
+  }
+
+  const categoriasIniciadas = torneo.categorias.filter((c) => c.estado !== 'BORRADOR');
+  if (categoriasIniciadas.length > 0) {
+    console.error(`❌ No se puede actualizar disponibilidad: las siguientes categorías ya fueron iniciadas: ${categoriasIniciadas.map((c) => c.nombre).join(', ')}.`);
+    process.exit(1);
+  }
+
   console.log(`  Torneo: "${torneo.nombre}" (ID: ${torneo.id})`);
   console.log(`  Club: ${torneo.organizador.nombre}`);
   console.log(`  Grilla Viernes: ${torneo.organizador.viernesInicio} a ${torneo.organizador.viernesFin}`);
