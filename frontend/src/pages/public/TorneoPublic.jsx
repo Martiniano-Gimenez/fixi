@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
 import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X, Star, Play } from 'lucide-react';
 import { formatPartidoHorario, getDiaCalendarioCordoba } from '../../utils/dateUtils';
+import { normalizeText } from '../../utils/textUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import { APP_NAME, APP_TAGLINE } from '../../constants/app';
 import '../admin/EliminatoriaView.css';
@@ -595,12 +596,8 @@ export default function TorneoPublic() {
     return list;
   }, [zonas]);
 
-  // Normalización sin acentos y case-insensitive
-  const normalize = (text) =>
-    (text || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
+  // Normalización sin acentos y case-insensitive reutilizando textUtils
+  const normalize = normalizeText;
 
   // Coincidencias de búsqueda en tiempo real
   const resultadosBusqueda = useMemo(() => {

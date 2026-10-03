@@ -1,15 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import DisponibilidadEditor from '../../components/DisponibilidadEditor';
 import { estadoLabel } from '../../utils/estadoLabels';
 import { formatHorasDisponibles } from '../../utils/dateUtils';
-import { ChevronLeft, Plus, Clock, Trash2, Users, Info, AlertTriangle } from 'lucide-react';
+import { normalizeText } from '../../utils/textUtils';
+import { ChevronLeft, Plus, Clock, Trash2, Users, Info, AlertTriangle, Search, X } from 'lucide-react';
 
 const DURACION_PARTIDO_MIN = 75;
 const MINUTOS_POR_SLOT = 15;
 const SLOTS_MINIMOS_PARTIDO = Math.ceil(DURACION_PARTIDO_MIN / MINUTOS_POR_SLOT); // 5 turnos de 15m
+const UMBRAL_BUSCADOR_PAREJAS = 8;
 
 export default function ParejasManager() {
   const { torneoId, id } = useParams();
@@ -18,6 +20,7 @@ export default function ParejasManager() {
 
   const [categoria, setCategoria] = useState(null);
   const [parejas, setParejas] = useState([]);
+  const [busqueda, setBusqueda] = useState('');
   const [jugador1, setJugador1] = useState('');
   const [jugador2, setJugador2] = useState('');
   const [loading, setLoading] = useState(true);
@@ -106,6 +109,23 @@ export default function ParejasManager() {
     );
   };
 
+  const parejasFiltradas = useMemo(() => {
+    const q = normalizeText(busqueda);
+    if (!q) return parejas;
+    return parejas.filter((p) => {
+      const j1 = p.jugador1 || '';
+      const j2 = p.jugador2 || '';
+      return (
+        normalizeText(j1).includes(q) ||
+        normalizeText(j2).includes(q) ||
+        normalizeText(`${j1} ${j2}`).includes(q) ||
+        normalizeText(`${j2} ${j1}`).includes(q)
+      );
+    });
+  }, [parejas, busqueda]);
+
+  const mostrarBuscador = parejas.length > UMBRAL_BUSCADOR_PAREJAS;
+
   if (loading) return <div className="loading">Cargando parejas...</div>;
   if (error || !categoria) return <div className="error-message">{error || 'Categoría no encontrada'}</div>;
 
@@ -185,16 +205,74 @@ export default function ParejasManager() {
   const renderListaCard = () => (
     <div className="torneo-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h3 style={{ margin: 0 }}>Parejas Inscriptas ({parejas.length})</h3>
+        <h3 style={{ margin: 0 }}>
+          Parejas Inscriptas ({busqueda.trim() ? `${parejasFiltradas.length} de ${parejas.length}` : parejas.length})
+        </h3>
       </div>
+
+      {mostrarBuscador && (
+        <div style={{ marginBottom: '1rem', width: '100%' }}>
+          <div className="public-search-box">
+            <Search size={16} className="public-search-icon" aria-hidden="true" />
+            <input
+              type="text"
+              className="public-search-input"
+              placeholder="Buscar por jugador o pareja..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              aria-label="Buscar pareja o jugador"
+            />
+            {busqueda && (
+              <button
+                type="button"
+                className="public-search-clear"
+                onClick={() => setBusqueda('')}
+                aria-label="Limpiar búsqueda"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {parejas.length === 0 ? (
         <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
           No hay parejas cargadas en esta categoría aún.
         </p>
+      ) : parejasFiltradas.length === 0 ? (
+        <div
+          style={{
+            padding: '1.5rem 1rem',
+            textAlign: 'center',
+            background: 'var(--color-bg)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--color-border)',
+          }}
+        >
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: '0 0 0.5rem 0' }}>
+            Ninguna pareja coincide con la búsqueda.
+          </p>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setBusqueda('')}
+            style={{
+              fontSize: 'var(--font-size-xs)',
+              padding: '0.35rem 0.75rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              margin: '0 auto',
+            }}
+          >
+            <X size={12} />
+            Limpiar búsqueda
+          </button>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {parejas.map((pareja, index) => {
+          {parejasFiltradas.map((pareja, index) => {
             const isExpanded = expandedParejaId === pareja.id;
             const cantSlots = pareja._cantSlots || 0;
             const isCritico = cantSlots > 0 && cantSlots < SLOTS_MINIMOS_PARTIDO;
