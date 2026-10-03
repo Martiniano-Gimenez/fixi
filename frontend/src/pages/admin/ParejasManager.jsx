@@ -315,25 +315,8 @@ export default function ParejasManager() {
                 }}
               >
                 {/* Fila principal de la pareja */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.75rem 1rem',
-                    gap: '0.6rem',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: '0.6rem',
-                      flex: '1 1 200px',
-                      minWidth: 0,
-                    }}
-                  >
+                <div className="pareja-list-row">
+                  <div className="pareja-list-info">
                     <span
                       style={{
                         color: 'var(--color-text-secondary)',
@@ -364,16 +347,7 @@ export default function ParejasManager() {
                   </div>
 
                   {/* Botones y chips de información */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      flexWrap: 'wrap',
-                      justifyContent: 'flex-end',
-                      flexShrink: 0,
-                    }}
-                  >
+                  <div className="pareja-chips-wrap">
                     {!isBorrador && zonaNombre && (
                       <span
                         style={{
