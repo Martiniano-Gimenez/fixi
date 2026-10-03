@@ -1,18 +1,17 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ResultadoModal from '../../components/ResultadoModal';
 import EditBracketMatchModal from '../../components/EditBracketMatchModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import BracketLines from '../../components/BracketLines';
-import { ChevronLeft, GitBranch, Settings, Trophy, Edit2, Plus, Clock, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, GitBranch, Settings, Clock, AlertTriangle } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
 import './EliminatoriaView.css';
 
 export default function EliminatoriaView() {
   const { torneoId, id: categoriaId } = useParams();
-  const navigate = useNavigate();
   const [categoria, setCategoria] = useState(null);
   const [fases, setFases] = useState([]);
   const [zonas, setZonas] = useState([]);

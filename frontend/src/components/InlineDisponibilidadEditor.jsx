@@ -94,7 +94,7 @@ export default function InlineDisponibilidadEditor({
       setIsSyncing(true);
       try {
         await onSaved(parejaId, saved);
-      } catch (err) {
+      } catch {
         setWarning('Turno guardado, pero no se pudo re-verificar automáticamente. Hacé clic en "Volver a verificar" abajo.');
       } finally {
         setIsSyncing(false);
@@ -132,7 +132,7 @@ export default function InlineDisponibilidadEditor({
       setIsSyncing(true);
       try {
         await onSaved(parejaId, saved);
-      } catch (err) {
+      } catch {
         setWarning('Turno guardado, pero no se pudo re-verificar automáticamente. Hacé clic en "Volver a verificar" abajo.');
       } finally {
         setIsSyncing(false);

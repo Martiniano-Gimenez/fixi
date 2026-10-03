@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import ActionsMenu from '../../components/ActionsMenu';
@@ -27,7 +27,6 @@ import {
   Edit2,
   X,
   GitBranch,
-  MoreVertical,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
 import CruceResolver from '../../components/CruceResolver';
@@ -310,7 +309,6 @@ function ordenarCategoriasPorUrgencia(conflictos) {
 
 export default function TorneoDetail() {
   const { id } = useParams();
-  const navigate = useNavigate();
 
   const [torneo, setTorneo] = useState(null);
   const [loading, setLoading] = useState(true);

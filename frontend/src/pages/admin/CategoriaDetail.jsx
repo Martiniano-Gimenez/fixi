@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft,
   Users,
@@ -24,7 +24,6 @@ import ActionsMenu from '../../components/ActionsMenu';
 
 export default function CategoriaDetail() {
   const { torneoId, id } = useParams();
-  const navigate = useNavigate();
 
   const [categoria, setCategoria] = useState(null);
   const [zonas, setZonas] = useState([]);

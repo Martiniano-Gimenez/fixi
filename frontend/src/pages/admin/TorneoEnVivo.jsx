@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   CloudRain,
@@ -18,7 +18,6 @@ import {
   Play,
   RotateCcw,
   Zap,
-  Loader2,
   GitBranch,
   Calendar,
   Layers,
@@ -436,7 +435,7 @@ export default function TorneoEnVivo() {
     );
   }
 
-  const { partidosEnCurso, partidosEnCanchaFantasma, proximosPartidos, partidosFinalizados, resumenEstado } = data;
+  const { partidosEnCanchaFantasma, partidosFinalizados } = data;
 
   // Determinar el día lógico de los cambios en feedbackReprogramacion para no mostrarlo en otros tabs
   let feedbackDiaKey = null;

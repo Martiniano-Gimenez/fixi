@@ -1,12 +1,10 @@
-export const ESTADO_TORNEO_LABELS = {
+const ESTADO_TORNEO_LABELS = {
   BORRADOR: 'Borrador',
   EN_CURSO: 'En curso',
   FINALIZADO: 'Finalizado',
 };
 
-export const ESTADO_CATEGORIA_LABELS = ESTADO_TORNEO_LABELS;
-
-export const ESTADO_PARTIDO_LABELS = {
+const ESTADO_PARTIDO_LABELS = {
   PENDIENTE: 'Pendiente',
   EN_CURSO: 'En curso',
   FINALIZADO: 'Finalizado',
