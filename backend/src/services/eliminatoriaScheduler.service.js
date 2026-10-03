@@ -462,7 +462,6 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
 
           for (let i = 0; i < toAssignThisSlot.length; i++) {
             const p = toAssignThisSlot[i];
-            const c = freeCourts[i];
 
             // Verificar si este partido específico respeta su padre directo
             if (hasParentRonda) {

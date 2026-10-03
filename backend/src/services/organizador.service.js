@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
-const { getSlotsValidosSet, generarGrillaOrganizador, calcularCasiEstrellas, calcularOpcionesResolucion, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
+const { getSlotsValidosSet, generarGrillaOrganizador, calcularOpcionesResolucion, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
 const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal } = require('../utils/dateUtils');
 const {
   iniciarCategoria,
@@ -18,7 +18,6 @@ const { programarHorariosEliminatorias } = require('./eliminatoriaScheduler.serv
 
 // Cache de planes validados en memoria para inicio determinista
 const planesCache = new Map();
-const PLAN_TTL_MS = 60 * 60 * 1000; // 1 hora con sliding TTL
 
 // Cache de sesiones de pre-check en memoria para resolución incremental estable
 const preCheckSessions = new Map();
@@ -2302,8 +2301,6 @@ module.exports = {
   getSlotsGrilla,
   preCheckInicioTorneo,
   iniciarTorneoMultiCategoria,
-  preCheckInicioTodos: preCheckInicioTorneo,
-  iniciarTodosLosTorneos: iniciarTorneoMultiCategoria,
   getPartidosSinHorarioTorneo,
   getCanchasDisponiblesTorneo,
   getEstadoEnVivo,

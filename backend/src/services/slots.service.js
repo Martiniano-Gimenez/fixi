@@ -271,7 +271,6 @@ function calcularOpcionesResolucion(slotsP1, slotsP2, slotsViables, maxResultado
 
 module.exports = {
   DURACION_PARTIDO_MIN,
-  SLOT_GRANULARIDAD_MIN,
   horaAMinutos,
   minutosAHora,
   generarSlotsDia,

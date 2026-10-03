@@ -36,29 +36,9 @@ async function getSlotsGrilla(req, res, next) {
   }
 }
 
-async function preCheckInicio(req, res, next) {
-  try {
-    const resultado = await organizadorService.preCheckInicioTodos(req.organizadorId);
-    res.json(resultado);
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function iniciarTodos(req, res, next) {
-  try {
-    const resultado = await organizadorService.iniciarTodosLosTorneos(req.organizadorId, req.body?.planId);
-    res.json(resultado);
-  } catch (error) {
-    next(error);
-  }
-}
-
 module.exports = {
   getOrganizador,
   updateOrganizador,
   simularCambioJornada,
   getSlotsGrilla,
-  preCheckInicio,
-  iniciarTodos,
 };

@@ -15,10 +15,4 @@ router.post('/simular-jornada', organizadorController.simularCambioJornada);
 // Grilla de slots del club
 router.get('/slots', organizadorController.getSlotsGrilla);
 
-// Pre-verificación de inicio simultáneo (dry-run)
-router.post('/pre-check-inicio', organizadorController.preCheckInicio);
-
-// Iniciar todos los torneos en borrador y programar horarios simultáneamente
-router.post('/iniciar-todos', organizadorController.iniciarTodos);
-
 module.exports = router;

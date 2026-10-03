@@ -1852,7 +1852,6 @@ module.exports = {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
   iniciarTorneo: iniciarCategoria,
-  iniciarTorneoConDisponibilidad: iniciarCategoriaConDisponibilidad,
   asignarHorariosAutomatico,
   getZonasByCategoria,
   limpiarResultadosZonas,
