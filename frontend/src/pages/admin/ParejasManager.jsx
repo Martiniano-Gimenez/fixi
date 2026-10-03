@@ -215,6 +215,14 @@ export default function ParejasManager() {
                 : `${detalleTurnos} (${isBorrador ? 'clic para configurar' : 'clic para ver'})`;
             }
 
+            const zp = pareja.zonaParejas?.[0];
+            const zonaNombre = zp?.zona?.nombre;
+            const partidosZona = zp?.zona?.partidos?.filter(
+              (p) => p.pareja1Id === pareja.id || p.pareja2Id === pareja.id
+            ) || [];
+            const partidosTotales = partidosZona.length;
+            const partidosJugados = partidosZona.filter((p) => p.estado === 'FINALIZADO').length;
+
             return (
               <div
                 key={pareja.id}
@@ -235,16 +243,24 @@ export default function ParejasManager() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '0.75rem 1rem',
-                    gap: '0.5rem',
+                    gap: '0.6rem',
+                    flexWrap: 'wrap',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: '0.6rem',
+                      flex: '1 1 200px',
+                      minWidth: 0,
+                    }}
+                  >
                     <span
                       style={{
                         color: 'var(--color-text-secondary)',
                         fontSize: 'var(--font-size-xs)',
                         fontWeight: 700,
-                        width: '1.5rem',
                         flexShrink: 0,
                       }}
                     >
@@ -254,17 +270,73 @@ export default function ParejasManager() {
                       style={{
                         fontWeight: 600,
                         fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text)',
+                        minWidth: 0,
+                        wordBreak: 'break-word',
+                        lineHeight: 1.35,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
                       }}
+                      title={`${pareja.jugador1} / ${pareja.jugador2}`}
                     >
                       {pareja.jugador1} / {pareja.jugador2}
                     </span>
                   </div>
 
-                  {/* Botones de acción */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                  {/* Botones y chips de información */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      flexWrap: 'wrap',
+                      justifyContent: 'flex-end',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {!isBorrador && zonaNombre && (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'var(--color-text-secondary)',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '4px',
+                          padding: '2px 6px',
+                          letterSpacing: '0.3px',
+                          lineHeight: 1.4,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {zonaNombre}
+                      </span>
+                    )}
+
+                    {!isBorrador && zonaNombre && partidosTotales > 0 && (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          fontSize: '11px',
+                          fontWeight: 500,
+                          color: 'var(--color-text-secondary)',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          border: '1px solid rgba(255, 255, 255, 0.06)',
+                          borderRadius: '4px',
+                          padding: '2px 6px',
+                          lineHeight: 1.4,
+                          whiteSpace: 'nowrap',
+                        }}
+                        title={`${partidosJugados} de ${partidosTotales} partidos de zona disputados`}
+                      >
+                        {partidosJugados}/{partidosTotales} jugados
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => toggleDisponibilidad(pareja.id)}

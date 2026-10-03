@@ -38,6 +38,24 @@ async function getParejasByCategoria(organizadorId, categoriaId) {
     where: { categoriaId },
     include: {
       slotsSeleccionados: true,
+      zonaParejas: {
+        include: {
+          zona: {
+            select: {
+              id: true,
+              nombre: true,
+              partidos: {
+                select: {
+                  id: true,
+                  estado: true,
+                  pareja1Id: true,
+                  pareja2Id: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
     orderBy: { orden: 'asc' },
   });
