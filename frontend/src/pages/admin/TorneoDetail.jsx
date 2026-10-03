@@ -756,6 +756,8 @@ export default function TorneoDetail() {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '0.4rem',
+                      wordBreak: 'break-word',
+                      maxWidth: '100%',
                     }}
                     onClick={handleStartEditingNombre}
                     title="Hacé click para cambiar el nombre del torneo"
@@ -998,6 +1000,7 @@ export default function TorneoDetail() {
                   alignItems: 'center',
                   gap: '0.4rem',
                   width: 'auto',
+                  maxWidth: '100%',
                   textDecoration: 'none',
                   background: 'linear-gradient(135deg, var(--color-primary), #00b372)',
                   boxShadow: '0 2px 8px rgba(0, 208, 132, 0.3)',
@@ -1015,7 +1018,7 @@ export default function TorneoDetail() {
                 className="btn-primary"
                 onClick={() => handlePreCheckInicio()}
                 disabled={verificandoInicio}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', maxWidth: '100%' }}
               >
                 {verificandoInicio ? (
                   <>
@@ -1043,20 +1046,19 @@ export default function TorneoDetail() {
       )}
 
       {/* Listado de Categorías */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div className="torneo-section-header">
         <div>
-          <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)', display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}>
             <Layers size={22} style={{ color: 'var(--color-primary)' }} />
-            Categorías del Torneo
+            Categorías
           </h2>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             type="button"
-            className="btn-primary"
+            className="btn-primary torneo-nueva-cat-btn"
             onClick={() => setNuevaCatModalOpen(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
           >
             <Plus size={16} /> Nueva Categoría
           </button>
@@ -1114,7 +1116,7 @@ export default function TorneoDetail() {
                       display: 'flex',
                       alignItems: 'center',
                       flexWrap: 'wrap',
-                      gap: '1rem',
+                      gap: '0.75rem',
                       color: 'var(--color-text-secondary)',
                       fontSize: 'var(--font-size-sm)',
                       marginTop: '0.75rem',
@@ -1153,29 +1155,10 @@ export default function TorneoDetail() {
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingTop: '0.75rem',
-                    borderTop: '1px solid var(--color-border)',
-                    gap: '0.5rem',
-                  }}
-                >
+                <div className="torneo-card-actions">
                   <Link
                     to={`/admin/torneos/${torneo.id}/categorias/${cat.id}`}
                     className="btn-outline"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      flex: 1,
-                      justifyContent: 'center',
-                      padding: '0.45rem 0.75rem',
-                      fontSize: 'var(--font-size-sm)',
-                      textDecoration: 'none',
-                    }}
                   >
                     <Settings size={15} /> Administrar
                   </Link>
@@ -1183,14 +1166,6 @@ export default function TorneoDetail() {
                   <Link
                     to={`/admin/torneos/${torneo.id}/categorias/${cat.id}/eliminatoria`}
                     className="btn-secondary"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      padding: '0.45rem 0.65rem',
-                      fontSize: 'var(--font-size-sm)',
-                      textDecoration: 'none',
-                    }}
                     title="Ver Bracket Eliminatorio"
                   >
                     <GitBranch size={15} /> Bracket
