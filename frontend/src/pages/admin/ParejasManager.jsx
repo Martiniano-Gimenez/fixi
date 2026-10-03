@@ -4,7 +4,12 @@ import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import DisponibilidadEditor from '../../components/DisponibilidadEditor';
 import { estadoLabel } from '../../utils/estadoLabels';
-import { ChevronLeft, Plus, Clock, Trash2, Users, Info } from 'lucide-react';
+import { formatHorasDisponibles } from '../../utils/dateUtils';
+import { ChevronLeft, Plus, Clock, Trash2, Users, Info, AlertTriangle } from 'lucide-react';
+
+const DURACION_PARTIDO_MIN = 75;
+const MINUTOS_POR_SLOT = 15;
+const SLOTS_MINIMOS_PARTIDO = Math.ceil(DURACION_PARTIDO_MIN / MINUTOS_POR_SLOT); // 5 turnos de 15m
 
 export default function ParejasManager() {
   const { torneoId, id } = useParams();
@@ -192,6 +197,23 @@ export default function ParejasManager() {
           {parejas.map((pareja, index) => {
             const isExpanded = expandedParejaId === pareja.id;
             const cantSlots = pareja._cantSlots || 0;
+            const isCritico = cantSlots > 0 && cantSlots < SLOTS_MINIMOS_PARTIDO;
+
+            let textoDisponibilidad = '';
+            let titleDisponibilidad = '';
+
+            if (cantSlots === 0) {
+              textoDisponibilidad = isBorrador ? 'Sin cargar' : 'Sin restricción';
+              titleDisponibilidad = isBorrador
+                ? 'Sin disponibilidad cargada (clic para configurar)'
+                : 'Sin restricción de horario (disponible para todo el torneo)';
+            } else {
+              textoDisponibilidad = formatHorasDisponibles(cantSlots);
+              const detalleTurnos = `${cantSlots} turno${cantSlots === 1 ? '' : 's'} de 15 min`;
+              titleDisponibilidad = isCritico
+                ? `${detalleTurnos} · Disponibilidad insuficiente para un partido (mínimo 75 min)`
+                : `${detalleTurnos} (${isBorrador ? 'clic para configurar' : 'clic para ver'})`;
+            }
 
             return (
               <div
@@ -254,15 +276,20 @@ export default function ParejasManager() {
                         alignItems: 'center',
                         gap: '0.35rem',
                         width: 'auto',
+                        cursor: 'pointer',
+                        ...(isCritico && !isExpanded
+                          ? {
+                              background: 'var(--color-warning-bg)',
+                              borderColor: 'var(--color-warning-border)',
+                              color: 'var(--color-warning)',
+                              fontWeight: 600,
+                            }
+                          : {}),
                       }}
-                      title={isBorrador ? 'Configurar disponibilidad horaria' : 'Ver disponibilidad horaria (solo lectura)'}
+                      title={titleDisponibilidad}
                     >
-                      <Clock size={12} strokeWidth={2} />
-                      <span>
-                        {cantSlots > 0
-                          ? `${cantSlots} turno${cantSlots > 1 ? 's' : ''}`
-                          : 'Sin horario'}
-                      </span>
+                      {isCritico ? <AlertTriangle size={12} strokeWidth={2} /> : <Clock size={12} strokeWidth={2} />}
+                      <span>{textoDisponibilidad}</span>
                     </button>
 
                     {isBorrador && (

@@ -174,9 +174,6 @@ export function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
 /**
  * Convierte una hora en formato "HH:MM" a minutos transcurridos desde el inicio de la jornada lógica.
  * En torneos de pádel, las horas de madrugada (00:00 a 05:59) corresponden a la trasnoche
- * de la jornada anterior, por lo que se les suma 24 horas (1440 minutos) para ubicarlas
- * cronológicamente al final del día (después de las 23:45) y no al inicio.
- *
  * @param {string} hora - Formato "HH:MM"
  * @returns {number} Minutos cronológicos acumulados en la jornada
  */
@@ -188,4 +185,27 @@ export function minutosCronologicosJornada(hora) {
   const effectiveHour = hourNum < 6 ? hourNum + 24 : hourNum;
   return effectiveHour * 60 + minNum;
 }
+
+/**
+ * Formatea una cantidad de turnos (slots de 15 minutos) a formato amigable en horas/minutos:
+ * - 20 turnos (300 min) -> "5 h"
+ * - 5 turnos (75 min)   -> "1 h 15 min"
+ * - 4 turnos (60 min)   -> "1 h"
+ * - 1 turno (15 min)    -> "15 min"
+ * @param {number} cantSlots
+ * @returns {string}
+ */
+export function formatHorasDisponibles(cantSlots) {
+  const totalMin = (cantSlots || 0) * 15;
+  if (totalMin < 60) {
+    return `${totalMin} min`;
+  }
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (m === 0) {
+    return `${h} h`;
+  }
+  return `${h} h ${m} min`;
+}
+
 
