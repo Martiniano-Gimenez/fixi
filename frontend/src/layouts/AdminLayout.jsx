@@ -22,9 +22,9 @@ export default function AdminLayout() {
     <div className="admin-layout">
       <header className="admin-header">
         <div className="admin-header-left">
-          <Link to="/admin" className="admin-logo">
-            <Award size={20} strokeWidth={2} />
-            {APP_NAME}
+          <Link to="/admin" className="admin-logo" aria-label={APP_NAME}>
+            <Award size={20} strokeWidth={2} className="admin-logo-icon" />
+            <span className="admin-logo-text">{APP_NAME}</span>
           </Link>
         </div>
 
@@ -33,22 +33,28 @@ export default function AdminLayout() {
             to="/admin"
             className={`admin-nav-link${isTorneos ? ' active' : ''}`}
           >
-            <Trophy size={16} strokeWidth={2} />
-            Mis Torneos
+            <Trophy size={16} strokeWidth={2} className="admin-nav-icon" />
+            <span>Mis Torneos</span>
           </Link>
           <Link
             to="/admin/club"
             className={`admin-nav-link${isClub ? ' active' : ''}`}
           >
-            <Building2 size={16} strokeWidth={2} />
-            Mi Club
+            <Building2 size={16} strokeWidth={2} className="admin-nav-icon" />
+            <span>Mi Club</span>
           </Link>
         </nav>
 
         <div className="admin-nav-actions">
-          <button onClick={handleLogout} className="btn-logout">
-            <LogOut size={14} strokeWidth={2} />
-            Cerrar sesión
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="btn-logout"
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+          >
+            <LogOut size={16} strokeWidth={2} />
+            <span className="btn-logout-text">Cerrar sesión</span>
           </button>
         </div>
       </header>
