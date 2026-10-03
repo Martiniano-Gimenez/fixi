@@ -78,7 +78,7 @@ organizadores que hoy llevan todo en papel.
 
 ## Funcionalidades implementadas
 - Jerarquía completa: Club $\rightarrow$ Torneo (Evento) $\rightarrow$ Categorías $\rightarrow$ Parejas/Zonas/Partidos/Eliminatorias.
-- CRUD completo de torneos y categorías (crear, editar nombre/fecha vía modal interactivo, eliminar y reiniciar a borrador, reseteando flags de `resolucionManual` en `Pareja`, overrides de lluvia `canchasDisponiblesOverride`/`overrideActivoDesde` en `Torneo` y eliminando sesiones activas de pre-check).
+- CRUD completo de torneos y categorías (crear, editar nombre inline y fecha vía modal dedicado, eliminar y reiniciar a borrador, reseteando flags de `resolucionManual` en `Pareja`, overrides de lluvia `canchasDisponiblesOverride`/`overrideActivoDesde` en `Torneo` y eliminando sesiones activas de pre-check).
 - Gestión de Club / Organizador (`/admin/club`): edición de canchas totales y horarios de apertura con advertencia de impacto.
 - Carga de disponibilidad por pareja mediante **Slider de Rango Horario dual (15 min)** (`RangeSliderDia`, `RangeSliderGroup` y `DisponibilidadEditor`): selectores de manijas desde-hasta con snap de 15 min, soporte para múltiples rangos independientes por día (gaps/huecos en el medio), indicador de trasnoche y algoritmo de reconstrucción con expansión de slots de 75 min previos a ventanas continuas completas.
 - Generación de zonas por sorteo aleatorio (Fisher-Yates) o por compatibilidad horaria por categoría.
@@ -345,6 +345,10 @@ organizadores que hoy llevan todo en papel.
     - CSS: eliminación de más de 300 líneas de selectores obsoletos en `index.css` (navegación lateral antigua `.sidebar-nav`, grillas residuales, modales viejos y estilos de posiciones mobile previos), preservando intactos todos los selectores dinámicos de tarjetas de partidos y clases del sistema de diseño.
     - Validación estática estricta con `oxlint -D no-undef` (0 errores en frontend y backend) y punto de restauración previo preservado en el tag `pre-limpieza`.
 - **Configuración de Red Local LAN:** Servidor de desarrollo Vite configurado con `host: true` en `vite.config.js` para auditorías y pruebas directas en tiempo real desde dispositivos móviles en la red Wi-Fi local.
+- **Refactor y Desacople de Edición en Cabecera de Torneo (`TorneoDetail.jsx`):**
+  - **Edición Inline Exclusiva para el Nombre:** El título del torneo se edita de forma inline en el `<h1>` con atajos de teclado (Enter/Esc) y persistencia reactiva, retirando el acceso redundante "Editar Torneo" de la botonera de acciones principales para respetar la regla de CTA primario único ("Día de Torneo" o "Iniciar Torneo") y consolidar las acciones secundarias en `.btn-ghost`.
+  - **Modal Especializado para la Fecha del Torneo:** El modal de cabecera quedó dedicado exclusivamente a la edición de la fecha de inicio (`torneo.fecha`), accesible al hacer clic en el botón de fecha/calendario en los metadatos. Se eliminó el campo de nombre del formulario y el estado `editNombre`, enviando un payload parcial `{ fecha: editFecha || null }` a `PUT /api/torneos/:id` sin riesgo de pisar el nombre.
+  - **Diseño Mobile-First y Ergonomía Táctil:** Retiro de autofocus en el input de fecha para evitar la apertura abrupta del selector nativo en celulares (≤ 480px y ≤ 376px), y botones de acción con wrap fluido sin desbordes horizontales.
 
 ## Reglas de trabajo
 - Trabajar en ramas por feature (`feature/nombre-ticket`), nunca directo a main.
