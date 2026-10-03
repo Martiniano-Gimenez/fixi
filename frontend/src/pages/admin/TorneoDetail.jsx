@@ -937,15 +937,6 @@ export default function TorneoDetail() {
             <button
               type="button"
               className="btn-ghost"
-              onClick={handleOpenEditTorneo}
-              title="Editar nombre y fecha del torneo"
-            >
-              <Edit2 size={15} /> Editar Torneo
-            </button>
-
-            <button
-              type="button"
-              className="btn-ghost"
               onClick={handleCopyLink}
               title="Copiar link público para compartir con jugadores"
             >
