@@ -1677,16 +1677,16 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 - **Validación y verificación:**
   - `npm test` ejecutado bajo `$env:TZ='UTC'` y sin TZ en Windows: 20/20 suites pasaron exitosamente en ambas corridas, con `test-scheduler-backfill-regression.js` pasando al 100%.
   - Simulación de entorno sin soporte (`getTimezoneOffset() !== 180`): proceso abortó de forma inmediata con el mensaje esperado.
-- **Resultado final:** Backend completamente blindado contra discrepancias de zona horaria entre desarrollo local y servidores de hosting en la nube.
+- **Resultado final:** El blindaje cubre estrictamente el proceso del backend, garantizando que el servidor, los tests y las herramientas operen de manera idéntica independientemente de la zona horaria del sistema operativo o contenedor de hosting. El frontend todavía NO está cubierto: el panel de administración formatea fechas utilizando la zona horaria local del navegador y el `diaKey` del Modo Lluvia se calcula en el frontend con su propia copia de `getDiaCalendarioConTrasnoche` (pendiente de abordarse en una tarea aparte).
 
 ---
 
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 62 sesiones de trabajo, sumando un aproximado total de entre 140.5 y 169 horas de programación, refactorización, depuración y testeo.
+El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 62 sesiones de trabajo, sumando un aproximado total de entre 140.5 y 169 horas de programación, refactorización, depuración y testeo (las horas indicadas por sesión corresponden a estimaciones aproximadas de esfuerzo, no a mediciones cronometradas exactas).
 
-| Sesión | Tiempo estimado | Temas cubiertos |
-|--------|-----------------|------------------|
+| Sesión | Tiempo estimado (estimación, no medición) | Temas cubiertos |
+|--------|-------------------------------------------|------------------|
 | **1** | ~2 horas | CRUD Base, Generación algorítmica de Zonas, Tablas de Posiciones y persistencia, Setup de DB (SQLite). |
 | **2** | ~1.5 horas | Implementación base de Brackets (CSS), Inyección de selectores Fecha/Hora seguros, Propagación de Etiquetas ("1°A"). |
 | **3** | ~2.5 a 3 horas | Modificación transaccional (Gestión manual post-sorteo), Refactorización de Lógica de Clasificación en Mini-Bracket. |
