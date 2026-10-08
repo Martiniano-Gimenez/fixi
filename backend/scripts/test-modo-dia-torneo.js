@@ -1,3 +1,4 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -12,29 +13,36 @@ const canchasOverridesService = require('../src/services/canchasOverrides.servic
 const assert = require('assert');
 
 async function testModoDiaTorneo() {
+  await ensureTestDb();
   console.log('🧪 Iniciando test automatizado de Modo Día de Torneo...');
   await canchasOverridesService.loadFromDb();
 
-  // 1. Limpiar datos previos del test piloto si existieran
-  const existingPiloto = await prisma.organizador.findUnique({ where: { email: 'piloto@padel.com' } });
-  if (existingPiloto) {
-    const torneos = await prisma.torneo.findMany({ where: { organizadorId: existingPiloto.id } });
-    const torneoIds = torneos.map((t) => t.id);
-    const categorias = await prisma.categoria.findMany({ where: { torneoId: { in: torneoIds } } });
-    const categoriaIds = categorias.map((c) => c.id);
-    
-    await prisma.setPartido.deleteMany({ where: { partido: { categoriaId: { in: categoriaIds } } } });
-    await prisma.partido.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
-    await prisma.faseEliminatoria.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
-    await prisma.zonaPareja.deleteMany({ where: { zona: { categoriaId: { in: categoriaIds } } } });
-    await prisma.zona.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
-    await prisma.slotPareja.deleteMany({ where: { pareja: { categoriaId: { in: categoriaIds } } } });
-    await prisma.pareja.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
-    await prisma.categoria.deleteMany({ where: { id: { in: categoriaIds } } });
-    await prisma.torneo.deleteMany({ where: { id: { in: torneoIds } } });
-    await prisma.organizador.delete({ where: { id: existingPiloto.id } });
+  async function limpiarPiloto() {
+    const existingPiloto = await prisma.organizador.findUnique({ where: { email: 'piloto@padel.com' } });
+    if (existingPiloto) {
+      const torneos = await prisma.torneo.findMany({ where: { organizadorId: existingPiloto.id } });
+      const torneoIds = torneos.map((t) => t.id);
+      const categorias = await prisma.categoria.findMany({ where: { torneoId: { in: torneoIds } } });
+      const categoriaIds = categorias.map((c) => c.id);
+      
+      await prisma.setPartido.deleteMany({ where: { partido: { categoriaId: { in: categoriaIds } } } });
+      await prisma.partido.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
+      await prisma.faseEliminatoria.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
+      await prisma.zonaPareja.deleteMany({ where: { zona: { categoriaId: { in: categoriaIds } } } });
+      await prisma.zona.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
+      await prisma.slotPareja.deleteMany({ where: { pareja: { categoriaId: { in: categoriaIds } } } });
+      await prisma.pareja.deleteMany({ where: { categoriaId: { in: categoriaIds } } });
+      await prisma.categoria.deleteMany({ where: { id: { in: categoriaIds } } });
+      await prisma.overrideCanchasDia.deleteMany({ where: { torneoId: { in: torneoIds } } });
+      await prisma.torneo.deleteMany({ where: { id: { in: torneoIds } } });
+      await prisma.organizador.delete({ where: { id: existingPiloto.id } });
+    }
   }
 
+  // 1. Limpiar datos previos del test piloto si existieran
+  await limpiarPiloto();
+
+  try {
   // 2. Crear Organizador con 6 canchas (4 techadas, 2 aire libre)
   const passwordHash = await bcrypt.hash('123456', 10);
   const organizador = await prisma.organizador.create({
@@ -821,6 +829,14 @@ async function testModoDiaTorneo() {
   console.log('✅ TEST E PASÓ: Validación EN_CURSO scopeada con precisión a la jornada bajo lluvia.');
 
   console.log('\n🎉 TODOS LOS TESTS DE MODO DÍA DE TORNEO PASARON EXITOSAMENTE!');
+  } finally {
+    try {
+      await limpiarPiloto();
+      console.log('✓ Limpieza en finally completada para piloto@padel.com');
+    } catch (e) {
+      console.error('Error limpiando piloto en finally:', e);
+    }
+  }
 }
 
 testModoDiaTorneo()

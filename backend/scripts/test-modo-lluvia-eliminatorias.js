@@ -1,3 +1,4 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const { PrismaClient } = require('@prisma/client');
 const assert = require('assert');
 const prisma = new PrismaClient();
@@ -8,6 +9,7 @@ const canchasOverridesService = require('../src/services/canchasOverrides.servic
 const { parseFechaLocal } = require('../src/utils/dateUtils');
 
 async function runTest() {
+  await ensureTestDb();
   console.log('🧪 Iniciando test: Protección de Eliminatorias y Horarios Pasados en Modo Lluvia...');
   await canchasOverridesService.loadFromDb();
 

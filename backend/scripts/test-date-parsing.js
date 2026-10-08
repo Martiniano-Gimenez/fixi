@@ -1,7 +1,10 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const assert = require('assert');
 const { parseFechaLocal, requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../src/utils/dateUtils');
 
-console.log('🧪 Iniciando tests unitarios para parseFechaLocal y requireTorneoFecha...\n');
+async function main() {
+  await ensureTestDb();
+  console.log('🧪 Iniciando tests unitarios para parseFechaLocal y requireTorneoFecha...\n');
 
 // Test 1: String "YYYY-MM-DD" da Viernes y día exacto
 const fechaStr = '2026-08-28';
@@ -87,4 +90,12 @@ assert.strictEqual(infoVie00.key, '2026-09-04', '"Viernes-00:00" debe pertenecer
 assert.strictEqual(infoVie00.logicalDate.getDay(), 5, '"Viernes-00:00" debe tener día lógico Viernes');
 console.log('✅ Test 8: parseSlotToDate("Viernes-00:00") ubica la trasnoche en la madrugada correcta y mapea al Viernes lógico.');
 
-console.log('\n🎉 TODOS LOS TESTS DE PARSEO Y VALIDACIÓN DE FECHAS PASARON EXITOSAMENTE!');
+  console.log('\n🎉 TODOS LOS TESTS DE PARSEO Y VALIDACIÓN DE FECHAS PASARON EXITOSAMENTE!');
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('\n❌ ERROR EN TEST:', err);
+    process.exit(1);
+  });

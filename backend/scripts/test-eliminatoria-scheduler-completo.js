@@ -1,9 +1,11 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const prisma = require('../src/lib/prisma');
 const organizadorService = require('../src/services/organizador.service');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 
 async function test() {
+  await ensureTestDb();
   console.log('=== TEST: SCHEDULER COMPLETO DE ELIMINATORIAS (PRIORIDAD POR CLASIFICADOS) ===\n');
   await canchasOverridesService.loadFromDb();
 

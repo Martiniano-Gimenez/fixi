@@ -13,13 +13,16 @@
  * 7. Limpieza total de datos de prueba al finalizar.
  */
 
+const { ensureTestDb } = require('./utils/testEnvGuard');
+const { startTestServer } = require('./utils/testServer');
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../src/config/env');
 const { generarPartidosZonaHelper, asignarHorariosAutomatico } = require('../src/services/zona.service');
 
 const prisma = new PrismaClient();
-const BASE_URL = 'http://localhost:3001/api';
+let BASE_URL = null;
+let serverInstance = null;
 
 let testOrgId = null;
 let testTorneoId = null;
@@ -63,11 +66,19 @@ async function cleanup() {
   } catch (err) {
     console.error('Error durante la limpieza:', err);
   } finally {
+    if (serverInstance) {
+      await new Promise((resolve) => serverInstance.close(resolve));
+    }
     await prisma.$disconnect();
   }
 }
 
 async function runTests() {
+  await ensureTestDb();
+  const { server, baseUrl } = await startTestServer();
+  serverInstance = server;
+  BASE_URL = baseUrl;
+
   try {
     await logStep('1. CREANDO ESCENARIO DE PRUEBA COMPLETO');
 
@@ -567,6 +578,7 @@ async function runTests() {
     process.exitCode = 1;
   } finally {
     await cleanup();
+    process.exit(process.exitCode || 0);
   }
 }
 

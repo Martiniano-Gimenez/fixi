@@ -1,3 +1,4 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const prisma = require('../src/lib/prisma');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const { asignarHorariosRondaUno } = require('../src/services/eliminatoriaScheduler.service');
@@ -5,6 +6,7 @@ const { esRondaDieciseisavos } = require('../src/services/faseEliminatoria.servi
 const crypto = require('crypto');
 
 async function runTest() {
+  await ensureTestDb();
   console.log('🧪 Iniciando prueba automatizada de Scheduling de Domingo...');
   await canchasOverridesService.loadFromDb();
 

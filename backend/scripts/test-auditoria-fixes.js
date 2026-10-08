@@ -1,3 +1,4 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const prisma = require('../src/lib/prisma');
 const { generarEliminatoria, ordenarZonaParejas } = require('../src/services/faseEliminatoria.service');
 const { propagarMiniBracket } = require('../src/services/partido.service');
@@ -9,11 +10,14 @@ const canchasOverridesService = require('../src/services/canchasOverrides.servic
 const crypto = require('crypto');
 
 async function main() {
+  await ensureTestDb();
   console.log('🧪 Iniciando test suite: test-auditoria-fixes.js...\n');
   await canchasOverridesService.loadFromDb();
 
-  const orgEmail = `test-audit-${Date.now()}@padel.com`;
-  const organizador = await prisma.organizador.create({
+  let organizador = null;
+  try {
+    const orgEmail = `test-audit-${Date.now()}@padel.com`;
+    organizador = await prisma.organizador.create({
     data: {
       nombre: 'Club Auditoria',
       email: orgEmail,
@@ -387,6 +391,24 @@ async function main() {
   console.log(`  ✅ Verificado: Partido con horario (${new Date(pConHorarioPost.fechaHora).toISOString()}) tuvo prioridad sobre el partido sin horario (${new Date(pSinHorarioPost.fechaHora).toISOString()}).`);
 
   console.log('\n🎉 TODOS LOS TESTS DE AUDITORÍA PASARON EXITOSAMENTE AL 100%!');
+  } finally {
+    if (organizador) {
+      const torneos = await prisma.torneo.findMany({ where: { organizadorId: organizador.id }, select: { id: true } });
+      const tIds = torneos.map(t => t.id);
+      await prisma.setPartido.deleteMany({ where: { partido: { categoria: { torneoId: { in: tIds } } } } });
+      await prisma.partido.deleteMany({ where: { categoria: { torneoId: { in: tIds } } } });
+      await prisma.faseEliminatoria.deleteMany({ where: { categoria: { torneoId: { in: tIds } } } });
+      await prisma.zonaPareja.deleteMany({ where: { zona: { categoria: { torneoId: { in: tIds } } } } });
+      await prisma.zona.deleteMany({ where: { categoria: { torneoId: { in: tIds } } } });
+      await prisma.slotPareja.deleteMany({ where: { pareja: { categoria: { torneoId: { in: tIds } } } } });
+      await prisma.pareja.deleteMany({ where: { categoria: { torneoId: { in: tIds } } } });
+      await prisma.overrideCanchasDia.deleteMany({ where: { torneoId: { in: tIds } } });
+      await prisma.categoria.deleteMany({ where: { torneoId: { in: tIds } } });
+      await prisma.torneo.deleteMany({ where: { id: { in: tIds } } });
+      await prisma.organizador.deleteMany({ where: { id: organizador.id } });
+      console.log('✓ Limpieza de datos de test-auditoria-fixes completada en bloque finally.');
+    }
+  }
 }
 
 main()

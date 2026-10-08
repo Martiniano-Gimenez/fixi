@@ -1,224 +1,281 @@
+'use strict';
+
+// 1. Guarda fail-safe: DEBE ejecutarse ANTES de cualquier require que instancie Prisma
+const { ensureTestDb } = require('./utils/testEnvGuard');
+
+const assert = require('assert');
 const prisma = require('../src/lib/prisma');
 const organizadorService = require('../src/services/organizador.service');
-const torneoService = require('../src/services/torneo.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
-const { parseFechaLocal, formatDiaHorario, getDiaCalendarioConTrasnoche } = require('../src/utils/dateUtils');
+const { getDiaCalendarioConTrasnoche } = require('../src/utils/dateUtils');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
+const { generarSlotsDia } = require('../src/services/slots.service');
 
 async function main() {
-  console.log('=== TEST MODO LLUVIA INDEPENDIENTE POR DÍA Y PLAYOFFS DOMINGO ===\n');
+  console.log('=== TEST MODO LLUVIA INDEPENDIENTE POR DÍA Y PLAYOFFS (FLUJO REAL) ===\n');
+
+  // Verificar que estamos conectados a prisma/test.db
+  await ensureTestDb();
   await canchasOverridesService.loadFromDb();
 
-  // Buscar un organizador y torneo de prueba en curso o crear escenario
-  let torneo = await prisma.torneo.findFirst({
-    where: {
-      estado: 'EN_CURSO',
-      categorias: {
-        some: {
-          fasesEliminatorias: {
-            some: {
-              partidos: { some: {} },
-            },
-          },
-        },
-      },
-    },
-    include: {
-      organizador: true,
-      categorias: {
-        include: {
-          fasesEliminatorias: {
-            include: {
-              partidos: true,
-            },
-          },
-        },
-      },
-    },
-  });
+  const timestamp = Date.now();
+  let organizador = null;
+  let torneo = null;
 
-  if (!torneo) {
-    console.log('No se encontró un torneo en curso con eliminatorias. Buscando cualquier torneo en curso...');
-    torneo = await prisma.torneo.findFirst({
-      where: { estado: 'EN_CURSO' },
-      include: {
-        organizador: true,
-        categorias: {
-          include: {
-            fasesEliminatorias: {
-              include: {
-                partidos: true,
-              },
-            },
-          },
-        },
+  try {
+    // ─── 1. Siembra mediante flujo real ─────────────────────────────────────────
+    console.log('1. Creando Club con 6 canchas y horarios viernes, sábado y domingo...');
+    organizador = await prisma.organizador.create({
+      data: {
+        nombre: 'Club Test Lluvia 6 Canchas',
+        email: `test-indep-${timestamp}@padel.test`,
+        passwordHash: 'dummy_hash',
+        cantidadCanchas: 6,
+        viernesInicio: '14:00',
+        viernesFin: '23:00',
+        sabadoInicio: '09:00',
+        sabadoFin: '23:00',
+        domingoInicio: '08:00',
+        domingoFin: '22:00',
       },
     });
-  }
 
-  if (!torneo) {
-    console.error('ERROR: No se encontró ningún torneo EN_CURSO en la base de datos para probar.');
-    process.exit(1);
-  }
+    const now = new Date();
+    let offsetToFriday = 5 - now.getDay();
+    if (offsetToFriday <= 0) offsetToFriday += 7;
+    const refViernes = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetToFriday, 12, 0, 0);
 
-  const organizador = torneo.organizador;
-  const canchasClub = organizador.cantidadCanchas || 4;
-  console.log(`Torneo ID: ${torneo.id}, Nombre: "${torneo.nombre}", Canchas Club: ${canchasClub}`);
+    console.log(`2. Creando Torneo para el viernes ${refViernes.toISOString().slice(0, 10)}...`);
+    torneo = await prisma.torneo.create({
+      data: {
+        nombre: 'Torneo Test Flujo Real Lluvia',
+        slug: `torneo-lluvia-real-${timestamp}`,
+        fecha: refViernes,
+        estado: 'BORRADOR',
+        organizadorId: organizador.id,
+      },
+    });
 
-  // Asegurar que overrides previos estén limpios para el test
-  canchasOverridesService.clearOverridesTorneo(torneo.id);
+    console.log('3. Creando 2 categorías (Cat A 12 parejas viernes, Cat B 12 parejas viernes/sábado)...');
+    const catA = await prisma.categoria.create({
+      data: { torneoId: torneo.id, nombre: '4ta Varones', estado: 'BORRADOR' },
+    });
+    const catB = await prisma.categoria.create({
+      data: { torneoId: torneo.id, nombre: '5ta Varones', estado: 'BORRADOR' },
+    });
 
-  // Calcular las fechas de Viernes, Sábado y Domingo del torneo
-  const refFecha = parseFechaLocal(torneo.fecha);
-  const horariosClubObj = {
-    viernesInicio: organizador.viernesInicio,
-    viernesFin: organizador.viernesFin,
-    sabadoInicio: organizador.sabadoInicio,
-    sabadoFin: organizador.sabadoFin,
-    domingoInicio: organizador.domingoInicio,
-    domingoFin: organizador.domingoFin,
-  };
+    const slotsViernes = generarSlotsDia('Viernes', organizador.viernesInicio, organizador.viernesFin);
+    const slotsSabado  = generarSlotsDia('Sabado',  organizador.sabadoInicio,  organizador.sabadoFin);
 
-  const viernesKey = getDiaCalendarioConTrasnoche(refFecha, horariosClubObj).key;
-  const sabadoKey = getDiaCalendarioConTrasnoche(new Date(refFecha.getTime() + 24 * 3600 * 1000), horariosClubObj).key;
-  const domingoKey = getDiaCalendarioConTrasnoche(new Date(refFecha.getTime() + 2 * 24 * 3600 * 1000), horariosClubObj).key;
+    // Inscribir 12 parejas en Cat A con disponibilidad en Viernes (4 zonas de 3)
+    for (let i = 1; i <= 12; i++) {
+      await prisma.pareja.create({
+        data: {
+          categoriaId: catA.id,
+          jugador1: `A_J1_${i}`,
+          jugador2: `A_J2_${i}`,
+          orden: i,
+          slotsSeleccionados: {
+            create: slotsViernes.map((slotId) => ({ slotId })),
+          },
+        },
+      });
+    }
 
-  console.log(`Días detectados: Viernes=${viernesKey}, Sábado=${sabadoKey}, Domingo=${domingoKey}`);
+    // Inscribir 12 parejas en Cat B:
+    // Parejas 1-6 con disponibilidad Viernes (2 zonas de 3 -> junto con Cat A ocupan las 6 canchas el viernes a las 14:00)
+    // Parejas 7-12 con disponibilidad Sábado (2 zonas de 3 -> garantizan partidos el sábado)
+    for (let i = 1; i <= 12; i++) {
+      const slots = i <= 6 ? slotsViernes : slotsSabado;
+      await prisma.pareja.create({
+        data: {
+          categoriaId: catB.id,
+          jugador1: `B_J1_${i}`,
+          jugador2: `B_J2_${i}`,
+          orden: i,
+          slotsSeleccionados: {
+            create: slots.map((slotId) => ({ slotId })),
+          },
+        },
+      });
+    }
 
-  // 1. Reducir canchas solo el VIERNES a 2 canchas
-  console.log('\n--- Paso 1: Reducir canchas el VIERNES a 2 canchas ---');
-  const resViernes = await organizadorService.reprogramarPorReduccionCanchas(
-    organizador.id,
-    torneo.id,
-    2,
-    null,
-    viernesKey
-  );
-  console.log('Resultado reducción Viernes:', resViernes.message);
+    console.log('4. Ejecutando iniciarTorneoMultiCategoria (genera zonas y brackets)...');
+    await organizadorService.iniciarTorneoMultiCategoria(organizador.id, torneo.id);
 
-  let estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
-  console.log('canchasPorDia después de reducir Viernes:');
-  console.log(JSON.stringify(estadoEnVivo.canchasPorDia, null, 2));
+    console.log('5. Ejecutando programarHorariosEliminatorias (asigna playoffs el domingo)...');
+    await programarHorariosEliminatorias(organizador.id, torneo.id);
 
-  if (estadoEnVivo.canchasPorDia[viernesKey]?.canchas !== 2 || !estadoEnVivo.canchasPorDia[viernesKey]?.isLluvia) {
-    throw new Error(`FAIL: Viernes debería tener 2 canchas con lluvia activa, pero tiene: ${JSON.stringify(estadoEnVivo.canchasPorDia[viernesKey])}`);
-  }
-  if (estadoEnVivo.canchasPorDia[sabadoKey]?.canchas !== canchasClub || estadoEnVivo.canchasPorDia[sabadoKey]?.isLluvia) {
-    throw new Error(`FAIL: Sábado no debería tener lluvia activa y debería tener ${canchasClub} canchas, pero tiene: ${JSON.stringify(estadoEnVivo.canchasPorDia[sabadoKey])}`);
-  }
-  if (estadoEnVivo.canchasPorDia[domingoKey]?.canchas !== canchasClub || estadoEnVivo.canchasPorDia[domingoKey]?.isLluvia) {
-    throw new Error(`FAIL: Domingo no debería tener lluvia activa y debería tener ${canchasClub} canchas, pero tiene: ${JSON.stringify(estadoEnVivo.canchasPorDia[domingoKey])}`);
-  }
-  console.log('✔ Paso 1 EXITOSO: Viernes reducido a 2 canchas sin afectar Sábado ni Domingo.');
+    // Días del torneo
+    const horariosClubObj = {
+      viernesInicio: organizador.viernesInicio,
+      viernesFin: organizador.viernesFin,
+      sabadoInicio: organizador.sabadoInicio,
+      sabadoFin: organizador.sabadoFin,
+      domingoInicio: organizador.domingoInicio,
+      domingoFin: organizador.domingoFin,
+    };
 
-  // 2. Reducir canchas el DOMINGO a 2 canchas
-  console.log('\n--- Paso 2: Reducir canchas el DOMINGO a 2 canchas ---');
-  const resDomingo = await organizadorService.reprogramarPorReduccionCanchas(
-    organizador.id,
-    torneo.id,
-    2,
-    null,
-    domingoKey
-  );
-  console.log('Resultado reducción Domingo:', resDomingo.message);
+    const viernesKey = getDiaCalendarioConTrasnoche(refViernes, horariosClubObj).key;
+    const sabadoKey = getDiaCalendarioConTrasnoche(new Date(refViernes.getTime() + 24 * 3600 * 1000), horariosClubObj).key;
+    const domingoKey = getDiaCalendarioConTrasnoche(new Date(refViernes.getTime() + 2 * 24 * 3600 * 1000), horariosClubObj).key;
 
-  estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
-  console.log('canchasPorDia después de reducir Domingo:');
-  console.log(JSON.stringify(estadoEnVivo.canchasPorDia, null, 2));
+    console.log(`Días detectados: Viernes=${viernesKey}, Sábado=${sabadoKey}, Domingo=${domingoKey}`);
 
-  if (estadoEnVivo.canchasPorDia[domingoKey]?.canchas !== 2 || !estadoEnVivo.canchasPorDia[domingoKey]?.isLluvia) {
-    throw new Error(`FAIL: Domingo debería tener 2 canchas con lluvia activa.`);
-  }
-  if (estadoEnVivo.canchasPorDia[viernesKey]?.canchas !== 2 || !estadoEnVivo.canchasPorDia[viernesKey]?.isLluvia) {
-    throw new Error(`FAIL: Viernes debería seguir teniendo 2 canchas independientes.`);
-  }
-  if (estadoEnVivo.canchasPorDia[sabadoKey]?.canchas !== canchasClub || estadoEnVivo.canchasPorDia[sabadoKey]?.isLluvia) {
-    throw new Error(`FAIL: Sábado debería seguir teniendo ${canchasClub} canchas sin lluvia.`);
-  }
-  console.log('✔ Paso 2 EXITOSO: Domingo reducido a 2 canchas manteniendo Viernes en 2 y Sábado en 4.');
+    const todosPartidos = await prisma.partido.findMany({
+      where: { categoria: { torneoId: torneo.id }, fechaHora: { not: null } },
+    });
 
-  // 3. Verificar los horarios y descansos en los partidos de eliminatorias reprogramados para el Domingo
-  console.log('\n--- Paso 3: Verificar partidos de eliminatorias en Domingo con 2 canchas ---');
-  const partidosDomingo = await prisma.partido.findMany({
-    where: {
-      categoria: { torneoId: torneo.id },
-      faseEliminatoriaId: { not: null },
-      fechaHora: { not: null },
-    },
-    include: {
-      faseEliminatoria: true,
-      categoria: true,
-    },
-    orderBy: { fechaHora: 'asc' },
-  });
+    console.log(`Total partidos programados en el torneo: ${todosPartidos.length}`);
+    const partidosViernesPre = todosPartidos.filter((p) => getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key === viernesKey);
+    const partidosSabadoPre  = todosPartidos.filter((p) => getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key === sabadoKey);
+    const partidosDomingoPre = todosPartidos.filter((p) => getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key === domingoKey);
 
-  console.log(`Se encontraron ${partidosDomingo.length} partidos de eliminatoria con horario en el torneo.`);
-  const canchasUsadasDomingo = new Set();
+    console.log(`Partidos por día -> Viernes: ${partidosViernesPre.length}, Sábado: ${partidosSabadoPre.length}, Domingo: ${partidosDomingoPre.length}`);
+    assert.ok(partidosViernesPre.length > 0, 'FALLO: No hay partidos programados el Viernes');
+    assert.ok(partidosSabadoPre.length > 0, 'FALLO: No hay partidos programados el Sábado');
+    assert.ok(partidosDomingoPre.length > 0, 'FALLO: No hay partidos programados el Domingo');
 
-  for (const p of partidosDomingo) {
-    const diaInfo = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj);
-    if (diaInfo?.key === domingoKey) {
-      canchasUsadasDomingo.add(p.canchaNumero);
-      if (p.canchaNumero > 2) {
-        throw new Error(`FAIL: Partido ${p.id} (${p.faseEliminatoria?.nombre}) fue asignado a Cancha ${p.canchaNumero}, pero Domingo está reducido a 2 canchas.`);
+    const canchasViernesPre = new Set(partidosViernesPre.map((p) => p.canchaNumero));
+    const canchasSabadoPre  = new Set(partidosSabadoPre.map((p) => p.canchaNumero));
+    const canchasDomingoPre = new Set(partidosDomingoPre.map((p) => p.canchaNumero));
+    console.log(`Canchas Viernes inicial: ${Array.from(canchasViernesPre).sort().join(', ')}`);
+    console.log(`Canchas Sábado inicial : ${Array.from(canchasSabadoPre).sort().join(', ')}`);
+    console.log(`Canchas Domingo inicial: ${Array.from(canchasDomingoPre).sort().join(', ')}`);
+
+    // ─── 2. Reducir canchas el VIERNES a 2 canchas ─────────────────────────────
+    console.log('\n--- Paso 1: Reducir canchas el VIERNES a 2 canchas ---');
+    const resViernes = await organizadorService.reprogramarPorReduccionCanchas(
+      organizador.id,
+      torneo.id,
+      2,
+      null,
+      viernesKey
+    );
+    console.log('Resultado reducción Viernes:', resViernes.message);
+
+    // Verificar que la reducción reprogramó al menos N > 0 partidos
+    const reprogramadosViernes = resViernes.reprogramacion?.partidosReprogramados ?? 0;
+    console.log(`Partidos reprogramados en Viernes: ${reprogramadosViernes}`);
+    assert.ok(
+      reprogramadosViernes > 0,
+      `FALLO DE ASERCIÓN: La reducción de Viernes debía reprogramar al menos 1 partido (N > 0), pero reprogramó ${reprogramadosViernes}.`
+    );
+
+    let estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
+
+    // Validar aislamiento del estado por día
+    assert.strictEqual(estadoEnVivo.canchasPorDia[viernesKey]?.canchas, 2, 'Viernes debe tener 2 canchas');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[viernesKey]?.isLluvia, true, 'Viernes debe tener isLluvia: true');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[sabadoKey]?.canchas, 6, 'Sábado debe seguir con 6 canchas');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[sabadoKey]?.isLluvia, false, 'Sábado no debe tener lluvia');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[domingoKey]?.canchas, 6, 'Domingo debe seguir con 6 canchas');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[domingoKey]?.isLluvia, false, 'Domingo no debe tener lluvia');
+
+    // Verificar que ningún partido de Viernes use cancha > 2
+    const partidosPostViernes = await prisma.partido.findMany({
+      where: { categoria: { torneoId: torneo.id }, fechaHora: { not: null } },
+    });
+    for (const p of partidosPostViernes) {
+      const diaKey = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key;
+      if (diaKey === viernesKey && p.canchaNumero > 2) {
+        throw new Error(`FAIL: Partido ${p.id} de Viernes asignado a Cancha ${p.canchaNumero} (> 2)`);
       }
     }
+    console.log('✔ Paso 1 EXITOSO: Viernes reducido a 2 canchas (reprogramados N > 0) sin afectar Sábado ni Domingo.');
+
+    // ─── 3. Reducir canchas el DOMINGO a 2 canchas ─────────────────────────────
+    console.log('\n--- Paso 2: Reducir canchas el DOMINGO a 2 canchas (eliminatorias) ---');
+    const resDomingo = await organizadorService.reprogramarPorReduccionCanchas(
+      organizador.id,
+      torneo.id,
+      2,
+      null,
+      domingoKey
+    );
+    console.log('Resultado reducción Domingo:', resDomingo.message);
+
+    const reprogramadosDomingo = resDomingo.reprogramacion?.partidosReprogramados ?? 0;
+    console.log(`Partidos reprogramados en Domingo: ${reprogramadosDomingo}`);
+    assert.ok(
+      reprogramadosDomingo > 0,
+      `FALLO DE ASERCIÓN: La reducción de Domingo debía reprogramar al menos 1 partido (N > 0), pero reprogramó ${reprogramadosDomingo}.`
+    );
+
+    estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
+    assert.strictEqual(estadoEnVivo.canchasPorDia[domingoKey]?.canchas, 2, 'Domingo debe tener 2 canchas');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[domingoKey]?.isLluvia, true, 'Domingo debe tener isLluvia: true');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[viernesKey]?.canchas, 2, 'Viernes debe seguir en 2 canchas');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[viernesKey]?.isLluvia, true, 'Viernes debe seguir con lluvia');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[sabadoKey]?.canchas, 6, 'Sábado debe seguir normal en 6 canchas');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[sabadoKey]?.isLluvia, false, 'Sábado debe seguir sin lluvia');
+
+    const partidosPostDomingo = await prisma.partido.findMany({
+      where: { categoria: { torneoId: torneo.id }, fechaHora: { not: null } },
+    });
+    for (const p of partidosPostDomingo) {
+      const diaKey = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key;
+      if (diaKey === domingoKey && p.canchaNumero > 2) {
+        throw new Error(`FAIL: Partido ${p.id} de Domingo asignado a Cancha ${p.canchaNumero} (> 2)`);
+      }
+    }
+    console.log('✔ Paso 2 EXITOSO: Domingo reducido a 2 canchas manteniendo Viernes en 2 y Sábado intacto en 6.');
+
+    // ─── 4. Restaurar Domingo al total del club ───────────────────────────────
+    console.log('\n--- Paso 3: Restaurar Domingo a 6 canchas ---');
+    await organizadorService.reprogramarPorReduccionCanchas(
+      organizador.id,
+      torneo.id,
+      null,
+      null,
+      domingoKey
+    );
+
+    estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
+    assert.strictEqual(estadoEnVivo.canchasPorDia[domingoKey]?.canchas, 6, 'Domingo debe estar restaurado a 6 canchas');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[domingoKey]?.isLluvia, false, 'Domingo debe estar sin lluvia');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[viernesKey]?.canchas, 2, 'Viernes debe seguir con lluvia en 2 canchas');
+    assert.strictEqual(estadoEnVivo.canchasPorDia[viernesKey]?.isLluvia, true, 'Viernes debe seguir en lluvia');
+    console.log('✔ Paso 3 EXITOSO: Domingo restaurado sin afectar el modo lluvia de Viernes.');
+
+    // ─── 5. Restaurar Viernes al total del club ───────────────────────────────
+    console.log('\n--- Paso 4: Restaurar Viernes a 6 canchas ---');
+    await organizadorService.reprogramarPorReduccionCanchas(
+      organizador.id,
+      torneo.id,
+      null,
+      null,
+      viernesKey
+    );
+
+    estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
+    const todosNormales = Object.values(estadoEnVivo.canchasPorDia).every((d) => !d.isLluvia && d.canchas === 6);
+    assert.ok(todosNormales, 'Todos los días deben quedar restaurados a 6 canchas sin lluvia');
+    console.log('✔ Paso 4 EXITOSO: Todos los días quedaron restaurados correctamente.');
+
+    console.log('\n🎉 TEST MODO LLUVIA INDEPENDIENTE PASÓ EXITOSAMENTE AL 100%!');
+  } finally {
+    // Limpieza garantizada en finally
+    if (torneo && organizador) {
+      await prisma.setPartido.deleteMany({ where: { partido: { categoria: { torneoId: torneo.id } } } });
+      await prisma.partido.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
+      await prisma.faseEliminatoria.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
+      await prisma.zonaPareja.deleteMany({ where: { zona: { categoria: { torneoId: torneo.id } } } });
+      await prisma.zona.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
+      await prisma.slotPareja.deleteMany({ where: { pareja: { categoria: { torneoId: torneo.id } } } });
+      await prisma.pareja.deleteMany({ where: { categoria: { torneoId: torneo.id } } });
+      await prisma.overrideCanchasDia.deleteMany({ where: { torneoId: torneo.id } });
+      await prisma.categoria.deleteMany({ where: { torneoId: torneo.id } });
+      await prisma.torneo.deleteMany({ where: { id: torneo.id } });
+      await prisma.organizador.deleteMany({ where: { id: organizador.id } });
+      console.log('✓ Limpieza de datos de prueba completada en bloque finally.');
+    }
   }
-
-  console.log(`Canchas utilizadas en Domingo bajo lluvia: ${Array.from(canchasUsadasDomingo).join(', ')} (todas <= 2).`);
-  console.log('✔ Paso 3 EXITOSO: Ningún partido de Domingo supera las 2 canchas habilitadas.');
-
-  // 4. Restaurar canchas de Domingo al total del club
-  console.log('\n--- Paso 4: Restaurar Domingo al total del club ---');
-  const resRestaurarDomingo = await organizadorService.reprogramarPorReduccionCanchas(
-    organizador.id,
-    torneo.id,
-    null,
-    null,
-    domingoKey
-  );
-  console.log('Resultado restauración Domingo:', resRestaurarDomingo.message);
-
-  estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
-  console.log('canchasPorDia después de restaurar Domingo:');
-  console.log(JSON.stringify(estadoEnVivo.canchasPorDia, null, 2));
-
-  if (estadoEnVivo.canchasPorDia[domingoKey]?.canchas !== canchasClub || estadoEnVivo.canchasPorDia[domingoKey]?.isLluvia) {
-    throw new Error(`FAIL: Domingo debería estar restaurado a ${canchasClub} canchas sin lluvia.`);
-  }
-  if (estadoEnVivo.canchasPorDia[viernesKey]?.canchas !== 2 || !estadoEnVivo.canchasPorDia[viernesKey]?.isLluvia) {
-    throw new Error(`FAIL: Viernes debería seguir en modo lluvia independiente con 2 canchas.`);
-  }
-  console.log('✔ Paso 4 EXITOSO: Domingo restaurado sin afectar el modo lluvia de Viernes.');
-
-  // 5. Restaurar Viernes
-  console.log('\n--- Paso 5: Restaurar Viernes ---');
-  await organizadorService.reprogramarPorReduccionCanchas(
-    organizador.id,
-    torneo.id,
-    null,
-    null,
-    viernesKey
-  );
-
-  estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
-  console.log('canchasPorDia después de restaurar Viernes:');
-  console.log(JSON.stringify(estadoEnVivo.canchasPorDia, null, 2));
-
-  const allNormal = Object.values(estadoEnVivo.canchasPorDia).every((d) => !d.isLluvia && d.canchas === canchasClub);
-  if (!allNormal) {
-    throw new Error(`FAIL: Todos los días deberían estar restaurados sin lluvia.`);
-  }
-  console.log('✔ Paso 5 EXITOSO: Todos los días quedaron restaurados correctamente.');
-
-  console.log('\n============================================================');
-  console.log('🎉 TODOS LOS TESTS DE MODO LLUVIA INDEPENDIENTE PASARON CON ÉXITO!');
-  console.log('============================================================\n');
 }
 
 main()
   .catch((err) => {
-    console.error('ERROR EN TEST:', err);
+    console.error('\n❌ ERROR EN TEST:', err);
     process.exit(1);
   })
   .finally(async () => {

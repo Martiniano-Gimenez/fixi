@@ -1,12 +1,18 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
+const { startTestServer } = require('./utils/testServer');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { JWT_SECRET, PORT } = require('../src/config/env');
+const { JWT_SECRET } = require('../src/config/env');
 
-const BASE_URL = `http://localhost:${PORT || 3001}/api`;
+let serverInstance = null;
 
 async function main() {
+  await ensureTestDb();
+  const { server, baseUrl } = await startTestServer();
+  serverInstance = server;
+  const BASE_URL = baseUrl;
   console.log('🧪 =============================================================');
   console.log('🧪 TEST: REGRESIÓN ZONA Y PARTIDOS POR PAREJA + MULTITENANT');
   console.log('🧪 =============================================================\n');
@@ -413,7 +419,11 @@ async function main() {
     } catch (cleanupErr) {
       console.error('⚠️ Error durante la limpieza:', cleanupErr.message);
     }
+    if (serverInstance) {
+      await new Promise((resolve) => serverInstance.close(resolve));
+    }
     await prisma.$disconnect();
+    process.exit(0);
   }
 }
 

@@ -1,5 +1,6 @@
 'use strict';
 
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
@@ -10,6 +11,7 @@ const torneoService = require('../src/services/torneo.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 
 async function main() {
+  await ensureTestDb();
   console.log('🧪 Iniciando suite de tests para Zonas de 4 (MINI_BRACKET)...');
   await canchasOverridesService.loadFromDb();
 

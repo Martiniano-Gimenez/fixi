@@ -1,3 +1,4 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const prisma = require('../src/lib/prisma');
 const partidoService = require('../src/services/partido.service');
 const faseEliminatoriaService = require('../src/services/faseEliminatoria.service');
@@ -6,11 +7,17 @@ const canchasOverridesService = require('../src/services/canchasOverrides.servic
 const crypto = require('crypto');
 
 async function testAutoAsignacionEliminatoria() {
+  await ensureTestDb();
   console.log('🧪 Iniciando prueba automatizada de Auto-Asignación de Eliminatoria...');
   await canchasOverridesService.loadFromDb();
 
-  const orgEmail = `test-auto-${Date.now()}@test.com`;
-  const organizador = await prisma.organizador.create({
+  let organizador = null;
+  let categoria = null;
+  let torneo = null;
+
+  try {
+    const orgEmail = `test-auto-${Date.now()}@test.com`;
+    organizador = await prisma.organizador.create({
     data: {
       nombre: 'Club Test Auto Asignacion',
       email: orgEmail,
@@ -21,7 +28,7 @@ async function testAutoAsignacionEliminatoria() {
     },
   });
 
-  const torneo = await prisma.torneo.create({
+  torneo = await prisma.torneo.create({
     data: {
       organizadorId: organizador.id,
       nombre: 'Torneo Test Auto-Asignar',
@@ -31,7 +38,7 @@ async function testAutoAsignacionEliminatoria() {
     },
   });
 
-  const categoria = await prisma.categoria.create({
+  categoria = await prisma.categoria.create({
     data: {
       torneoId: torneo.id,
       nombre: '6ta Varones',
@@ -183,16 +190,20 @@ async function testAutoAsignacionEliminatoria() {
 
   console.log('\n🎉 ¡TODAS LAS PRUEBAS DE AUTO-ASIGNACIÓN Y AUTO-SCHEDULING PASARON EXITOSAMENTE!');
 
-  // Cleanup
-  await prisma.setPartido.deleteMany({ where: { partido: { categoriaId: categoria.id } } });
-  await prisma.partido.deleteMany({ where: { categoriaId: categoria.id } });
-  await prisma.faseEliminatoria.deleteMany({ where: { categoriaId: categoria.id } });
-  await prisma.zonaPareja.deleteMany({ where: { zona: { categoriaId: categoria.id } } });
-  await prisma.zona.deleteMany({ where: { categoriaId: categoria.id } });
-  await prisma.pareja.deleteMany({ where: { categoriaId: categoria.id } });
-  await prisma.categoria.deleteMany({ where: { torneoId: torneo.id } });
-  await prisma.torneo.deleteMany({ where: { id: torneo.id } });
-  await prisma.organizador.deleteMany({ where: { id: organizador.id } });
+  } finally {
+    if (categoria && torneo && organizador) {
+      await prisma.setPartido.deleteMany({ where: { partido: { categoriaId: categoria.id } } });
+      await prisma.partido.deleteMany({ where: { categoriaId: categoria.id } });
+      await prisma.faseEliminatoria.deleteMany({ where: { categoriaId: categoria.id } });
+      await prisma.zonaPareja.deleteMany({ where: { zona: { categoriaId: categoria.id } } });
+      await prisma.zona.deleteMany({ where: { categoriaId: categoria.id } });
+      await prisma.pareja.deleteMany({ where: { categoriaId: categoria.id } });
+      await prisma.categoria.deleteMany({ where: { torneoId: torneo.id } });
+      await prisma.torneo.deleteMany({ where: { id: torneo.id } });
+      await prisma.organizador.deleteMany({ where: { id: organizador.id } });
+      console.log('✓ Limpieza de test-auto-asignar-eliminatoria completada en finally.');
+    }
+  }
 }
 
 testAutoAsignacionEliminatoria()

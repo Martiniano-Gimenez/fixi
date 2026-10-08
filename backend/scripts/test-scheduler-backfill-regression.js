@@ -1,5 +1,7 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const prisma = require('../src/lib/prisma');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 
 /**
  * Test de regresión permanente:
@@ -17,6 +19,8 @@ const { programarHorariosEliminatorias } = require('../src/services/eliminatoria
  * 6. Idempotencia: correr el scheduler dos veces produce exactamente la misma asignación.
  */
 async function testSchedulerBackfillRegression() {
+  await ensureTestDb();
+  await canchasOverridesService.loadFromDb();
   console.log('=== TEST DE REGRESIÓN: BACKFILL DIRIGIDO EN OCTAVOS ===\n');
 
   const email = `test-backfill-${Date.now()}@padel.test`;
@@ -255,8 +259,12 @@ async function testSchedulerBackfillRegression() {
 }
 
 testSchedulerBackfillRegression()
-  .catch((err) => {
+  .catch(async (err) => {
     console.error('❌ Error en test de regresión:', err);
+    await prisma.$disconnect();
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  });

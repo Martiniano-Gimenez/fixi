@@ -1,13 +1,19 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
+const { startTestServer } = require('./utils/testServer');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const disponibilidadService = require('../src/services/disponibilidad.service');
-const { JWT_SECRET, PORT } = require('../src/config/env');
+const { JWT_SECRET } = require('../src/config/env');
 
-const BASE_URL = `http://localhost:${PORT || 3001}/api`;
+let serverInstance = null;
 
 async function main() {
+  await ensureTestDb();
+  const { server, baseUrl } = await startTestServer();
+  serverInstance = server;
+  const BASE_URL = baseUrl;
   console.log('🧪 =============================================================');
   console.log('🧪 TEST: REGRESIÓN GUARD DISPONIBILIDAD (BORRADOR vs NO-BORRADOR)');
   console.log('🧪 =============================================================\n');
@@ -281,7 +287,11 @@ async function main() {
     await prisma.categoria.deleteMany({ where: { id: { in: [catA.id, catB.id] } } });
     await prisma.torneo.deleteMany({ where: { id: { in: [torneoA.id, torneoB.id] } } });
     await prisma.organizador.deleteMany({ where: { id: { in: [orgA.id, orgB.id] } } });
+    if (serverInstance) {
+      await new Promise((resolve) => serverInstance.close(resolve));
+    }
     await prisma.$disconnect();
+    process.exit(0);
   }
 }
 

@@ -1,10 +1,14 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const organizadorService = require('../src/services/organizador.service');
 const disponibilidadService = require('../src/services/disponibilidad.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const { parseFechaLocal } = require('../src/utils/dateUtils');
 
 async function runTests() {
+  await ensureTestDb();
+  await canchasOverridesService.loadFromDb();
   console.log('🧪 =============================================================');
   console.log('🧪 TEST SUITE: PRE-CHECK SNAPSHOT CONGELADO Y RESOLUCIÓN INCREMENTAL');
   console.log('🧪 =============================================================\n');
@@ -240,7 +244,11 @@ async function runTests() {
   }
 }
 
-runTests().catch((err) => {
+runTests().catch(async (err) => {
   console.error('❌ ERROR EN TEST SUITE:', err);
+  await prisma.$disconnect();
   process.exit(1);
-}).finally(() => prisma.$disconnect());
+}).finally(async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});

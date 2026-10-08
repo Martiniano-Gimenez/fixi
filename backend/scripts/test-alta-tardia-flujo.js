@@ -8,11 +8,13 @@
  * 5. Limpieza garantizada en bloque finally para no dejar datos huérfanos en la base.
  */
 
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const prisma = require('../src/lib/prisma');
 const zonaService = require('../src/services/zona.service');
 const partidoService = require('../src/services/partido.service');
 
 async function testAltaTardiaFlujo() {
+  await ensureTestDb();
   console.log('🧪 Iniciando prueba de flujo real: Alta tardía (0 slots) y asignación de horario...');
 
   const timestamp = Date.now();

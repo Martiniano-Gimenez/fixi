@@ -1,3 +1,4 @@
+const { ensureTestDb } = require('./utils/testEnvGuard');
 const prisma = require('../src/lib/prisma');
 const assert = require('assert');
 
@@ -5,6 +6,7 @@ const canchasOverridesService = require('../src/services/canchasOverrides.servic
 const torneoService = require('../src/services/torneo.service');
 
 async function testPersistenciaOverrides() {
+  await ensureTestDb();
   console.log('🧪 Iniciando test: Persistencia de Overrides, Transaccionalidad y Ciclo de Vida de Caché...\n');
 
   // Preparar organizador y torneo de prueba
