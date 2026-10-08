@@ -16,6 +16,12 @@ node_modules/
 *.sqlite
 *.sqlite3
 backend/prisma/dev.backup.*.db
+backend/prisma/test.db
+backend/prisma/test.template.db
+backend/prisma/test.db-wal
+backend/prisma/test.db-shm
+backend/prisma/test.template.db-wal
+backend/prisma/test.template.db-shm
 
 # Backups and Local Data
 backend/src/data/canchasOverrides.json

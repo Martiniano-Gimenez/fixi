@@ -68,9 +68,13 @@ async function startServer() {
     process.exit(1);
   }
 
-  app.listen(PORT, () => {
+  return app.listen(PORT, () => {
     console.log(`🏸 Backend corriendo en http://localhost:${PORT}`);
   });
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer };

@@ -21,3 +21,14 @@
 
 3. **Copia de seguridad previa**:
    - Antes de aplicar cambios estructurales en desarrollo, siempre realizar un backup de `dev.db`.
+
+4. **Base de Datos de Test y Plantilla (`test.template.db` / `test.db`)**:
+   - Las pruebas automatizadas corren exclusivamente contra `prisma/test.db`, garantizando aislamiento total de `dev.db`.
+   - Antes de cada suite, `scripts/reset-test-db.js` restablece `test.db` como copia limpia de `test.template.db`.
+   - **Regeneración de la plantilla**:
+     - Si `test.template.db` no existe, `reset-test-db.js` la regenera automáticamente ejecutando `prisma migrate deploy` sobre una base SQLite temporal y copiándola luego atómicamente a `test.template.db`.
+     - Si se modificó el esquema (`schema.prisma`) y se crearon nuevas migraciones, podés regenerar la plantilla ejecutando:
+       ```bash
+       npm run test:db:reset -- --rebuild-template
+       ```
+       o eliminando `prisma/test.template.db` (se autogenerará en la próxima ejecución de tests).
