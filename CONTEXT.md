@@ -11,6 +11,7 @@ organizadores que hoy llevan todo en papel.
 ## Stack
 - Frontend: React 19 + Vite + React Router v7, estado local con hooks
   (sin Redux ni Context API), Vanilla CSS (`index.css` con variables/tokens del sistema de diseño), `lucide-react` para iconografía vectorial consistente.
+  - *Nota de Zona Horaria (Pendiente):* El blindaje actual cubre estrictamente el backend (`backend/src/config/timezone.js`). El frontend aún formatea fechas con la zona del navegador y calcula `diaKey` en `TorneoEnVivo.jsx` con su propia copia de `getDiaCalendarioConTrasnoche` (pendiente para próxima tarea).
 - Backend: Node.js + Express
   - **Zona Horaria del Proceso:** Estandarizada estrictamente en `America/Argentina/Buenos_Aires` (UTC-3, sin horario de verano) con offset verificado de 180 min. Blindada en el arranque mediante `backend/src/config/timezone.js`. Requiere imágenes de hosting con soporte `tzdata` (ej. Debian/Ubuntu o `apk add tzdata icu-data-full` en Alpine).
 - DB: SQLite + Prisma como ORM (preparado para migrar a Postgres en producción sin cambios de código).
