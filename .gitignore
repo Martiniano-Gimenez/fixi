@@ -15,6 +15,11 @@ node_modules/
 *.db-shm
 *.sqlite
 *.sqlite3
+backend/prisma/dev.backup.*.db
+
+# Backups and Local Data
+backend/src/data/canchasOverrides.json
+backend/src/data/canchasOverrides.backup.*.json
 
 # Production builds
 dist/

@@ -1,5 +1,13 @@
 // Fixi — Schema completo del MVP (Adaptado para SQLite en Local)
 // Docs: https://pris.ly/d/prisma-schema
+//
+// NOTA DE MIGRACIONES:
+// De ahora en adelante, cualquier cambio en este schema debe versionarse utilizando:
+//   npx prisma migrate dev --name <nombre_cambio>
+// y NUNCA ejecutando `prisma db push`.
+// Las migraciones en prisma/migrations son específicas de SQLite para desarrollo local.
+// Para el despliegue en PostgreSQL en producción (Render/Railway), se debe regenerar
+// la línea base para Postgres mediante prisma migrate deploy tras baselining.
 
 generator client {
   provider = "prisma-client-js"
@@ -38,13 +46,31 @@ model Torneo {
   fecha          DateTime?
   slug           String    @unique
   estado                     String    @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
-  canchasDisponiblesOverride Int? // null = usar club.cantidadCanchas
-  overrideActivoDesde        DateTime? // timestamp de activación del override actual
+  canchasDisponiblesOverride Int? // null = usar club.cantidadCanchas (legacy / retrocompatibilidad)
+  overrideActivoDesde        DateTime? // timestamp de activación del override actual (legacy / retrocompatibilidad)
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
-  organizador    Organizador @relation(fields: [organizadorId], references: [id])
+  organizador    Organizador          @relation(fields: [organizadorId], references: [id])
   categorias     Categoria[]
+  overridesDia   OverrideCanchasDia[]
+}
+
+model OverrideCanchasDia {
+  id              String   @id @default(uuid())
+  torneoId        String
+  diaKey          String   // Formato YYYY-MM-DD (ej: "2026-10-09")
+  canchas         Int
+  isLluvia        Boolean  @default(true)
+  activoDesde     DateTime @default(now())
+  partidosSinSlot Json?    // Mapa { [partidoId]: motivoString }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  torneo Torneo @relation(fields: [torneoId], references: [id], onDelete: Cascade)
+
+  @@unique([torneoId, diaKey])
+  @@index([torneoId])
 }
 
 model Categoria {
