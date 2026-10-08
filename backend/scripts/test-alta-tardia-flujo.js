@@ -151,7 +151,7 @@ async function testAltaTardiaFlujo() {
 
     const resAsignar = await partidoService.asignarHorarioManual(org.id, partidoParaAsignar.id, {
       slotId: 'Viernes-18:00',
-      canchaNumero: 1,
+      canchaNumero: 2,
     });
 
     console.log(`✓ Partido asignado exitosamente:`);
