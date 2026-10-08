@@ -1997,17 +1997,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     }
   }
 
-  // 4. Retrocompatibilidad: si torneo.canchasDisponiblesOverride existe en DB pero no en canchasPorDia
-  if (torneo.canchasDisponiblesOverride != null && overrideDiaKey) {
-    if (!canchasPorDia[overrideDiaKey] || !canchasPorDia[overrideDiaKey].isLluvia) {
-      canchasPorDia[overrideDiaKey] = {
-        canchas: Number(torneo.canchasDisponiblesOverride),
-        isLluvia: true,
-        activoDesde: torneo.overrideActivoDesde ? new Date(torneo.overrideActivoDesde).toISOString() : null,
-      };
-    }
-  }
-
   // Grilla de canchas
   const canchas = [];
   for (let c = 1; c <= canchasClub; c++) {
@@ -2222,7 +2211,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
 
   // Ejecutar scheduler y actualización de torneo en una ÚNICA transacción atómica.
   // Si cualquiera de las dos operaciones falla, todo hace rollback sin dejar estados inconsistentes.
-  const mcfRes = await prisma.$transaction(async (tx) => {
+  const { res: mcfRes, pendingMutations } = await prisma.$transaction(async (tx) => {
     let res;
 
     if (esDomingo) {
@@ -2252,31 +2241,40 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       );
     }
 
-    // Actualizar override independiente por día
+    // Actualizar override independiente por día en DB dentro de tx
+    // NOTA: La caché en memoria NO se muta dentro de la transacción.
+    const mutations = [];
     if (esRestauracion) {
       if (diaKey) {
-        canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey || diaKey);
+        const m1 = await canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey || diaKey, tx);
+        if (m1) mutations.push(m1);
         if (overrideDiaKey && overrideDiaKey !== diaKey) {
-          canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey);
+          const m2 = await canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey, tx);
+          if (m2) mutations.push(m2);
         }
       } else {
-        canchasOverridesService.clearOverridesTorneo(torneoId);
+        const m = await canchasOverridesService.clearOverridesTorneo(torneoId, tx);
+        if (m) mutations.push(m);
       }
     } else if (overrideDiaKey) {
-      canchasOverridesService.setOverrideDia(
+      const m = await canchasOverridesService.setOverrideDia(
         torneoId,
         overrideDiaKey,
         overrideNum,
         timestampOverride,
-        res?.partidosSinSlot || {}
+        res?.partidosSinSlot || {},
+        tx
       );
+      if (m) mutations.push(m);
     }
 
     // Sincronizar estado en Torneo dentro de la misma tx (retrocompatibilidad)
     if (esRestauracion) {
-      const allOverrides = canchasOverridesService.getOverridesTorneo(torneoId);
-      const activeEntries = Object.values(allOverrides).filter((o) => o && o.isLluvia);
-      const latestRemaining = activeEntries.length > 0 ? activeEntries[activeEntries.length - 1] : null;
+      const remainingOverrides = await tx.overrideCanchasDia.findMany({
+        where: { torneoId, isLluvia: true },
+        orderBy: { activoDesde: 'asc' },
+      });
+      const latestRemaining = remainingOverrides.length > 0 ? remainingOverrides[remainingOverrides.length - 1] : null;
       await tx.torneo.update({
         where: { id: torneoId },
         data: {
@@ -2294,8 +2292,13 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       });
     }
 
-    return res;
+    return { res, pendingMutations: mutations };
   }, { timeout: 20000, maxWait: 5000 });
+
+  // POST-COMMIT: Aplicar mutaciones pendientes a la memoria caché de forma centralizada
+  for (const m of pendingMutations || []) {
+    canchasOverridesService.applyCacheMutation(m.action, m.payload);
+  }
 
   const message = esRestauracion
     ? `Todas las canchas (${canchasClub}) fueron restauradas para ${diaNombre || 'la jornada'}. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`

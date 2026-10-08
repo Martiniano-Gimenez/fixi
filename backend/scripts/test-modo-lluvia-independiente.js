@@ -7,6 +7,7 @@ const { programarHorariosEliminatorias } = require('../src/services/eliminatoria
 
 async function main() {
   console.log('=== TEST MODO LLUVIA INDEPENDIENTE POR DÍA Y PLAYOFFS DOMINGO ===\n');
+  await canchasOverridesService.loadFromDb();
 
   // Buscar un organizador y torneo de prueba en curso o crear escenario
   let torneo = await prisma.torneo.findFirst({

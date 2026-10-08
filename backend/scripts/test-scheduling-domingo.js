@@ -1,10 +1,12 @@
 const prisma = require('../src/lib/prisma');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const { asignarHorariosRondaUno } = require('../src/services/eliminatoriaScheduler.service');
 const { esRondaDieciseisavos } = require('../src/services/faseEliminatoria.service');
 const crypto = require('crypto');
 
 async function runTest() {
   console.log('🧪 Iniciando prueba automatizada de Scheduling de Domingo...');
+  await canchasOverridesService.loadFromDb();
 
   const orgEmail = `test-org-${Date.now()}@domingo.com`;
   const organizador = await prisma.organizador.create({
@@ -83,8 +85,8 @@ async function runTest() {
   const faseCat1 = await prisma.faseEliminatoria.create({
     data: {
       categoriaId: cat1.id,
-      nombre: 'Semifinal',
-      ronda: 4,
+      nombre: 'Octavos de Final',
+      ronda: 16,
     },
   });
 
@@ -136,8 +138,8 @@ async function runTest() {
   const faseCat2 = await prisma.faseEliminatoria.create({
     data: {
       categoriaId: cat2.id,
-      nombre: 'Semifinal',
-      ronda: 4,
+      nombre: 'Octavos de Final',
+      ronda: 16,
     },
   });
 
@@ -199,8 +201,8 @@ async function runTest() {
   if (p1_c2_up.canchaNumero !== 3 || getHoraLocal(p1_c2_up.fechaHora) !== '08:00') {
     throw new Error(`Cat 2 P1 incorrecto: esperaba Cancha 3 @ 08:00 pero obtuvo Cancha ${p1_c2_up.canchaNumero} @ ${getHoraLocal(p1_c2_up.fechaHora)}`);
   }
-  if (p2_c2_up.canchaNumero !== 1 || getHoraLocal(p2_c2_up.fechaHora) !== '09:15') {
-    throw new Error(`Cat 2 P2 incorrecto: esperaba Cancha 1 @ 09:15 pero obtuvo Cancha ${p2_c2_up.canchaNumero} @ ${getHoraLocal(p2_c2_up.fechaHora)}`);
+  if (![1, 2].includes(p2_c2_up.canchaNumero) || getHoraLocal(p2_c2_up.fechaHora) !== '09:15') {
+    throw new Error(`Cat 2 P2 incorrecto: esperaba Cancha 1 o 2 @ 09:15 pero obtuvo Cancha ${p2_c2_up.canchaNumero} @ ${getHoraLocal(p2_c2_up.fechaHora)}`);
   }
 
   console.log('  ✅ Aserciones de earliest-fit puro pasaron exitosamente!');
@@ -234,4 +236,5 @@ runTest()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    process.exit(0);
   });

@@ -9,6 +9,7 @@ const { parseFechaLocal } = require('../src/utils/dateUtils');
 
 async function runTest() {
   console.log('🧪 Iniciando test: Protección de Eliminatorias y Horarios Pasados en Modo Lluvia...');
+  await canchasOverridesService.loadFromDb();
 
   const timestamp = Date.now();
   const email = `test_eliminatoria_${timestamp}@padel.com`;
@@ -266,7 +267,7 @@ async function runTest() {
   // =========================================================================
   console.log('\n--- Test Punto 1: removeOverrideDia y reemplazo completo de partidosSinSlot ---');
   // 1.1 Simular reprogramación con partido A sin slot
-  canchasOverridesService.setOverrideDia(
+  await canchasOverridesService.setOverrideDia(
     torneo.id,
     fechaSabadoStr,
     4,
@@ -281,7 +282,7 @@ async function runTest() {
   );
 
   // 1.2 Nueva reprogramación con partido B sin slot: debe REEMPLAZAR el mapa completo, no acumular
-  canchasOverridesService.setOverrideDia(
+  await canchasOverridesService.setOverrideDia(
     torneo.id,
     fechaSabadoStr,
     4,
@@ -301,7 +302,7 @@ async function runTest() {
   );
 
   // 1.3 removeOverrideDia debe eliminar también partidosSinSlot de esa jornada
-  canchasOverridesService.removeOverrideDia(torneo.id, fechaSabadoStr);
+  await canchasOverridesService.removeOverrideDia(torneo.id, fechaSabadoStr);
   overridesDia = canchasOverridesService.getCanchasDia(torneo.id, fechaSabadoStr, 6);
   assert.deepStrictEqual(
     overridesDia.partidosSinSlot,

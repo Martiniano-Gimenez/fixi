@@ -156,6 +156,10 @@ async function reiniciarTorneo(organizadorId, torneoId) {
       });
     }
 
+    await tx.overrideCanchasDia.deleteMany({
+      where: { torneoId: torneo.id },
+    });
+
     await tx.torneo.update({
       where: { id: torneo.id },
       data: {
@@ -165,6 +169,18 @@ async function reiniciarTorneo(organizadorId, torneoId) {
       },
     });
   });
+
+  let canchasOverridesService;
+  try {
+    // Se aísla require() en try/catch únicamente para prevenir fallos por dependencias circulares durante la inicialización temprana
+    canchasOverridesService = require('./canchasOverrides.service');
+  } catch (err) {
+    // Ignorar únicamente error de resolución de módulo por ciclo de dependencias
+  }
+  if (canchasOverridesService) {
+    // Si la caché no está inicializada, applyCacheMutation lanzará el error explícito sin ser silenciado
+    canchasOverridesService.applyCacheMutation('CLEAR', { torneoId });
+  }
 
   try {
     const { preCheckSessions } = require('./organizador.service');

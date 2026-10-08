@@ -57,6 +57,20 @@ if (process.env.NODE_ENV === 'production') {
 app.use(errorHandler);
 
 // ─── Iniciar servidor ────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`🏸 Backend corriendo en http://localhost:${PORT}`);
-});
+const canchasOverridesService = require('./services/canchasOverrides.service');
+
+async function startServer() {
+  try {
+    await canchasOverridesService.loadFromDb();
+    console.log('✅ Caché de overrides de canchas hidratada desde la base de datos.');
+  } catch (err) {
+    console.error('❌ Error hidratando caché de overrides de canchas:', err);
+    process.exit(1);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`🏸 Backend corriendo en http://localhost:${PORT}`);
+  });
+}
+
+startServer();

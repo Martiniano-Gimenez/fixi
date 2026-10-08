@@ -1,9 +1,11 @@
 const prisma = require('../src/lib/prisma');
 const organizadorService = require('../src/services/organizador.service');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 
 async function test() {
   console.log('=== TEST: SCHEDULER COMPLETO DE ELIMINATORIAS (PRIORIDAD POR CLASIFICADOS) ===\n');
+  await canchasOverridesService.loadFromDb();
 
   // 1. Crear organizador y club de prueba con horarios de fin de semana
   const emailOrg = `test-sched-${Date.now()}@padel.test`;
@@ -167,4 +169,7 @@ test()
     console.error('Error en el test:', e);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  });

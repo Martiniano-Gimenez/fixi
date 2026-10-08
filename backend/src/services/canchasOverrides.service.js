@@ -1,59 +1,129 @@
-const fs = require('fs');
-const path = require('path');
+/**
+ * canchasOverrides.service.js
+ * 
+ * Servicio para gestión y persistencia de overrides de canchas por día (Modo Lluvia).
+ * Fuente única de verdad: tabla `OverrideCanchasDia` en base de datos.
+ * 
+ * NOTA DE ARQUITECTURA:
+ * Asume una sola instancia de proceso (single instance deployment) para Render/Railway.
+ * La caché en memoria se hidrata al arrancar el servidor mediante `loadFromDb()`.
+ * Las lecturas son síncronas para preservar rendimiento y firmas existentes.
+ * Las mutaciones de caché en memoria pasan EXCLUSIVAMENTE por `applyCacheMutation()`
+ * y se invocan post-commit tras transacciones exitosas de Prisma.
+ */
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const DATA_FILE = path.join(DATA_DIR, 'canchasOverrides.json');
+const prisma = require('../lib/prisma');
 
-// In-memory cache for ultra-fast access
+// Caché en memoria para acceso ultrarrápido y lecturas síncronas
 let memoryCache = null;
 
-function ensureDataFile() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify({}, null, 2), 'utf8');
-  }
-}
-
-function loadOverrides() {
-  if (memoryCache !== null) {
-    return memoryCache;
-  }
-  try {
-    ensureDataFile();
-    const content = fs.readFileSync(DATA_FILE, 'utf8');
-    memoryCache = JSON.parse(content || '{}');
-  } catch (err) {
-    console.error('[canchasOverrides] Error reading overrides file, resetting cache:', err.message);
-    memoryCache = {};
-  }
-  return memoryCache;
-}
-
-function saveOverrides(data) {
-  memoryCache = data;
-  try {
-    ensureDataFile();
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (err) {
-    console.error('[canchasOverrides] Error writing overrides file:', err.message);
+function assertCacheLoaded() {
+  if (memoryCache === null) {
+    throw new Error(
+      '[canchasOverrides] La caché en memoria no ha sido inicializada. Debe completarse `await canchasOverridesService.loadFromDb()` antes de leer.'
+    );
   }
 }
 
 /**
- * Obtiene todos los overrides de un torneo: { [diaKey]: { canchas: number, isLluvia: boolean, activoDesde: string } }
+ * Hidrata la caché en memoria desde la tabla `OverrideCanchasDia` de la base de datos.
+ * Debe invocarse al inicio del servidor antes de comenzar a escuchar peticiones.
+ */
+async function loadFromDb() {
+  const records = await prisma.overrideCanchasDia.findMany();
+  const nextCache = {};
+
+  for (const r of records) {
+    if (!nextCache[r.torneoId]) {
+      nextCache[r.torneoId] = {};
+    }
+
+    let parsedPartidos = {};
+    if (r.partidosSinSlot) {
+      if (typeof r.partidosSinSlot === 'string') {
+        try {
+          parsedPartidos = JSON.parse(r.partidosSinSlot);
+        } catch {
+          parsedPartidos = {};
+        }
+      } else if (typeof r.partidosSinSlot === 'object') {
+        parsedPartidos = r.partidosSinSlot;
+      }
+    }
+
+    nextCache[r.torneoId][r.diaKey] = {
+      canchas: Number(r.canchas),
+      isLluvia: Boolean(r.isLluvia),
+      activoDesde: r.activoDesde ? new Date(r.activoDesde).toISOString() : null,
+      partidosSinSlot: parsedPartidos,
+    };
+  }
+
+  memoryCache = nextCache;
+  return memoryCache;
+}
+
+/**
+ * Limpia la caché en memoria (utilizado para pruebas de reinicio/recuperación).
+ */
+function clearMemoryCache() {
+  memoryCache = null;
+}
+
+/**
+ * Aplica una mutación a la memoria caché local.
+ * ÚNICA puerta de entrada para mutaciones de memoria caché (invocada solo post-commit o fuera de tx).
+ * @param {'SET' | 'REMOVE' | 'CLEAR'} action 
+ * @param {object} payload 
+ */
+function applyCacheMutation(action, payload = {}) {
+  assertCacheLoaded();
+
+  const { torneoId, diaKey, canchas, isLluvia, activoDesde, partidosSinSlot } = payload;
+
+  if (action === 'SET') {
+    if (!torneoId || !diaKey) return;
+    if (!memoryCache[torneoId]) {
+      memoryCache[torneoId] = {};
+    }
+    memoryCache[torneoId][diaKey] = {
+      canchas: Number(canchas),
+      isLluvia: isLluvia !== undefined ? Boolean(isLluvia) : true,
+      activoDesde: activoDesde ? new Date(activoDesde).toISOString() : new Date().toISOString(),
+      partidosSinSlot: partidosSinSlot || {},
+    };
+  } else if (action === 'REMOVE') {
+    if (!torneoId || !diaKey) return;
+    if (memoryCache[torneoId] && memoryCache[torneoId][diaKey]) {
+      delete memoryCache[torneoId][diaKey];
+      if (Object.keys(memoryCache[torneoId]).length === 0) {
+        delete memoryCache[torneoId];
+      }
+    }
+  } else if (action === 'CLEAR') {
+    if (!torneoId) return;
+    if (memoryCache[torneoId]) {
+      delete memoryCache[torneoId];
+    }
+  }
+}
+
+/**
+ * Obtiene todos los overrides de un torneo: { [diaKey]: { canchas, isLluvia, activoDesde, partidosSinSlot } }
+ * @throws {Error} si la caché no ha sido hidratada previamente con loadFromDb().
  */
 function getOverridesTorneo(torneoId) {
+  assertCacheLoaded();
   if (!torneoId) return {};
-  const all = loadOverrides();
-  return all[torneoId] || {};
+  return memoryCache[torneoId] || {};
 }
 
 /**
  * Obtiene la cantidad de canchas activas y estado de lluvia para un torneo y un día específico.
+ * @throws {Error} si la caché no ha sido hidratada previamente con loadFromDb().
  */
 function getCanchasDia(torneoId, diaKey, defaultCanchasClub) {
+  assertCacheLoaded();
   if (!torneoId || !diaKey) {
     return { canchas: defaultCanchasClub, isLluvia: false, activoDesde: null, partidosSinSlot: {} };
   }
@@ -76,48 +146,110 @@ function getCanchasDia(torneoId, diaKey, defaultCanchasClub) {
 }
 
 /**
- * Registra o actualiza la reducción de canchas para un día específico del torneo.
+ * Registra o actualiza la reducción de canchas para un día específico del torneo en DB.
+ * Si se pasa `tx`, la operación se realiza dentro de la transacción y NO muta la caché (el llamador
+ * debe invocar `applyCacheMutation` post-commit). Si no se pasa `tx`, ejecuta en DB y aplica la mutación DESPUÉS del éxito.
  */
-function setOverrideDia(torneoId, diaKey, canchas, activoDesde = null, partidosSinSlot = {}) {
-  if (!torneoId || !diaKey) return;
-  const all = loadOverrides();
-  if (!all[torneoId]) {
-    all[torneoId] = {};
-  }
-  all[torneoId][diaKey] = {
-    canchas: Number(canchas),
-    isLluvia: true,
-    activoDesde: activoDesde ? new Date(activoDesde).toISOString() : new Date().toISOString(),
-    partidosSinSlot: partidosSinSlot || {},
+async function setOverrideDia(torneoId, diaKey, canchas, activoDesde = null, partidosSinSlot = {}, tx = null) {
+  if (!torneoId || !diaKey) return null;
+
+  const client = tx || prisma;
+  const fechaActivo = activoDesde ? new Date(activoDesde) : new Date();
+
+  await client.overrideCanchasDia.upsert({
+    where: {
+      torneoId_diaKey: {
+        torneoId,
+        diaKey,
+      },
+    },
+    create: {
+      torneoId,
+      diaKey,
+      canchas: Number(canchas),
+      isLluvia: true,
+      activoDesde: fechaActivo,
+      partidosSinSlot: partidosSinSlot || {},
+    },
+    update: {
+      canchas: Number(canchas),
+      isLluvia: true,
+      activoDesde: fechaActivo,
+      partidosSinSlot: partidosSinSlot || {},
+    },
+  });
+
+  const mutation = {
+    action: 'SET',
+    payload: {
+      torneoId,
+      diaKey,
+      canchas: Number(canchas),
+      isLluvia: true,
+      activoDesde: fechaActivo.toISOString(),
+      partidosSinSlot: partidosSinSlot || {},
+    },
   };
-  saveOverrides(all);
+
+  // Si se ejecuta fuera de transacción, aplicar mutación a la caché DESPUÉS del commit exitoso en DB
+  if (!tx) {
+    applyCacheMutation(mutation.action, mutation.payload);
+  }
+
+  return mutation;
 }
 
 /**
- * Elimina el override de un día específico (restauración de canchas al total del club).
+ * Elimina el override de un día específico en DB.
+ * Si se pasa `tx`, se ejecuta dentro de la transacción sin mutar la caché.
  */
-function removeOverrideDia(torneoId, diaKey) {
-  if (!torneoId || !diaKey) return;
-  const all = loadOverrides();
-  if (all[torneoId] && all[torneoId][diaKey]) {
-    delete all[torneoId][diaKey];
-    if (Object.keys(all[torneoId]).length === 0) {
-      delete all[torneoId];
-    }
-    saveOverrides(all);
+async function removeOverrideDia(torneoId, diaKey, tx = null) {
+  if (!torneoId || !diaKey) return null;
+
+  const client = tx || prisma;
+  await client.overrideCanchasDia.deleteMany({
+    where: {
+      torneoId,
+      diaKey,
+    },
+  });
+
+  const mutation = {
+    action: 'REMOVE',
+    payload: { torneoId, diaKey },
+  };
+
+  if (!tx) {
+    applyCacheMutation(mutation.action, mutation.payload);
   }
+
+  return mutation;
 }
 
 /**
- * Limpia todos los overrides de un torneo (ej. al reiniciar torneo).
+ * Limpia todos los overrides de un torneo en DB.
+ * Si se pasa `tx`, se ejecuta dentro de la transacción sin mutar la caché.
  */
-function clearOverridesTorneo(torneoId) {
-  if (!torneoId) return;
-  const all = loadOverrides();
-  if (all[torneoId]) {
-    delete all[torneoId];
-    saveOverrides(all);
+async function clearOverridesTorneo(torneoId, tx = null) {
+  if (!torneoId) return null;
+
+  const client = tx || prisma;
+  await client.overrideCanchasDia.deleteMany({
+    where: {
+      torneoId,
+    },
+  });
+
+  const mutation = {
+    action: 'CLEAR',
+    payload: { torneoId },
+  };
+
+  if (!tx) {
+    applyCacheMutation(mutation.action, mutation.payload);
   }
+
+  return mutation;
 }
 
 module.exports = {
@@ -126,4 +258,7 @@ module.exports = {
   setOverrideDia,
   removeOverrideDia,
   clearOverridesTorneo,
+  loadFromDb,
+  clearMemoryCache,
+  applyCacheMutation,
 };

@@ -5,10 +5,12 @@ const { reiniciarTorneo } = require('../src/services/torneo.service');
 const { preCheckInicioTorneo, preCheckSessions } = require('../src/services/organizador.service');
 const { asignarHorariosRondaUno } = require('../src/services/eliminatoriaScheduler.service');
 const { asignarHorariosModoLluviaMCF } = require('../src/services/zona.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const crypto = require('crypto');
 
 async function main() {
   console.log('🧪 Iniciando test suite: test-auditoria-fixes.js...\n');
+  await canchasOverridesService.loadFromDb();
 
   const orgEmail = `test-audit-${Date.now()}@padel.com`;
   const organizador = await prisma.organizador.create({
@@ -394,4 +396,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    process.exit(0);
   });

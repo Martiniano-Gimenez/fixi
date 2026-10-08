@@ -8,10 +8,12 @@ const zonaService = require('../src/services/zona.service');
 const torneoService = require('../src/services/torneo.service');
 const partidoService = require('../src/services/partido.service');
 const { parseFechaLocal, getDiaCalendarioConTrasnoche } = require('../src/utils/dateUtils');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const assert = require('assert');
 
 async function testModoDiaTorneo() {
   console.log('🧪 Iniciando test automatizado de Modo Día de Torneo...');
+  await canchasOverridesService.loadFromDb();
 
   // 1. Limpiar datos previos del test piloto si existieran
   const existingPiloto = await prisma.organizador.findUnique({ where: { email: 'piloto@padel.com' } });

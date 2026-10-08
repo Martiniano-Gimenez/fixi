@@ -2,10 +2,12 @@ const prisma = require('../src/lib/prisma');
 const partidoService = require('../src/services/partido.service');
 const faseEliminatoriaService = require('../src/services/faseEliminatoria.service');
 const organizadorService = require('../src/services/organizador.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const crypto = require('crypto');
 
 async function testAutoAsignacionEliminatoria() {
   console.log('🧪 Iniciando prueba automatizada de Auto-Asignación de Eliminatoria...');
+  await canchasOverridesService.loadFromDb();
 
   const orgEmail = `test-auto-${Date.now()}@test.com`;
   const organizador = await prisma.organizador.create({
@@ -200,4 +202,5 @@ testAutoAsignacionEliminatoria()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    process.exit(0);
   });

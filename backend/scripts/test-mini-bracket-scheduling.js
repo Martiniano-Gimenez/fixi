@@ -7,9 +7,11 @@ const prisma = new PrismaClient();
 const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
 const torneoService = require('../src/services/torneo.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 
 async function main() {
   console.log('🧪 Iniciando suite de tests para Zonas de 4 (MINI_BRACKET)...');
+  await canchasOverridesService.loadFromDb();
 
   // Helper limpieza
   async function limpiar(email) {
@@ -207,6 +209,7 @@ async function main() {
   console.log('🎉 =============================================================');
 
   await prisma.$disconnect();
+  process.exit(0);
 }
 
 main().catch(async (e) => {
