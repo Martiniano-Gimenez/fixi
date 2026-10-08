@@ -1127,6 +1127,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
 
   // Pre-sembrar partidos inmutables: FINALIZADO y EN_CURSO
   const partidosAAsignar = [];
+  const partidosSinSlotMotivos = new Map();
 
   // Calcular día lógico afectado por el override (si se proporciona)
   let overrideDiaKey = null;
@@ -1165,18 +1166,18 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
         }
       }
     } else if (p.estado === 'PENDIENTE') {
+      const pDiaInfo = p.fechaHora
+        ? getDiaCalendarioConTrasnoche(p.fechaHora, organizador)
+        : getDiaCalendarioConTrasnoche(parseFechaLocal(refFecha), organizador);
+      const esMismaJornada = !overrideDiaKey || (pDiaInfo && pDiaInfo.key === overrideDiaKey);
+
       if (p.pareja1Id && p.pareja2Id) {
         // Cruces de eliminatoria sin horario asignado (ej. dieciseisavos) quedan para asignación manual
         if (p.faseEliminatoriaId && (p.sinHorarioAsignado || !p.fechaHora)) {
           continue;
         }
 
-        // Determinar día lógico del partido (o fallback a torneo.fecha si no tiene fechaHora)
-        const pDiaInfo = p.fechaHora
-          ? getDiaCalendarioConTrasnoche(p.fechaHora, organizador)
-          : getDiaCalendarioConTrasnoche(parseFechaLocal(refFecha), organizador);
-
-        if (overrideDiaKey && pDiaInfo && pDiaInfo.key !== overrideDiaKey) {
+        if (!esMismaJornada) {
           // Partido de otro día lógico → tratar como ocupación fija si tiene horario
           if (p.fechaHora && p.canchaNumero) {
             const startMs = new Date(p.fechaHora).getTime();
@@ -1188,6 +1189,27 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
 
         // Partido del día afectado → candidato a reprogramar
         partidosAAsignar.push(p);
+      } else {
+        // Cruces sin parejas definidas (ej. dieciseisavos con placeholders origenPareja1 / origenPareja2)
+        if (p.faseEliminatoriaId && p.fechaHora && !p.sinHorarioAsignado && p.canchaNumero) {
+          if (!esMismaJornada) {
+            // Otra jornada: pre-sembrar si su cancha está habilitada
+            const startMs = new Date(p.fechaHora).getTime();
+            const endMs = startMs + DURACION_MS;
+            addInterval(p.canchaNumero, null, null, startMs, endMs);
+            continue;
+          }
+
+          if (p.canchaNumero > cantidadCanchas) {
+            // Su cancha quedó inhabilitada en la jornada afectada → admitir para buscar cancha activa 1..cantidadCanchas
+            partidosAAsignar.push(p);
+          } else {
+            // Su cancha ya está en cancha activa (1..cantidadCanchas) → NO alterar, pre-sembrar slot como ocupado
+            const startMs = new Date(p.fechaHora).getTime();
+            const endMs = startMs + DURACION_MS;
+            addInterval(p.canchaNumero, null, null, startMs, endMs);
+          }
+        }
       }
     }
   }
@@ -1281,12 +1303,19 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
         canchaNumero: bestCandidate.cancha,
       });
     } else {
-      updatesMap.set(partido.id, {
-        id: partido.id,
-        sinHorarioAsignado: true,
-        fechaHora: null,
-        canchaNumero: null,
-      });
+      // Si no hay slot libre antes de dayLimitMs:
+      // Si es un partido sin parejas definidas, NO borrar horario ni cancha: queda como está
+      // y se reporta en el aviso naranja con motivo "Sin cancha activa libre disponible en ese horario".
+      if (!partido.pareja1Id || !partido.pareja2Id) {
+        partidosSinSlotMotivos.set(partido.id, 'Sin cancha activa libre disponible en ese horario');
+      } else {
+        updatesMap.set(partido.id, {
+          id: partido.id,
+          sinHorarioAsignado: true,
+          fechaHora: null,
+          canchaNumero: null,
+        });
+      }
     }
   }
 
@@ -1356,6 +1385,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     partidosReprogramados,
     partidosSinCambio,
     partidosSinHorarioNuevo,
+    partidosSinSlot: Object.fromEntries(partidosSinSlotMotivos),
     cambios,
     total: updates.length,
   };

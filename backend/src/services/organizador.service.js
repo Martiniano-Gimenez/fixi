@@ -1923,9 +1923,23 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         const esDelDiaLluvia = diaPartidoOverride ? diaPartidoOverride.isLluvia : false;
 
         if (p.canchaNumero && p.canchaNumero > canchasMaxDia && esDelDiaLluvia) {
+          let motivo = 'Cancha inhabilitada por modo lluvia';
+          if (
+            p.estado === 'PENDIENTE' &&
+            p.canchaNumero > canchasMaxDia &&
+            diaPartidoOverride?.partidosSinSlot &&
+            diaPartidoOverride.partidosSinSlot[p.id]
+          ) {
+            motivo = diaPartidoOverride.partidosSinSlot[p.id];
+          } else if (p.fechaHora && torneo.overrideActivoDesde && new Date(p.fechaHora).getTime() < new Date(torneo.overrideActivoDesde).getTime()) {
+            motivo = 'Horario anterior a la activación del modo lluvia';
+          } else if (!p.pareja1Id || !p.pareja2Id) {
+            motivo = 'Parejas aún no definidas (clasificados de zona)';
+          }
+
           partidosEnCanchaFantasmaList.push({
             ...formatted,
-            motivo: 'Partido anterior al override en cancha inhabilitada',
+            motivo,
           });
         } else {
           proximosPartidosList.push(formatted);
@@ -2240,13 +2254,22 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
 
     // Actualizar override independiente por día
     if (esRestauracion) {
-      if (diaKey && overrideDiaKey) {
-        canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey);
+      if (diaKey) {
+        canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey || diaKey);
+        if (overrideDiaKey && overrideDiaKey !== diaKey) {
+          canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey);
+        }
       } else {
         canchasOverridesService.clearOverridesTorneo(torneoId);
       }
     } else if (overrideDiaKey) {
-      canchasOverridesService.setOverrideDia(torneoId, overrideDiaKey, overrideNum, timestampOverride);
+      canchasOverridesService.setOverrideDia(
+        torneoId,
+        overrideDiaKey,
+        overrideNum,
+        timestampOverride,
+        res?.partidosSinSlot || {}
+      );
     }
 
     // Sincronizar estado en Torneo dentro de la misma tx (retrocompatibilidad)

@@ -55,7 +55,7 @@ function getOverridesTorneo(torneoId) {
  */
 function getCanchasDia(torneoId, diaKey, defaultCanchasClub) {
   if (!torneoId || !diaKey) {
-    return { canchas: defaultCanchasClub, isLluvia: false, activoDesde: null };
+    return { canchas: defaultCanchasClub, isLluvia: false, activoDesde: null, partidosSinSlot: {} };
   }
   const torneoOverrides = getOverridesTorneo(torneoId);
   const diaOverride = torneoOverrides[diaKey];
@@ -64,19 +64,21 @@ function getCanchasDia(torneoId, diaKey, defaultCanchasClub) {
       canchas: Number(diaOverride.canchas),
       isLluvia: Boolean(diaOverride.isLluvia),
       activoDesde: diaOverride.activoDesde || null,
+      partidosSinSlot: diaOverride.partidosSinSlot || {},
     };
   }
   return {
     canchas: defaultCanchasClub,
     isLluvia: false,
     activoDesde: null,
+    partidosSinSlot: {},
   };
 }
 
 /**
  * Registra o actualiza la reducción de canchas para un día específico del torneo.
  */
-function setOverrideDia(torneoId, diaKey, canchas, activoDesde = null) {
+function setOverrideDia(torneoId, diaKey, canchas, activoDesde = null, partidosSinSlot = {}) {
   if (!torneoId || !diaKey) return;
   const all = loadOverrides();
   if (!all[torneoId]) {
@@ -86,6 +88,7 @@ function setOverrideDia(torneoId, diaKey, canchas, activoDesde = null) {
     canchas: Number(canchas),
     isLluvia: true,
     activoDesde: activoDesde ? new Date(activoDesde).toISOString() : new Date().toISOString(),
+    partidosSinSlot: partidosSinSlot || {},
   };
   saveOverrides(all);
 }

@@ -828,4 +828,5 @@ testModoDiaTorneo()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    process.exit(0);
   });

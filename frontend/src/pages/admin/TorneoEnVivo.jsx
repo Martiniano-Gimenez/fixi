@@ -26,7 +26,7 @@ import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import ResultadoModal from '../../components/ResultadoModal';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
-import { formatDiaHorario, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
+import { formatDiaHorario, formatDiaNombre, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
 
 export default function TorneoEnVivo() {
   const { id } = useParams();
@@ -178,10 +178,10 @@ export default function TorneoEnVivo() {
       });
 
       setConfirmRestaurarOpen(false);
+      setTargetCanchas(canchasClub);
       setUserTouchedTarget(false);
       setFeedbackReprogramacion(null);
-      await fetchEnVivoData(true);
-      startPolling(fetchEnVivoData);
+      await fetchAndResetPolling();
     } catch (err) {
       setError(err.message || 'Error al restaurar las canchas');
       setConfirmRestaurarOpen(false);
@@ -373,17 +373,22 @@ export default function TorneoEnVivo() {
 
   // Datos contextuales del día activo en el modelo independiente por jornada
   const diaInfoContextual = (activeTabDay && data?.canchasPorDia?.[activeTabDay]) || null;
-  const anyDayHasLluvia = Object.values(data?.canchasPorDia || {}).some((d) => d && d.isLluvia) || isLluviaActive;
+  const anyDayHasLluvia = Object.values(data?.canchasPorDia || {}).some((d) => d && d.canchas < canchasClub) || isLluviaActive;
 
   // Determinar si la solapa actualmente visible está bajo modo lluvia
+  // Derivamos de la cantidad real de canchas vs total del club (no del flag isLluvia que puede quedar stale)
   const isTabBajoOverride = diaInfoContextual
-    ? Boolean(diaInfoContextual.isLluvia)
+    ? (diaInfoContextual.canchas < canchasClub)
     : (isLluviaActive && (!torneo?.overrideDiaKey || esModoTodo || activeTabDay === torneo?.overrideDiaKey));
 
   // Canchas activas contextuales a la solapa de día seleccionada
   const canchasActivasContextuales = diaInfoContextual
     ? diaInfoContextual.canchas
     : (isTabBajoOverride ? canchasActivas : canchasClub);
+
+  const diaLluviaNombre = activeJornadaInfo?.diaNombre
+    || (diaInfoContextual?.activoDesde ? formatDiaNombre(diaInfoContextual.activoDesde) : null)
+    || (torneo?.overrideActivoDesde ? formatDiaNombre(torneo.overrideActivoDesde) : null);
 
   const prevTabDayRef = useRef(activeTabDay);
 
@@ -640,7 +645,7 @@ export default function TorneoEnVivo() {
                 )}
                 <span>{jornada.label}</span>
 
-                {data?.canchasPorDia?.[jornada.key]?.isLluvia && (
+                {data?.canchasPorDia?.[jornada.key] && data.canchasPorDia[jornada.key].canchas < canchasClub && (
                   <CloudRain
                     size={14}
                     style={{ color: '#60a5fa' }}
@@ -825,7 +830,7 @@ export default function TorneoEnVivo() {
                   }}
                 >
                   <CloudRain size={13} />
-                  Modo Lluvia ({diaInfoContextual?.activoDesde ? formatDiaHorario(diaInfoContextual.activoDesde) : (torneo.overrideActivoDesde ? formatDiaHorario(torneo.overrideActivoDesde) : 'Activo')})
+                  Modo Lluvia{diaLluviaNombre ? ` (${diaLluviaNombre})` : ''}
                 </span>
               ) : anyDayHasLluvia ? (
                 <span
@@ -1170,7 +1175,7 @@ export default function TorneoEnVivo() {
           </div>
 
           <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
-            Estos partidos tenían asignada una cancha que ahora está inhabilitada (Cancha &gt; {canchasActivas}) y su horario programado era anterior a la activación del modo lluvia, por lo que no fueron reprogramados automáticamente.
+            Estos partidos tenían asignada una cancha que ahora está inhabilitada (Cancha &gt; {canchasActivas}) y no pudieron ser reprogramados automáticamente. Revisá su asignación en cada categoría.
           </p>
 
           {fantasmaExpanded && (
@@ -1195,6 +1200,11 @@ export default function TorneoEnVivo() {
                     </div>
                     <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
                       {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''} • Asignado a: Cancha {p.canchaNumero} ({formatDiaHorario(p.fechaHora)})
+                      {p.motivo && (
+                        <span style={{ display: 'block', color: '#f59e0b', marginTop: '0.2rem', fontWeight: 500 }}>
+                          Motivo: {p.motivo}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <Link

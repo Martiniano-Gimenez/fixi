@@ -18,6 +18,20 @@ export function formatDiaHorario(fechaHora) {
 }
 
 /**
+ * Formatea una fecha/hora ISO obteniendo únicamente el día: "Viernes" o "Sábado"
+ * @param {string | Date} fechaHora
+ * @returns {string}
+ */
+export function formatDiaNombre(fechaHora) {
+  if (!fechaHora) return '';
+  const d = new Date(fechaHora);
+  if (isNaN(d.getTime())) return '';
+
+  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  return dias[d.getDay()];
+}
+
+/**
  * Formatea una fecha/hora ISO en formato compacto para tarjeta de partido: "Vie · 19:30"
  * Utiliza timeZone 'America/Argentina/Cordoba'. Si fechaHora es null o inválida, retorna ''.
  * @param {string | Date} fechaHora

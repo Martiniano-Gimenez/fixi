@@ -17,5 +17,20 @@
       "isLluvia": true,
       "activoDesde": "2026-09-18T21:00:00.000Z"
     }
+  },
+  "2f20c197-3f60-4db0-bd44-c7f423480fb5": {
+    "2026-08-29": {
+      "canchas": 4,
+      "isLluvia": true,
+      "activoDesde": "2026-08-29T15:00:00.000Z"
+    }
+  },
+  "21a1a96d-fc3d-4d5d-bc59-3a587568ac60": {
+    "2026-10-09": {
+      "canchas": 4,
+      "isLluvia": true,
+      "activoDesde": "2026-10-09T21:00:00.000Z",
+      "partidosSinSlot": {}
+    }
   }
 }
