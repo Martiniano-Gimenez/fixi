@@ -1,5 +1,7 @@
 'use strict';
 
+require('../../src/config/timezone');
+
 const path = require('path');
 const fs = require('fs');
 
