@@ -1,16 +1,22 @@
 const fs = require('fs');
 const path = require('path');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-const { getDiaCalendarioConTrasnoche } = require('../src/utils/dateUtils');
+const prisma = require('../../src/lib/prisma');
+const { getDiaCalendarioConTrasnoche } = require('../../src/utils/dateUtils');
+const { requireConfirmarDev, crearBackupDevDb } = require('./devUtils');
 
-const DATA_DIR = path.join(__dirname, '..', 'src', 'data');
+const DATA_DIR = path.join(__dirname, '..', '..', 'src', 'data');
 const JSON_FILE = path.join(DATA_DIR, 'canchasOverrides.json');
 
 async function migrateOverrides() {
   const isDryRun = process.argv.includes('--dry-run');
+
+  if (!isDryRun) {
+    requireConfirmarDev('migrate-canchas-overrides-json.js');
+    crearBackupDevDb();
+  }
+
   console.log(`\n======================================================`);
-  console.log(`📦 SCRIPT DE MIGRACIÓN: CANCHAS OVERRIDES JSON -> DB`);
+  console.log(`📦 SCRIPT DE MIGRACIÓN: CANCHAS OVERRIDES JSON -> DB (DEV-TOOLS)`);
   console.log(`Modo: ${isDryRun ? 'DRY-RUN (Simulación, no escribe en base)' : 'EJECUCIÓN REAL (Escribe en DB)'}`);
   console.log(`======================================================\n`);
 

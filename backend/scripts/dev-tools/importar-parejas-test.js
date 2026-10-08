@@ -4,27 +4,16 @@
  * Script de un solo uso para cargar datos de prueba desde un XLSX a la DB.
  *
  * USO:
- *   node scripts/importar-parejas-test.js --archivo=ruta.xlsx --torneoId=<id>
- *
- * COLUMNAS ESPERADAS (orden fijo en el XLSX):
- *   Apellido 1 | Apellido 2 | Categoría | Horarios
- *
- * FORMATO DE HORARIOS (ejemplos):
- *   "Viernes 13 a 20 / Sabado 9 a 15"
- *   "Viernes desde 13 / Sabado hasta 18"
- *   "todo el día"
- *   "13 a 20"                   → aplica a ambos días
- *   "Viernes todo el día"
- *   "Sabado 10 a 18 (en horario de mañana)"  → texto en paréntesis ignorado
+ *   node scripts/dev-tools/importar-parejas-test.js --confirmar-dev --archivo=ruta.xlsx --torneoId=<id> [--margenMinutos=60]
  */
 
 'use strict';
 
-require('dotenv').config();          // carga .env (DATABASE_URL)
+require('dotenv').config();
 const path   = require('path');
 const XLSX   = require('xlsx');
-const prisma = require('../src/lib/prisma');
-const { generarSlotsDia } = require('../src/services/slots.service');
+const prisma = require('../../src/lib/prisma');
+const { requireConfirmarDev, crearBackupDevDb } = require('./devUtils');
 
 // ─── Helpers de tiempo ──────────────────────────────────────────────────────
 
@@ -35,7 +24,7 @@ function horaAMinutos(h, isFin = false) {
     return 24 * 60;
   }
   if (/^\d+$/.test(str)) {
-    return parseInt(str, 10) * 60;  // "9" → 540
+    return parseInt(str, 10) * 60;
   }
   const m = str.match(/^(\d{1,2}):(\d{2})$/);
   if (m) {
@@ -55,10 +44,6 @@ function minutosAHora(min) {
 const PALABRAS_VIERNES = ['viernes', 'vier', 'vier.', 'vie'];
 const PALABRAS_SABADO  = ['sabado', 'sábado', 'sab', 'sab.'];
 
-/**
- * Detecta a qué día apunta un segmento de texto.
- * Retorna 'Viernes', 'Sabado', o null (ambos días).
- */
 function detectarDia(texto) {
   const t = texto.toLowerCase();
   if (PALABRAS_VIERNES.some(p => t.includes(p))) return 'Viernes';
@@ -66,83 +51,56 @@ function detectarDia(texto) {
   return null;
 }
 
-/**
- * Parsea un segmento de horario (sin referencia a día) y devuelve
- * { inicioMin, finMin } en minutos absolutos, o null si no hay patrón reconocido.
- */
 function parsearRangoHorario(segmento) {
-  // Quitar texto entre paréntesis
   let s = segmento.replace(/\(.*?\)/g, '').trim().toLowerCase();
   s = s.replace(/,\s*/g, ' ');
 
-  // "todo el día" o equivalentes
   if (/todo\s+el\s+d[ií]a|libre|todo/.test(s)) {
     return { inicioMin: null, finMin: null, todoElDia: true };
   }
 
-  // después de / luego de / +
   s = s.replace(/despu[eé]s\s+de\s+(?:las?\s+)?/gi, 'desde ');
   s = s.replace(/luego\s+de\s+(?:las?\s+)?/gi, 'desde ');
   s = s.replace(/^\+/, 'desde ');
   s = s.replace(/\s+\+/, ' desde ');
-
-  // entre X y Y
   s = s.replace(/entre\s+(\d{1,2}(?::\d{2})?(?:hs)?)\s+y\s+(\d{1,2}(?::\d{2})?(?:hs)?)/gi, '$1 a $2');
-
-  // de X a Y -> eliminar 'de '
   s = s.replace(/(?:^|\s+)de\s+/gi, ' ');
-
-  // limpiar frases de relleno habituales
   s = s.replace(/los\s+dos\s+partidos|los\s+dos|no\s+seguidos|seguidos|medio\s+seguidos|si\s+es\s+posible|cuanto\s+m[aá]s\s+temprano\s+mejor/gi, '').trim();
   s = s.replace(/\s+/g, ' ').trim();
 
-  // "X a Y"
   let m = s.match(/^(\d{1,2}(?::\d{2})?(?:hs)?)\s*a\s*(\d{1,2}(?::\d{2})?(?:hs)?)$/i);
   if (m) {
     return { inicioMin: horaAMinutos(m[1], false), finMin: horaAMinutos(m[2], true), todoElDia: false };
   }
 
-  // "desde X"
   m = s.match(/^desde\s+(?:las?\s+)?(\d{1,2}(?::\d{2})?(?:hs)?)$/i);
   if (m) {
     return { inicioMin: horaAMinutos(m[1], false), finMin: null, todoElDia: false };
   }
 
-  // "hasta Y"
   m = s.match(/^hasta\s+(?:las?\s+)?(\d{1,2}(?::\d{2})?(?:hs)?)$/i);
   if (m) {
     return { inicioMin: null, finMin: horaAMinutos(m[1], true), todoElDia: false };
   }
 
-  // número suelto → "desde X"
   m = s.match(/^(\d{1,2}(?::\d{2})?(?:hs)?)$/i);
   if (m) {
     return { inicioMin: horaAMinutos(m[1], false), finMin: null, todoElDia: false };
   }
 
-  return null; // patrón no reconocido
+  return null;
 }
 
-/**
- * Toma el texto completo de la celda "Horarios" y devuelve un array de
- * { dia: 'Viernes'|'Sabado', inicioMin, finMin, todoElDia }.
- *
- * Retorna null si el texto está vacío o no contiene ningún patrón válido.
- * Retorna { error: '...' } si algún segmento no matchea ningún patrón.
- */
 function parsearHorarios(texto) {
   if (!texto || !String(texto).trim()) return null;
 
   const textoLower = String(texto).toLowerCase();
   const sabadoTambien = textoLower.includes('sábado también') || textoLower.includes('sabado tambien');
 
-  // Separar por "/"
   const segmentos = String(texto).split('/').map(s => s.trim()).filter(Boolean);
-
   const resultados = [];
 
   for (const seg of segmentos) {
-    // Quitar el prefijo del día para parsear el rango
     let sinDia = seg
       .replace(/viernes/gi, '')
       .replace(/sábado/gi, '')
@@ -164,7 +122,6 @@ function parsearHorarios(texto) {
         resultados.push({ dia: 'Sabado', ...rango });
       }
     } else {
-      // Sin referencia de día → aplica a ambos
       resultados.push({ dia: 'Viernes', ...rango });
       resultados.push({ dia: 'Sabado',  ...rango });
     }
@@ -176,14 +133,9 @@ function parsearHorarios(texto) {
 
 // ─── Cálculo de slots ───────────────────────────────────────────────────────
 
-/**
- * Dado el organizador del club y un array de rangos horarios parseados,
- * devuelve el array de slotIds (strings) que caen íntegramente dentro.
- * Soporta un margen en minutos (por defecto 30m antes y 30m después) y jornadas trasnoche.
- */
 function calcularSlots(organizador, rangos, margenMinutos = 30) {
-  const DURACION = 75; // minutos por partido
-  const GRANULARIDAD = 15; // granularidad de la grilla
+  const DURACION = 75;
+  const GRANULARIDAD = 15;
 
   function getSlotsConTiempos(dia, horaInicio, horaFin) {
     if (!horaInicio || !horaFin) return { slots: [], aperturaMin: 0, cierreMin: 0 };
@@ -223,13 +175,11 @@ function calcularSlots(organizador, rangos, margenMinutos = 30) {
         continue;
       }
 
-      // Aplicar margen antes (inicioMin - margen) acotado por apertura del club
       let inicio = aperturaMin;
       if (rango.inicioMin !== null) {
         inicio = Math.max(aperturaMin, rango.inicioMin - margenMinutos);
       }
 
-      // Aplicar margen después (finMin + margen) acotado por cierre del club
       let fin = cierreMin;
       if (rango.finMin !== null) {
         let rFin = rango.finMin;
@@ -262,10 +212,12 @@ function parseArgs() {
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
+  requireConfirmarDev('importar-parejas-test.js');
+
   const args = parseArgs();
 
   if (!args.archivo || !args.torneoId) {
-    console.error('USO: node scripts/importar-parejas-test.js --archivo=ruta.xlsx --torneoId=<id> [--margenMinutos=60]');
+    console.error('USO: node scripts/dev-tools/importar-parejas-test.js --confirmar-dev --archivo=ruta.xlsx --torneoId=<id> [--margenMinutos=60]');
     process.exit(1);
   }
 
@@ -307,6 +259,8 @@ async function main() {
     process.exit(1);
   }
 
+  crearBackupDevDb();
+
   console.log(`\n✅ Torneo encontrado: "${torneo.nombre}"`);
   console.log(`   Categorías: ${torneo.categorias.map(c => c.nombre).join(', ')}`);
   console.log(`   Club: ${torneo.organizador.nombre}`);
@@ -340,28 +294,33 @@ async function main() {
 
     stats.total++;
 
-    const apellido1   = String(fila[0] || '').trim();
-    const apellido2   = String(fila[1] || '').trim();
-    const catNombre   = String(fila[2] || '').trim();
-    const horariosRaw = String(fila[3] || '').trim();
+    const apellido1   = String(fila[0] ?? '').trim();
+    const apellido2   = String(fila[1] ?? '').trim();
+    const catNombre   = String(fila[2] ?? '').trim();
+    const horariosRaw = String(fila[3] ?? '').trim();
 
-    const jugador1 = apellido1 || '(sin nombre)';
-    const jugador2 = apellido2 || '(sin nombre)';
-
-    // 3a. Matchear categoría (case-insensitive)
-    const categoria = categoriasMap.get(catNombre.toLowerCase());
-    if (!categoria) {
-      const motivo = `Categoría no encontrada: "${catNombre}"`;
-      console.warn(`⚠️  Fila ${numFila} salteada — ${motivo}  (${jugador1} / ${jugador2})`);
-      stats.salteadas.push({ fila: numFila, jugador1, jugador2, catNombre, horariosRaw, motivo });
+    if (!catNombre) {
+      const motivo = 'Columna Categoría vacía';
+      console.warn(`⚠️  Fila ${numFila} salteada — ${motivo}`);
+      stats.salteadas.push({ fila: numFila, jugador1: apellido1, jugador2: apellido2, catNombre, horariosRaw, motivo });
       continue;
     }
 
-    // 3b. Parsear horarios
+    const categoria = categoriasMap.get(catNombre.toLowerCase());
+    if (!categoria) {
+      const motivo = `Categoría "${catNombre}" no encontrada en el torneo`;
+      console.warn(`⚠️  Fila ${numFila} salteada — ${motivo}`);
+      stats.salteadas.push({ fila: numFila, jugador1: apellido1, jugador2: apellido2, catNombre, horariosRaw, motivo });
+      continue;
+    }
+
+    const jugador1 = apellido1 || `Jugador A (fila ${numFila})`;
+    const jugador2 = apellido2 || `Jugador B (fila ${numFila})`;
+
     const parseResult = parsearHorarios(horariosRaw);
 
     if (!parseResult) {
-      const motivo = `Horario vacío o sin patrón reconocido: "${horariosRaw}"`;
+      const motivo = `Horario vacío o no reconocible: "${horariosRaw}"`;
       console.warn(`⚠️  Fila ${numFila} salteada — ${motivo}  (${jugador1} / ${jugador2})`);
       stats.salteadas.push({ fila: numFila, jugador1, jugador2, catNombre, horariosRaw, motivo });
       continue;
@@ -374,7 +333,6 @@ async function main() {
       continue;
     }
 
-    // 3c. Calcular slots de la grilla con margen
     const slots = calcularSlots(torneo.organizador, parseResult, margenMinutos);
 
     if (slots.length === 0) {
@@ -384,7 +342,6 @@ async function main() {
       continue;
     }
 
-    // 3d. Crear siempre una nueva Pareja y sus SlotPareja correspondientes
     const orden = (ordenPorCategoria.get(categoria.id) || 0) + 1;
     ordenPorCategoria.set(categoria.id, orden);
 
@@ -401,7 +358,7 @@ async function main() {
     });
 
     stats.guardadas++;
-    console.log(`✅ Fila ${numFila} → [${categoria.nombre}] ${jugador1} / ${jugador2} — ${slots.length} slot(s): ${slots.slice(0, 3).join(', ')}${slots.length > 3 ? '...' : ''}`);
+    console.log(`✅ Fila ${numFila} → [${categoria.nombre}] ${jugador1} / ${jugador2} — ${slots.length} slot(s)`);
   }
 
   // ── 4. Resumen final ──────────────────────────────────────────────────────
@@ -411,15 +368,6 @@ async function main() {
   console.log(`  Total filas procesadas : ${stats.total}`);
   console.log(`  Parejas creadas        : ${stats.guardadas}`);
   console.log(`  Filas salteadas        : ${stats.salteadas.length}`);
-
-  if (stats.salteadas.length > 0) {
-    console.log('\n  Detalle de filas salteadas:');
-    for (const s of stats.salteadas) {
-      console.log(`    • Fila ${s.fila}: ${s.jugador1} / ${s.jugador2}`);
-      console.log(`      Motivo: ${s.motivo}`);
-    }
-  }
-
   console.log('═'.repeat(62) + '\n');
 
   await prisma.$disconnect();

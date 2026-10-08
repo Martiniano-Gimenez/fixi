@@ -1,8 +1,9 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const zonaService = require('../src/services/zona.service');
-const { parseFechaLocal, getDiaCalendarioConTrasnoche, requireTorneoFecha } = require('../src/utils/dateUtils');
-const { horaAMinutos } = require('../src/services/slots.service');
+const zonaService = require('../../src/services/zona.service');
+const { parseFechaLocal, getDiaCalendarioConTrasnoche, requireTorneoFecha } = require('../../src/utils/dateUtils');
+const { horaAMinutos } = require('../../src/services/slots.service');
+const { requireConfirmarDev, crearBackupDevDb } = require('./devUtils');
 
 // Implementación exacta del bucle voraz anterior que tenía `startSearchMs = minSlotMs`
 function simularBucleVorazAnterior(partidosAReprogramar, overrideNum, friDayStartMs, satDayStartMs, refFecha, organizador, DURACION_MS) {
@@ -134,9 +135,18 @@ function simularBucleVorazAnterior(partidosAReprogramar, overrideNum, friDayStar
 }
 
 async function runBenchmark() {
+  requireConfirmarDev('benchmark-voraz-vs-mcf.js');
+  crearBackupDevDb();
+
   console.log('🏁 Iniciando Benchmark: Escenario con Slots Nocturnos y Huecos Tempranos (6 → 4 Canchas)...\n');
 
-  const organizador = await prisma.organizador.create({
+  let organizador = null;
+  let torneo = null;
+  let cat = null;
+  let parejas = [];
+
+  try {
+    organizador = await prisma.organizador.create({
     data: {
       nombre: 'Club Test Causa Raiz',
       email: `causa-raiz-${Date.now()}@padel.com`,
@@ -282,14 +292,25 @@ async function runBenchmark() {
   })));
   console.log('================================================================\n');
 
-  // Limpieza
-  await prisma.partido.deleteMany({ where: { categoriaId: cat.id } });
-  await prisma.zona.deleteMany({ where: { categoriaId: cat.id } });
-  await prisma.slotPareja.deleteMany({ where: { parejaId: { in: parejas.map(p => p.id) } } });
-  await prisma.pareja.deleteMany({ where: { categoriaId: cat.id } });
-  await prisma.categoria.deleteMany({ where: { torneoId: torneo.id } });
-  await prisma.torneo.deleteMany({ where: { id: torneo.id } });
-  await prisma.organizador.deleteMany({ where: { id: organizador.id } });
+  } finally {
+    // Limpieza garantizada en bloque finally
+    if (cat) {
+      await prisma.partido.deleteMany({ where: { categoriaId: cat.id } });
+      await prisma.zona.deleteMany({ where: { categoriaId: cat.id } });
+      if (parejas.length > 0) {
+        await prisma.slotPareja.deleteMany({ where: { parejaId: { in: parejas.map(p => p.id) } } });
+      }
+      await prisma.pareja.deleteMany({ where: { categoriaId: cat.id } });
+    }
+    if (torneo) {
+      await prisma.categoria.deleteMany({ where: { torneoId: torneo.id } });
+      await prisma.torneo.deleteMany({ where: { id: torneo.id } });
+    }
+    if (organizador) {
+      await prisma.organizador.deleteMany({ where: { id: organizador.id } });
+    }
+    console.log('✓ Limpieza de datos de benchmark completada.');
+  }
 }
 
 runBenchmark().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });

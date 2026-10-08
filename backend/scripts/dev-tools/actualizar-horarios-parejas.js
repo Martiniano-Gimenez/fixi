@@ -6,7 +6,7 @@
  * antes y después del rango horario declarado por cada pareja.
  *
  * USO:
- *   node scripts/actualizar-horarios-parejas.js [--archivo=ruta.xlsx] [--torneoId=<id>] [--margenMinutos=30]
+ *   node scripts/dev-tools/actualizar-horarios-parejas.js --confirmar-dev --torneoId=<id> [--archivo=ruta.xlsx] [--margenMinutos=30]
  */
 
 'use strict';
@@ -14,7 +14,8 @@
 require('dotenv').config();
 const path   = require('path');
 const XLSX   = require('xlsx');
-const prisma = require('../src/lib/prisma');
+const prisma = require('../../src/lib/prisma');
+const { requireConfirmarDev, crearBackupDevDb } = require('./devUtils');
 
 // ─── Helpers de tiempo ──────────────────────────────────────────────────────
 
@@ -180,13 +181,11 @@ function calcularSlots(organizador, rangos, margenMinutos = 30) {
         continue;
       }
 
-      // Aplicar margen antes (inicioMin - margen) acotado por apertura del club
       let inicio = aperturaMin;
       if (rango.inicioMin !== null) {
         inicio = Math.max(aperturaMin, rango.inicioMin - margenMinutos);
       }
 
-      // Aplicar margen después (finMin + margen) acotado por cierre del club
       let fin = cierreMin;
       if (rango.finMin !== null) {
         let rFin = rango.finMin;
@@ -219,14 +218,23 @@ function parseArgs() {
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
+  requireConfirmarDev('actualizar-horarios-parejas.js');
+
   const args = parseArgs();
-  const archivoPath   = path.resolve(args.archivo || path.resolve(__dirname, '../../Inscripciones_Padel_Ordenado.xlsx'));
+  const archivoPath   = path.resolve(args.archivo || path.resolve(__dirname, '../../../Inscripciones_Padel_Ordenado.xlsx'));
   const margenMinutos = args.margenMinutos !== undefined ? parseInt(args.margenMinutos, 10) : 30;
 
-  console.log('🎾 ACTUALIZADOR DE HORARIOS DE PAREJAS');
+  if (!args.torneoId) {
+    console.error('❌ Parámetro obligatorio faltante: --torneoId=<id>');
+    console.error('Por seguridad se eliminó el fallback ciego. Debes indicar el torneo objetivo.');
+    process.exit(1);
+  }
+
+  console.log('🎾 ACTUALIZADOR DE HORARIOS DE PAREJAS (DEV-TOOLS)');
   console.log('═'.repeat(60));
-  console.log(`  Archivo: ${archivoPath}`);
-  console.log(`  Margen : ±${margenMinutos} minutos antes y después`);
+  console.log(`  Archivo  : ${archivoPath}`);
+  console.log(`  Torneo ID: ${args.torneoId}`);
+  console.log(`  Margen   : ±${margenMinutos} minutos antes y después`);
 
   // 1. Leer XLSX
   let workbook;
@@ -244,59 +252,31 @@ async function main() {
 
   console.log(`  Total filas en Excel: ${filasDatos.length}`);
 
-  // 2. Buscar torneo
-  let torneo;
-  if (args.torneoId) {
-    torneo = await prisma.torneo.findUnique({
-      where: { id: args.torneoId },
-      include: {
-        categorias: {
-          include: {
-            parejas: {
-              include: { slotsSeleccionados: true },
-              orderBy: { orden: 'asc' },
-            },
+  // 2. Buscar torneo estrictamente por ID
+  const torneo = await prisma.torneo.findUnique({
+    where: { id: args.torneoId },
+    include: {
+      categorias: {
+        include: {
+          parejas: {
+            include: { slotsSeleccionados: true },
+            orderBy: { orden: 'asc' },
           },
         },
-        organizador: true,
       },
-    });
-  } else {
-    // Buscar el torneo principal que contenga las parejas
-    torneo = await prisma.torneo.findFirst({
-      where: {
-        nombre: { contains: 'Agosto' },
-      },
-      include: {
-        categorias: {
-          include: {
-            parejas: {
-              include: { slotsSeleccionados: true },
-              orderBy: { orden: 'asc' },
-            },
-          },
-        },
-        organizador: true,
-      },
-    });
-  }
+      organizador: true,
+    },
+  });
 
   if (!torneo) {
-    console.error('❌ Torneo no encontrado en la base de datos.');
+    console.error(`❌ Torneo no encontrado en la base de datos con id="${args.torneoId}".`);
     process.exit(1);
   }
 
-  // Guard de ciclo de vida: la disponibilidad horaria solo se puede actualizar para categorías en BORRADOR
-  const categoriasBorrador = torneo.categorias.filter((c) => c.estado === 'BORRADOR');
-  if (categoriasBorrador.length === 0) {
-    console.error(`❌ No se puede actualizar disponibilidad: todas las categorías del torneo ya fueron iniciadas (disponibilidad congelada).`);
-    process.exit(1);
-  }
+  crearBackupDevDb();
 
-  console.log(`  Torneo: "${torneo.nombre}" (ID: ${torneo.id})`);
-  console.log(`  Club: ${torneo.organizador.nombre}`);
-  console.log(`  Grilla Viernes: ${torneo.organizador.viernesInicio} a ${torneo.organizador.viernesFin}`);
-  console.log(`  Grilla Sábado : ${torneo.organizador.sabadoInicio} a ${torneo.organizador.sabadoFin}`);
+  console.log(`  Torneo: ${torneo.nombre} (${torneo.id})`);
+  console.log(`  Club  : ${torneo.organizador.nombre}`);
   console.log('═'.repeat(60) + '\n');
 
   // Mapear categorías

@@ -1,4 +1,4 @@
-const prisma = require('../src/lib/prisma');
+const prisma = require('../../src/lib/prisma');
 
 async function check() {
   const impares = await prisma.torneo.findFirst({

@@ -1,11 +1,28 @@
-const prisma = require('../src/lib/prisma');
+'use strict';
+
+const prisma = require('../../src/lib/prisma');
+const { requireConfirmarDev, crearBackupDevDb } = require('./devUtils');
 
 async function main() {
-  const org = await prisma.organizador.findFirst();
-  if (!org) {
-    console.error('No organizador found');
+  requireConfirmarDev('setup-test-mobile.js');
+
+  const args = process.argv.slice(2);
+  const orgArg = args.find((a) => a.startsWith('--organizadorId='));
+  const organizadorId = orgArg ? orgArg.split('=')[1].trim() : null;
+
+  if (!organizadorId) {
+    console.error('❌ Parámetro obligatorio faltante: --organizadorId=<id>');
+    console.error('Por seguridad se eliminó el fallback findFirst(). Debes especificar el organizador destino.');
     process.exit(1);
   }
+
+  const org = await prisma.organizador.findUnique({ where: { id: organizadorId } });
+  if (!org) {
+    console.error(`❌ No se encontró ningún organizador con id="${organizadorId}".`);
+    process.exit(1);
+  }
+
+  crearBackupDevDb();
 
   // Delete previous test tournament if exists
   const existing = await prisma.torneo.findUnique({
