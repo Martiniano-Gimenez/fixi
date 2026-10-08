@@ -1661,7 +1661,8 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   - Ejecución consecutiva dual de `npm test` (`run-all-tests.js`): 19/19 suites aprobadas en ambas corridas de forma idéntica (12.58s y 11.73s), certificando cero estado arrastrado.
   - Verificación de inmutabilidad de `dev.db` (SHA256 idéntico y 149 partidos preservados).
   - Verificación de arranque de `node src/index.js` y `npm run dev` con hidratación previa de caché.
-  - Verificación de auto-regeneración de `test.template.db` mediante `reset-test-db.js --rebuild-template`.
+  - Verificación de auto-regeneración de `test.template.db` mediante `reset-test-db.js --rebuild-template` (y al detectar su ausencia).
+  - Validación manual de usuario sobre entorno clonado (`dev.manual.db` en puerto 3001) para Modo Lluvia y persistencia en `OverrideCanchasDia`: comprobación de reprogramaciones, restauración y cero contaminación de `dev.db` (SHA256 verificado antes y después: `51FC0B1DD6EBE5722EEEA8292352B66EE88651486A67DA8889C50EFDF0C2B6FE`).
 - **Resultado final:** Infraestructura de testeo completamente profesional, desacoplada, reproducible y segura que protege al 100% la integridad de los datos de desarrollo y producción.
 
 ---

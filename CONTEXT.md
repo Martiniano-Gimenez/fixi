@@ -371,7 +371,7 @@ organizadores que hoy llevan todo en papel.
   - **Padding Adaptativo y Grilla Blindada:** `.torneos-grid` con `grid-template-columns: minmax(0, 1fr)` en mobile y `.torneo-card` con `min-width: 0; max-width: 100%;` y padding adaptativo ($16\text{px}$ en $\le 480\text{px}$ y $12\text{px}$ en $\le 360\text{px}$), eliminando los desbordes que ocurrían en $\le 347\text{px}$ por el padding rígido previo de 24px.
   - **Fila de Acciones de Tarjeta Proporcional:** `.torneo-card-actions` con botones `Administrar`, `Bracket` y `Eliminar` con padding y tipografía ajustada en $\le 360\text{px}$, asegurando una única fila alineada con márgenes limpios y cero scroll horizontal en 320px.
 - **Aislamiento Total de Base de Datos de Test y Blindaje de Entorno:**
-  - **Base de Datos Descartable Aislada (`prisma/test.db` y `prisma/test.template.db`):** Todas las suites de prueba corren exclusivamente contra `test.db`. Se utiliza una plantilla inmutable `test.template.db` migrada con la línea base y los cambios vigentes.
+  - **Base de Datos Descartable Aislada (`prisma/test.db` y `prisma/test.template.db`):** Todas las suites de prueba corren exclusivamente contra `test.db`. Se utiliza una plantilla inmutable `test.template.db` migrada con la línea base y los cambios vigentes. Si el archivo no existe o se ejecuta `reset-test-db.js --rebuild-template`, se auto-regenera automáticamente corriendo `prisma migrate deploy` sobre un archivo temporal (documentado en detalle en `backend/prisma/README.md`).
   - **Guarda Fail-Safe de Dos Capas (`backend/scripts/utils/testEnvGuard.js`):**
     1. *Capa Sincrónica:* Carga forzada de variables de entorno `.env.test` (`DATABASE_URL="file:./test.db"`, `PORT=3002`, `JWT_SECRET`) previo a que Prisma o cualquier servicio sea requerido.
     2. *Capa Asincrónica (`ensureTestDb()`):* Ejecuta `PRAGMA database_list` contra SQLite resolviendo la ruta física de la base conectada. Aborta inmediatamente el proceso si la ruta no termina de forma estricta en `prisma/test.db`.
@@ -383,6 +383,7 @@ organizadores que hoy llevan todo en papel.
     - Se erradicaron los fallbacks ciegos (`contains: 'Agosto'`, `organizador.findFirst()`), exigiendo argumentos explícitos (`--torneoId`, `--organizadorId`).
     - `restaurar-torneo.js` quedó deshabilitado permanentemente con abort seguro para prevenir borrados accidentales de datos.
   - **Herramienta de Saneamiento de `dev.db` (`limpiar-residuos-dev.js`):** Modo `--dry-run` por defecto, filtrado en memoria en JS para evitar comodines SQL (`_`), y lista blanca por ID exacto con aserción de que se conservan exactamente 3 organizadores reales (`demo@padel.com`, `admin@padel.org`, `admin@test.com`) y el torneo real "Impares Agosto" con sus 149 partidos.
+  - **Aislamiento de Bases de Validación Manual:** Ignoradas en `.gitignore` (`backend/prisma/dev.manual.db*`) para permitir clones efímeros de prueba de usuario en puertos aislados sin ensuciar el árbol de trabajo ni exponer `dev.db`.
 
 ## Reglas de trabajo
 - Trabajar en ramas por feature (`feature/nombre-ticket`), nunca directo a main.
