@@ -125,18 +125,6 @@ export default function CategoriaDetail() {
     }
   };
 
-  const handleUpdateFechaHora = async (partidoId, newTimeStr) => {
-    try {
-      if (!newTimeStr) {
-        await api.put(`/partidos/${partidoId}/fecha-hora`, { fechaHora: null });
-      } else {
-        await api.put(`/partidos/${partidoId}/fecha-hora`, { fechaHora: new Date(newTimeStr).toISOString() });
-      }
-      fetchData();
-    } catch (err) {
-      alert(err.message || 'Error al actualizar horario');
-    }
-  };
 
   if (loading) return <div className="loading">Cargando categoría...</div>;
   if (error || !categoria) return <div className="error-message">{error || 'Categoría no encontrada'}</div>;
@@ -293,7 +281,6 @@ export default function CategoriaDetail() {
                 zona={activeZona}
                 partidos={partidosDeZona}
                 onPartidoClick={(p) => setPartidoSeleccionado(p)}
-                onUpdateFechaHora={handleUpdateFechaHora}
                 onReprogramar={setPartidoReprogramar}
               />
             ) : (
@@ -312,7 +299,6 @@ export default function CategoriaDetail() {
                         partido={partido}
                         onClick={() => setPartidoSeleccionado(partido)}
                         onCargarResultado={(p) => setPartidoSeleccionado(p)}
-                        onUpdateFechaHora={handleUpdateFechaHora}
                         onReprogramar={setPartidoReprogramar}
                       />
                     ))}

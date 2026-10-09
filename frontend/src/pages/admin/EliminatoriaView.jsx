@@ -73,18 +73,6 @@ export default function EliminatoriaView() {
     }
   }
 
-  async function handleUpdateFechaHora(partidoId, newTimeStr) {
-    try {
-      if (!newTimeStr) {
-        await api.put(`/partidos/${partidoId}/fecha-hora`, { fechaHora: null });
-      } else {
-        await api.put(`/partidos/${partidoId}/fecha-hora`, { fechaHora: new Date(newTimeStr).toISOString() });
-      }
-      await cargarDatos();
-    } catch (err) {
-      alert(err.message || 'Error al actualizar horario');
-    }
-  }
 
   function handleClickPartido(partido) {
     if (partido.pareja1Id && partido.pareja2Id) {

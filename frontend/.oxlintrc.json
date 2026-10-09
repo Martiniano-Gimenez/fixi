@@ -63,6 +63,35 @@
           {
             "property": "toLocaleString",
             "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "setHours",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "setMinutes",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "setDate",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "setMonth",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "setFullYear",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "getTimezoneOffset",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "object": "Date",
+            "property": "parse",
+            "message": "Usar frontend/src/utils/dateUtils.js"
           }
         ]
       }

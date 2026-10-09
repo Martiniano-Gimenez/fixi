@@ -1,7 +1,7 @@
 import { Edit2, Play, Plus, Clock, Trophy, AlertTriangle } from 'lucide-react';
 import { formatDiaHorario } from '../utils/dateUtils';
 
-export default function PartidoCard({ partido, onClick, onCargarResultado, onUpdateFechaHora, onReprogramar }) {
+export default function PartidoCard({ partido, onClick, onCargarResultado, onReprogramar }) {
   if (!partido) return null;
 
   const isFinalizado = partido.estado === 'FINALIZADO';
