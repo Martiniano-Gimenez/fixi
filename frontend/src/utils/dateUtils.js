@@ -1,69 +1,163 @@
 /**
+ * Utilidades de fecha y hora para el frontend.
+ *
+ * Todas las funciones de formateo y cálculo de jornadas operan estrictamente
+ * en la zona horaria oficial del torneo ('America/Argentina/Buenos_Aires')
+ * utilizando la API nativa Intl, garantizando paridad total con el backend
+ * independientemente del huso horario local configurado en el navegador del usuario.
+ */
+
+export const TIME_ZONE_ARGENTINA = 'America/Argentina/Buenos_Aires';
+
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+// Instancia reutilizable de Intl para extraer componentes civiles en Buenos Aires
+const dtfParts = new Intl.DateTimeFormat('en-US', {
+  timeZone: TIME_ZONE_ARGENTINA,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+
+// Instancia para formato largo de fecha de torneo ("9 de octubre de 2026")
+const dtfFechaTorneo = new Intl.DateTimeFormat('es-AR', {
+  timeZone: 'UTC',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+
+/**
+ * Descompone una fecha/hora ISO o timestamp en sus componentes civiles
+ * en America/Argentina/Buenos_Aires sin depender de la zona horaria del navegador.
+ *
+ * @param {string | Date | number} fechaHora
+ * @returns {{ year: number, month: number, day: number, hour: number, minute: number, second: number, dayOfWeek: number } | null}
+ */
+export function getZonedParts(fechaHora) {
+  if (!fechaHora) return null;
+  const d = new Date(fechaHora);
+  if (isNaN(d.getTime())) return null;
+
+  const parts = dtfParts.formatToParts(d);
+  const map = {};
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (p.type !== 'literal') map[p.type] = p.value;
+  }
+
+  const year = parseInt(map.year, 10);
+  const month = parseInt(map.month, 10);
+  const day = parseInt(map.day, 10);
+  const hour = parseInt(map.hour, 10);
+  const minute = parseInt(map.minute, 10);
+  const second = parseInt(map.second, 10);
+
+  // En el calendario gregoriano universal, la fecha civil dada (año, mes, día)
+  // tiene un único día de la semana. Date.UTC deriva dayOfWeek (0: Dom .. 6: Sáb)
+  // de forma completamente inmune a cualquier desfasaje o salto horario local.
+  const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+
+  return { year, month, day, hour, minute, second, dayOfWeek };
+}
+
+/**
  * Formatea una fecha/hora ISO en formato amigable de torneo: "Viernes 19:30" o "Sábado 10:30"
+ * Siempre evaluado en America/Argentina/Buenos_Aires.
  * @param {string | Date} fechaHora
  * @returns {string}
  */
 export function formatDiaHorario(fechaHora) {
-  if (!fechaHora) return '';
-  const d = new Date(fechaHora);
-  if (isNaN(d.getTime())) return '';
+  const parts = getZonedParts(fechaHora);
+  if (!parts) return '';
 
-  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const diaNombre = dias[d.getDay()];
-
-  const horas = String(d.getHours()).padStart(2, '0');
-  const minutos = String(d.getMinutes()).padStart(2, '0');
+  const diaNombre = DIAS_SEMANA[parts.dayOfWeek];
+  const horas = String(parts.hour).padStart(2, '0');
+  const minutos = String(parts.minute).padStart(2, '0');
 
   return `${diaNombre} ${horas}:${minutos}`;
 }
 
 /**
  * Formatea una fecha/hora ISO obteniendo únicamente el día: "Viernes" o "Sábado"
+ * Siempre evaluado en America/Argentina/Buenos_Aires.
  * @param {string | Date} fechaHora
  * @returns {string}
  */
 export function formatDiaNombre(fechaHora) {
-  if (!fechaHora) return '';
-  const d = new Date(fechaHora);
-  if (isNaN(d.getTime())) return '';
+  const parts = getZonedParts(fechaHora);
+  if (!parts) return '';
 
-  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  return dias[d.getDay()];
+  return DIAS_SEMANA[parts.dayOfWeek];
+}
+
+/**
+ * Formatea una fecha/hora obteniendo únicamente la hora civil: "19:30" o "00:00".
+ * Nunca devuelve "24:00" gracias al ciclo de 23 horas.
+ * @param {string | Date} fechaHora
+ * @returns {string}
+ */
+export function formatHora(fechaHora) {
+  const parts = getZonedParts(fechaHora);
+  if (!parts) return '';
+
+  const horas = String(parts.hour).padStart(2, '0');
+  const minutos = String(parts.minute).padStart(2, '0');
+
+  return `${horas}:${minutos}`;
 }
 
 /**
  * Formatea una fecha/hora ISO en formato compacto para tarjeta de partido: "Vie · 19:30"
- * Utiliza timeZone 'America/Argentina/Cordoba'. Si fechaHora es null o inválida, retorna ''.
+ * Siempre evaluado en America/Argentina/Buenos_Aires.
  * @param {string | Date} fechaHora
  * @returns {string}
  */
 export function formatPartidoHorario(fechaHora) {
-  if (!fechaHora) return '';
-  const d = new Date(fechaHora);
-  if (isNaN(d.getTime())) return '';
+  const parts = getZonedParts(fechaHora);
+  if (!parts) return '';
 
-  const dayStr = new Intl.DateTimeFormat('es-AR', {
-    weekday: 'short',
-    timeZone: 'America/Argentina/Cordoba',
-  }).format(d);
-  const cleanDay = dayStr.replace('.', '');
-  const capitalizedDay = cleanDay.charAt(0).toUpperCase() + cleanDay.slice(1);
+  const diaCorto = DIAS_CORTOS[parts.dayOfWeek];
+  const horas = String(parts.hour).padStart(2, '0');
+  const minutos = String(parts.minute).padStart(2, '0');
 
-  const timeStr = new Intl.DateTimeFormat('es-AR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-    timeZone: 'America/Argentina/Cordoba',
-  }).format(d);
-
-  return `${capitalizedDay} · ${timeStr}`;
+  return `${diaCorto} · ${horas}:${minutos}`;
 }
 
 /**
- * Agrupa por día calendario lógico en America/Argentina/Cordoba.
+ * Formatea una fecha civil de torneo: "9 de octubre de 2026".
+ * Maneja cadenas ISO con mediodía UTC, medianoche UTC o strings planos "YYYY-MM-DD",
+ * evitando que la medianoche UTC en husos al oeste reste un día calendario.
+ * @param {string | Date} fecha
+ * @returns {string}
+ */
+export function formatFechaTorneo(fecha) {
+  if (!fecha) return '';
+  if (typeof fecha === 'string') {
+    const m = fecha.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const y = parseInt(m[1], 10);
+      const mo = parseInt(m[2], 10) - 1;
+      const d = parseInt(m[3], 10);
+      return dtfFechaTorneo.format(new Date(Date.UTC(y, mo, d, 12, 0, 0)));
+    }
+  }
+  const d = new Date(fecha);
+  if (isNaN(d.getTime())) return '';
+  return dtfFechaTorneo.format(d);
+}
+
+/**
+ * Agrupa por día calendario en America/Argentina/Buenos_Aires sin trasnoche.
+ * Mantiene la firma y tipo de retorno original para la vista pública.
  * Retorna { key: string, diaNombre: string } o null si fechaHora es inválida o vacía.
  * key: "YYYY-MM-DD"
- * diaNombre: "Viernes", "Sábado", etc. (solo el nombre del día, sin fecha numérica)
+ * diaNombre: "Viernes", "Sábado", etc.
  * @param {string | Date} fechaHora
  * @returns {{ key: string, diaNombre: string } | null}
  */
@@ -73,7 +167,7 @@ export function getDiaCalendarioCordoba(fechaHora) {
   if (isNaN(d.getTime())) return null;
 
   const key = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Argentina/Cordoba',
+    timeZone: TIME_ZONE_ARGENTINA,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -81,7 +175,7 @@ export function getDiaCalendarioCordoba(fechaHora) {
 
   const diaNombreRaw = new Intl.DateTimeFormat('es-AR', {
     weekday: 'long',
-    timeZone: 'America/Argentina/Cordoba',
+    timeZone: TIME_ZONE_ARGENTINA,
   }).format(d);
   const diaNombre = diaNombreRaw.charAt(0).toUpperCase() + diaNombreRaw.slice(1);
 
@@ -90,13 +184,6 @@ export function getDiaCalendarioCordoba(fechaHora) {
 
 /**
  * Formatea un ajuste de tiempo en minutos con signo (+/-) y formato de horas si es >= 60m.
- * Ejemplos:
- *  45 -> "+45m"
- * -45 -> "-45m"
- *  60 -> "+1h"
- * -60 -> "-1h"
- *  95 -> "+1h 35m"
- * -120 -> "-2h"
  * @param {number} minutos
  * @returns {string}
  */
@@ -122,33 +209,35 @@ export function formatAjusteTiempo(minutos) {
 
 /**
  * Determina el día calendario lógico de un partido considerando turnos de trasnoche
- * y los horarios configurados del club.
+ * y los horarios configurados del club, evaluado en America/Argentina/Buenos_Aires.
+ *
+ * Mantiene la compatibilidad total de retorno con los componentes existentes,
+ * exponiendo campos numéricos precalculados y un logicalDate centrado en el mediodía local
+ * para evitar que getters locales en husos horarios al oeste devuelvan el día anterior.
+ *
  * @param {string | Date} fechaHora
- * @param {Object} [horariosClub] { viernesInicio, viernesFin, sabadoInicio, sabadoFin }
- * @returns {{ key: string, label: string, diaNombre: string, diaNumero: number, logicalDate: Date } | null}
+ * @param {Object} [horariosClub] { sabadoInicio, domingoInicio }
+ * @returns {{ key: string, label: string, diaNombre: string, diaNumero: number, dayOfWeek: number, logicalDate: Date } | null}
  */
 export function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
-  if (!fechaHora) return null;
-  const d = new Date(fechaHora);
-  if (isNaN(d.getTime())) return null;
+  const parts = getZonedParts(fechaHora);
+  if (!parts) return null;
 
-  const diaSemana = d.getDay(); // 0: Dom, 1: Lun, ..., 5: Vie, 6: Sab
-  const horas = d.getHours();
-  const minutos = d.getMinutes();
-  const timeInMinutes = horas * 60 + minutos;
+  const { year, month, day, hour, minute, dayOfWeek } = parts;
+  const timeInMinutes = hour * 60 + minute;
 
   let shiftDays = 0;
+  const sabInicio = horariosClub?.sabadoInicio || '06:00';
+  const [sh, sm] = sabInicio.split(':').map(Number);
+  const sabInicioMin = (isNaN(sh) ? 6 : sh) * 60 + (isNaN(sm) ? 0 : sm);
 
-  // Evaluar trasnoche en madrugada
-  if (diaSemana === 6) {
+  // Evaluar trasnoche en madrugada según hora oficial de Argentina
+  if (dayOfWeek === 6) {
     // Sábado de madrugada: si es antes de la apertura del sábado (o antes de las 06:00 AM)
-    const sabInicio = horariosClub?.sabadoInicio || '06:00';
-    const [sh, sm] = sabInicio.split(':').map(Number);
-    const sabInicioMin = (isNaN(sh) ? 6 : sh) * 60 + (isNaN(sm) ? 0 : sm);
     if (timeInMinutes < sabInicioMin) {
       shiftDays = -1; // Pertenece al Viernes
     }
-  } else if (diaSemana === 0) {
+  } else if (dayOfWeek === 0) {
     // Domingo de madrugada: si es antes de la apertura del domingo (o antes de las 06:00 AM)
     const domInicio = horariosClub?.domingoInicio || '06:00';
     const [dh, dm] = domInicio.split(':').map(Number);
@@ -161,26 +250,28 @@ export function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
     shiftDays = -1;
   }
 
-  const logicalDate = new Date(d);
-  if (shiftDays !== 0) {
-    logicalDate.setDate(logicalDate.getDate() + shiftDays);
-  }
+  // Desplazamiento de calendario en UTC para evitar saltos o desfasajes
+  const logicalUtc = new Date(Date.UTC(year, month - 1, day + shiftDays));
+  const logicalYear = logicalUtc.getUTCFullYear();
+  const logicalMonth = String(logicalUtc.getUTCMonth() + 1).padStart(2, '0');
+  const logicalDay = String(logicalUtc.getUTCDate()).padStart(2, '0');
+  const logicalDayOfWeek = logicalUtc.getUTCDay();
 
-  const yyyy = logicalDate.getFullYear();
-  const mm = String(logicalDate.getMonth() + 1).padStart(2, '0');
-  const dd = String(logicalDate.getDate()).padStart(2, '0');
-  const key = `${yyyy}-${mm}-${dd}`;
-
-  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const diaNombre = dias[logicalDate.getDay()];
-  const diaNumero = logicalDate.getDate();
+  const key = `${logicalYear}-${logicalMonth}-${logicalDay}`;
+  const diaNombre = DIAS_SEMANA[logicalDayOfWeek];
+  const diaNumero = logicalUtc.getUTCDate();
   const label = `${diaNombre} ${diaNumero}`;
+
+  // Se inicializa al mediodía local (12:00:00) para que cualquier getter local
+  // (.getDate(), .getDay()) sea inmune a la zona horaria del navegador
+  const logicalDate = new Date(logicalYear, parseInt(logicalMonth, 10) - 1, diaNumero, 12, 0, 0);
 
   return {
     key,
     label,
     diaNombre,
     diaNumero,
+    dayOfWeek: logicalDayOfWeek,
     logicalDate,
   };
 }
@@ -201,11 +292,7 @@ export function minutosCronologicosJornada(hora) {
 }
 
 /**
- * Formatea una cantidad de turnos (slots de 15 minutos) a formato amigable en horas/minutos:
- * - 20 turnos (300 min) -> "5 h"
- * - 5 turnos (75 min)   -> "1 h 15 min"
- * - 4 turnos (60 min)   -> "1 h"
- * - 1 turno (15 min)    -> "15 min"
+ * Formatea una cantidad de turnos (slots de 15 minutos) a formato amigable en horas/minutos
  * @param {number} cantSlots
  * @returns {string}
  */
@@ -221,5 +308,3 @@ export function formatHorasDisponibles(cantSlots) {
   }
   return `${h} h ${m} min`;
 }
-
-
