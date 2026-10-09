@@ -131,6 +131,10 @@ export function formatPartidoHorario(fechaHora) {
 
 /**
  * Formatea una fecha civil de torneo: "9 de octubre de 2026".
+ *
+ * USO EXCLUSIVO para fechas de torneo (fecha civil guardada al mediodía local).
+ * NO debe usarse para fechas/horarios de partidos (para eso usar formatDiaHorario / formatHora).
+ *
  * Maneja cadenas ISO con mediodía UTC, medianoche UTC o strings planos "YYYY-MM-DD",
  * evitando que la medianoche UTC en husos al oeste reste un día calendario.
  * @param {string | Date} fecha

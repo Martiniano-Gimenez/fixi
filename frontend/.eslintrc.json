@@ -1,0 +1,42 @@
+{
+  "overrides": [
+    {
+      "files": [
+        "src/**/*.js",
+        "src/**/*.jsx"
+      ],
+      "excludedFiles": [
+        "src/utils/dateUtils.js"
+      ],
+      "rules": {
+        "no-restricted-properties": [
+          "error",
+          {
+            "property": "getHours",
+            "message": "Usar dateUtils.js"
+          },
+          {
+            "property": "getMinutes",
+            "message": "Usar dateUtils.js"
+          },
+          {
+            "property": "getDay",
+            "message": "Usar dateUtils.js"
+          },
+          {
+            "property": "getDate",
+            "message": "Usar dateUtils.js"
+          },
+          {
+            "property": "toLocaleTimeString",
+            "message": "Usar dateUtils.js"
+          },
+          {
+            "property": "toLocaleDateString",
+            "message": "Usar dateUtils.js"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -26,7 +26,7 @@ import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import ResultadoModal from '../../components/ResultadoModal';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
-import { formatDiaHorario, formatDiaNombre, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
+import { formatDiaHorario, formatDiaNombre, formatHora, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
 
 export default function TorneoEnVivo() {
   const { id } = useParams();
@@ -1685,7 +1685,7 @@ export default function TorneoEnVivo() {
                       }}
                     >
                       <span>
-                        Inicio: {new Date(p.horaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        Inicio: {formatHora(p.horaInicio)}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         <button

@@ -32,6 +32,7 @@ import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEdi
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { estadoLabel } from '../../utils/estadoLabels';
+import { formatFechaTorneo, getZonedParts } from '../../utils/dateUtils';
 
 function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -463,11 +464,11 @@ export default function TorneoDetail() {
       if (match) {
         setEditFecha(`${match[1]}-${match[2]}-${match[3]}`);
       } else {
-        const d = new Date(torneo.fecha);
-        if (!isNaN(d.getTime())) {
-          const yyyy = d.getFullYear();
-          const mm = String(d.getMonth() + 1).padStart(2, '0');
-          const dd = String(d.getDate()).padStart(2, '0');
+        const parts = getZonedParts(torneo.fecha);
+        if (parts) {
+          const yyyy = parts.year;
+          const mm = String(parts.month).padStart(2, '0');
+          const dd = String(parts.day).padStart(2, '0');
           setEditFecha(`${yyyy}-${mm}-${dd}`);
         } else {
           setEditFecha('');
@@ -911,13 +912,7 @@ export default function TorneoDetail() {
                 >
                   <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
                   <span>
-                    {torneo.fecha
-                      ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric',
-                        })
-                      : 'Fecha a confirmar'}
+                    {torneo.fecha ? formatFechaTorneo(torneo.fecha) : 'Fecha a confirmar'}
                   </span>
                   <Edit2 size={12} style={{ opacity: 0.7, marginLeft: '0.2rem' }} />
                 </button>
@@ -939,13 +934,7 @@ export default function TorneoDetail() {
                 >
                   <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
                   <span>
-                    {torneo.fecha
-                      ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric',
-                        })
-                      : 'Fecha a confirmar'}
+                    {torneo.fecha ? formatFechaTorneo(torneo.fecha) : 'Fecha a confirmar'}
                   </span>
                 </span>
               )}

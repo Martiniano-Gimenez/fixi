@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import { Plus, Trash2, Calendar, Layers, Users, Trophy } from 'lucide-react';
+import { formatFechaTorneo } from '../../utils/dateUtils';
 
 export default function TorneosList() {
   const [torneos, setTorneos] = useState([]);
@@ -127,13 +128,7 @@ export default function TorneosList() {
                   >
                     <Calendar size={14} />
                     <span>
-                      {torneo.fecha
-                        ? new Date(torneo.fecha).toLocaleDateString('es-AR', {
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric',
-                          })
-                        : 'Fecha a confirmar'}
+                      {torneo.fecha ? formatFechaTorneo(torneo.fecha) : 'Fecha a confirmar'}
                     </span>
                   </div>
                 </div>

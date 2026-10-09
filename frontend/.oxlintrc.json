@@ -3,9 +3,57 @@
   "env": {
     "browser": true
   },
-  "plugins": ["react", "oxc"],
+  "plugins": [
+    "react",
+    "oxc"
+  ],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/**/*.js",
+        "src/**/*.jsx"
+      ],
+      "excludeFiles": [
+        "src/utils/dateUtils.js"
+      ],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "property": "getHours",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "getMinutes",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "getDay",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "getDate",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "toLocaleTimeString",
+            "message": "Usar formatHora() de frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "toLocaleDateString",
+            "message": "Usar formatFechaTorneo() de frontend/src/utils/dateUtils.js"
+          }
+        ]
+      }
+    }
+  ]
 }

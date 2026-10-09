@@ -12,7 +12,13 @@ async function main() {
 
   const results = items.map((x) => {
     const res = mod.getDiaCalendarioConTrasnoche(x.iso, x.horariosClub);
-    return res?.key || null;
+    if (!res) return null;
+    return {
+      key: res.key,
+      label: res.label,
+      diaNombre: res.diaNombre,
+      diaNumero: res.diaNumero,
+    };
   });
 
   process.stdout.write(JSON.stringify(results));

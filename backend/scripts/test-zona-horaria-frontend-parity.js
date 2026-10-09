@@ -74,13 +74,18 @@ async function main() {
     }
   }
 
-  // 3. Calcular la verdad de referencia con el backend
+  // 3. Calcular la verdad de referencia con el backend (key, label, diaNombre, diaNumero)
   console.log('\n--- 3. Cálculo de referencia (Backend en TZ=America/Argentina/Buenos_Aires) ---');
-  const backendKeys = testCases.map((tc) => {
+  const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const backendResults = testCases.map((tc) => {
     const res = backendDateUtils.getDiaCalendarioConTrasnoche(tc.iso, tc.horariosClub);
-    return res?.key || null;
+    if (!res) return null;
+    const diaNombre = DIAS_SEMANA[res.logicalDate.getDay()];
+    const diaNumero = res.logicalDate.getDate();
+    const label = `${diaNombre} ${diaNumero}`;
+    return { key: res.key, label, diaNombre, diaNumero };
   });
-  console.log(`  ✓ ${backendKeys.length} claves calculadas por el backend.`);
+  console.log(`  ✓ ${backendResults.length} resultados completos calculados por el backend (key, label, diaNombre, diaNumero).`);
 
   // 4. Ejecutar el helper del frontend en procesos hijos aislados con distintas zonas horarias
   console.log('\n--- 4. Validación de equivalencia en procesos hijos del frontend ---');
@@ -95,21 +100,25 @@ async function main() {
       maxBuffer: 50 * 1024 * 1024,
     }).toString();
 
-    const frontendKeys = JSON.parse(stdout);
+    const frontendResults = JSON.parse(stdout);
     assert.strictEqual(
-      frontendKeys.length,
-      backendKeys.length,
+      frontendResults.length,
+      backendResults.length,
       `La cantidad de resultados en TZ=${tz} debe ser idéntica`
     );
 
     let mismatches = 0;
-    for (let i = 0; i < backendKeys.length; i++) {
-      if (frontendKeys[i] !== backendKeys[i]) {
+    for (let i = 0; i < backendResults.length; i++) {
+      const b = backendResults[i];
+      const f = frontendResults[i];
+      if (!b && !f) continue;
+      if (!b || !f || b.key !== f.key || b.label !== f.label || b.diaNombre !== f.diaNombre || b.diaNumero !== f.diaNumero) {
         mismatches++;
         if (mismatches <= 5) {
           console.error(
-            `    ❌ DISCREPANCIA en #${i}: instant=${testCases[i].iso}, config=${JSON.stringify(testCases[i].horariosClub)} ` +
-            `-> Backend=${backendKeys[i]} vs Frontend(${tz})=${frontendKeys[i]}`
+            `    ❌ DISCREPANCIA en #${i}: instant=${testCases[i].iso}, config=${JSON.stringify(testCases[i].horariosClub)}\n` +
+            `       Backend:  key=${b?.key}, label="${b?.label}", diaNombre="${b?.diaNombre}", diaNumero=${b?.diaNumero}\n` +
+            `       Frontend: key=${f?.key}, label="${f?.label}", diaNombre="${f?.diaNombre}", diaNumero=${f?.diaNumero}`
           );
         }
       }
@@ -120,10 +129,10 @@ async function main() {
       0,
       `Se encontraron ${mismatches} discrepancias entre backend y frontend en TZ=${tz}`
     );
-    console.log(`  ✓ TZ=${tz}: 100% de coincidencia exacta (${frontendKeys.length}/${frontendKeys.length} casos OK).`);
+    console.log(`  ✓ TZ=${tz}: 100% de coincidencia exacta en (key, label, diaNombre, diaNumero) (${frontendResults.length}/${frontendResults.length} casos OK).`);
   }
 
-  // 5. Verificación de formateo de medianoche (00:xx nunca debe dar "24:00")
+  // 5. Verificación de formateo de medianoche (00:xx)
   console.log('\n--- 5. Verificación de formateo de medianoche (00:xx) ---');
   const frontendHelperPath = path.resolve(__dirname, '../../frontend/src/utils/dateUtils.js');
   const frontendMod = await import('file:///' + frontendHelperPath.replace(/\\/g, '/'));

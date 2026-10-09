@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
 import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X, Star, Play } from 'lucide-react';
-import { formatPartidoHorario, getDiaCalendarioCordoba } from '../../utils/dateUtils';
+import { formatPartidoHorario, getDiaCalendarioCordoba, formatFechaTorneo } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import { APP_NAME, APP_TAGLINE } from '../../constants/app';
 import '../admin/EliminatoriaView.css';
@@ -980,11 +980,7 @@ export default function TorneoPublic() {
           {torneo.fecha && (
             <span className="public-meta-item">
               <Calendar size={13} />
-              {new Date(torneo.fecha).toLocaleDateString('es-AR', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric',
-              })}
+              {formatFechaTorneo(torneo.fecha)}
             </span>
           )}
         </div>
