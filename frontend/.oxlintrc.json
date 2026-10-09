@@ -45,12 +45,24 @@
             "message": "Usar frontend/src/utils/dateUtils.js"
           },
           {
+            "property": "getMonth",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "getFullYear",
+            "message": "Usar frontend/src/utils/dateUtils.js"
+          },
+          {
             "property": "toLocaleTimeString",
             "message": "Usar formatHora() de frontend/src/utils/dateUtils.js"
           },
           {
             "property": "toLocaleDateString",
             "message": "Usar formatFechaTorneo() de frontend/src/utils/dateUtils.js"
+          },
+          {
+            "property": "toLocaleString",
+            "message": "Usar frontend/src/utils/dateUtils.js"
           }
         ]
       }
