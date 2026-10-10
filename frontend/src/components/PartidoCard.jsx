@@ -103,7 +103,7 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
         }
       }}
     >
-      <div className={`partido-card-header ${handleClick ? 'has-actions' : ''}`}>
+      <div className={`partido-card-header ${handleClick || (partido.estado === 'PENDIENTE' && onReprogramar) ? 'has-actions' : ''}`}>
         <div className="partido-card-info">
           <span
             style={{
@@ -157,9 +157,9 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
           )}
         </div>
 
-        {handleClick ? (
+        {handleClick || (partido.estado === 'PENDIENTE' && onReprogramar) ? (
           <div className="partido-card-actions">
-            {isJugable && partido.estado === 'PENDIENTE' && onReprogramar && (
+            {partido.estado === 'PENDIENTE' && onReprogramar && (
               <button
                 type="button"
                 className="btn-secondary"
@@ -186,42 +186,48 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
                 <Clock size={11} /> {partido.fechaHora ? 'Reprogramar' : 'Asignar horario'}
               </button>
             )}
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClick();
-              }}
-              style={{
-                margin: 0,
-                height: '24px',
-                padding: '0 0.55rem',
-                fontSize: '11px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.3rem',
-                borderRadius: 'var(--radius-sm)',
-                boxSizing: 'border-box',
-                lineHeight: 1,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {isFinalizado ? (
-                <>
-                  <Edit2 size={11} /> Editar
-                </>
-              ) : isEnCurso ? (
-                <>
-                  <Plus size={11} /> Cargar Set
-                </>
-              ) : (
-                <>
-                  <Play size={11} /> Cargar Resultado
-                </>
-              )}
-            </button>
+            {handleClick ? (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClick();
+                }}
+                style={{
+                  margin: 0,
+                  height: '24px',
+                  padding: '0 0.55rem',
+                  fontSize: '11px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.3rem',
+                  borderRadius: 'var(--radius-sm)',
+                  boxSizing: 'border-box',
+                  lineHeight: 1,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {isFinalizado ? (
+                  <>
+                    <Edit2 size={11} /> Editar
+                  </>
+                ) : isEnCurso ? (
+                  <>
+                    <Plus size={11} /> Cargar Set
+                  </>
+                ) : (
+                  <>
+                    <Play size={11} /> Cargar Resultado
+                  </>
+                )}
+              </button>
+            ) : !isJugable ? (
+              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+                Esperando cruces
+              </span>
+            ) : null}
           </div>
         ) : !isJugable ? (
           <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>

@@ -514,7 +514,7 @@ function interseccionVentanas(ventanasA, ventanasB) {
  * de TODO el club (cross-category y cruces con horario fijado).
  * Soporta recibir un categoriaId individual o un array de categoriaIds para optimización global (MCF Global).
  */
-async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, externalTx = null) {
+async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, externalTx = null, options = {}) {
   const db = externalTx || prisma;
   const categoriaIds = Array.isArray(categoriaIdOrIds) ? categoriaIdOrIds : [categoriaIdOrIds];
 
@@ -1008,6 +1008,49 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
               sinHorarioAsignado: false,
               fechaHora: new Date(bestCandidate.T),
               canchaNumero: bestCandidate.cancha,
+            });
+            asignado = true;
+            break;
+          }
+        }
+      }
+
+      // 3. Fallback: Si no hay coincidencia cuádruple de disponibilidad, auto-asignar en la siguiente cancha libre del club posterior a minStartMs
+      if (!asignado && !options.isPreCheck) {
+        const clubWindows = [];
+        if (hasFriday && friDayEndMs > minStartMs) {
+          clubWindows.push({ dia: 'Viernes', startMs: Math.max(friDayStartMs, minStartMs), endMs: friDayEndMs });
+        }
+        if (hasSaturday && satDayEndMs > minStartMs) {
+          clubWindows.push({ dia: 'Sabado', startMs: Math.max(satDayStartMs, minStartMs), endMs: satDayEndMs });
+        }
+
+        for (const cWin of clubWindows) {
+          let bestFallback = null;
+          for (let c = 1; c <= cantidadCanchas; c++) {
+            let T = cWin.startMs;
+            while (T + DURACION_MS <= cWin.endMs) {
+              const tEnd = T + DURACION_MS;
+              if (isCourtFree(c, T, tEnd)) {
+                if (bestFallback === null || T < bestFallback.T) {
+                  bestFallback = { T, cancha: c };
+                }
+                break;
+              }
+              T += 15 * 60 * 1000;
+            }
+          }
+
+          if (bestFallback !== null) {
+            courtTimelines.get(bestFallback.cancha).push({
+              startMs: bestFallback.T,
+              endMs: bestFallback.T + DURACION_MS,
+            });
+            updatesMap.set(m.id, {
+              id: m.id,
+              sinHorarioAsignado: false,
+              fechaHora: new Date(bestFallback.T),
+              canchaNumero: bestFallback.cancha,
             });
             asignado = true;
             break;

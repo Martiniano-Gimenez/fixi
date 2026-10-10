@@ -8,6 +8,7 @@ const prisma = new PrismaClient();
 const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
 const torneoService = require('../src/services/torneo.service');
+const partidoService = require('../src/services/partido.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 
 async function main() {
@@ -204,6 +205,83 @@ async function main() {
     throw new Error(`Error: re-check incremental debería haber quedado desbloqueado: ${JSON.stringify(recheckRes.conflictos)}`);
   }
   console.log('✅ TEST 3 PASÓ: Re-check incremental destrabó la zona de 4 con 4-pair intersection.');
+
+  await limpiar(email);
+
+  // CASO 3: Parejas sin ventana común cuádruple en torneo en curso -> Auto-asignar a la siguiente cancha libre y permitir asignación manual antes de jugarse
+  console.log('\n▶️ TEST 4: Parejas sin ventana cuádruple común -> Auto-asignar a la siguiente cancha libre y permitir asignación manual previa...');
+  const org3 = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Mini Bracket Test 3',
+      email,
+      passwordHash,
+      cantidadCanchas: 2,
+      viernesInicio: '18:00',
+      viernesFin: '22:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '21:00',
+    },
+  });
+
+  const torneo3 = await torneoService.createTorneo(org3.id, {
+    nombre: 'Torneo Mini Bracket Auto C1',
+    fecha: fechaTorneo.toISOString(),
+  });
+
+  const cat3 = await prisma.categoria.create({
+    data: { torneoId: torneo3.id, nombre: '4ta Test', estado: 'BORRADOR' },
+  });
+
+  // P1 y P2 solo disponibles Viernes; P3 y P4 solo disponibles Sábado (sin intersección entre ambas duplas)
+  await prisma.pareja.create({
+    data: { categoriaId: cat3.id, jugador1: 'J1', jugador2: 'J2', orden: 1, slotsSeleccionados: { create: [{ slotId: 'Viernes-18:00' }, { slotId: 'Viernes-19:15' }] } },
+  });
+  await prisma.pareja.create({
+    data: { categoriaId: cat3.id, jugador1: 'J3', jugador2: 'J4', orden: 2, slotsSeleccionados: { create: [{ slotId: 'Viernes-18:00' }, { slotId: 'Viernes-19:15' }] } },
+  });
+  await prisma.pareja.create({
+    data: { categoriaId: cat3.id, jugador1: 'J5', jugador2: 'J6', orden: 3, slotsSeleccionados: { create: [{ slotId: 'Sabado-09:00' }, { slotId: 'Sabado-10:15' }] } },
+  });
+  await prisma.pareja.create({
+    data: { categoriaId: cat3.id, jugador1: 'J7', jugador2: 'J8', orden: 4, slotsSeleccionados: { create: [{ slotId: 'Sabado-09:00' }, { slotId: 'Sabado-10:15' }] } },
+  });
+
+  await zonaService.iniciarCategoria(org3.id, cat3.id);
+  await prisma.torneo.update({ where: { id: torneo3.id }, data: { estado: 'EN_CURSO' } });
+  // Asignar en modo live (isPreCheck false por defecto)
+  await zonaService.asignarHorariosAutomatico(org3.id, [cat3.id]);
+
+  const partidosCat3 = await prisma.partido.findMany({
+    where: { categoriaId: cat3.id },
+    orderBy: { posicionEnRonda: 'asc' },
+  });
+
+  const p3_match = partidosCat3.find((p) => p.posicionEnRonda === 3);
+  const p4_match = partidosCat3.find((p) => p.posicionEnRonda === 4);
+
+  if (p3_match.sinHorarioAsignado || !p3_match.fechaHora || !p3_match.canchaNumero) {
+    throw new Error(`Error en Test 4: P3 debió ser asignado a la siguiente cancha libre. Estado: ${JSON.stringify(p3_match)}`);
+  }
+  if (p4_match.sinHorarioAsignado || !p4_match.fechaHora || !p4_match.canchaNumero) {
+    throw new Error(`Error en Test 4: P4 debió ser asignado a la siguiente cancha libre. Estado: ${JSON.stringify(p4_match)}`);
+  }
+
+  console.log(`   ✓ P3 asignado automáticamente a la siguiente cancha libre: ${p3_match.fechaHora.toISOString()} (Cancha ${p3_match.canchaNumero})`);
+  console.log(`   ✓ P4 asignado automáticamente a la siguiente cancha libre: ${p4_match.fechaHora.toISOString()} (Cancha ${p4_match.canchaNumero})`);
+
+  // Verificar que el organizador puede asignar/reprogramar manualmente el horario ANTES de jugar Match 1 y 2
+  console.log('   Verificando reprogramación manual previa sin parejas definidas...');
+  const resReprog = await partidoService.asignarHorarioManual(org3.id, p3_match.id, {
+    slotId: 'Sabado-18:00',
+    canchaNumero: 1,
+  });
+
+  if (resReprog.partido.canchaNumero !== 1 || resReprog.partido.sinHorarioAsignado) {
+    throw new Error('Error en Test 4: Falló la reprogramación manual de P3 antes de definirse las parejas');
+  }
+  console.log('   ✓ P3 reprogramado manualmente con éxito antes de definirse los cruces.');
+
+  console.log('✅ TEST 4 PASÓ: Auto-asignación a la siguiente cancha libre y reprogramación manual previa operativas.');
 
   await limpiar(email);
   console.log('\n🎉 =============================================================');

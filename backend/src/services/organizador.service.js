@@ -1108,7 +1108,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
 
       // 3. Asignar horarios y canchas en tx con pool global multi-categoría (MCF Global)
       const categoriasIdsValidos = validos.map((v) => v.categoria.id);
-      await asignarHorariosAutomatico(organizadorId, categoriasIdsValidos, tx);
+      await asignarHorariosAutomatico(organizadorId, categoriasIdsValidos, tx, { isPreCheck: true });
 
       // 4. Construir categoriasPlan y capturar timelines del snapshot
       const categoriasPlan = [];
@@ -1349,6 +1349,10 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
           where: { id: cPlan.categoriaId },
           data: { estado: 'EN_CURSO' },
         });
+
+        if (sinHorarioCount > 0) {
+          await asignarHorariosAutomatico(organizadorId, [cPlan.categoriaId], tx);
+        }
 
         resumen.push({
           categoriaId: cPlan.categoriaId,

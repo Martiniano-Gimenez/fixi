@@ -61,6 +61,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       (partido.faseEliminatoria?.ronda && partido.faseEliminatoria.ronda >= 32) ||
       partido.faseEliminatoria?.nombre?.toLowerCase().includes('dieciseisavos')
     );
+  const esSinParejasDefinidas = !partido.pareja1Id || !partido.pareja2Id;
 
   const esSlotPermitidoPorContexto = (s) => {
     if (esPartidoZona) {
@@ -129,8 +130,8 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     slotsValidos.some((s) => s.slotId === id)
   );
 
-  // Ranking inteligente idéntico a preCheck (solo necesario en fase de zonas)
-  const rankedSlots = esPartidoEliminatoria ? [] : rankearSlotsParaPartido(slotsValidos, slotsP1, slotsP2);
+  // Ranking inteligente idéntico a preCheck (solo necesario en fase de zonas con parejas definidas)
+  const rankedSlots = (esPartidoEliminatoria || esSinParejasDefinidas) ? [] : rankearSlotsParaPartido(slotsValidos, slotsP1, slotsP2);
 
   const heroOption = rankedSlots[0];
   const alternativas = rankedSlots.slice(1, 6);
@@ -455,7 +456,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             </div>
           )}
 
-          {!esPartidoEliminatoria && (
+          {!esPartidoEliminatoria && !esSinParejasDefinidas && (
             slotsEnComunOriginales.length > 0 && slotsEnComunDisponibles.length === 0 ? (
               <div
                 style={{
@@ -495,6 +496,26 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                 <span>Sin coincidencia horaria directa</span>
               </div>
             ) : null
+          )}
+
+          {esSinParejasDefinidas && (
+            <div
+              style={{
+                marginTop: '0.35rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontSize: '11px',
+                color: 'var(--color-text-secondary)',
+                background: 'rgba(255, 255, 255, 0.04)',
+                padding: '0.2rem 0.5rem',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              <Clock size={12} style={{ flexShrink: 0 }} />
+              <span>Cruce pendiente de resultados previos. Podés fijar o cambiar su horario y cancha anticipadamente.</span>
+            </div>
           )}
         </div>
 
@@ -554,11 +575,11 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                 )}
               </div>
             </div>
-          ) : esPartidoEliminatoria ? (
-            /* Vista simplificada para Eliminatorias / Bracket: lista plana directa sin Hero ficticio ni estiramientos */
+          ) : (esPartidoEliminatoria || esSinParejasDefinidas) ? (
+            /* Vista simplificada para Eliminatorias / Bracket o Partidos sin parejas confirmadas: lista plana directa sin Hero ficticio */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.15rem' }}>
-                Turnos con cancha libre para este cruce ({slotsValidos.length}):
+                Turnos con cancha libre para este partido ({slotsValidos.length}):
               </div>
               <div
                 style={{
@@ -568,6 +589,8 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                   border: '1px solid var(--color-border)',
                 }}
               >
+                {esPartidoZona && viernesViables.length > 0 && renderDiaBloques('Viernes', viernesViables)}
+                {esPartidoZona && sabadoViables.length > 0 && renderDiaBloques('Sábado', sabadoViables)}
                 {esDieciseisavos && sabadoViables.length > 0 && renderDiaBloques('Sábado (noche)', sabadoViables)}
                 {domingoViables.length > 0 && renderDiaBloques('Domingo', domingoViables)}
               </div>
