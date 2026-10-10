@@ -32,7 +32,7 @@ import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEdi
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { estadoLabel } from '../../utils/estadoLabels';
-import { formatFechaTorneo, getZonedParts } from '../../utils/dateUtils';
+import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
 
 function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -485,6 +485,10 @@ export default function TorneoDetail() {
     e.preventDefault();
     if (!editFecha) {
       setEditTorneoError('La fecha de inicio del torneo es obligatoria.');
+      return;
+    }
+    if (!isViernes(editFecha)) {
+      setEditTorneoError('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
       return;
     }
     setGuardandoTorneo(true);

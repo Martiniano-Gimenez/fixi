@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
+import { isViernes } from '../../utils/dateUtils';
 import './TorneoCreate.css';
 
 export default function TorneoCreate() {
@@ -16,6 +17,11 @@ export default function TorneoCreate() {
 
     if (!fecha) {
       setError('Por favor, seleccioná una fecha de inicio.');
+      return;
+    }
+
+    if (!isViernes(fecha)) {
+      setError('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
       return;
     }
 
@@ -51,7 +57,7 @@ export default function TorneoCreate() {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="fecha">Fecha de inicio</label>
+            <label htmlFor="fecha">Fecha de inicio (viernes)</label>
             <input 
               type="date" 
               id="fecha" 

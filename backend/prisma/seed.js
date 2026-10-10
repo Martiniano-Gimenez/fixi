@@ -44,7 +44,7 @@ async function main() {
   const torneo = await prisma.torneo.create({
     data: {
       nombre: 'Torneo Pádel Pro 2026',
-      fecha: new Date(),
+      fecha: new Date('2026-10-09T15:00:00.000Z'), // 9 de octubre de 2026 (Viernes al mediodía ART)
       estado: 'BORRADOR',
       slug,
       organizadorId: organizador.id,

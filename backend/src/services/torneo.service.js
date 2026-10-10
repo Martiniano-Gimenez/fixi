@@ -28,6 +28,12 @@ async function createTorneo(organizadorId, { nombre, fecha }) {
     throw error;
   }
 
+  if (parsedFecha.getDay() !== 5) {
+    const error = new Error('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const slug = generarSlug(nombre.trim());
 
   return await prisma.torneo.create({
@@ -129,6 +135,12 @@ async function updateTorneo(organizadorId, torneoId, data) {
     parsedFecha = parseFechaLocal(data.fecha);
     if (!parsedFecha) {
       const error = new Error('La fecha del torneo no es válida.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (parsedFecha.getDay() !== 5) {
+      const error = new Error('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
       error.statusCode = 400;
       throw error;
     }

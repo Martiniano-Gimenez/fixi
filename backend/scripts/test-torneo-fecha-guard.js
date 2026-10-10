@@ -92,12 +92,34 @@ async function main() {
       console.log('  ✓ [createTorneo] Fecha inválida rechazada con 400:', err.message);
     }
 
-    // 0.4 Crear con fecha válida -> OK y fecha guardada es el mediodía local
+    // 0.4 Crear con un sábado -> 400
+    try {
+      await torneoService.createTorneo(orgA.id, { nombre: 'Torneo Sábado', fecha: '2026-10-10' });
+      throw new Error('FALLO: createTorneo debió lanzar error 400 al crear con sábado');
+    } catch (err) {
+      if (err.statusCode !== 400 || !err.message.includes('debe ser un viernes')) {
+        throw new Error(`FALLO: Error inesperado al crear con sábado: ${err.message} (status: ${err.statusCode})`);
+      }
+      console.log('  ✓ [createTorneo] Creación con sábado rechazada con 400:', err.message);
+    }
+
+    // 0.5 Crear con un jueves -> 400
+    try {
+      await torneoService.createTorneo(orgA.id, { nombre: 'Torneo Jueves', fecha: '2026-10-08' });
+      throw new Error('FALLO: createTorneo debió lanzar error 400 al crear con jueves');
+    } catch (err) {
+      if (err.statusCode !== 400 || !err.message.includes('debe ser un viernes')) {
+        throw new Error(`FALLO: Error inesperado al crear con jueves: ${err.message} (status: ${err.statusCode})`);
+      }
+      console.log('  ✓ [createTorneo] Creación con jueves rechazada con 400:', err.message);
+    }
+
+    // 0.6 Crear con fecha válida (viernes) -> OK y fecha guardada es el mediodía local
     const torneoValido = await torneoService.createTorneo(orgA.id, {
       nombre: 'Torneo Válido Test',
       fecha: '2026-10-09',
     });
-    console.log('  ✓ [createTorneo] Torneo creado con fecha válida:', torneoValido.id);
+    console.log('  ✓ [createTorneo] Torneo creado con viernes válido:', torneoValido.id);
     const dValida = new Date(torneoValido.fecha);
     if (
       dValida.getFullYear() !== 2026 ||
@@ -108,31 +130,53 @@ async function main() {
     ) {
       throw new Error(`FALLO: La fecha guardada no es el mediodía local (12:00:00) del día elegido: ${dValida.toString()}`);
     }
-    console.log('  ✓ [createTorneo] Fecha guardada confirmada al mediodía local:', dValida.toString());
+    console.log('  ✓ [createTorneo] Fecha guardada confirmada al mediodía local de viernes:', dValida.toString());
     await prisma.torneo.delete({ where: { id: torneoValido.id } });
 
     // -------------------------------------------------------------
-    // CASO 1: BORRADOR -> Edición de fecha y preservación
+    // CASO 1: BORRADOR -> Edición de fecha y validaciones
     // -------------------------------------------------------------
     console.log('\n--- 1. BORRADOR: Edición de fecha y validaciones ---');
 
-    // 1.1 Cambiar fecha a 21 de agosto
+    // 1.1 Cambiar fecha a 21 de agosto (viernes) -> OK
     const resBorradorCambio = await torneoService.updateTorneo(orgA.id, torneoA.id, {
       fecha: '2026-08-21',
     });
-    console.log('  ✓ [Service] Cambiar fecha en BORRADOR: OK (nueva fecha:', resBorradorCambio.fecha?.toISOString().slice(0, 10), ')');
+    console.log('  ✓ [Service] Cambiar fecha a viernes en BORRADOR: OK (nueva fecha:', resBorradorCambio.fecha?.toISOString().slice(0, 10), ')');
     if (!resBorradorCambio.fecha || resBorradorCambio.fecha.getDate() !== 21) {
       throw new Error('FALLO: La fecha no se actualizó a 2026-08-21');
     }
 
-    // 1.2 Editar solo el NOMBRE sin tocar la fecha -> OK y fecha preservada
+    // 1.2 Editar a un martes en BORRADOR -> 400
+    try {
+      await torneoService.updateTorneo(orgA.id, torneoA.id, {
+        fecha: '2026-10-13', // Martes
+      });
+      throw new Error('FALLO: updateTorneo debió lanzar error 400 al editar a un martes en BORRADOR');
+    } catch (err) {
+      if (err.statusCode !== 400 || !err.message.includes('debe ser un viernes')) {
+        throw new Error(`FALLO: Error inesperado al editar a martes: ${err.message} (status: ${err.statusCode})`);
+      }
+      console.log('  ✓ [Service] Edición a martes rechazada con 400 en BORRADOR:', err.message);
+    }
+
+    // 1.3 Editar a otro viernes en BORRADOR -> OK
+    const resEditarViernes = await torneoService.updateTorneo(orgA.id, torneoA.id, {
+      fecha: '2026-10-16', // Viernes
+    });
+    console.log('  ✓ [Service] Editar a viernes (2026-10-16) en BORRADOR: OK (fecha:', resEditarViernes.fecha?.toISOString().slice(0, 10), ')');
+    if (!resEditarViernes.fecha || resEditarViernes.fecha.getDate() !== 16) {
+      throw new Error('FALLO: La fecha no se actualizó al viernes 2026-10-16');
+    }
+
+    // 1.4 Editar solo el NOMBRE sin tocar la fecha -> OK y fecha preservada
     const resEditarSoloNombre = await torneoService.updateTorneo(orgA.id, torneoA.id, {
       nombre: 'Torneo Guard Test Nombre Modificado',
     });
     if (resEditarSoloNombre.nombre !== 'Torneo Guard Test Nombre Modificado') {
       throw new Error('FALLO: El nombre no se actualizó');
     }
-    if (!resEditarSoloNombre.fecha || resEditarSoloNombre.fecha.getDate() !== 21) {
+    if (!resEditarSoloNombre.fecha || resEditarSoloNombre.fecha.getDate() !== 16) {
       throw new Error('FALLO: La fecha no se preservó al editar solo el nombre');
     }
     console.log('  ✓ [Service] Editar nombre sin tocar la fecha: OK (fecha preservada)');
