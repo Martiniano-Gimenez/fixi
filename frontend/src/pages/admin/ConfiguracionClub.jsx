@@ -138,12 +138,12 @@ export default function ConfiguracionClub() {
       </div>
 
       <div className="torneo-card club-card">
-        {error && <div className="error-message" style={{ marginBottom: '1.25rem' }}>{error}</div>}
+        {error && <div className="error-message">{error}</div>}
 
         <form onSubmit={handleSubmit} className="club-form">
           {/* Columna Izquierda: Datos del club y botón guardar */}
           <div className="club-col-datos">
-            <div className="form-group" style={{ margin: 0 }}>
+            <div className="form-group">
               <label htmlFor="club-nombre">Nombre del Club / Organizador</label>
               <input
                 id="club-nombre"
@@ -155,7 +155,7 @@ export default function ConfiguracionClub() {
               />
             </div>
 
-            <div className="form-group" style={{ margin: 0 }}>
+            <div className="form-group">
               <label htmlFor="club-canchas">Cantidad de canchas disponibles</label>
               <div className="club-stepper">
                 <button
@@ -215,10 +215,8 @@ export default function ConfiguracionClub() {
           {/* Columna Derecha: Horarios de apertura compactos */}
           <div className="club-col-horarios">
             <div className="club-horarios-header">
-              <Calendar size={18} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-              <h3 style={{ fontSize: 'var(--font-size-base)', margin: 0 }}>
-                Horarios de Apertura (Jornada)
-              </h3>
+              <Calendar size={18} strokeWidth={2} />
+              <h3>Horarios de Apertura (Jornada)</h3>
             </div>
 
             <div className="club-table-wrapper">
