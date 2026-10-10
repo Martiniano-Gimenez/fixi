@@ -1,6 +1,13 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
-const { getSlotsValidosSet, generarGrillaOrganizador, calcularOpcionesResolucion, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
+const {
+  getSlotsValidosSet,
+  generarGrillaOrganizador,
+  calcularOpcionesResolucion,
+  horaAMinutos,
+  DURACION_PARTIDO_MIN,
+  ordenarSlotsCronologicamente,
+} = require('./slots.service');
 const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal } = require('../utils/dateUtils');
 const {
   iniciarCategoria,
@@ -258,8 +265,8 @@ function evaluarAsignacionesIncrementales({
 
         const par1 = parejasMap.get(partido.pareja1Id);
         const par2 = parejasMap.get(partido.pareja2Id);
-        const slotsP1 = (par1?.slotsSeleccionados || []).map((s) => s.slotId);
-        const slotsP2 = (par2?.slotsSeleccionados || []).map((s) => s.slotId);
+        const slotsP1 = ordenarSlotsCronologicamente((par1?.slotsSeleccionados || []).map((s) => s.slotId));
+        const slotsP2 = ordenarSlotsCronologicamente((par2?.slotsSeleccionados || []).map((s) => s.slotId));
 
         const conSlotsP1 = slotsP1.length > 0;
         const conSlotsP2 = slotsP2.length > 0;
@@ -276,6 +283,8 @@ function evaluarAsignacionesIncrementales({
           slotsComunes = conSlotsP1 ? slotsP1 : slotsP2;
           sharedWindows = fusionarSlotsEnVentanas(slotsComunes, refFecha);
         }
+
+        slotsComunes = ordenarSlotsCronologicamente(slotsComunes);
 
         if (sharedWindows.length === 0) continue;
 
@@ -367,7 +376,7 @@ function evaluarAsignacionesIncrementales({
       const minStartMs = Math.max(new Date(p1.fechaHora).getTime(), new Date(p2.fechaHora).getTime()) + DURACION_MS;
 
       const rawZonaParejas = (zona.parejaIds || []).map((pId) => parejasMap.get(pId)).filter(Boolean);
-      const slotsLists = rawZonaParejas.map((p) => (p.slotsSeleccionados || []).map((s) => s.slotId));
+      const slotsLists = rawZonaParejas.map((p) => ordenarSlotsCronologicamente((p.slotsSeleccionados || []).map((s) => s.slotId)));
 
       let shared4 = [];
       const conSlotsLists = slotsLists.filter((l) => l.length > 0);
@@ -392,6 +401,7 @@ function evaluarAsignacionesIncrementales({
         for (let i = 1; i < conSlotsLists.length; i++) {
           commonSlots4 = commonSlots4.filter((s) => conSlotsLists[i].includes(s));
         }
+        commonSlots4 = ordenarSlotsCronologicamente(commonSlots4);
       }
 
       const matchesToAssign = [p3, p4].filter((p) => p && p.sinHorarioAsignado);
@@ -559,8 +569,8 @@ function evaluarAsignacionesIncrementales({
 
             const par1 = parejasMap.get(partido.pareja1Id);
             const par2 = parejasMap.get(partido.pareja2Id);
-            const slotsP1 = (par1?.slotsSeleccionados || []).map((s) => s.slotId);
-            const slotsP2 = (par2?.slotsSeleccionados || []).map((s) => s.slotId);
+            const slotsP1 = ordenarSlotsCronologicamente((par1?.slotsSeleccionados || []).map((s) => s.slotId));
+            const slotsP2 = ordenarSlotsCronologicamente((par2?.slotsSeleccionados || []).map((s) => s.slotId));
 
             const conSlotsP1 = slotsP1.length > 0;
             const conSlotsP2 = slotsP2.length > 0;
@@ -577,6 +587,8 @@ function evaluarAsignacionesIncrementales({
               slotsComunes = conSlotsP1 ? slotsP1 : slotsP2;
               sharedWindows = fusionarSlotsEnVentanas(slotsComunes, refFecha);
             }
+
+            slotsComunes = ordenarSlotsCronologicamente(slotsComunes);
 
             if (sharedWindows.length === 0) continue;
 
@@ -826,8 +838,8 @@ function evaluarAsignacionesIncrementales({
 
         const par1 = parejasMap.get(p.pareja1Id);
         const par2 = parejasMap.get(p.pareja2Id);
-        const slotsP1 = (par1?.slotsSeleccionados || []).map((s) => s.slotId);
-        const slotsP2 = (par2?.slotsSeleccionados || []).map((s) => s.slotId);
+        const slotsP1 = ordenarSlotsCronologicamente((par1?.slotsSeleccionados || []).map((s) => s.slotId));
+        const slotsP2 = ordenarSlotsCronologicamente((par2?.slotsSeleccionados || []).map((s) => s.slotId));
 
         const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
         const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
@@ -1515,21 +1527,23 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
 
   // Para cada partido sin horario calculamos slotsViables y nivel de urgencia
   const partidosConUrgencia = partidos.map((p) => {
-    const p1Slots = (p.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
-    const p2Slots = (p.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
-    const slotsEnComunOriginales = p1Slots.filter((s) => p2Slots.includes(s));
+    const p1Slots = ordenarSlotsCronologicamente((p.pareja1?.slotsSeleccionados || []).map((s) => s.slotId));
+    const p2Slots = ordenarSlotsCronologicamente((p.pareja2?.slotsSeleccionados || []).map((s) => s.slotId));
+    const slotsEnComunOriginales = ordenarSlotsCronologicamente(p1Slots.filter((s) => p2Slots.includes(s)));
 
-    const slotsViables = slotsEvaluados
-      .filter((s) => {
-        if (s.canchasLibres <= 0) return false;
-        if (p.pareja1Id && s.parejasJugando.includes(p.pareja1Id)) return false;
-        if (p.pareja2Id && s.parejasJugando.includes(p.pareja2Id)) return false;
-        return true;
-      })
-      .map((s) => s.slotId);
+    const slotsViables = ordenarSlotsCronologicamente(
+      slotsEvaluados
+        .filter((s) => {
+          if (s.canchasLibres <= 0) return false;
+          if (p.pareja1Id && s.parejasJugando.includes(p.pareja1Id)) return false;
+          if (p.pareja2Id && s.parejasJugando.includes(p.pareja2Id)) return false;
+          return true;
+        })
+        .map((s) => s.slotId)
+    );
 
     const slotsViablesCount = slotsViables.length;
-    const slotsValidosConEstrella = slotsViables.filter((sId) => slotsEnComunOriginales.includes(sId));
+    const slotsValidosConEstrella = ordenarSlotsCronologicamente(slotsViables.filter((sId) => slotsEnComunOriginales.includes(sId)));
     const slotsValidosConEstrellaCount = slotsValidosConEstrella.length;
 
     let urgencia = 'BAJA';

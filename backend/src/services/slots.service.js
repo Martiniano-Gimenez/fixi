@@ -14,6 +14,69 @@ function minutosAHora(minutos) {
 }
 
 /**
+ * Devuelve los minutos cronológicos de una hora ("HH:MM") dentro de la jornada.
+ * Las horas de madrugada (00:00 a 05:59) corresponden a la trasnoche de la jornada,
+ * por lo que se suman 24 horas (+1440 min) para ubicarlas cronológicamente
+ * después de las 23:45.
+ * @param {string} hora
+ * @returns {number}
+ */
+function minutosCronologicosJornada(hora) {
+  if (!hora || typeof hora !== 'string') return 0;
+  const [h, m] = hora.split(':').map(Number);
+  const hourNum = isNaN(h) ? 0 : h;
+  const minNum = isNaN(m) ? 0 : m;
+  const effectiveHour = hourNum < 6 ? hourNum + 24 : hourNum;
+  return effectiveHour * 60 + minNum;
+}
+
+const DIA_PESO = {
+  'Viernes': 1,
+  'viernes': 1,
+  'Sabado': 2,
+  'Sábado': 2,
+  'sabado': 2,
+  'sábado': 2,
+  'Domingo': 3,
+  'domingo': 3,
+};
+
+/**
+ * Compara dos slots (ej. "Sabado-13:30" vs "Sabado-00:00") cronológicamente:
+ * primero por día del torneo, y luego por minutos cronológicos
+ * con trasnoche al final de la jornada.
+ * @param {string} slotA
+ * @param {string} slotB
+ * @returns {number}
+ */
+function compararSlotsCronologicamente(slotA, slotB) {
+  if (!slotA) return -1;
+  if (!slotB) return 1;
+
+  const [diaA, horaA] = slotA.split('-');
+  const [diaB, horaB] = slotB.split('-');
+
+  const pesoA = DIA_PESO[diaA] || 99;
+  const pesoB = DIA_PESO[diaB] || 99;
+
+  if (pesoA !== pesoB) {
+    return pesoA - pesoB;
+  }
+
+  return minutosCronologicosJornada(horaA) - minutosCronologicosJornada(horaB);
+}
+
+/**
+ * Ordena un array de slots cronológicamente respetando días y trasnoche.
+ * @param {string[]} slots
+ * @returns {string[]}
+ */
+function ordenarSlotsCronologicamente(slots) {
+  if (!Array.isArray(slots)) return [];
+  return [...slots].sort(compararSlotsCronologicamente);
+}
+
+/**
  * Genera array de slots ["Viernes-18:00", "Viernes-18:15", ..., "Viernes-00:45"]
  * con granularidad de 15 minutos.
  * Soporta jornadas que pasan de la medianoche (ej. 18:00 a 02:00).
@@ -168,7 +231,9 @@ function calcularCasiEstrellas(slotsP1, slotsP2, slotsViables, maxResultados = 3
     const balanceA = Math.abs(Math.abs(a.distP1) - Math.abs(a.distP2));
     const balanceB = Math.abs(Math.abs(b.distP1) - Math.abs(b.distP2));
     if (balanceA !== balanceB) return balanceA - balanceB;
-    return Math.abs(a.distP1) - Math.abs(b.distP1);
+    const diffAbs = Math.abs(a.distP1) - Math.abs(b.distP1);
+    if (diffAbs !== 0) return diffAbs;
+    return compararSlotsCronologicamente(a.slotId, b.slotId);
   });
 
   return candidatos.slice(0, maxResultados);
@@ -263,7 +328,10 @@ function calcularOpcionesResolucion(slotsP1, slotsP2, slotsViables, maxResultado
     const balanceA = Math.abs(Math.abs(a.distP1) - Math.abs(a.distP2));
     const balanceB = Math.abs(Math.abs(b.distP1) - Math.abs(b.distP2));
     if (balanceA !== balanceB) return balanceA - balanceB;
-    return Math.abs(a.distP1) - Math.abs(b.distP1);
+    const diffAbs = Math.abs(a.distP1) - Math.abs(b.distP1);
+    if (diffAbs !== 0) return diffAbs;
+    // 4. Desempate cronológico: opciones diurnas antes que trasnoche
+    return compararSlotsCronologicamente(a.slotId, b.slotId);
   });
 
   return candidatos.slice(0, maxResultados);
@@ -273,10 +341,14 @@ module.exports = {
   DURACION_PARTIDO_MIN,
   horaAMinutos,
   minutosAHora,
+  minutosCronologicosJornada,
+  compararSlotsCronologicamente,
+  ordenarSlotsCronologicamente,
   generarSlotsDia,
   generarGrillaOrganizador,
   getSlotsValidosSet,
   calcularCompatibilidad,
+  calcularDistanciaSlotAPareja,
   calcularCasiEstrellas,
   calcularOpcionesResolucion,
 };

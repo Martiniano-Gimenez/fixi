@@ -1,6 +1,13 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
-const { calcularCompatibilidad, horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
+const {
+  calcularCompatibilidad,
+  horaAMinutos,
+  DURACION_PARTIDO_MIN,
+  minutosCronologicosJornada,
+  compararSlotsCronologicamente,
+  ordenarSlotsCronologicamente,
+} = require('./slots.service');
 const { parseFechaLocal, requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
 
 // Fisher-Yates shuffle
@@ -661,8 +668,8 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   const grupo2 = [];
 
   for (const partido of partidosFase1) {
-    const slotsP1 = (partido.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
-    const slotsP2 = (partido.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
+    const slotsP1 = ordenarSlotsCronologicamente((partido.pareja1?.slotsSeleccionados || []).map((s) => s.slotId));
+    const slotsP2 = ordenarSlotsCronologicamente((partido.pareja2?.slotsSeleccionados || []).map((s) => s.slotId));
 
     const conSlotsP1 = slotsP1.length > 0;
     const conSlotsP2 = slotsP2.length > 0;
@@ -688,6 +695,8 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
         sharedWindows.push({ dia: 'Sabado', startMs: satDayStartMs, endMs: satDayEndMs });
       }
     }
+
+    slotsComunes = ordenarSlotsCronologicamente(slotsComunes);
 
     const item = { partido, slotsComunes, sharedWindows, numOptions: sharedWindows.length };
 
@@ -904,7 +913,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
     // Obtener las 4 parejas de la zona
     const zonePairs = (zona.zonaParejas || []).map((zp) => zp.pareja).filter(Boolean);
-    const slotsLists = zonePairs.map((p) => (p.slotsSeleccionados || []).map((s) => s.slotId));
+    const slotsLists = zonePairs.map((p) => ordenarSlotsCronologicamente((p.slotsSeleccionados || []).map((s) => s.slotId)));
 
     // Calcular intersección cuádruple de ventanas continuas
     let shared4 = [];
@@ -927,6 +936,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
       for (let i = 1; i < conSlotsLists.length; i++) {
         commonSlots4 = commonSlots4.filter((s) => conSlotsLists[i].includes(s));
       }
+      commonSlots4 = ordenarSlotsCronologicamente(commonSlots4);
     }
 
     // Programar P3 y P4
@@ -1896,5 +1906,8 @@ module.exports = {
   generarPartidosZonaHelper,
   moverParejaDeZona,
   agregarParejaAZona,
+  minutosCronologicosJornada,
+  compararSlotsCronologicamente,
+  ordenarSlotsCronologicamente,
 };
 

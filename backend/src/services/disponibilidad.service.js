@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma');
-const { getSlotsValidosSet } = require('./slots.service');
+const { getSlotsValidosSet, ordenarSlotsCronologicamente } = require('./slots.service');
 
 async function getParejaAndVerifyPermisos(organizadorId, parejaId) {
   const pareja = await prisma.pareja.findUnique({
@@ -37,7 +37,7 @@ async function getDisponibilidad(organizadorId, parejaId) {
     where: { parejaId },
     select: { slotId: true },
   });
-  return slots.map((s) => s.slotId);
+  return ordenarSlotsCronologicamente(slots.map((s) => s.slotId));
 }
 
 async function setDisponibilidad(organizadorId, parejaId, slotIds) {

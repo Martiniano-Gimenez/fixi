@@ -20,7 +20,7 @@ const { resetTestDb } = require('./reset-test-db');
 
 const SCRIPTS_DIR = __dirname;
 
-// Lista explícita de las 21 suites oficiales
+// Lista explícita de las suites oficiales
 const TEST_SUITES = [
   'test-alta-tardia-flujo.js',
   'test-auditoria-fixes.js',
@@ -35,6 +35,7 @@ const TEST_SUITES = [
   'test-modo-lluvia-independiente.js',
   'test-modo-lluvia-mcf.js',
   'test-operaciones-zonas.js',
+  'test-orden-cronologico-slots.js',
   'test-parejas-categoria-zona.js',
   'test-persistencia-overrides.js',
   'test-precheck-snapshot.js',
