@@ -2,7 +2,14 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
-import { Building2, Calendar, Save, ChevronLeft } from 'lucide-react';
+import { Building2, Calendar, Save, ChevronLeft, Minus, Plus } from 'lucide-react';
+import './ConfiguracionClub.css';
+
+const DIAS = [
+  { key: 'viernes', label: 'Viernes', inicio: 'viernesInicio', fin: 'viernesFin' },
+  { key: 'sabado', label: 'Sábado', inicio: 'sabadoInicio', fin: 'sabadoFin' },
+  { key: 'domingo', label: 'Domingo', inicio: 'domingoInicio', fin: 'domingoFin' },
+];
 
 export default function ConfiguracionClub() {
   const [loading, setLoading] = useState(true);
@@ -116,144 +123,161 @@ export default function ConfiguracionClub() {
   if (loading) return <div className="loading">Cargando configuración del club...</div>;
 
   return (
-    <div className="page" style={{ maxWidth: '720px' }}>
-      <div className="flex-header">
+    <div className="page club-page">
+      <div className="flex-header club-header">
         <div>
-          <Link
-            to="/admin"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-text-secondary)',
-            }}
-          >
-            <ChevronLeft size={14} strokeWidth={2} />
+          <Link to="/admin" className="club-back-link">
+            <ChevronLeft size={16} strokeWidth={2} />
             Volver a Mis Torneos
           </Link>
-          <h1 style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <h1 className="club-title">
             <Building2 size={24} strokeWidth={2} />
-            Configuración del Club
+            <span>Configuración del Club</span>
           </h1>
         </div>
       </div>
 
-      <div className="torneo-card" style={{ marginTop: '1.5rem' }}>
+      <div className="torneo-card club-card">
         {error && <div className="error-message" style={{ marginBottom: '1.25rem' }}>{error}</div>}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label htmlFor="club-nombre">Nombre del Club / Organizador</label>
-            <input
-              id="club-nombre"
-              type="text"
-              value={form.nombre}
-              onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="form-group" style={{ margin: 0, maxWidth: '240px' }}>
-            <label htmlFor="club-canchas">Cantidad de canchas disponibles</label>
-            <input
-              id="club-canchas"
-              type="number"
-              min="1"
-              max="30"
-              value={form.cantidadCanchas}
-              onChange={(e) => setForm({ ...form, cantidadCanchas: e.target.value })}
-              required
-            />
-          </div>
-
-          <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Calendar size={16} strokeWidth={2} style={{ color: 'var(--color-text-secondary)' }} />
-              <h3 style={{ fontSize: 'var(--font-size-base)', margin: 0 }}>Horarios de Apertura (Jornada)</h3>
+        <form onSubmit={handleSubmit} className="club-form">
+          {/* Columna Izquierda: Datos del club y botón guardar */}
+          <div className="club-col-datos">
+            <div className="form-group" style={{ margin: 0 }}>
+              <label htmlFor="club-nombre">Nombre del Club / Organizador</label>
+              <input
+                id="club-nombre"
+                type="text"
+                className="club-text-input"
+                value={form.nombre}
+                onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                required
+              />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-              {/* Viernes */}
-              <div style={{ background: 'var(--color-bg-input)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <h4 style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.75rem' }}>Viernes</h4>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
-                    <label style={{ fontSize: 'var(--font-size-xs)' }}>Inicio</label>
-                    <input
-                      type="time"
-                      value={form.viernesInicio}
-                      onChange={(e) => setForm({ ...form, viernesInicio: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
-                    <label style={{ fontSize: 'var(--font-size-xs)' }}>Fin</label>
-                    <input
-                      type="time"
-                      value={form.viernesFin}
-                      onChange={(e) => setForm({ ...form, viernesFin: e.target.value })}
-                    />
-                  </div>
-                </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label htmlFor="club-canchas">Cantidad de canchas disponibles</label>
+              <div className="club-stepper">
+                <button
+                  type="button"
+                  className="club-stepper-btn"
+                  onClick={() => {
+                    const current = Number(form.cantidadCanchas) || 1;
+                    if (current > 1) {
+                      setForm((prev) => ({ ...prev, cantidadCanchas: current - 1 }));
+                    }
+                  }}
+                  disabled={Number(form.cantidadCanchas) <= 1}
+                  aria-label="Disminuir cantidad de canchas"
+                >
+                  <Minus size={16} strokeWidth={2.5} />
+                </button>
+                <input
+                  id="club-canchas"
+                  type="number"
+                  min="1"
+                  max="30"
+                  className="club-stepper-input"
+                  value={form.cantidadCanchas}
+                  onChange={(e) => setForm({ ...form, cantidadCanchas: e.target.value })}
+                  required
+                />
+                <button
+                  type="button"
+                  className="club-stepper-btn"
+                  onClick={() => {
+                    const current = Number(form.cantidadCanchas) || 1;
+                    if (current < 30) {
+                      setForm((prev) => ({ ...prev, cantidadCanchas: current + 1 }));
+                    }
+                  }}
+                  disabled={Number(form.cantidadCanchas) >= 30}
+                  aria-label="Aumentar cantidad de canchas"
+                >
+                  <Plus size={16} strokeWidth={2.5} />
+                </button>
               </div>
+            </div>
 
-              {/* Sábado */}
-              <div style={{ background: 'var(--color-bg-input)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <h4 style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.75rem' }}>Sábado</h4>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
-                    <label style={{ fontSize: 'var(--font-size-xs)' }}>Inicio</label>
-                    <input
-                      type="time"
-                      value={form.sabadoInicio}
-                      onChange={(e) => setForm({ ...form, sabadoInicio: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
-                    <label style={{ fontSize: 'var(--font-size-xs)' }}>Fin</label>
-                    <input
-                      type="time"
-                      value={form.sabadoFin}
-                      onChange={(e) => setForm({ ...form, sabadoFin: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Domingo */}
-              <div style={{ background: 'var(--color-bg-input)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <h4 style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.75rem' }}>Domingo</h4>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
-                    <label style={{ fontSize: 'var(--font-size-xs)' }}>Inicio</label>
-                    <input
-                      type="time"
-                      value={form.domingoInicio}
-                      onChange={(e) => setForm({ ...form, domingoInicio: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
-                    <label style={{ fontSize: 'var(--font-size-xs)' }}>Fin</label>
-                    <input
-                      type="time"
-                      value={form.domingoFin}
-                      onChange={(e) => setForm({ ...form, domingoFin: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
+            {/* En escritorio el botón se posiciona junto a los datos; en móvil se ancla al fondo del viewport */}
+            <div className="club-save-bar">
+              <button
+                type="submit"
+                className="btn-primary club-save-btn"
+                disabled={saving}
+              >
+                <Save size={16} strokeWidth={2} />
+                <span>{saving ? 'Guardando...' : 'Guardar configuración del club'}</span>
+              </button>
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={saving}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', width: 'auto', alignSelf: 'flex-start', marginTop: '0.5rem' }}
-          >
-            <Save size={16} strokeWidth={2} />
-            {saving ? 'Guardando...' : 'Guardar configuración del club'}
-          </button>
+          {/* Columna Derecha: Horarios de apertura compactos */}
+          <div className="club-col-horarios">
+            <div className="club-horarios-header">
+              <Calendar size={18} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
+              <h3 style={{ fontSize: 'var(--font-size-base)', margin: 0 }}>
+                Horarios de Apertura (Jornada)
+              </h3>
+            </div>
+
+            <div className="club-table-wrapper">
+              <table className="club-horarios-table">
+                <thead>
+                  <tr>
+                    <th className="th-dia">Día</th>
+                    <th className="th-hora">Inicio</th>
+                    <th className="th-hora">Fin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DIAS.map((dia) => {
+                    const horaInicio = form[dia.inicio];
+                    const horaFin = form[dia.fin];
+                    const esMadrugada = Boolean(horaInicio && horaFin && horaFin < horaInicio);
+
+                    return (
+                      <tr key={dia.key}>
+                        <td className="td-dia">
+                          <span className="club-dia-name">{dia.label}</span>
+                        </td>
+                        <td className="td-hora">
+                          <input
+                            id={`time-${dia.inicio}`}
+                            type="time"
+                            className="club-time-input"
+                            value={horaInicio}
+                            onChange={(e) => setForm({ ...form, [dia.inicio]: e.target.value })}
+                            aria-label={`Horario de inicio para ${dia.label}`}
+                          />
+                        </td>
+                        <td className="td-hora">
+                          <div className="club-fin-container">
+                            <input
+                              id={`time-${dia.fin}`}
+                              type="time"
+                              className="club-time-input"
+                              value={horaFin}
+                              onChange={(e) => setForm({ ...form, [dia.fin]: e.target.value })}
+                              aria-label={`Horario de fin para ${dia.label}`}
+                            />
+                            {esMadrugada && (
+                              <span
+                                className="club-madrugada-badge"
+                                title="Cierra en la madrugada del día siguiente"
+                              >
+                                madrugada siguiente
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </form>
       </div>
 
