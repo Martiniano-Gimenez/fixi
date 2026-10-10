@@ -1,0 +1,68 @@
+.torneo-create-card {
+  margin: 2rem auto;
+  text-align: left;
+}
+
+.torneo-create-card h2 {
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--space-6);
+  text-align: left;
+}
+
+.torneo-create-card .form-group {
+  margin-bottom: var(--space-5);
+  text-align: left;
+}
+
+.torneo-create-card .form-group label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+
+.torneo-create-card .form-group input {
+  width: 100%;
+  color-scheme: dark;
+}
+
+.torneo-create-card .form-help {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.torneo-create-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.torneo-create-actions .btn-secondary,
+.torneo-create-actions .btn-primary {
+  flex: 1;
+  margin-top: 0;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+@media (max-width: 480px) {
+  .torneo-create-actions {
+    flex-direction: column-reverse;
+  }
+
+  .torneo-create-actions .btn-secondary,
+  .torneo-create-actions .btn-primary {
+    width: 100%;
+  }
+}

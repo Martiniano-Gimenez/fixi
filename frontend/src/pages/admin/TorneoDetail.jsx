@@ -32,7 +32,7 @@ import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEdi
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { estadoLabel } from '../../utils/estadoLabels';
-import { formatFechaTorneo, getZonedParts } from '../../utils/dateUtils';
+import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
 
 function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -483,11 +483,19 @@ export default function TorneoDetail() {
 
   const handleGuardarTorneo = async (e) => {
     e.preventDefault();
+    if (!editFecha) {
+      setEditTorneoError('La fecha de inicio del torneo es obligatoria.');
+      return;
+    }
+    if (!isViernes(editFecha)) {
+      setEditTorneoError('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
+      return;
+    }
     setGuardandoTorneo(true);
     setEditTorneoError('');
     try {
       const updated = await api.put(`/torneos/${torneo.id}`, {
-        fecha: editFecha || null,
+        fecha: editFecha,
       });
       setTorneo((prev) => ({ ...prev, ...updated }));
       setEditTorneoModalOpen(false);
@@ -1199,6 +1207,7 @@ export default function TorneoDetail() {
                   type="date"
                   value={editFecha}
                   onChange={(e) => setEditFecha(e.target.value)}
+                  required
                   style={{ width: '100%' }}
                 />
                 <p style={{ margin: '0.4rem 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>

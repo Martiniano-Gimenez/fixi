@@ -312,3 +312,25 @@ export function formatHorasDisponibles(cantSlots) {
   }
   return `${h} h ${m} min`;
 }
+
+/**
+ * Determina si una fecha en formato civil "YYYY-MM-DD" o Date corresponde a un viernes (día 5).
+ * Interpreta la fecha civil de forma determinista e inmune a la zona horaria del navegador.
+ *
+ * @param {string | Date} fecha
+ * @returns {boolean}
+ */
+export function isViernes(fecha) {
+  if (!fecha) return false;
+  if (typeof fecha === 'string') {
+    const m = fecha.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return false;
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10) - 1;
+    const d = parseInt(m[3], 10);
+    return new Date(Date.UTC(y, mo, d)).getUTCDay() === 5;
+  }
+  const parts = getZonedParts(fecha);
+  return parts ? parts.dayOfWeek === 5 : false;
+}
+

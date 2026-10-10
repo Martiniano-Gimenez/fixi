@@ -15,13 +15,32 @@ async function createTorneo(organizadorId, { nombre, fecha }) {
     throw error;
   }
 
+  if (!fecha || (typeof fecha === 'string' && !fecha.trim())) {
+    const error = new Error('La fecha de inicio del torneo es obligatoria.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const parsedFecha = parseFechaLocal(fecha);
+  if (!parsedFecha) {
+    const error = new Error('La fecha del torneo no es válida.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (parsedFecha.getDay() !== 5) {
+    const error = new Error('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const slug = generarSlug(nombre.trim());
 
   return await prisma.torneo.create({
     data: {
       organizadorId,
       nombre: nombre.trim(),
-      fecha: fecha ? parseFechaLocal(fecha) : null,
+      fecha: parsedFecha,
       slug,
     },
   });
@@ -91,15 +110,37 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
 async function updateTorneo(organizadorId, torneoId, data) {
   const torneo = await getTorneoById(organizadorId, torneoId);
 
-  if (torneo.estado !== 'BORRADOR' && data.fecha !== undefined) {
-    const nuevaFecha = data.fecha ? parseFechaLocal(data.fecha) : null;
-    const fechaActual = torneo.fecha ? parseFechaLocal(torneo.fecha) : null;
-    const fechaCambio = nuevaFecha === null
-      ? fechaActual !== null
-      : (fechaActual === null || nuevaFecha.getTime() !== fechaActual.getTime());
+  let parsedFecha;
+  if (data.fecha !== undefined) {
+    if (torneo.estado !== 'BORRADOR') {
+      const nuevaFecha = data.fecha ? parseFechaLocal(data.fecha) : null;
+      const fechaActual = torneo.fecha ? parseFechaLocal(torneo.fecha) : null;
+      const fechaCambio = nuevaFecha === null
+        ? fechaActual !== null
+        : (fechaActual === null || nuevaFecha.getTime() !== fechaActual.getTime());
 
-    if (fechaCambio) {
-      const error = new Error('No se puede modificar la fecha de un torneo que ya inició. Reiniciá el torneo para poder cambiarla.');
+      if (fechaCambio) {
+        const error = new Error('No se puede modificar la fecha de un torneo que ya inició. Reiniciá el torneo para poder cambiarla.');
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
+    if (!data.fecha || (typeof data.fecha === 'string' && !data.fecha.trim())) {
+      const error = new Error('La fecha de inicio del torneo es obligatoria.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    parsedFecha = parseFechaLocal(data.fecha);
+    if (!parsedFecha) {
+      const error = new Error('La fecha del torneo no es válida.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (parsedFecha.getDay() !== 5) {
+      const error = new Error('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
       error.statusCode = 400;
       throw error;
     }
@@ -107,7 +148,7 @@ async function updateTorneo(organizadorId, torneoId, data) {
 
   const updateData = {};
   if (data.nombre !== undefined && data.nombre.trim()) updateData.nombre = data.nombre.trim();
-  if (data.fecha !== undefined) updateData.fecha = data.fecha ? parseFechaLocal(data.fecha) : null;
+  if (data.fecha !== undefined) updateData.fecha = parsedFecha;
   if (data.estado !== undefined) updateData.estado = data.estado;
 
   return await prisma.torneo.update({

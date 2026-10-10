@@ -39,7 +39,7 @@ async function main() {
       nombre: 'Torneo Verificación Mobile',
       slug: 'test-mobile-posiciones',
       estado: 'EN_CURSO',
-      fecha: new Date('2026-10-15'),
+      fecha: new Date('2026-10-16T15:00:00.000Z'),
       organizadorId: org.id,
     }
   });
