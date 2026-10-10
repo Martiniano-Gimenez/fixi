@@ -228,27 +228,6 @@
   box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
-.club-fin-container {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.club-madrugada-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.7rem;
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  border-radius: var(--radius-sm);
-  padding: 0.2rem 0.45rem;
-  line-height: 1.1;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
 /* ─── Escritorio (desde 900px) ─────────────────────────── */
 @media (min-width: 900px) {
   .club-form {
@@ -346,24 +325,75 @@
     font-size: var(--font-size-sm);
   }
 
-  .club-fin-container {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
-  }
-
   .club-horarios-table th,
   .club-horarios-table td {
-    padding: 0.5rem 0.4rem;
+    padding: 0.5rem 0.25rem;
+  }
+
+  .club-horarios-table th:first-child,
+  .club-horarios-table td:first-child {
+    padding-left: 0.45rem;
+  }
+
+  .club-horarios-table th:last-child,
+  .club-horarios-table td:last-child {
+    padding-right: 0.45rem;
+  }
+
+  .th-dia,
+  .td-dia {
+    min-width: 0;
+    width: auto;
+  }
+
+  .th-hora,
+  .td-hora {
+    width: 38%;
+  }
+
+  .club-dia-name {
+    font-size: 0.82rem;
+    white-space: nowrap;
   }
 
   .club-time-input {
-    padding: 0.4rem 0.35rem;
+    width: 100%;
+    min-width: 0;
+    max-width: 108px;
+    padding: 0.35rem 0.25rem;
     font-size: 0.82rem;
+  }
+
+  .club-time-input::-webkit-calendar-picker-indicator {
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
   }
 
   /* Scoped a la pantalla club para no afectar el resto de la app */
   .club-page .toast-container {
     bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ─── Pantallas Móviles Pequeñas (<= 480px) ────────────── */
+@media (max-width: 480px) {
+  .club-page {
+    padding: 0.75rem 0.5rem;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .club-card {
+    padding: 0.85rem 0.6rem;
+  }
+
+  .club-time-input {
+    max-width: 100px;
+    padding: 0.35rem 0.2rem;
+    font-size: 0.8rem;
+  }
+
+  .club-dia-name {
+    font-size: 0.8rem;
   }
 }

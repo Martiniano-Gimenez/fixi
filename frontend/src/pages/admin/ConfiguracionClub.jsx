@@ -232,7 +232,6 @@ export default function ConfiguracionClub() {
                   {DIAS.map((dia) => {
                     const horaInicio = form[dia.inicio];
                     const horaFin = form[dia.fin];
-                    const esMadrugada = Boolean(horaInicio && horaFin && horaFin < horaInicio);
 
                     return (
                       <tr key={dia.key}>
@@ -250,24 +249,14 @@ export default function ConfiguracionClub() {
                           />
                         </td>
                         <td className="td-hora">
-                          <div className="club-fin-container">
-                            <input
-                              id={`time-${dia.fin}`}
-                              type="time"
-                              className="club-time-input"
-                              value={horaFin}
-                              onChange={(e) => setForm({ ...form, [dia.fin]: e.target.value })}
-                              aria-label={`Horario de fin para ${dia.label}`}
-                            />
-                            {esMadrugada && (
-                              <span
-                                className="club-madrugada-badge"
-                                title="Cierra en la madrugada del día siguiente"
-                              >
-                                madrugada siguiente
-                              </span>
-                            )}
-                          </div>
+                          <input
+                            id={`time-${dia.fin}`}
+                            type="time"
+                            className="club-time-input"
+                            value={horaFin}
+                            onChange={(e) => setForm({ ...form, [dia.fin]: e.target.value })}
+                            aria-label={`Horario de fin para ${dia.label}`}
+                          />
                         </td>
                       </tr>
                     );
