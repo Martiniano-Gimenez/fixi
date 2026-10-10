@@ -925,22 +925,8 @@ export default function TorneoDetail() {
                   <Edit2 size={12} style={{ opacity: 0.7, marginLeft: '0.2rem' }} />
                 </button>
               ) : (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    background: 'transparent',
-                    border: '1px dashed var(--color-border)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '0.2rem 0.5rem',
-                    color: 'inherit',
-                    fontSize: 'inherit',
-                    fontFamily: 'inherit',
-                  }}
-                  title="La fecha no se puede cambiar una vez iniciado el torneo"
-                >
-                  <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Calendar size={15} />
                   <span>
                     {torneo.fecha ? formatFechaTorneo(torneo.fecha) : 'Fecha a confirmar'}
                   </span>
