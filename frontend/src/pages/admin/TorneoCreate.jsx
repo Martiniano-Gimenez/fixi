@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import './TorneoCreate.css';
@@ -8,12 +8,7 @@ export default function TorneoCreate() {
   const [fecha, setFecha] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const nombreInputRef = useRef(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    nombreInputRef.current?.focus();
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -46,7 +41,6 @@ export default function TorneoCreate() {
           <div className="form-group">
             <label htmlFor="nombre">Nombre del torneo</label>
             <input 
-              ref={nombreInputRef}
               type="text" 
               id="nombre" 
               value={nombre} 
