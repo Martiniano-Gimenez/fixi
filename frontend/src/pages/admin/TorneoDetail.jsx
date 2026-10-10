@@ -483,11 +483,15 @@ export default function TorneoDetail() {
 
   const handleGuardarTorneo = async (e) => {
     e.preventDefault();
+    if (!editFecha) {
+      setEditTorneoError('La fecha de inicio del torneo es obligatoria.');
+      return;
+    }
     setGuardandoTorneo(true);
     setEditTorneoError('');
     try {
       const updated = await api.put(`/torneos/${torneo.id}`, {
-        fecha: editFecha || null,
+        fecha: editFecha,
       });
       setTorneo((prev) => ({ ...prev, ...updated }));
       setEditTorneoModalOpen(false);
@@ -1199,6 +1203,7 @@ export default function TorneoDetail() {
                   type="date"
                   value={editFecha}
                   onChange={(e) => setEditFecha(e.target.value)}
+                  required
                   style={{ width: '100%' }}
                 />
                 <p style={{ margin: '0.4rem 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
