@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { AlertTriangle, Check, Loader2, Info } from 'lucide-react';
 import RangeSliderGroup from './RangeSliderGroup';
@@ -55,16 +55,21 @@ function reconstruirRangos(slotsGuardados, slotsDisponiblesDia, dia) {
   return result;
 }
 
-function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado) {
+function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado, rangosDomingo = [], grillaDomingo = []) {
   const result = new Set();
   (rangosViernes || []).forEach((r) => {
     for (let i = r.startIdx; i <= r.endIdx; i++) {
-      if (grillaViernes[i]) result.add(grillaViernes[i]);
+      if (grillaViernes && grillaViernes[i]) result.add(grillaViernes[i]);
     }
   });
   (rangosSabado || []).forEach((r) => {
     for (let i = r.startIdx; i <= r.endIdx; i++) {
-      if (grillaSabado[i]) result.add(grillaSabado[i]);
+      if (grillaSabado && grillaSabado[i]) result.add(grillaSabado[i]);
+    }
+  });
+  (rangosDomingo || []).forEach((r) => {
+    for (let i = r.startIdx; i <= r.endIdx; i++) {
+      if (grillaDomingo && grillaDomingo[i]) result.add(grillaDomingo[i]);
     }
   });
   return Array.from(result);
@@ -142,55 +147,104 @@ function agruparSlotsEnRangos(slotIdsDelDia, grillaDelDia = []) {
     .join(', ');
 }
 
-export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEstado, onChanged, onSlotsChanged, onClose }) {
-  const [grilla, setGrilla] = useState({ viernes: [], sabado: [] });
-  const [rawSlots, setRawSlots] = useState([]);
+export default function DisponibilidadEditor({
+  parejaId,
+  torneoId,
+  categoriaEstado,
+  onChanged,
+  onSlotsChanged,
+  onClose,
+  value,
+  onChange,
+  grillaProp,
+}) {
+  const isControlled = Boolean(onChange && !parejaId);
+  const [grilla, setGrilla] = useState(grillaProp || { viernes: [], sabado: [], domingo: [] });
+  const [rawSlots, setRawSlots] = useState(isControlled ? (value || []) : []);
   const [rangosViernes, setRangosViernes] = useState([]);
   const [rangosSabado, setRangosSabado] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [rangosDomingo, setRangosDomingo] = useState([]);
+  const [loading, setLoading] = useState(!grillaProp);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const initialLoadedRef = useRef(false);
-
   useEffect(() => {
+    let isCancelled = false;
+
+    const cargarDatos = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        if (isControlled) {
+          let g = grillaProp;
+          if (!g) {
+            const grillaData = await api.get('/organizador/slots');
+            g = grillaData || { viernes: [], sabado: [], domingo: [] };
+            if (!isCancelled) setGrilla(g);
+          }
+          const s = value || [];
+          if (!isCancelled) {
+            setRawSlots(s);
+            setRangosViernes(reconstruirRangos(s, g?.viernes || [], 'Viernes'));
+            setRangosSabado(reconstruirRangos(s, g?.sabado || [], 'Sabado'));
+            setRangosDomingo(reconstruirRangos(s, g?.domingo || [], 'Domingo'));
+          }
+        } else if (parejaId) {
+          const [grillaData, slotsData] = await Promise.all([
+            api.get('/organizador/slots'),
+            api.get(`/parejas/${parejaId}/disponibilidad`),
+          ]);
+
+          const g = grillaData || { viernes: [], sabado: [], domingo: [] };
+          const s = slotsData || [];
+          if (!isCancelled) {
+            setGrilla(g);
+            setRawSlots(s);
+            setRangosViernes(reconstruirRangos(s, g.viernes || [], 'Viernes'));
+            setRangosSabado(reconstruirRangos(s, g.sabado || [], 'Sabado'));
+            setRangosDomingo(reconstruirRangos(s, g.domingo || [], 'Domingo'));
+          }
+        }
+      } catch (err) {
+        if (!isCancelled) setError(err.message || 'Error al cargar disponibilidad.');
+      } finally {
+        if (!isCancelled) setLoading(false);
+      }
+    };
+
     cargarDatos();
-  }, [parejaId, torneoId, categoriaEstado]);
 
-  const cargarDatos = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const [grillaData, slotsData] = await Promise.all([
-        api.get('/organizador/slots'),
-        api.get(`/parejas/${parejaId}/disponibilidad`),
-      ]);
+    return () => {
+      isCancelled = true;
+    };
+  }, [parejaId, torneoId, categoriaEstado, isControlled, grillaProp, value]);
 
-      const g = grillaData || { viernes: [], sabado: [] };
-      const s = slotsData || [];
-      setGrilla(g);
-      setRawSlots(s);
-
-      const rv = reconstruirRangos(s, g.viernes || [], 'Viernes');
-      const rs = reconstruirRangos(s, g.sabado || [], 'Sabado');
-
-      setRangosViernes(rv);
-      setRangosSabado(rs);
-      initialLoadedRef.current = true;
-    } catch (err) {
-      setError(err.message || 'Error al cargar disponibilidad.');
-    } finally {
-      setLoading(false);
+  // Sincronización en modo controlado cuando cambia `value` externo
+  useEffect(() => {
+    if (isControlled && Array.isArray(value)) {
+      setRawSlots(value);
+      if (grilla) {
+        setRangosViernes(reconstruirRangos(value, grilla.viernes || [], 'Viernes'));
+        setRangosSabado(reconstruirRangos(value, grilla.sabado || [], 'Sabado'));
+        setRangosDomingo(reconstruirRangos(value, grilla.domingo || [], 'Domingo'));
+      }
     }
-  };
+  }, [value, isControlled, grilla]);
 
-  const guardarCambios = async (newRangosViernes, newRangosSabado) => {
+  const guardarCambios = async (newRangosViernes, newRangosSabado, newRangosDomingo) => {
     setSaving(true);
     setError('');
     setSavedSuccess(false);
     try {
-      const slotList = rangosASlots(newRangosViernes, grilla.viernes, newRangosSabado, grilla.sabado);
+      const slotList = rangosASlots(
+        newRangosViernes,
+        grilla.viernes,
+        newRangosSabado,
+        grilla.sabado,
+        newRangosDomingo,
+        grilla.domingo
+      );
       const saved = await api.put(`/parejas/${parejaId}/disponibilidad`, {
         slots: slotList,
       });
@@ -207,20 +261,51 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
 
   const handleRangosViernesChange = (newRangos) => {
     setRangosViernes(newRangos);
-    guardarCambios(newRangos, rangosSabado);
+    if (isControlled) {
+      const slotList = rangosASlots(newRangos, grilla.viernes, rangosSabado, grilla.sabado, rangosDomingo, grilla.domingo);
+      setRawSlots(slotList);
+      onChange(slotList);
+    } else {
+      guardarCambios(newRangos, rangosSabado, rangosDomingo);
+    }
   };
 
   const handleRangosSabadoChange = (newRangos) => {
     setRangosSabado(newRangos);
-    guardarCambios(rangosViernes, newRangos);
+    if (isControlled) {
+      const slotList = rangosASlots(rangosViernes, grilla.viernes, newRangos, grilla.sabado, rangosDomingo, grilla.domingo);
+      setRawSlots(slotList);
+      onChange(slotList);
+    } else {
+      guardarCambios(rangosViernes, newRangos, rangosDomingo);
+    }
+  };
+
+  const handleRangosDomingoChange = (newRangos) => {
+    setRangosDomingo(newRangos);
+    if (isControlled) {
+      const slotList = rangosASlots(rangosViernes, grilla.viernes, rangosSabado, grilla.sabado, newRangos, grilla.domingo);
+      setRawSlots(slotList);
+      onChange(slotList);
+    } else {
+      guardarCambios(rangosViernes, rangosSabado, newRangos);
+    }
+  };
+
+  const handleLimpiarTodoControlled = () => {
+    setRangosViernes([]);
+    setRangosSabado([]);
+    setRangosDomingo([]);
+    setRawSlots([]);
+    if (onChange) onChange([]);
   };
 
   if (loading) {
     return <div className="loading" style={{ padding: '1rem', fontSize: 'var(--font-size-xs)' }}>Cargando disponibilidad...</div>;
   }
 
-  // Vista de SOLO LECTURA cuando la categoría ya inició (EN_CURSO) o finalizó (FINALIZADO)
-  if (categoriaEstado !== 'BORRADOR') {
+  // Vista de SOLO LECTURA cuando la categoría ya inició (EN_CURSO) o finalizó (FINALIZADO), sólo en modo legado con parejaId
+  if (!isControlled && categoriaEstado !== 'BORRADOR') {
     const diasAConfigurar = [
       { key: 'Viernes', label: 'Viernes', grillaSlots: grilla.viernes || [] },
       { key: 'Sabado', label: 'Sábado', grillaSlots: grilla.sabado || [] },
@@ -340,10 +425,13 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
     );
   }
 
-  // Vista interactiva de edición (exclusiva de BORRADOR)
-  const sinSlotsConfigurados = grilla.viernes.length === 0 && grilla.sabado.length === 0;
-  const currentSlots = rangosASlots(rangosViernes, grilla.viernes, rangosSabado, grilla.sabado);
-  const totalSlotsSeleccionados = currentSlots.length;
+  // Vista interactiva de edición (en BORRADOR o en modo controlado)
+  const sinSlotsConfigurados =
+    (!grilla.viernes || grilla.viernes.length === 0) &&
+    (!grilla.sabado || grilla.sabado.length === 0) &&
+    (!grilla.domingo || grilla.domingo.length === 0);
+
+  const totalSlotsSeleccionados = rawSlots.length;
 
   return (
     <div className="disponibilidad-editor">
@@ -353,29 +441,81 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
         <div className="alert-warning" style={{ margin: '0.5rem 0', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
           <AlertTriangle size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px' }} />
           <div>
-            No hay horarios configurados para este torneo. El organizador debe definir la hora de inicio y fin de
-            Viernes/Sábado en la configuración del club.
+            No hay horarios configurados para este torneo. El organizador debe definir la hora de inicio y fin en la configuración del club.
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)', margin: 0 }}>
-              Arrastrá los extremos de la barra para definir las franjas horarias en las que esta pareja puede jugar:
-            </p>
-            {saving ? (
-              <span style={{ fontSize: '11px', color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Loader2 size={11} className="spin" /> Guardando...
-              </span>
-            ) : savedSuccess ? (
-              <span style={{ fontSize: '11px', color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                <Check size={12} /> Guardado
-              </span>
-            ) : null}
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          {isControlled ? (
+            <div>
+              {totalSlotsSeleccionados === 0 ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.65rem 0.85rem',
+                    background: 'rgba(0, 208, 132, 0.08)',
+                    border: '1px solid rgba(0, 208, 132, 0.25)',
+                    borderRadius: 'var(--border-radius-sm)',
+                    color: 'var(--color-text)',
+                    fontSize: 'var(--font-size-xs)',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <Info size={16} strokeWidth={2} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                  <span>
+                    <strong>Sin restricciones:</strong> la pareja se considerará disponible en cualquier horario.
+                  </span>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.55rem 0.85rem',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--border-radius-sm)',
+                    color: 'var(--color-text)',
+                    fontSize: 'var(--font-size-xs)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Check size={14} style={{ color: 'var(--color-primary)' }} />
+                    <span>Restricción horaria: <strong>{totalSlotsSeleccionados} turnos</strong> seleccionados</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-link-action text-danger"
+                    onClick={handleLimpiarTodoControlled}
+                    style={{ fontSize: '11px', cursor: 'pointer', background: 'none', border: 'none' }}
+                  >
+                    Quitar restricciones
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)', margin: 0 }}>
+                Arrastrá los extremos de la barra para definir las franjas horarias en las que esta pareja puede jugar:
+              </p>
+              {saving ? (
+                <span style={{ fontSize: '11px', color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Loader2 size={11} className="spin" /> Guardando...
+                </span>
+              ) : savedSuccess ? (
+                <span style={{ fontSize: '11px', color: 'var(--color-success)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                  <Check size={12} /> Guardado
+                </span>
+              ) : null}
+            </div>
+          )}
 
           {/* Grilla Viernes */}
-          {grilla.viernes.length > 0 && (
+          {grilla.viernes && grilla.viernes.length > 0 && (
             <RangeSliderGroup
               dia="Viernes"
               slotsDisponibles={grilla.viernes}
@@ -386,7 +526,7 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
           )}
 
           {/* Grilla Sábado */}
-          {grilla.sabado.length > 0 && (
+          {grilla.sabado && grilla.sabado.length > 0 && (
             <RangeSliderGroup
               dia="Sabado"
               slotsDisponibles={grilla.sabado}
@@ -396,21 +536,34 @@ export default function DisponibilidadEditor({ parejaId, torneoId, categoriaEsta
             />
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.6rem' }}>
-            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-              Total: {totalSlotsSeleccionados} {totalSlotsSeleccionados === 1 ? 'turno de 15 min' : 'turnos de 15 min'} seleccionados
-            </span>
-            {onClose && (
-              <button
-                type="button"
-                className="btn-primary"
-                style={{ padding: '0.35rem 0.85rem', fontSize: 'var(--font-size-xs)' }}
-                onClick={onClose}
-              >
-                Listo / Cerrar
-              </button>
-            )}
-          </div>
+          {/* Grilla Domingo */}
+          {grilla.domingo && grilla.domingo.length > 0 && (
+            <RangeSliderGroup
+              dia="Domingo"
+              slotsDisponibles={grilla.domingo}
+              rangos={rangosDomingo}
+              onRangosChange={handleRangosDomingoChange}
+              disabled={saving}
+            />
+          )}
+
+          {!isControlled && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.6rem' }}>
+              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                Total: {totalSlotsSeleccionados} {totalSlotsSeleccionados === 1 ? 'turno de 15 min' : 'turnos de 15 min'} seleccionados
+              </span>
+              {onClose && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ padding: '0.35rem 0.85rem', fontSize: 'var(--font-size-xs)' }}
+                  onClick={onClose}
+                >
+                  Listo / Cerrar
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

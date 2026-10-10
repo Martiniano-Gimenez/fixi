@@ -16,6 +16,8 @@ async function getCategoriaById(organizadorId, categoriaId, tx = null) {
               viernesFin: true,
               sabadoInicio: true,
               sabadoFin: true,
+              domingoInicio: true,
+              domingoFin: true,
             },
           },
         },

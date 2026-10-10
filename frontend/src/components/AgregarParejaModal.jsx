@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { X, UserPlus, Loader2, AlertCircle, CheckCircle2, Check } from 'lucide-react';
+import DisponibilidadEditor from './DisponibilidadEditor';
 
 function StepBadge({ number, status }) {
   if (status === 'completed') {
@@ -77,6 +78,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
   const [jugador1, setJugador1] = useState('');
   const [jugador2, setJugador2] = useState('');
   const [zonaDestinoId, setZonaDestinoId] = useState('');
+  const [slotIds, setSlotIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -85,6 +87,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
       setJugador1('');
       setJugador2('');
       setZonaDestinoId('');
+      setSlotIds([]);
       setError('');
       setLoading(false);
     }
@@ -115,10 +118,11 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
 
   const zonaDestinoSeleccionada = destinoZonas.find((z) => z.id === zonaDestinoId);
 
-  // Estados de los pasos (3 estados)
+  // Estados de los pasos (3 pasos)
   const paso1Completo = jugador1.trim() !== '' && jugador2.trim() !== '';
   const paso1Status = paso1Completo ? 'completed' : 'active';
   const paso2Status = zonaDestinoId ? 'completed' : (paso1Completo ? 'active' : 'pending');
+  const paso3Status = slotIds.length > 0 ? 'completed' : (zonaDestinoId ? 'active' : 'pending');
 
   const getInputStyle = (value, disabled) => ({
     width: '100%',
@@ -166,6 +170,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
         zonaDestinoId,
         jugador1: jugador1.trim(),
         jugador2: jugador2.trim(),
+        slotIds: slotIds && slotIds.length > 0 ? slotIds : [],
       });
 
       if (onSuccess) {
@@ -204,8 +209,8 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
         className="card"
         style={{
           width: '100%',
-          maxWidth: '500px',
-          maxHeight: 'min(90vh, calc(100dvh - 2rem))',
+          maxWidth: '560px',
+          maxHeight: 'min(92vh, calc(100dvh - 2rem))',
           display: 'flex',
           flexDirection: 'column',
           borderRadius: 'var(--border-radius-lg)',
@@ -298,7 +303,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
             {/* Paso 1: Jugadores */}
             <div>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: '0.45rem' }}>
@@ -357,6 +362,29 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
               </select>
             </div>
 
+            {/* Paso 3: Disponibilidad Horaria (opcional) */}
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: '0.45rem' }}>
+                <StepBadge number={3} status={paso3Status} />
+                <span style={{ color: paso3Status === 'active' ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>
+                  Disponibilidad Horaria (opcional)
+                </span>
+              </label>
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--border-radius-md)',
+                  padding: '0.85rem',
+                }}
+              >
+                <DisponibilidadEditor
+                  value={slotIds}
+                  onChange={setSlotIds}
+                />
+              </div>
+            </div>
+
             {/* Resumen explicativo */}
             {jugador1.trim() && jugador2.trim() && zonaDestinoSeleccionada && (
               <div
@@ -375,6 +403,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
                   <span>Impacto de la incorporación:</span>
                 </div>
                 <div>• <strong>{jugador1.trim()} / {jugador2.trim()}</strong> ingresará como nueva pareja en <strong>{zonaDestinoSeleccionada.nombre}</strong> (pasará a tener {zonaDestinoSeleccionada.parejasCount + 1} parejas).</div>
+                <div>• Disponibilidad: {slotIds.length > 0 ? <strong>{slotIds.length} turnos seleccionados</strong> : <span>Sin restricciones (disponible en cualquier horario)</span>}.</div>
                 <div>• Se regenerarán únicamente los partidos de esta zona y se programarán automáticamente sus horarios sin modificar otras zonas ni el cuadro eliminatorio.</div>
               </div>
             )}

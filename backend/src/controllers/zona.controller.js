@@ -54,11 +54,12 @@ async function agregarPareja(req, res, next) {
   try {
     const organizadorId = getOrgId(req);
     const categoriaId = req.params.categoriaId || req.params.id;
-    const { zonaDestinoId, jugador1, jugador2 } = req.body;
+    const { zonaDestinoId, jugador1, jugador2, slotIds } = req.body;
     const result = await zonaService.agregarParejaAZona(organizadorId, categoriaId, {
       zonaDestinoId,
       jugador1,
       jugador2,
+      slotIds,
     });
     res.status(201).json(result);
   } catch (error) {

@@ -1,11 +1,10 @@
 /**
  * test-alta-tardia-flujo.js
- * Demostración real de cómo el sistema interpreta una pareja de alta tardía (0 slots):
- * 1. Crea categoría y torneo en EN_CURSO con 3 parejas en una zona.
- * 2. Agrega una pareja tardía mediante agregarParejaAZona (crea pareja con 0 slots).
- * 3. Demuestra que el sistema no lo bloquea como "imposible de programar".
- * 4. Asigna horario exitosamente al partido de la pareja tardía mediante asignarHorarioManual.
- * 5. Limpieza garantizada en bloque finally para no dejar datos huérfanos en la base.
+ * Prueba completa del flujo de alta tardía:
+ * 1. Alta sin slots: se asigna igual y no falla (adopta disponibilidad o queda programable).
+ * 2. Validación de slots: slots con formato inválido o fuera del club arrojan 400.
+ * 3. Alta con slots: guarda SlotPareja en DB y auto-asigna el partido dentro de los slots provistos.
+ * 4. Limpieza garantizada en bloque finally.
  */
 
 const { ensureTestDb } = require('./utils/testEnvGuard');
@@ -15,7 +14,7 @@ const partidoService = require('../src/services/partido.service');
 
 async function testAltaTardiaFlujo() {
   await ensureTestDb();
-  console.log('🧪 Iniciando prueba de flujo real: Alta tardía (0 slots) y asignación de horario...');
+  console.log('🧪 Iniciando prueba de flujo: Alta tardía con y sin slots, y validación de 400...');
 
   const timestamp = Date.now();
   let orgId = null;
@@ -57,7 +56,8 @@ async function testAltaTardiaFlujo() {
     });
     catId = cat.id;
 
-    // Crear 3 parejas iniciales
+    // --- SECCIÓN 1: Alta sin slots (comportamiento base) ---
+    console.log('\n--- 1. Probando alta tardía SIN slots (se agrega y no falla) ---');
     const p1 = await prisma.pareja.create({
       data: {
         categoriaId: cat.id,
@@ -82,19 +82,7 @@ async function testAltaTardiaFlujo() {
       },
     });
 
-    const p3 = await prisma.pareja.create({
-      data: {
-        categoriaId: cat.id,
-        jugador1: 'C1',
-        jugador2: 'C2',
-        orden: 3,
-        slotsSeleccionados: {
-          create: [{ slotId: 'Sabado-10:00' }, { slotId: 'Sabado-11:15' }],
-        },
-      },
-    });
-
-    const zona = await prisma.zona.create({
+    const zona1 = await prisma.zona.create({
       data: {
         categoriaId: cat.id,
         nombre: 'Zona A',
@@ -105,86 +93,224 @@ async function testAltaTardiaFlujo() {
 
     await prisma.zonaPareja.createMany({
       data: [
-        { zonaId: zona.id, parejaId: p1.id },
-        { zonaId: zona.id, parejaId: p2.id },
-        { zonaId: zona.id, parejaId: p3.id },
+        { zonaId: zona1.id, parejaId: p1.id },
+        { zonaId: zona1.id, parejaId: p2.id },
       ],
     });
 
-    await zonaService.regenerarPartidosZona(prisma, cat.id, zona.id);
-    console.log('✓ Zona creada con 3 parejas.');
+    await zonaService.regenerarPartidosZona(prisma, cat.id, zona1.id);
 
-    // Paso 2: Agregar pareja tardía mediante agregarParejaAZona
-    const resAgregar = await zonaService.agregarParejaAZona(org.id, cat.id, {
-      zonaDestinoId: zona.id,
+    // Agregar pareja tardía sin slots
+    const resSinSlots = await zonaService.agregarParejaAZona(org.id, cat.id, {
+      zonaDestinoId: zona1.id,
       jugador1: 'Tardío Juan',
       jugador2: 'Tardío Pedro',
+      slotIds: [],
     });
 
-    const parejaTardia = resAgregar.pareja;
-    console.log(`✓ Pareja tardía agregada: "${parejaTardia.jugador1} / ${parejaTardia.jugador2}" (ID: ${parejaTardia.id})`);
+    const parejaTardiaSinSlots = resSinSlots.pareja;
+    console.log(`✓ Pareja agregada sin slots: "${parejaTardiaSinSlots.jugador1} / ${parejaTardiaSinSlots.jugador2}"`);
 
-    // Verificar cantidad de slots en DB
-    const slotsCount = await prisma.slotPareja.count({
-      where: { parejaId: parejaTardia.id },
+    const slotsCountSin = await prisma.slotPareja.count({
+      where: { parejaId: parejaTardiaSinSlots.id },
     });
-    console.log(`✓ Slots en DB de la pareja tardía: ${slotsCount} (0 slots)`);
+    if (slotsCountSin !== 0) {
+      throw new Error(`Se esperaban 0 slots en DB para alta sin slots, pero se encontraron ${slotsCountSin}.`);
+    }
+    console.log('✓ Confirmado: 0 slots persistidos en DB.');
 
-    // Buscar los partidos de la pareja tardía
-    const partidosTardia = await prisma.partido.findMany({
+    // Verificar partidos generados
+    const partidosZona1 = await prisma.partido.findMany({
+      where: { zonaId: zona1.id },
+    });
+    console.log(`✓ Partidos en Zona A post-incorporación: ${partidosZona1.length}`);
+    if (partidosZona1.length !== 3) {
+      throw new Error(`Se esperaban 3 partidos para zona de 3, pero hay ${partidosZona1.length}.`);
+    }
+
+    // --- SECCIÓN 2: Validaciones de slot inválido → 400 ---
+    console.log('\n--- 2. Probando rechazo de slots inválidos (HTTP 400) ---');
+
+    // 2a. Formato inválido
+    let errorFormatoCapturado = false;
+    try {
+      await zonaService.agregarParejaAZona(org.id, cat.id, {
+        zonaDestinoId: zona1.id,
+        jugador1: 'Invalido 1',
+        jugador2: 'Invalido 2',
+        slotIds: ['FormatoInvalido-99:99'],
+      });
+    } catch (err) {
+      if (err.statusCode === 400) {
+        errorFormatoCapturado = true;
+        console.log(`✓ Slot con formato inválido rechazado con 400: "${err.message}"`);
+      } else {
+        throw err;
+      }
+    }
+    if (!errorFormatoCapturado) {
+      throw new Error('[FALLO] Se esperaba que un slot con formato inválido fuera rechazado con 400.');
+    }
+
+    // 2b. Slot fuera de los horarios del club (el club cierra a las 21:00 los sábados)
+    let errorClubCapturado = false;
+    try {
+      await zonaService.agregarParejaAZona(org.id, cat.id, {
+        zonaDestinoId: zona1.id,
+        jugador1: 'Fuera Horario 1',
+        jugador2: 'Fuera Horario 2',
+        slotIds: ['Sabado-22:00'],
+      });
+    } catch (err) {
+      if (err.statusCode === 400) {
+        errorClubCapturado = true;
+        console.log(`✓ Slot fuera del horario del club rechazado con 400: "${err.message}"`);
+      } else {
+        throw err;
+      }
+    }
+    if (!errorClubCapturado) {
+      throw new Error('[FALLO] Se esperaba que un slot fuera de horario del club fuera rechazado con 400.');
+    }
+
+    // --- SECCIÓN 3: Alta con slots válidos (auto-asignación en los slots) ---
+    console.log('\n--- 3. Probando alta tardía CON slots (el partido se asigna dentro de esos slots) ---');
+    const zona2 = await prisma.zona.create({
+      data: {
+        categoriaId: cat.id,
+        nombre: 'Zona B',
+        formato: 'ROUND_ROBIN',
+        clasifican: 2,
+      },
+    });
+
+    const p3 = await prisma.pareja.create({
+      data: {
+        categoriaId: cat.id,
+        jugador1: 'C1',
+        jugador2: 'C2',
+        orden: 4,
+        slotsSeleccionados: {
+          create: [{ slotId: 'Sabado-10:00' }, { slotId: 'Sabado-11:15' }, { slotId: 'Sabado-12:30' }],
+        },
+      },
+    });
+
+    const p4 = await prisma.pareja.create({
+      data: {
+        categoriaId: cat.id,
+        jugador1: 'D1',
+        jugador2: 'D2',
+        orden: 5,
+        slotsSeleccionados: {
+          create: [{ slotId: 'Sabado-10:00' }, { slotId: 'Sabado-11:15' }, { slotId: 'Sabado-12:30' }],
+        },
+      },
+    });
+
+    await prisma.zonaPareja.createMany({
+      data: [
+        { zonaId: zona2.id, parejaId: p3.id },
+        { zonaId: zona2.id, parejaId: p4.id },
+      ],
+    });
+
+    await zonaService.regenerarPartidosZona(prisma, cat.id, zona2.id);
+
+    // Agregar pareja tardía especificando slots comunes: ['Sabado-10:00', 'Sabado-11:15', 'Sabado-12:30']
+    const slotsSolicitados = ['Sabado-10:00', 'Sabado-11:15', 'Sabado-12:30'];
+    const resConSlots = await zonaService.agregarParejaAZona(org.id, cat.id, {
+      zonaDestinoId: zona2.id,
+      jugador1: 'ConSlot A',
+      jugador2: 'ConSlot B',
+      slotIds: slotsSolicitados,
+    });
+
+    const parejaConSlots = resConSlots.pareja;
+    console.log(`✓ Pareja agregada con slots: "${parejaConSlots.jugador1} / ${parejaConSlots.jugador2}" (ID: ${parejaConSlots.id})`);
+
+    // Verificar que los slots existen en SlotPareja
+    const dbSlots = await prisma.slotPareja.findMany({
+      where: { parejaId: parejaConSlots.id },
+      select: { slotId: true },
+    });
+    const dbSlotIds = dbSlots.map((s) => s.slotId);
+    console.log(`✓ Slots persistidos en DB: ${JSON.stringify(dbSlotIds)}`);
+    if (dbSlotIds.length !== 3 || !dbSlotIds.includes('Sabado-10:00') || !dbSlotIds.includes('Sabado-11:15') || !dbSlotIds.includes('Sabado-12:30')) {
+      throw new Error(`Los slots guardados en DB no coinciden. Esperados: ${JSON.stringify(slotsSolicitados)}, En DB: ${JSON.stringify(dbSlotIds)}`);
+    }
+
+    // Verificar los partidos de la nueva pareja
+    const partidosNuevaPareja = await prisma.partido.findMany({
       where: {
-        OR: [{ pareja1Id: parejaTardia.id }, { pareja2Id: parejaTardia.id }],
+        zonaId: zona2.id,
+        OR: [{ pareja1Id: parejaConSlots.id }, { pareja2Id: parejaConSlots.id }],
       },
       include: { pareja1: true, pareja2: true },
     });
 
-    console.log(`✓ Partidos generados para la pareja tardía: ${partidosTardia.length} partidos`);
-    for (const part of partidosTardia) {
-      console.log(
-        `  - Partido #${part.numero || part.id.slice(0, 6)}: ${part.pareja1?.jugador1} vs ${part.pareja2?.jugador1} | Horario: ${part.fechaHora ? part.fechaHora.toISOString() : 'PENDIENTE'}`
-      );
+    console.log(`✓ Partidos generados para la pareja en Zona B: ${partidosNuevaPareja.length}`);
+    if (partidosNuevaPareja.length !== 2) {
+      throw new Error(`Se esperaban 2 partidos para la nueva pareja en zona de 3, se encontraron ${partidosNuevaPareja.length}`);
     }
 
-    // Paso 3: Asignar horario manual mediante asignarHorarioManual
-    const partidoParaAsignar = partidosTardia[0];
-    console.log(`\n→ Asignando horario al partido #${partidoParaAsignar.numero || partidoParaAsignar.id.slice(0, 6)}...`);
+    for (const part of partidosNuevaPareja) {
+      if (!part.fechaHora) {
+        throw new Error(`El partido #${part.id} debía asignarse automáticamente y quedó sin horario.`);
+      }
 
-    const resAsignar = await partidoService.asignarHorarioManual(org.id, partidoParaAsignar.id, {
-      slotId: 'Viernes-18:00',
-      canchaNumero: 2,
-    });
+      const fechaHora = new Date(part.fechaHora);
+      const horasUTC = fechaHora.getUTCHours();
+      const minutosUTC = fechaHora.getUTCMinutes();
+      // 10:00 ART == 13:00 UTC
+      // 11:15 ART == 14:15 UTC
+      // 12:30 ART == 15:30 UTC
+      const es1000 = horasUTC === 13 && minutosUTC === 0;
+      const es1115 = horasUTC === 14 && minutosUTC === 15;
+      const es1230 = horasUTC === 15 && minutosUTC === 30;
 
-    console.log(`✓ Partido asignado exitosamente:`);
-    console.log(`  - Cancha: ${resAsignar.partido.canchaNumero}`);
-    console.log(`  - Fecha/Hora: ${resAsignar.partido.fechaHora.toISOString()}`);
-    console.log(`  - Estado: ${resAsignar.partido.estado}`);
+      console.log(`  - Partido: ${part.pareja1?.jugador1} vs ${part.pareja2?.jugador1} → ${fechaHora.toISOString()} (UTC ${horasUTC}:${minutosUTC})`);
 
-    console.log('\n🎉 ¡Demostración de flujo real completada con 100% de éxito!');
+      if (!es1000 && !es1115 && !es1230) {
+        throw new Error(
+          `El partido fue asignado fuera de los slots seleccionados: UTC ${horasUTC}:${minutosUTC} no corresponde a 10:00, 11:15 ni 12:30 ART.`
+        );
+      }
+    }
+    console.log('✓ Todos los partidos de la pareja con slots fueron auto-asignados dentro de sus slots declarados.');
+
+    console.log('\n🎉 ¡Todos los tests de alta tardía (con slots, sin slots y 400) pasaron exitosamente!');
   } finally {
-    // Limpieza garantizada en finally
+    console.log('\n🧹 Limpiando datos de prueba...');
     if (catId) {
       await prisma.slotPareja.deleteMany({ where: { pareja: { categoriaId: catId } } });
       await prisma.partido.deleteMany({ where: { categoriaId: catId } });
       await prisma.zonaPareja.deleteMany({ where: { zona: { categoriaId: catId } } });
       await prisma.zona.deleteMany({ where: { categoriaId: catId } });
       await prisma.pareja.deleteMany({ where: { categoriaId: catId } });
+      await prisma.categoria.deleteMany({ where: { id: catId } });
     }
     if (torneoId) {
-      await prisma.categoria.deleteMany({ where: { torneoId } });
       await prisma.torneo.deleteMany({ where: { id: torneoId } });
     }
     if (orgId) {
       await prisma.organizador.deleteMany({ where: { id: orgId } });
     }
-    console.log('✓ Limpieza de datos de prueba completada (torneo, categoría y organizador eliminados).');
+    await prisma.$disconnect();
+    console.log('✓ Limpieza completada.');
   }
 }
 
-testAltaTardiaFlujo()
-  .catch((e) => {
-    console.error('❌ Error en test:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+if (require.main === module) {
+  testAltaTardiaFlujo()
+    .then(() => {
+      console.log('✅ Suite test-alta-tardia-flujo completada con éxito.');
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error('❌ Error en suite test-alta-tardia-flujo:', err);
+      process.exit(1);
+    });
+}
+
+module.exports = { testAltaTardiaFlujo };

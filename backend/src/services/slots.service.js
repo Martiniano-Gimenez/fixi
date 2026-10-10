@@ -118,8 +118,8 @@ function generarGrillaOrganizador(organizador) {
  * Devuelve un Set con todos los slots válidos del club (organizador)
  */
 function getSlotsValidosSet(organizador) {
-  const { viernes, sabado } = generarGrillaOrganizador(organizador);
-  return new Set([...viernes, ...sabado]);
+  const { viernes, sabado, domingo } = generarGrillaOrganizador(organizador);
+  return new Set([...viernes, ...sabado, ...(domingo || [])]);
 }
 
 /**

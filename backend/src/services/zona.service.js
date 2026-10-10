@@ -7,6 +7,7 @@ const {
   minutosCronologicosJornada,
   compararSlotsCronologicamente,
   ordenarSlotsCronologicamente,
+  getSlotsValidosSet,
 } = require('./slots.service');
 const { parseFechaLocal, requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
 
@@ -1760,7 +1761,7 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
  * Agrega una nueva pareja a una zona existente post-inicio de torneo (alta tardía).
  * Crea la pareja y su asignación en la zona, regenera partidos y reasigna horarios atómicamente.
  */
-async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, jugador1, jugador2 }) {
+async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, jugador1, jugador2, slotIds = [] }) {
   if (!categoriaId || !zonaDestinoId || !jugador1 || !jugador2) {
     const error = new Error('Faltan parámetros requeridos: zonaDestinoId, jugador1 y jugador2 son obligatorios.');
     error.statusCode = 400;
@@ -1775,6 +1776,16 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     throw error;
   }
 
+  let cleanSlotIds = [];
+  if (slotIds !== undefined && slotIds !== null) {
+    if (!Array.isArray(slotIds)) {
+      const error = new Error('slotIds debe ser un array de identificadores de horario.');
+      error.statusCode = 400;
+      throw error;
+    }
+    cleanSlotIds = [...new Set(slotIds)];
+  }
+
   // 1. Validaciones previas
   const categoria = await getCategoriaById(organizadorId, categoriaId);
   if (categoria.estado !== 'EN_CURSO') {
@@ -1786,6 +1797,33 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     const error = new Error('El torneo debe estar en estado EN_CURSO para agregar parejas.');
     error.statusCode = 400;
     throw error;
+  }
+
+  const organizador = categoria.torneo?.organizador;
+  if (!organizador) {
+    const error = new Error('Organizador no encontrado.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Validación de slotIds contra formato "Dia-HH:mm" y contra los días/horarios del club
+  if (cleanSlotIds.length > 0) {
+    const SLOT_FORMAT_REGEX = /^(Viernes|Sabado|Domingo)-\d{2}:\d{2}$/;
+    const validSlotsSet = getSlotsValidosSet(organizador);
+
+    for (const s of cleanSlotIds) {
+      if (typeof s !== 'string' || !SLOT_FORMAT_REGEX.test(s)) {
+        const error = new Error(`Formato de slot inválido: '${s}'. Debe ser 'Dia-HH:mm' (ej. 'Sabado-10:00').`);
+        error.statusCode = 400;
+        throw error;
+      }
+      if (!validSlotsSet.has(s)) {
+        const error = new Error(`El slot '${s}' no corresponde a los días y horarios configurados del club.`);
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+    cleanSlotIds = ordenarSlotsCronologicamente(cleanSlotIds);
   }
 
   const zonaDestino = await prisma.zona.findUnique({
@@ -1857,6 +1895,16 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
       },
     });
 
+    // Crear los SlotPareja dentro de la misma transacción de la pareja, ANTES de llamar a asignarHorariosAutomatico
+    if (cleanSlotIds.length > 0) {
+      await tx.slotPareja.createMany({
+        data: cleanSlotIds.map((slotId) => ({
+          parejaId: nuevaPareja.id,
+          slotId,
+        })),
+      });
+    }
+
     // Asociar pareja a la zona destino
     await tx.zonaPareja.create({
       data: {
@@ -1879,11 +1927,16 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     // Asignar horarios a los partidos nuevos dentro de la transacción externa
     await asignarHorariosAutomatico(organizadorId, [categoriaId], tx);
 
+    const parejaConSlots = await tx.pareja.findUnique({
+      where: { id: nuevaPareja.id },
+      include: { slotsSeleccionados: true },
+    });
+
     return {
       message: 'Pareja agregada a la zona correctamente.',
       categoriaId,
       zonaDestinoId,
-      pareja: nuevaPareja,
+      pareja: parejaConSlots || nuevaPareja,
     };
   });
 }
