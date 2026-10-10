@@ -35,6 +35,11 @@
   padding: 1.75rem 2rem;
   margin-top: 0;
   animation: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  perspective: none !important;
+  contain: none !important;
+  will-change: auto !important;
 }
 
 /* Desactivar transform de .torneo-card:hover para evitar romper el containing block de position: fixed */
