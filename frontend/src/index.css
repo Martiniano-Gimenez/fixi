@@ -629,32 +629,54 @@ ul, ol {
 }
 
 .badge {
-  display: inline-block;
-  padding: var(--space-1) var(--space-3);
-  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
   font-family: var(--font-display);
   font-size: var(--font-size-xs);
   font-weight: 600;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   border: 1px solid transparent;
+  line-height: 1.2;
 }
 
 .badge-borrador {
-  background: rgba(139, 148, 158, 0.1);
-  color: var(--color-text-secondary);
-  border-color: rgba(139, 148, 158, 0.2);
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.25);
 }
 
-.badge-en_curso {
-  background: var(--color-primary-light);
-  color: var(--color-success);
-  border-color: var(--color-primary-light);
+.badge-en_curso,
+.badge-en-curso {
+  background: rgba(0, 208, 132, 0.15);
+  color: #00d084;
+  border-color: rgba(0, 208, 132, 0.3);
 }
 
 .badge-finalizado {
-  background: rgba(245, 158, 11, 0.1);
+  background: rgba(245, 158, 11, 0.12);
   color: #f59e0b;
-  border-color: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.badge-success {
+  background: rgba(0, 208, 132, 0.15);
+  color: #00d084;
+  border-color: rgba(0, 208, 132, 0.3);
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.badge-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
 .empty-state {

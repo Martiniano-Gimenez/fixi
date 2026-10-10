@@ -12,5 +12,6 @@ const ESTADO_PARTIDO_LABELS = {
 
 export function estadoLabel(estado) {
   if (!estado) return '';
-  return ESTADO_TORNEO_LABELS[estado] ?? ESTADO_PARTIDO_LABELS[estado] ?? estado;
+  const upper = String(estado).toUpperCase();
+  return ESTADO_TORNEO_LABELS[upper] ?? ESTADO_PARTIDO_LABELS[upper] ?? estado;
 }

@@ -8,6 +8,7 @@ import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import BracketLines from '../../components/BracketLines';
 import { ChevronLeft, GitBranch, Settings, Clock, AlertTriangle } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
+import { estadoLabel } from '../../utils/estadoLabels';
 import './EliminatoriaView.css';
 
 export default function EliminatoriaView() {
@@ -125,7 +126,9 @@ export default function EliminatoriaView() {
         </h1>
         <div className="header-actions">
 
-          <div className="status">{categoria.estado}</div>
+          <span className={`badge badge-${(categoria.estado || '').toLowerCase()}`}>
+            {estadoLabel(categoria.estado)}
+          </span>
         </div>
       </div>
 

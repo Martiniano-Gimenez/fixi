@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import { Plus, Trash2, Calendar, Layers, Users, Trophy } from 'lucide-react';
 import { formatFechaTorneo } from '../../utils/dateUtils';
+import { estadoLabel } from '../../utils/estadoLabels';
 
 export default function TorneosList() {
   const [torneos, setTorneos] = useState([]);
@@ -111,8 +112,8 @@ export default function TorneosList() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                     <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>{torneo.nombre}</h3>
-                    <span className={`badge badge-${torneo.estado.toLowerCase()}`}>
-                      {torneo.estado}
+                    <span className={`badge badge-${(torneo.estado || 'borrador').toLowerCase()}`}>
+                      {estadoLabel(torneo.estado)}
                     </span>
                   </div>
 
