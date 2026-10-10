@@ -173,6 +173,27 @@ async function testAltaTardiaFlujo() {
       throw new Error('[FALLO] Se esperaba que un slot fuera de horario del club fuera rechazado con 400.');
     }
 
+    // 2c. Slot de Domingo (el domingo se juegan los brackets/eliminatorias, no las zonas)
+    let errorDomingoCapturado = false;
+    try {
+      await zonaService.agregarParejaAZona(org.id, cat.id, {
+        zonaDestinoId: zona1.id,
+        jugador1: 'Domingo 1',
+        jugador2: 'Domingo 2',
+        slotIds: ['Domingo-10:00'],
+      });
+    } catch (err) {
+      if (err.statusCode === 400) {
+        errorDomingoCapturado = true;
+        console.log(`✓ Slot de Domingo rechazado con 400: "${err.message}"`);
+      } else {
+        throw err;
+      }
+    }
+    if (!errorDomingoCapturado) {
+      throw new Error('[FALLO] Se esperaba que un slot de Domingo fuera rechazado con 400 para zonas.');
+    }
+
     // --- SECCIÓN 3: Alta con slots válidos (auto-asignación en los slots) ---
     console.log('\n--- 3. Probando alta tardía CON slots (el partido se asigna dentro de esos slots) ---');
     const zona2 = await prisma.zona.create({

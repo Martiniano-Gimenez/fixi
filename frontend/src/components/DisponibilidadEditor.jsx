@@ -55,7 +55,7 @@ function reconstruirRangos(slotsGuardados, slotsDisponiblesDia, dia) {
   return result;
 }
 
-function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado, rangosDomingo = [], grillaDomingo = []) {
+function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado) {
   const result = new Set();
   (rangosViernes || []).forEach((r) => {
     for (let i = r.startIdx; i <= r.endIdx; i++) {
@@ -65,11 +65,6 @@ function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado, 
   (rangosSabado || []).forEach((r) => {
     for (let i = r.startIdx; i <= r.endIdx; i++) {
       if (grillaSabado && grillaSabado[i]) result.add(grillaSabado[i]);
-    }
-  });
-  (rangosDomingo || []).forEach((r) => {
-    for (let i = r.startIdx; i <= r.endIdx; i++) {
-      if (grillaDomingo && grillaDomingo[i]) result.add(grillaDomingo[i]);
     }
   });
   return Array.from(result);
@@ -159,11 +154,10 @@ export default function DisponibilidadEditor({
   grillaProp,
 }) {
   const isControlled = Boolean(onChange && !parejaId);
-  const [grilla, setGrilla] = useState(grillaProp || { viernes: [], sabado: [], domingo: [] });
+  const [grilla, setGrilla] = useState(grillaProp || { viernes: [], sabado: [] });
   const [rawSlots, setRawSlots] = useState(isControlled ? (value || []) : []);
   const [rangosViernes, setRangosViernes] = useState([]);
   const [rangosSabado, setRangosSabado] = useState([]);
-  const [rangosDomingo, setRangosDomingo] = useState([]);
   const [loading, setLoading] = useState(!grillaProp);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -180,7 +174,7 @@ export default function DisponibilidadEditor({
           let g = grillaProp;
           if (!g) {
             const grillaData = await api.get('/organizador/slots');
-            g = grillaData || { viernes: [], sabado: [], domingo: [] };
+            g = grillaData || { viernes: [], sabado: [] };
             if (!isCancelled) setGrilla(g);
           }
           const s = value || [];
@@ -188,7 +182,6 @@ export default function DisponibilidadEditor({
             setRawSlots(s);
             setRangosViernes(reconstruirRangos(s, g?.viernes || [], 'Viernes'));
             setRangosSabado(reconstruirRangos(s, g?.sabado || [], 'Sabado'));
-            setRangosDomingo(reconstruirRangos(s, g?.domingo || [], 'Domingo'));
           }
         } else if (parejaId) {
           const [grillaData, slotsData] = await Promise.all([
@@ -196,14 +189,13 @@ export default function DisponibilidadEditor({
             api.get(`/parejas/${parejaId}/disponibilidad`),
           ]);
 
-          const g = grillaData || { viernes: [], sabado: [], domingo: [] };
+          const g = grillaData || { viernes: [], sabado: [] };
           const s = slotsData || [];
           if (!isCancelled) {
             setGrilla(g);
             setRawSlots(s);
             setRangosViernes(reconstruirRangos(s, g.viernes || [], 'Viernes'));
             setRangosSabado(reconstruirRangos(s, g.sabado || [], 'Sabado'));
-            setRangosDomingo(reconstruirRangos(s, g.domingo || [], 'Domingo'));
           }
         }
       } catch (err) {
@@ -227,12 +219,11 @@ export default function DisponibilidadEditor({
       if (grilla) {
         setRangosViernes(reconstruirRangos(value, grilla.viernes || [], 'Viernes'));
         setRangosSabado(reconstruirRangos(value, grilla.sabado || [], 'Sabado'));
-        setRangosDomingo(reconstruirRangos(value, grilla.domingo || [], 'Domingo'));
       }
     }
   }, [value, isControlled, grilla]);
 
-  const guardarCambios = async (newRangosViernes, newRangosSabado, newRangosDomingo) => {
+  const guardarCambios = async (newRangosViernes, newRangosSabado) => {
     setSaving(true);
     setError('');
     setSavedSuccess(false);
@@ -241,9 +232,7 @@ export default function DisponibilidadEditor({
         newRangosViernes,
         grilla.viernes,
         newRangosSabado,
-        grilla.sabado,
-        newRangosDomingo,
-        grilla.domingo
+        grilla.sabado
       );
       const saved = await api.put(`/parejas/${parejaId}/disponibilidad`, {
         slots: slotList,
@@ -262,40 +251,28 @@ export default function DisponibilidadEditor({
   const handleRangosViernesChange = (newRangos) => {
     setRangosViernes(newRangos);
     if (isControlled) {
-      const slotList = rangosASlots(newRangos, grilla.viernes, rangosSabado, grilla.sabado, rangosDomingo, grilla.domingo);
+      const slotList = rangosASlots(newRangos, grilla.viernes, rangosSabado, grilla.sabado);
       setRawSlots(slotList);
       onChange(slotList);
     } else {
-      guardarCambios(newRangos, rangosSabado, rangosDomingo);
+      guardarCambios(newRangos, rangosSabado);
     }
   };
 
   const handleRangosSabadoChange = (newRangos) => {
     setRangosSabado(newRangos);
     if (isControlled) {
-      const slotList = rangosASlots(rangosViernes, grilla.viernes, newRangos, grilla.sabado, rangosDomingo, grilla.domingo);
+      const slotList = rangosASlots(rangosViernes, grilla.viernes, newRangos, grilla.sabado);
       setRawSlots(slotList);
       onChange(slotList);
     } else {
-      guardarCambios(rangosViernes, newRangos, rangosDomingo);
-    }
-  };
-
-  const handleRangosDomingoChange = (newRangos) => {
-    setRangosDomingo(newRangos);
-    if (isControlled) {
-      const slotList = rangosASlots(rangosViernes, grilla.viernes, rangosSabado, grilla.sabado, newRangos, grilla.domingo);
-      setRawSlots(slotList);
-      onChange(slotList);
-    } else {
-      guardarCambios(rangosViernes, rangosSabado, newRangos);
+      guardarCambios(rangosViernes, newRangos);
     }
   };
 
   const handleLimpiarTodoControlled = () => {
     setRangosViernes([]);
     setRangosSabado([]);
-    setRangosDomingo([]);
     setRawSlots([]);
     if (onChange) onChange([]);
   };
@@ -310,9 +287,6 @@ export default function DisponibilidadEditor({
       { key: 'Viernes', label: 'Viernes', grillaSlots: grilla.viernes || [] },
       { key: 'Sabado', label: 'Sábado', grillaSlots: grilla.sabado || [] },
     ];
-    if (grilla.domingo?.length > 0 || rawSlots.some((s) => s.startsWith('Domingo-'))) {
-      diasAConfigurar.push({ key: 'Domingo', label: 'Domingo', grillaSlots: grilla.domingo || [] });
-    }
 
     return (
       <div className="disponibilidad-editor" style={{ padding: '0.25rem 0' }}>
@@ -428,8 +402,7 @@ export default function DisponibilidadEditor({
   // Vista interactiva de edición (en BORRADOR o en modo controlado)
   const sinSlotsConfigurados =
     (!grilla.viernes || grilla.viernes.length === 0) &&
-    (!grilla.sabado || grilla.sabado.length === 0) &&
-    (!grilla.domingo || grilla.domingo.length === 0);
+    (!grilla.sabado || grilla.sabado.length === 0);
 
   const totalSlotsSeleccionados = rawSlots.length;
 
@@ -441,7 +414,7 @@ export default function DisponibilidadEditor({
         <div className="alert-warning" style={{ margin: '0.5rem 0', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
           <AlertTriangle size={16} strokeWidth={2} style={{ flexShrink: 0, marginTop: '2px' }} />
           <div>
-            No hay horarios configurados para este torneo. El organizador debe definir la hora de inicio y fin en la configuración del club.
+            No hay horarios configurados para este torneo. El organizador debe definir la hora de inicio y fin de Viernes/Sábado en la configuración del club.
           </div>
         </div>
       ) : (
@@ -532,17 +505,6 @@ export default function DisponibilidadEditor({
               slotsDisponibles={grilla.sabado}
               rangos={rangosSabado}
               onRangosChange={handleRangosSabadoChange}
-              disabled={saving}
-            />
-          )}
-
-          {/* Grilla Domingo */}
-          {grilla.domingo && grilla.domingo.length > 0 && (
-            <RangeSliderGroup
-              dia="Domingo"
-              slotsDisponibles={grilla.domingo}
-              rangos={rangosDomingo}
-              onRangosChange={handleRangosDomingoChange}
               disabled={saving}
             />
           )}

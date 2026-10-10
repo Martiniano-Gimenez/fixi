@@ -1808,12 +1808,12 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
 
   // Validación de slotIds contra formato "Dia-HH:mm" y contra los días/horarios del club
   if (cleanSlotIds.length > 0) {
-    const SLOT_FORMAT_REGEX = /^(Viernes|Sabado|Domingo)-\d{2}:\d{2}$/;
+    const SLOT_FORMAT_REGEX = /^(Viernes|Sabado)-\d{2}:\d{2}$/;
     const validSlotsSet = getSlotsValidosSet(organizador);
 
     for (const s of cleanSlotIds) {
       if (typeof s !== 'string' || !SLOT_FORMAT_REGEX.test(s)) {
-        const error = new Error(`Formato de slot inválido: '${s}'. Debe ser 'Dia-HH:mm' (ej. 'Sabado-10:00').`);
+        const error = new Error(`Formato de slot inválido o día no permitido: '${s}'. Solo se pueden seleccionar horarios de Viernes o Sábado para zonas ('Dia-HH:mm').`);
         error.statusCode = 400;
         throw error;
       }
