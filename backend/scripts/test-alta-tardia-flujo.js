@@ -300,7 +300,94 @@ async function testAltaTardiaFlujo() {
     }
     console.log('✓ Todos los partidos de la pareja con slots fueron auto-asignados dentro de sus slots declarados.');
 
-    console.log('\n🎉 ¡Todos los tests de alta tardía (con slots, sin slots y 400) pasaron exitosamente!');
+    // --- SECCIÓN 4: Agregar pareja a una zona NO asigna partidos pendientes de OTRAS zonas ---
+    console.log('\n--- 4. Probando que agregar pareja a Zona C NO auto-asigna partidos pendientes de Zona B ---');
+    const zonaB = await prisma.zona.create({
+      data: {
+        categoriaId: catId,
+        nombre: 'Zona B Aislada',
+        clasifican: 3,
+        formato: 'MINI_BRACKET',
+      },
+    });
+
+    const pB1 = await prisma.pareja.create({ data: { categoriaId: catId, jugador1: 'B1_1', jugador2: 'B1_2', orden: 10 } });
+    const pB2 = await prisma.pareja.create({ data: { categoriaId: catId, jugador1: 'B2_1', jugador2: 'B2_2', orden: 11 } });
+    const pB3 = await prisma.pareja.create({ data: { categoriaId: catId, jugador1: 'B3_1', jugador2: 'B3_2', orden: 12 } });
+    const pB4 = await prisma.pareja.create({ data: { categoriaId: catId, jugador1: 'B4_1', jugador2: 'B4_2', orden: 13 } });
+
+    await prisma.zonaPareja.createMany({
+      data: [
+        { zonaId: zonaB.id, parejaId: pB1.id },
+        { zonaId: zonaB.id, parejaId: pB2.id },
+        { zonaId: zonaB.id, parejaId: pB3.id },
+        { zonaId: zonaB.id, parejaId: pB4.id },
+      ],
+    });
+
+    // Crear P3 y P4 de Zona B explícitamente sin horario
+    const p3_zonaB = await prisma.partido.create({
+      data: {
+        categoriaId: catId,
+        zonaId: zonaB.id,
+        posicionEnRonda: 3,
+        sinHorarioAsignado: true,
+        fechaHora: null,
+        canchaNumero: null,
+        estado: 'PENDIENTE',
+      },
+    });
+    const p4_zonaB = await prisma.partido.create({
+      data: {
+        categoriaId: catId,
+        zonaId: zonaB.id,
+        posicionEnRonda: 4,
+        sinHorarioAsignado: true,
+        fechaHora: null,
+        canchaNumero: null,
+        estado: 'PENDIENTE',
+      },
+    });
+
+    // Crear Zona C con 2 parejas
+    const zonaC = await prisma.zona.create({
+      data: {
+        categoriaId: catId,
+        nombre: 'Zona C Destino',
+        clasifican: 2,
+        formato: 'ROUND_ROBIN',
+      },
+    });
+    const pC1 = await prisma.pareja.create({ data: { categoriaId: catId, jugador1: 'C1_1', jugador2: 'C1_2', orden: 20 } });
+    const pC2 = await prisma.pareja.create({ data: { categoriaId: catId, jugador1: 'C2_1', jugador2: 'C2_2', orden: 21 } });
+    await prisma.zonaPareja.createMany({
+      data: [
+        { zonaId: zonaC.id, parejaId: pC1.id },
+        { zonaId: zonaC.id, parejaId: pC2.id },
+      ],
+    });
+
+    // Agregar pareja 3 a Zona C
+    await zonaService.agregarParejaAZona(orgId, catId, {
+      zonaDestinoId: zonaC.id,
+      jugador1: 'C3_1',
+      jugador2: 'C3_2',
+      slotIds: ['Sabado-15:00'],
+    });
+
+    // Verificar que P3 y P4 de Zona B siguen sin horario
+    const p3_b_check = await prisma.partido.findUnique({ where: { id: p3_zonaB.id } });
+    const p4_b_check = await prisma.partido.findUnique({ where: { id: p4_zonaB.id } });
+
+    if (!p3_b_check.sinHorarioAsignado || p3_b_check.fechaHora !== null) {
+      throw new Error('Fallo: P3 de Zona B fue modificado indebidamente al agregar pareja a Zona C');
+    }
+    if (!p4_b_check.sinHorarioAsignado || p4_b_check.fechaHora !== null) {
+      throw new Error('Fallo: P4 de Zona B fue modificado indebidamente al agregar pareja a Zona C');
+    }
+    console.log('✓ P3 y P4 de Zona B se mantuvieron sin horario intactos al agregar pareja a Zona C.');
+
+    console.log('\n🎉 ¡Todos los tests de alta tardía (con slots, sin slots, 400 y aislamiento de zonas) pasaron exitosamente!');
   } finally {
     console.log('\n🧹 Limpiando datos de prueba...');
     if (catId) {

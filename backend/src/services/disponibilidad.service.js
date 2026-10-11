@@ -51,6 +51,14 @@ async function setDisponibilidad(organizadorId, parejaId, slotIds) {
     throw error;
   }
 
+  if (Array.isArray(slotIds) && slotIds.some((s) => typeof s === 'string' && s.startsWith('Domingo-'))) {
+    const error = new Error(
+      'No se pueden seleccionar horarios los domingos para la disponibilidad de zonas. Los domingos están reservados para los brackets eliminatorios.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
   // Filtrar solo los slots que pertenezcan a la grilla actual del club (organizador)
   const organizador = pareja.categoria.torneo.organizador;
   const slotsValidos = getSlotsValidosSet(organizador);
@@ -93,6 +101,17 @@ async function setDisponibilidadDoble(organizadorId, parejaId1, slotsToAdd1 = []
   if (pareja1.categoria?.estado !== 'BORRADOR' || pareja2.categoria?.estado !== 'BORRADOR') {
     const error = new Error(
       'La disponibilidad no se puede modificar una vez iniciada la categoría. Para cambiar un horario, reprogramá el partido.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    (Array.isArray(slotsToAdd1) && slotsToAdd1.some((s) => typeof s === 'string' && s.startsWith('Domingo-'))) ||
+    (Array.isArray(slotsToAdd2) && slotsToAdd2.some((s) => typeof s === 'string' && s.startsWith('Domingo-')))
+  ) {
+    const error = new Error(
+      'No se pueden seleccionar horarios los domingos para la disponibilidad de zonas. Los domingos están reservados para los brackets eliminatorios.'
     );
     error.statusCode = 400;
     throw error;

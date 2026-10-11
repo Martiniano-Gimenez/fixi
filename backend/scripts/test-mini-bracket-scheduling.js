@@ -232,21 +232,90 @@ async function main() {
     data: { torneoId: torneo3.id, nombre: '4ta Test', estado: 'BORRADOR' },
   });
 
-  // P1 y P2 solo disponibles Viernes; P3 y P4 solo disponibles Sábado (sin intersección entre ambas duplas)
-  await prisma.pareja.create({
+  const pA = await prisma.pareja.create({
     data: { categoriaId: cat3.id, jugador1: 'J1', jugador2: 'J2', orden: 1, slotsSeleccionados: { create: [{ slotId: 'Viernes-18:00' }, { slotId: 'Viernes-19:15' }] } },
   });
-  await prisma.pareja.create({
+  const pB = await prisma.pareja.create({
     data: { categoriaId: cat3.id, jugador1: 'J3', jugador2: 'J4', orden: 2, slotsSeleccionados: { create: [{ slotId: 'Viernes-18:00' }, { slotId: 'Viernes-19:15' }] } },
   });
-  await prisma.pareja.create({
+  const pC = await prisma.pareja.create({
     data: { categoriaId: cat3.id, jugador1: 'J5', jugador2: 'J6', orden: 3, slotsSeleccionados: { create: [{ slotId: 'Sabado-09:00' }, { slotId: 'Sabado-10:15' }] } },
   });
-  await prisma.pareja.create({
+  const pD = await prisma.pareja.create({
     data: { categoriaId: cat3.id, jugador1: 'J7', jugador2: 'J8', orden: 4, slotsSeleccionados: { create: [{ slotId: 'Sabado-09:00' }, { slotId: 'Sabado-10:15' }] } },
   });
 
-  await zonaService.iniciarCategoria(org3.id, cat3.id);
+  const zona3 = await prisma.zona.create({
+    data: {
+      categoriaId: cat3.id,
+      nombre: 'Zona A',
+      clasifican: 3,
+      formato: 'MINI_BRACKET',
+    },
+  });
+
+  await prisma.zonaPareja.createMany({
+    data: [
+      { zonaId: zona3.id, parejaId: pA.id },
+      { zonaId: zona3.id, parejaId: pB.id },
+      { zonaId: zona3.id, parejaId: pC.id },
+      { zonaId: zona3.id, parejaId: pD.id },
+    ],
+  });
+
+  // Partido 1: pA vs pB (compatibles Viernes)
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat3.id,
+      zonaId: zona3.id,
+      posicionEnRonda: 1,
+      pareja1Id: pA.id,
+      pareja2Id: pB.id,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Partido 2: pC vs pD (compatibles Sábado)
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat3.id,
+      zonaId: zona3.id,
+      posicionEnRonda: 2,
+      pareja1Id: pC.id,
+      pareja2Id: pD.id,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Partido 3: Ganador vs Ganador (esperando cruces, sin intersección cuádruple)
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat3.id,
+      zonaId: zona3.id,
+      posicionEnRonda: 3,
+      pareja1Id: null,
+      origenPareja1: 'Ganador Partido 1',
+      pareja2Id: null,
+      origenPareja2: 'Ganador Partido 2',
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Partido 4: Perdedor vs Perdedor (esperando cruces, sin intersección cuádruple)
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat3.id,
+      zonaId: zona3.id,
+      posicionEnRonda: 4,
+      pareja1Id: null,
+      origenPareja1: 'Perdedor Partido 1',
+      pareja2Id: null,
+      origenPareja2: 'Perdedor Partido 2',
+      estado: 'PENDIENTE',
+    },
+  });
+
+  await prisma.categoria.update({ where: { id: cat3.id }, data: { estado: 'EN_CURSO' } });
   await prisma.torneo.update({ where: { id: torneo3.id }, data: { estado: 'EN_CURSO' } });
   // Asignar en modo live (isPreCheck false por defecto)
   await zonaService.asignarHorariosAutomatico(org3.id, [cat3.id]);

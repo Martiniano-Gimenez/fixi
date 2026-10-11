@@ -1299,6 +1299,7 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
     // Aplicar el plan cacheado a la base de datos
     const resumen = [];
     await prisma.$transaction(async (tx) => {
+      const categoriasConSinHorario = [];
       for (const cPlan of cached.categoriasPlan) {
         const categoria = await tx.categoria.findUnique({ where: { id: cPlan.categoriaId } });
         if (!categoria || categoria.estado !== 'BORRADOR') {
@@ -1351,7 +1352,7 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
         });
 
         if (sinHorarioCount > 0) {
-          await asignarHorariosAutomatico(organizadorId, [cPlan.categoriaId], tx);
+          categoriasConSinHorario.push(cPlan.categoriaId);
         }
 
         resumen.push({
@@ -1363,10 +1364,19 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
         });
       }
 
+      // Asignar horarios automáticos con pool global a todas las categorías que tengan partidos sin horario
+      // una vez que TODOS los partidos aprobados de todas las categorías ya fueron persistidos en la base de datos
+      if (categoriasConSinHorario.length > 0) {
+        await asignarHorariosAutomatico(organizadorId, categoriasConSinHorario, tx);
+      }
+
       await tx.torneo.update({
         where: { id: torneoId },
         data: { estado: 'EN_CURSO' },
       });
+    }, {
+      maxWait: 10000,
+      timeout: 30000,
     });
 
     planesCache.delete(planId);

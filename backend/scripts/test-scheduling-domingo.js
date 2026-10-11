@@ -3,6 +3,8 @@ const prisma = require('../src/lib/prisma');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const { asignarHorariosRondaUno } = require('../src/services/eliminatoriaScheduler.service');
 const { esRondaDieciseisavos } = require('../src/services/faseEliminatoria.service');
+const partidoService = require('../src/services/partido.service');
+const disponibilidadService = require('../src/services/disponibilidad.service');
 const crypto = require('crypto');
 
 async function runTest() {
@@ -218,6 +220,45 @@ async function runTest() {
     throw new Error('Fallo: rondas < 32 no deben ser dieciseisavos.');
   }
   console.log('  ✅ Helper esRondaDieciseisavos funciona perfectamente.');
+
+  // 5. Verificar que asignarHorarioManual acepta Domingo para eliminatorias y PUT /parejas/:id/disponibilidad rechaza Domingo
+  console.log('\n5. Verificando que asignarHorarioManual acepta Domingo para eliminatorias y PUT /parejas/:id/disponibilidad lo rechaza...');
+
+  // A) asignarHorarioManual acepta Domingo para un cruce de eliminatoria
+  const resManual = await partidoService.asignarHorarioManual(organizador.id, partido1_cat1.id, {
+    slotId: 'Domingo-10:00',
+    canchaNumero: 1,
+  });
+  if (resManual.partido.canchaNumero !== 1 || resManual.partido.sinHorarioAsignado) {
+    throw new Error('Fallo: asignarHorarioManual debió asignar domingo al cruce de eliminatoria');
+  }
+  const horaP1Manual = getHoraLocal(resManual.partido.fechaHora);
+  console.log(`  ✅ asignarHorarioManual aceptó domingo para eliminatoria: Cancha ${resManual.partido.canchaNumero} @ ${horaP1Manual}`);
+
+  // B) PUT /parejas/:id/disponibilidad rechaza Domingo con 400
+  const catBorrador = await prisma.categoria.create({
+    data: {
+      torneoId: torneo.id,
+      nombre: 'Cat Borrador Test',
+      estado: 'BORRADOR',
+    },
+  });
+  const parejaBorrador = await prisma.pareja.create({
+    data: { categoriaId: catBorrador.id, jugador1: 'Test 1', jugador2: 'Test 2' },
+  });
+
+  let rechazoDomingo = false;
+  try {
+    await disponibilidadService.setDisponibilidad(organizador.id, parejaBorrador.id, ['Domingo-10:00']);
+  } catch (err) {
+    if (err.statusCode === 400 && err.message.includes('domingos')) {
+      rechazoDomingo = true;
+    }
+  }
+  if (!rechazoDomingo) {
+    throw new Error('Fallo: setDisponibilidad debía rechazar slots de Domingo con 400');
+  }
+  console.log('  ✅ PUT /parejas/:id/disponibilidad rechazó slot de Domingo con código 400.');
 
   // Limpieza de datos de prueba
   await prisma.partido.deleteMany({ where: { categoria: { torneoId: torneo.id } } });

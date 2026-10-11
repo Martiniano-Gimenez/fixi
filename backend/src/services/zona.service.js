@@ -602,11 +602,11 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
     }
   }
 
-  // 3. Cargar partidos pendientes de zonas de las categorías especificadas
+  // 3. Cargar partidos pendientes de zonas de las categorías especificadas (opcionalmente filtrado por zonaId)
   const partidos = await db.partido.findMany({
     where: {
       categoriaId: { in: categoriaIds },
-      zonaId: { not: null },
+      zonaId: options.zonaId ? options.zonaId : { not: null },
       estado: 'PENDIENTE',
     },
     include: {
@@ -1967,8 +1967,8 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     // Regenerar partidos de la zona destino
     await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
 
-    // Asignar horarios a los partidos nuevos dentro de la transacción externa
-    await asignarHorariosAutomatico(organizadorId, [categoriaId], tx);
+    // Asignar horarios únicamente a los partidos de la zona destino dentro de la transacción externa
+    await asignarHorariosAutomatico(organizadorId, [categoriaId], tx, { zonaId: zonaDestinoId });
 
     const parejaConSlots = await tx.pareja.findUnique({
       where: { id: nuevaPareja.id },
