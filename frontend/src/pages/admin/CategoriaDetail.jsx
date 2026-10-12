@@ -186,7 +186,7 @@ export default function CategoriaDetail() {
           </div>
 
           {/* Acciones principales de la categoría */}
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="categoria-header-actions">
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/parejas`}
               className="btn-outline"
@@ -198,7 +198,7 @@ export default function CategoriaDetail() {
               to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/eliminatoria`}
               className="btn-outline"
             >
-              <GitBranch size={16} /> Fase Eliminatoria
+              <GitBranch size={16} /> <span className="cat-header-fase-word">Fase </span>Eliminatoria
             </Link>
 
             {categoria.estado !== 'BORRADOR' && (
