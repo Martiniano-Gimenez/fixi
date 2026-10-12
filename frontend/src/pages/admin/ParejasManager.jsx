@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import DisponibilidadEditor from '../../components/DisponibilidadEditor';
+import AgregarParejaModal from '../../components/AgregarParejaModal';
 import { estadoLabel } from '../../utils/estadoLabels';
 import { formatHorasDisponibles } from '../../utils/dateUtils';
 import { normalizeText } from '../../utils/textUtils';
@@ -19,14 +20,19 @@ export default function ParejasManager() {
   const queryParejaId = searchParams.get('parejaId');
 
   const [categoria, setCategoria] = useState(null);
+  const [zonas, setZonas] = useState([]);
+  const [partidos, setPartidos] = useState([]);
   const [parejas, setParejas] = useState([]);
   const [busqueda, setBusqueda] = useState('');
+  const [zonaFiltro, setZonaFiltro] = useState('todas');
   const [jugador1, setJugador1] = useState('');
   const [jugador2, setJugador2] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [parejaToDelete, setParejaToDelete] = useState(null);
   const [expandedParejaId, setExpandedParejaId] = useState(queryParejaId || null);
+  const [agregarModalOpen, setAgregarModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
     if (queryParejaId) {
@@ -41,6 +47,19 @@ export default function ParejasManager() {
         api.get(`/categorias/${id}/parejas`),
       ]);
       setCategoria(categoriaData);
+
+      let zonasData = [];
+      let partidosData = [];
+      if (categoriaData.estado !== 'BORRADOR') {
+        const [zData, pData] = await Promise.all([
+          api.get(`/categorias/${id}/zonas`),
+          api.get(`/categorias/${id}/partidos`),
+        ]);
+        zonasData = zData || [];
+        partidosData = pData || [];
+      }
+      setZonas(zonasData);
+      setPartidos(partidosData);
 
       // Cargar disponibilidades de cada pareja para mostrar el badge
       const parejasConSlots = await Promise.all(
@@ -111,8 +130,12 @@ export default function ParejasManager() {
 
   const parejasFiltradas = useMemo(() => {
     const q = normalizeText(busqueda);
-    if (!q) return parejas;
     return parejas.filter((p) => {
+      if (zonaFiltro !== 'todas') {
+        const pZonaId = p.zonaParejas?.[0]?.zonaId || p.zonaParejas?.[0]?.zona?.id;
+        if (pZonaId !== zonaFiltro) return false;
+      }
+      if (!q) return true;
       const j1 = p.jugador1 || '';
       const j2 = p.jugador2 || '';
       return (
@@ -122,9 +145,9 @@ export default function ParejasManager() {
         normalizeText(`${j2} ${j1}`).includes(q)
       );
     });
-  }, [parejas, busqueda]);
+  }, [parejas, busqueda, zonaFiltro]);
 
-  const mostrarBuscador = parejas.length > UMBRAL_BUSCADOR_PAREJAS;
+  const mostrarFiltros = parejas.length > 0 && (parejas.length > UMBRAL_BUSCADOR_PAREJAS || zonas.length > 0);
 
   if (loading) return <div className="loading">Cargando parejas...</div>;
   if (error || !categoria) return <div className="error-message">{error || 'Categoría no encontrada'}</div>;
@@ -187,7 +210,7 @@ export default function ParejasManager() {
       <div>
         {categoria.estado === 'EN_CURSO' ? (
           <span>
-            Con el torneo en curso no se pueden agregar ni eliminar parejas desde acá. Para sumar una pareja, usá <strong>«Agregar pareja a zona»</strong> en el detalle de la categoría.
+            Con el torneo en curso no se pueden eliminar parejas. Para sumar una nueva pareja a una zona, usá el botón <strong>«Agregar pareja a zona»</strong>.
           </span>
         ) : categoria.estado === 'FINALIZADO' ? (
           <span>
@@ -204,15 +227,41 @@ export default function ParejasManager() {
 
   const renderListaCard = () => (
     <div className="torneo-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <h3 style={{ margin: 0 }}>
-          Parejas Inscriptas ({busqueda.trim() ? `${parejasFiltradas.length} de ${parejas.length}` : parejas.length})
+          Parejas Inscriptas ({busqueda.trim() || zonaFiltro !== 'todas' ? `${parejasFiltradas.length} de ${parejas.length}` : parejas.length})
         </h3>
+        {categoria?.estado === 'EN_CURSO' && (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setAgregarModalOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontSize: 'var(--font-size-xs)',
+              padding: '0.4rem 0.75rem',
+            }}
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            Agregar pareja a zona
+          </button>
+        )}
       </div>
 
-      {mostrarBuscador && (
-        <div style={{ marginBottom: '1rem', width: '100%' }}>
-          <div className="public-search-box">
+      {mostrarFiltros && (
+        <div
+          style={{
+            marginBottom: '1rem',
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div className="public-search-box" style={{ flex: '1 1 200px', minWidth: '180px' }}>
             <Search size={16} className="public-search-icon" aria-hidden="true" />
             <input
               type="text"
@@ -233,6 +282,44 @@ export default function ParejasManager() {
               </button>
             )}
           </div>
+
+          {zonas.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
+              <span
+                style={{
+                  fontSize: 'var(--font-size-xs)',
+                  color: 'var(--color-text-secondary)',
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Zona:
+              </span>
+              <select
+                value={zonaFiltro}
+                onChange={(e) => setZonaFiltro(e.target.value)}
+                aria-label="Filtrar por zona"
+                style={{
+                  padding: '0.45rem 0.75rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  fontSize: 'var(--font-size-sm)',
+                  cursor: 'pointer',
+                  minWidth: '110px',
+                  outline: 'none',
+                }}
+              >
+                <option value="todas">Todas</option>
+                {zonas.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 
@@ -251,12 +338,15 @@ export default function ParejasManager() {
           }}
         >
           <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', margin: '0 0 0.5rem 0' }}>
-            Ninguna pareja coincide con la búsqueda.
+            Ninguna pareja coincide con los filtros aplicados.
           </p>
           <button
             type="button"
             className="btn-secondary"
-            onClick={() => setBusqueda('')}
+            onClick={() => {
+              setBusqueda('');
+              setZonaFiltro('todas');
+            }}
             style={{
               fontSize: 'var(--font-size-xs)',
               padding: '0.35rem 0.75rem',
@@ -267,7 +357,7 @@ export default function ParejasManager() {
             }}
           >
             <X size={12} />
-            Limpiar búsqueda
+            Limpiar filtros
           </button>
         </div>
       ) : (
@@ -287,10 +377,9 @@ export default function ParejasManager() {
                 : 'Sin restricción de horario (disponible para todo el torneo)';
             } else {
               textoDisponibilidad = formatHorasDisponibles(cantSlots);
-              const detalleTurnos = `${cantSlots} turno${cantSlots === 1 ? '' : 's'} de 15 min`;
               titleDisponibilidad = isCritico
-                ? `${detalleTurnos} · Disponibilidad insuficiente para un partido (mínimo 75 min)`
-                : `${detalleTurnos} (${isBorrador ? 'clic para configurar' : 'clic para ver'})`;
+                ? `${textoDisponibilidad} disponibles · Disponibilidad insuficiente para un partido (mínimo 75 min)`
+                : `${textoDisponibilidad} disponibles (${isBorrador ? 'clic para configurar' : 'clic para ver'})`;
             }
 
             const zp = pareja.zonaParejas?.[0];
@@ -528,6 +617,42 @@ export default function ParejasManager() {
         onConfirm={executeDelete}
         onCancel={() => setParejaToDelete(null)}
       />
+
+      {/* Modal de Agregar Pareja a Zona */}
+      <AgregarParejaModal
+        isOpen={agregarModalOpen}
+        onClose={() => setAgregarModalOpen(false)}
+        categoriaId={id}
+        zonas={zonas}
+        partidos={partidos}
+        onSuccess={(msg) => {
+          fetchData();
+          if (msg) {
+            setToastMessage(msg);
+            setTimeout(() => setToastMessage(''), 5000);
+          }
+        }}
+      />
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            right: '2rem',
+            backgroundColor: 'var(--color-primary)',
+            color: '#000',
+            padding: '0.75rem 1.25rem',
+            borderRadius: 'var(--radius-md)',
+            fontWeight: 600,
+            boxShadow: 'var(--shadow-lg)',
+            zIndex: 1000,
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
     </div>
   );
 }

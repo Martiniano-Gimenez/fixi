@@ -72,7 +72,7 @@ function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado) 
 
 function agruparSlotsEnRangos(slotIdsDelDia, grillaDelDia = []) {
   if (!slotIdsDelDia || slotIdsDelDia.length === 0) {
-    return 'sin horarios';
+    return 'No disponible';
   }
 
   const slotsSet = new Set(slotIdsDelDia);
@@ -92,7 +92,7 @@ function agruparSlotsEnRangos(slotIdsDelDia, grillaDelDia = []) {
     });
   }
 
-  if (sortedSlots.length === 0) return 'sin horarios';
+  if (sortedSlots.length === 0) return 'No disponible';
 
   const parseMin = (slotId) => {
     const hora = slotId.split('-')[1] || '';
@@ -326,7 +326,7 @@ export default function DisponibilidadEditor({
               textAlign: 'center',
             }}
           >
-            Sin disponibilidad declarada (se puede programar en cualquier horario)
+            Sin restricciones: disponible en todo el horario del club
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.75rem 0' }}>
@@ -366,25 +366,16 @@ export default function DisponibilidadEditor({
           </div>
         )}
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingTop: '0.5rem',
-            borderTop: '1px solid var(--color-border)',
-            fontSize: 'var(--font-size-xs)',
-            color: 'var(--color-text-secondary)',
-            flexWrap: 'wrap',
-            gap: '0.5rem',
-          }}
-        >
-          <span>
-            {rawSlots.length === 0
-              ? 'Disponibilidad libre (0 restricciones)'
-              : `Total: ${rawSlots.length} ${rawSlots.length === 1 ? 'turno de 15 min' : 'turnos de 15 min'}`}
-          </span>
-          {onClose && (
+        {onClose && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              paddingTop: '0.5rem',
+              borderTop: '1px solid var(--color-border)',
+            }}
+          >
             <button
               type="button"
               className="btn-secondary"
@@ -393,8 +384,8 @@ export default function DisponibilidadEditor({
             >
               Cerrar
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -509,21 +500,16 @@ export default function DisponibilidadEditor({
             />
           )}
 
-          {!isControlled && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.6rem' }}>
-              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                Total: {totalSlotsSeleccionados} {totalSlotsSeleccionados === 1 ? 'turno de 15 min' : 'turnos de 15 min'} seleccionados
-              </span>
-              {onClose && (
-                <button
-                  type="button"
-                  className="btn-primary"
-                  style={{ padding: '0.35rem 0.85rem', fontSize: 'var(--font-size-xs)' }}
-                  onClick={onClose}
-                >
-                  Listo / Cerrar
-                </button>
-              )}
+          {!isControlled && onClose && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '0.25rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.6rem' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ padding: '0.35rem 0.85rem', fontSize: 'var(--font-size-xs)' }}
+                onClick={onClose}
+              >
+                Listo / Cerrar
+              </button>
             </div>
           )}
         </div>
