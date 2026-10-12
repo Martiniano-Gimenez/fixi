@@ -1333,15 +1333,25 @@ tr:nth-child(1) .pos-number {
   text-align: center;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 768px) {
+  .table-responsive {
+    overflow-x: hidden;
+  }
+
+  .table-responsive-wrapper::after,
+  .table-responsive.has-overflow::after {
+    display: none !important;
+  }
+
   .zona-table {
     table-layout: auto;
+    width: 100%;
   }
 
   .zona-table th,
   .zona-table td {
     width: auto;
-    padding: 0.45rem 0.15rem;
+    padding: 0.45rem 0.2rem;
     font-size: 0.78rem;
   }
 
@@ -1351,26 +1361,41 @@ tr:nth-child(1) .pos-number {
     padding-right: 0.15rem;
   }
 
-  .zona-table .col-pareja,
+  .zona-table .col-pareja {
+    width: auto;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+
+  .zona-table .team-name {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
+    font-size: 0.8rem;
+    line-height: 1.25;
+  }
+
   .zona-table .col-pts,
   .zona-table .col-pj,
   .zona-table .col-pg,
   .zona-table .col-pp {
     width: auto;
+    padding-left: 0.15rem;
+    padding-right: 0.15rem;
   }
 
   .zona-table .col-sets,
   .zona-table .col-games {
     width: auto;
     white-space: nowrap;
-  }
-
-  .zona-table .team-name {
-    max-width: none;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.8rem;
+    padding-left: 0.15rem;
+    padding-right: 0.15rem;
   }
 
   .zona-table .pos-number {
@@ -1397,6 +1422,18 @@ tr:nth-child(1) .pos-number {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .zona-table th,
+  .zona-table td {
+    padding: 0.4rem 0.1rem;
+    font-size: 0.74rem;
+  }
+
+  .zona-table .team-name {
+    font-size: 0.75rem;
   }
 }
 

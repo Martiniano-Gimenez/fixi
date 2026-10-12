@@ -14,7 +14,6 @@ import { api } from '../../api/client';
 import { estadoLabel } from '../../utils/estadoLabels';
 import ZonaTable from '../../components/ZonaTable';
 import PartidoCard from '../../components/PartidoCard';
-import MiniBracketView from '../../components/MiniBracketView';
 import ResultadoModal from '../../components/ResultadoModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
@@ -22,13 +21,30 @@ import MoverParejaModal from '../../components/MoverParejaModal';
 import AgregarParejaModal from '../../components/AgregarParejaModal';
 import ActionsMenu from '../../components/ActionsMenu';
 
+function ordenarPartidos(partidosList) {
+  return [...partidosList].sort((a, b) => {
+    const hasA = Boolean(a.fechaHora);
+    const hasB = Boolean(b.fechaHora);
+
+    if (hasA && !hasB) return -1;
+    if (!hasA && hasB) return 1;
+
+    if (hasA && hasB) {
+      const diff = new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime();
+      if (diff !== 0) return diff;
+    }
+
+    return (a.posicionEnRonda ?? 0) - (b.posicionEnRonda ?? 0);
+  });
+}
+
 export default function CategoriaDetail() {
   const { torneoId, id } = useParams();
 
   const [categoria, setCategoria] = useState(null);
   const [zonas, setZonas] = useState([]);
   const [partidos, setPartidos] = useState([]);
-  const [fasesEliminatorias, setFasesEliminatorias] = useState([]);
+  const [_fasesEliminatorias, setFasesEliminatorias] = useState([]);
   const [parejas, setParejas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -131,6 +147,8 @@ export default function CategoriaDetail() {
 
   const activeZona = zonas.find((z) => z.id === activeZonaId);
   const partidosDeZona = activeZona ? partidos.filter((p) => p.zonaId === activeZona.id) : [];
+
+  const partidosOrdenados = ordenarPartidos(partidosDeZona);
 
   return (
     <div className="page">
@@ -276,36 +294,27 @@ export default function CategoriaDetail() {
           </div>
 
           {activeZona && (
-            activeZona.formato === 'MINI_BRACKET' ? (
-              <MiniBracketView
-                zona={activeZona}
-                partidos={partidosDeZona}
-                onPartidoClick={(p) => setPartidoSeleccionado(p)}
-                onReprogramar={setPartidoReprogramar}
-              />
-            ) : (
-              <div className="zona-grid">
-                {/* Tabla de posiciones de la zona */}
-                <div>
-                  <ZonaTable zona={activeZona} />
-                </div>
+            <div className="zona-grid">
+              {/* Tabla de posiciones de la zona */}
+              <div>
+                <ZonaTable zona={activeZona} />
+              </div>
 
-                {/* Partidos de la zona */}
-                <div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {partidosDeZona.map((partido) => (
-                      <PartidoCard
-                        key={partido.id}
-                        partido={partido}
-                        onClick={() => setPartidoSeleccionado(partido)}
-                        onCargarResultado={(p) => setPartidoSeleccionado(p)}
-                        onReprogramar={setPartidoReprogramar}
-                      />
-                    ))}
-                  </div>
+              {/* Partidos de la zona */}
+              <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {partidosOrdenados.map((partido) => (
+                    <PartidoCard
+                      key={partido.id}
+                      partido={partido}
+                      onClick={() => setPartidoSeleccionado(partido)}
+                      onCargarResultado={(p) => setPartidoSeleccionado(p)}
+                      onReprogramar={setPartidoReprogramar}
+                    />
+                  ))}
                 </div>
               </div>
-            )
+            </div>
           )}
         </>
       )}

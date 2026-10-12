@@ -223,16 +223,8 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
                   </>
                 )}
               </button>
-            ) : !isJugable ? (
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic', whiteSpace: 'nowrap' }}>
-                Esperando cruces
-              </span>
             ) : null}
           </div>
-        ) : !isJugable ? (
-          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-            Esperando cruces
-          </span>
         ) : null}
       </div>
 
