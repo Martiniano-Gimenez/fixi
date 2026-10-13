@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import ConfirmModal from './ConfirmModal';
 
@@ -11,6 +11,8 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  const inputRefs = useRef({});
 
   const isFinished = partido?.estado === 'FINALIZADO';
   const isEnCurso = partido?.estado === 'EN_CURSO';
@@ -58,9 +60,38 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
   };
 
   const handleInputChange = (index, field, value) => {
+    const cleaned = value.replace(/\D/g, '');
     const newSets = [...setsInput];
-    newSets[index][field] = value;
+    const finalVal = cleaned.length > 1 ? cleaned.slice(-1) : cleaned;
+    newSets[index][field] = finalVal;
     setSetsInput(newSets);
+
+    // Foco automático: al completar el segundo campo de un set (field === 'g2' no vacío con g1 también cargado)
+    if (field === 'g2' && finalVal !== '' && newSets[index].g1 !== '') {
+      if (index === 0) {
+        setTimeout(() => {
+          inputRefs.current['1-g1']?.focus();
+        }, 10);
+      } else if (index === 1) {
+        const s1g1 = parseInt(newSets[0].g1, 10);
+        const s1g2 = parseInt(newSets[0].g2, 10);
+        const s2g1 = parseInt(newSets[1].g1, 10);
+        const s2g2 = parseInt(finalVal, 10);
+        let set3Bloqueado = false;
+        if (!isNaN(s1g1) && !isNaN(s1g2) && !isNaN(s2g1) && !isNaN(s2g2)) {
+          const w1 = s1g1 > s1g2 ? 1 : (s1g2 > s1g1 ? 2 : null);
+          const w2 = s2g1 > s2g2 ? 1 : (s2g2 > s2g1 ? 2 : null);
+          if (w1 && w2 && w1 === w2) {
+            set3Bloqueado = true;
+          }
+        }
+        if (!set3Bloqueado) {
+          setTimeout(() => {
+            inputRefs.current['2-g1']?.focus();
+          }, 10);
+        }
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -140,13 +171,6 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
 
   const p1Name = partido.pareja1 ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}` : 'Pareja 1';
   const p2Name = partido.pareja2 ? `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}` : 'Pareja 2';
-  
-  const p1Short = partido.pareja1 
-    ? `${partido.pareja1.jugador1.split(' ')[0]} / ${partido.pareja1.jugador2.split(' ')[0]}` 
-    : 'P1';
-  const p2Short = partido.pareja2 
-    ? `${partido.pareja2.jugador1.split(' ')[0]} / ${partido.pareja2.jugador2.split(' ')[0]}` 
-    : 'P2';
 
   const getTitle = () => {
     if (isFinished) return 'Editar Resultado';
@@ -183,29 +207,156 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
     return false;
   };
 
+  const getResumenResultado = () => {
+    let p1Sets = 0;
+    let p2Sets = 0;
+    let setsValidos = 0;
+
+    for (let i = 0; i < 3; i++) {
+      const g1Str = setsInput[i].g1;
+      const g2Str = setsInput[i].g2;
+      if (g1Str === '' || g2Str === '') continue;
+      if (validarSet(g1Str, g2Str, i + 1) !== null) continue;
+
+      const g1 = parseInt(g1Str, 10);
+      const g2 = parseInt(g2Str, 10);
+      if (g1 > g2) {
+        p1Sets++;
+        setsValidos++;
+      } else if (g2 > g1) {
+        p2Sets++;
+        setsValidos++;
+      }
+    }
+
+    if (setsValidos === 0) return null;
+
+    if (p1Sets === 2) {
+      return { texto: `Gana ${p1Name} (${p1Sets}-${p2Sets})`, esDefinido: true };
+    }
+    if (p2Sets === 2) {
+      return { texto: `Gana ${p2Name} (${p2Sets}-${p1Sets})`, esDefinido: true };
+    }
+    if (p1Sets === 1 && p2Sets === 1) {
+      return { texto: 'Sets: 1-1 (falta el tercer set)', esDefinido: false };
+    }
+    if (p1Sets === 1 && p2Sets === 0) {
+      return { texto: `Gana ${p1Name} (1-0)`, esDefinido: false };
+    }
+    if (p2Sets === 1 && p1Sets === 0) {
+      return { texto: `Gana ${p2Name} (1-0)`, esDefinido: false };
+    }
+
+    return null;
+  };
+
+  const resumen = getResumenResultado();
+
   return (
     <>
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-        backdropFilter: 'blur(4px)'
-      }}>
-        <div className="auth-card" style={{ width: '90%', maxWidth: '480px', padding: '2rem' }}>
-          <div className="flex-header" style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.75rem' }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>{getTitle()}</h2>
-              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>{getSubtitle()}</span>
+      <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+        <div className="modal-content" style={{ maxWidth: '440px', textAlign: 'left' }}>
+          {/* Cabecera del modal */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: '1.25rem',
+            borderBottom: '1px solid var(--color-border)',
+            paddingBottom: '0.75rem',
+            textAlign: 'left',
+          }}>
+            <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '1.25rem',
+                fontWeight: 700,
+                color: 'var(--color-text)',
+                fontFamily: 'var(--font-display)',
+                textAlign: 'left',
+                lineHeight: 1.2
+              }}>
+                {getTitle()}
+              </h2>
+              <p style={{
+                margin: '0.25rem 0 0',
+                fontSize: 'var(--font-size-xs)',
+                color: 'var(--color-text-secondary)',
+                textAlign: 'left',
+                lineHeight: 1.4
+              }}>
+                {getSubtitle()}
+              </p>
             </div>
-            <button type="button" onClick={onClose}
-              style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar modal"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--color-text-secondary)',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                lineHeight: 1,
+                padding: '0 0.25rem',
+                marginLeft: '0.75rem',
+                flexShrink: 0
+              }}
+            >
               &times;
             </button>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem', gap: '0.5rem' }}>
-            <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, flex: 1, textAlign: 'center' }}>{p1Name}</div>
-            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', alignSelf: 'center' }}>vs</div>
-            <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, flex: 1, textAlign: 'center' }}>{p2Name}</div>
+          {/* Encabezado con nombres de las dos parejas una sola vez (columnas alineadas con los inputs) */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            marginBottom: '0.85rem',
+            padding: '0 calc(1rem + 1px)',
+          }}>
+            <div style={{
+              flex: 1,
+              minWidth: 0,
+              textAlign: 'center',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 600,
+              color: 'var(--color-text)',
+              lineHeight: 1.3,
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+            }}>
+              {p1Name}
+            </div>
+
+            <span style={{
+              width: '20px',
+              textAlign: 'center',
+              fontSize: 'var(--font-size-xs)',
+              color: 'var(--color-text-muted)',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              userSelect: 'none',
+              flexShrink: 0
+            }}>
+              vs
+            </span>
+
+            <div style={{
+              flex: 1,
+              minWidth: 0,
+              textAlign: 'center',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 600,
+              color: 'var(--color-text)',
+              lineHeight: 1.3,
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+            }}>
+              {p2Name}
+            </div>
           </div>
 
           {error && <div className="error-message" style={{ marginBottom: '1rem' }}>{error}</div>}
@@ -215,47 +366,70 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
               const isDisabled = getIsSetDisabled(idx);
               return (
                 <div key={idx} style={{ 
-                  marginBottom: '1rem', 
-                  padding: '0.75rem', 
-                  background: isDisabled ? 'transparent' : 'var(--color-bg)', 
+                  marginBottom: '0.75rem', 
+                  padding: '0.75rem 1rem', 
+                  background: isDisabled ? 'transparent' : 'rgba(255, 255, 255, 0.02)', 
                   border: '1px solid var(--color-border)', 
                   borderRadius: 'var(--radius-md)',
-                  opacity: isDisabled ? 0.4 : 1
+                  opacity: isDisabled ? 0.35 : 1,
+                  transition: 'opacity var(--transition-fast)'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 'bold', color: 'var(--color-text-secondary)' }}>
+                    <span style={{
+                      fontSize: 'var(--font-size-xs)',
+                      fontWeight: 700,
+                      color: isDisabled ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
+                      letterSpacing: '0.05em'
+                    }}>
                       SET {idx + 1} {idx === 2 && isSet3DisabledByWin && '(No necesario)'}
                     </span>
                   </div>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>{p1Short}</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <input
-                        type="number"
-                        min="0"
-                        max="7"
+                        ref={(el) => { inputRefs.current[`${idx}-g1`] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className="resultado-set-input"
                         value={setsInput[idx].g1}
                         onChange={(e) => handleInputChange(idx, 'g1', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => e.target.select()}
                         placeholder="0"
                         disabled={isDisabled}
-                        style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 'bold' }}
+                        aria-label={`Set ${idx + 1} - ${p1Name}`}
                       />
                     </div>
 
-                    <span style={{ fontWeight: 'bold', color: 'var(--color-text-secondary)', marginTop: '1rem' }}>-</span>
+                    <span style={{
+                      width: '20px',
+                      textAlign: 'center',
+                      fontWeight: 700,
+                      color: 'var(--color-text-secondary)',
+                      fontSize: '1.25rem',
+                      userSelect: 'none',
+                      lineHeight: 1,
+                      flexShrink: 0
+                    }}>
+                      -
+                    </span>
 
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      <label style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>{p2Short}</label>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <input
-                        type="number"
-                        min="0"
-                        max="7"
+                        ref={(el) => { inputRefs.current[`${idx}-g2`] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className="resultado-set-input"
                         value={setsInput[idx].g2}
                         onChange={(e) => handleInputChange(idx, 'g2', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => e.target.select()}
                         placeholder="0"
                         disabled={isDisabled}
-                        style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 'bold' }}
+                        aria-label={`Set ${idx + 1} - ${p2Name}`}
                       />
                     </div>
                   </div>
@@ -263,7 +437,28 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
               );
             })}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem' }}>
+            {/* Resumen calculado sobre los botones de acción */}
+            {resumen && (
+              <div
+                style={{
+                  marginTop: '1rem',
+                  marginBottom: '0.25rem',
+                  padding: '0.55rem 0.85rem',
+                  background: resumen.esDefinido ? 'rgba(0, 208, 132, 0.08)' : 'rgba(255, 255, 255, 0.04)',
+                  border: `1px solid ${resumen.esDefinido ? 'rgba(0, 208, 132, 0.25)' : 'var(--color-border)'}`,
+                  borderRadius: 'var(--radius-md)',
+                  color: resumen.esDefinido ? 'var(--color-primary)' : 'var(--color-text)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  lineHeight: 1.4
+                }}
+              >
+                {resumen.texto}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', gap: '0.75rem', flexWrap: 'wrap' }}>
               {(isFinished || isEnCurso) ? (
                 <button 
                   type="button" 
@@ -276,7 +471,7 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
                 </button>
               ) : <div />}
 
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', marginLeft: 'auto' }}>
                 <button type="button" className="btn-secondary" onClick={onClose} disabled={loading} style={{ width: 'auto' }}>
                   Cancelar
                 </button>
@@ -306,3 +501,4 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
     </>
   );
 }
+
