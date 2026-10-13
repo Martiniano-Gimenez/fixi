@@ -1054,21 +1054,28 @@ ul, ol {
 
   .pareja-chips-wrap {
     width: 100%;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.35rem;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
     padding-left: 1.85rem;
+    flex-wrap: wrap;
   }
 
-  .pareja-chips-fila1,
-  .pareja-chips-fila2 {
-    display: flex;
+  .pareja-chips-fila1 {
+    display: inline-flex;
     align-items: center;
     gap: 0.4rem;
     flex-wrap: wrap;
-    width: 100%;
-    justify-content: flex-start;
-    flex-shrink: 1;
+    flex-shrink: 0;
+  }
+
+  .pareja-chips-fila2 {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+    flex-shrink: 0;
   }
 }
 
