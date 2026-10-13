@@ -140,8 +140,17 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
 
     for (const partido of partidosPrimeraRonda) {
       const updateData = {};
-      if (esDieciseisavos && partido.estado !== 'FINALIZADO') {
+      
+      // Detectar BYE: un slot tiene origen pero la pareja contraria no tiene origen (es BYE)
+      const esBye = (partido.origenPareja1 && !partido.origenPareja2) || 
+                    (!partido.origenPareja1 && partido.origenPareja2);
+
+      if (esDieciseisavos && partido.estado !== 'FINALIZADO' && !esBye) {
         updateData.sinHorarioAsignado = true;
+      } else if (esBye) {
+        updateData.sinHorarioAsignado = false;
+        updateData.fechaHora = null;
+        updateData.canchaNumero = null;
       }
       
       // Solo actualizar parejas si el partido de primera ronda aún no comenzó (PENDIENTE)
@@ -160,10 +169,6 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       // Determinar parejas efectivas tras el update
       const pareja1Id = updateData.pareja1Id !== undefined ? updateData.pareja1Id : partido.pareja1Id;
       const pareja2Id = updateData.pareja2Id !== undefined ? updateData.pareja2Id : partido.pareja2Id;
-
-      // Detectar BYE: un slot tiene origen pero la pareja contraria no tiene origen (es BYE)
-      const esBye = (partido.origenPareja1 && !partido.origenPareja2) || 
-                    (!partido.origenPareja1 && partido.origenPareja2);
       
       if (esBye && partido.estado !== 'FINALIZADO') {
         if (pareja1Id && !pareja2Id) {
@@ -448,7 +453,7 @@ function esRondaDieciseisavos(ronda) {
 async function getFasesEliminatorias(organizadorId, categoriaId) {
   await getCategoriaById(organizadorId, categoriaId);
 
-  return await prisma.faseEliminatoria.findMany({
+  const fases = await prisma.faseEliminatoria.findMany({
     where: { categoriaId },
     orderBy: { ronda: 'desc' },
     include: {
@@ -473,6 +478,77 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
       },
     },
   });
+
+  if (!fases || fases.length === 0) return fases;
+
+  const maxRondaCat = Math.max(...fases.map((f) => f.ronda));
+  const fasePrimera = fases.find((f) => f.ronda === maxRondaCat);
+  const primeraRondaPartidosMap = new Map();
+
+  // 1. Identificar BYEs en la primera ronda
+  if (fasePrimera && Array.isArray(fasePrimera.partidos)) {
+    for (const p of fasePrimera.partidos) {
+      const tieneLado1 = Boolean(p.pareja1Id || p.pareja1 || p.origenPareja1);
+      const tieneLado2 = Boolean(p.pareja2Id || p.pareja2 || p.origenPareja2);
+      const esBye = (tieneLado1 && !tieneLado2) || (!tieneLado1 && tieneLado2);
+
+      p.esBye = esBye;
+      if (esBye) {
+        // Los BYE no se juegan, no reciben horario ni se cuentan como "Sin horario"
+        p.sinHorarioAsignado = false;
+      }
+      primeraRondaPartidosMap.set(p.posicionEnRonda, p);
+    }
+  }
+
+  // 2. Proyectar origen/pareja en la ronda siguiente para cruces que reciben a un ganador de BYE
+  // CAMPOS DERIVADOS DE DISPLAY:
+  // - displayOrigenPareja1 / displayOrigenPareja2: texto de origen ("1° Zona A") que avanza por BYE cuando aún no se conoce la pareja
+  // - displayPareja1 / displayPareja2: pareja real que avanza por BYE si ya está clasificada
+  // Estos campos NO modifican origenPareja1 / origenPareja2 en la DB, preservando los placeholders originales necesarios para generarEliminatoria.
+  const siguienteRondaNum = maxRondaCat / 2;
+  const faseSiguiente = fases.find((f) => f.ronda === siguienteRondaNum);
+
+  if (faseSiguiente && Array.isArray(faseSiguiente.partidos)) {
+    for (const p of faseSiguiente.partidos) {
+      p.esBye = false;
+
+      // Slot 1 viene del partido (2 * pos - 1) de la primera ronda
+      const posPrev1 = 2 * p.posicionEnRonda - 1;
+      const prevMatch1 = primeraRondaPartidosMap.get(posPrev1);
+      if (prevMatch1 && prevMatch1.esBye) {
+        const parejaAvance = prevMatch1.pareja1 || prevMatch1.pareja2 || null;
+        const origenAvance = prevMatch1.origenPareja1 || prevMatch1.origenPareja2 || null;
+        p.displayOrigenPareja1 = origenAvance;
+        if (parejaAvance) {
+          p.displayPareja1 = parejaAvance;
+        }
+      }
+
+      // Slot 2 viene del partido (2 * pos) de la primera ronda
+      const posPrev2 = 2 * p.posicionEnRonda;
+      const prevMatch2 = primeraRondaPartidosMap.get(posPrev2);
+      if (prevMatch2 && prevMatch2.esBye) {
+        const parejaAvance = prevMatch2.pareja1 || prevMatch2.pareja2 || null;
+        const origenAvance = prevMatch2.origenPareja1 || prevMatch2.origenPareja2 || null;
+        p.displayOrigenPareja2 = origenAvance;
+        if (parejaAvance) {
+          p.displayPareja2 = parejaAvance;
+        }
+      }
+    }
+  }
+
+  // Para el resto de las fases, asegurar esBye: false
+  for (const f of fases) {
+    if (f.ronda !== maxRondaCat && f.ronda !== siguienteRondaNum) {
+      for (const p of f.partidos) {
+        p.esBye = false;
+      }
+    }
+  }
+
+  return fases;
 }
 
 async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null) {

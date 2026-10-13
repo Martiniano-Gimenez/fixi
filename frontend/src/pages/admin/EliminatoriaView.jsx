@@ -234,25 +234,47 @@ export default function EliminatoriaView() {
                 <h3 className="ronda-title">{fase.nombre}</h3>
                 <div className="ronda-matches bracket-matches-column">
                   {fase.partidos.map((partido) => {
+                    const isBye = Boolean(partido.esBye);
                     const isFinalizado = partido.estado === 'FINALIZADO';
-                    const isJugable = !!(partido.pareja1Id && partido.pareja2Id);
+                    const isJugable = !isBye && Boolean(partido.pareja1Id && partido.pareja2Id);
                     const p1esGanador = isFinalizado && partido.ganadorId === partido.pareja1Id;
                     const p2esGanador = isFinalizado && partido.ganadorId === partido.pareja2Id;
+
+                    // Lados definidos en la tarjeta (para identificar el slot BYE)
+                    const lado1Definido = Boolean(partido.pareja1 || partido.pareja1Id || partido.origenPareja1);
+                    const lado2Definido = Boolean(partido.pareja2 || partido.pareja2Id || partido.origenPareja2);
+
+                    // Parejas y orígenes a mostrar (incluyendo campos derivados de display de la ronda siguiente)
+                    const p1Pareja = partido.pareja1 || partido.displayPareja1;
+                    const p1Origen = partido.origenPareja1 || partido.displayOrigenPareja1;
+                    const p2Pareja = partido.pareja2 || partido.displayPareja2;
+                    const p2Origen = partido.origenPareja2 || partido.displayOrigenPareja2;
+
+                    let titleTexto = 'Esperando clasificados';
+                    if (isBye) {
+                      titleTexto = 'Pase directo por BYE';
+                    } else if (isJugable) {
+                      titleTexto = isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado';
+                    }
 
                     return (
                       <div key={partido.id} className="bracket-match-wrapper">
                         <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div
-                            className={`match-card ${isFinalizado ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
-                            onClick={() => handleClickPartido(partido)}
-                            title={isJugable ? (isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado') : 'Esperando clasificados'}
+                            className={`match-card ${isBye ? 'bye-card' : ''} ${isFinalizado && !isBye ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
+                            onClick={() => {
+                              if (!isBye && isJugable) {
+                                handleClickPartido(partido);
+                              }
+                            }}
+                            title={titleTexto}
                           >
                             <div className="match-card-header">
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span className={`match-status-badge ${isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
-                                  {isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
+                                <span className={`match-status-badge ${isBye ? 'bye' : isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
+                                  {isBye ? 'Pase directo' : isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
                                 </span>
-                                {!isFinalizado && (
+                                {!isFinalizado && !isBye && (
                                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <button
                                       className="btn-icon"
@@ -304,31 +326,35 @@ export default function EliminatoriaView() {
                               <span className="match-position">#{partido.posicionEnRonda}</span>
                             </div>
 
-                            {partido.fechaHora ? (
-                              <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                                  <Clock size={11} style={{ color: 'var(--color-primary)' }} />
-                                  {formatDiaHorario(partido.fechaHora)}
+                            {!isBye && (
+                              partido.fechaHora ? (
+                                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                                    <Clock size={11} style={{ color: 'var(--color-primary)' }} />
+                                    {formatDiaHorario(partido.fechaHora)}
+                                  </div>
                                 </div>
-                              </div>
-                            ) : (
-                              <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                  <AlertTriangle size={10} /> Sin horario
+                              ) : (
+                                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-warning)', fontWeight: 600 }}>
+                                    <AlertTriangle size={10} /> Sin horario
+                                  </div>
                                 </div>
-                              </div>
+                              )
                             )}
 
                             <div className="parejas-list">
                               <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
                                 <div className="pareja-info">
-                                  {partido.pareja1 ? (
+                                  {isBye && !lado1Definido ? (
+                                    <span className="pareja-bye">BYE</span>
+                                  ) : p1Pareja ? (
                                     <span className="pareja-nombre">
-                                      {partido.pareja1.jugador1} / {partido.pareja1.jugador2}
+                                      {p1Pareja.jugador1} / {p1Pareja.jugador2}
                                     </span>
                                   ) : (
                                     <span className="pareja-esperando">
-                                      {partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando...'}
+                                      {p1Origen ? `Esperando ${p1Origen}` : 'Esperando...'}
                                     </span>
                                   )}
                                 </div>
@@ -345,13 +371,15 @@ export default function EliminatoriaView() {
 
                               <div className={`pareja-row ${p2esGanador ? 'ganador' : ''}`}>
                                 <div className="pareja-info">
-                                  {partido.pareja2 ? (
+                                  {isBye && !lado2Definido ? (
+                                    <span className="pareja-bye">BYE</span>
+                                  ) : p2Pareja ? (
                                     <span className="pareja-nombre">
-                                      {partido.pareja2.jugador1} / {partido.pareja2.jugador2}
+                                      {p2Pareja.jugador1} / {p2Pareja.jugador2}
                                     </span>
                                   ) : (
                                     <span className="pareja-esperando">
-                                      {partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando...'}
+                                      {p2Origen ? `Esperando ${p2Origen}` : 'Esperando...'}
                                     </span>
                                   )}
                                 </div>

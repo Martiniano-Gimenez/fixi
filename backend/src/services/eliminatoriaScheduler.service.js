@@ -800,7 +800,7 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
   }
 
   return {
-    partidosAgendados: updates.filter((u) => !u.sinHorarioAsignado).length,
+    partidosAgendados: updates.filter((u) => Boolean(u.fechaHora && !u.sinHorarioAsignado)).length,
     partidosSinHorario: updates.filter((u) => u.sinHorarioAsignado).length,
     total: updates.length,
     canchasUtilizadas: cantidadCanchas,

@@ -119,30 +119,84 @@ async function getTorneoPublico(req, res, next) {
             })),
           })),
       })),
-      eliminatoria: c.fasesEliminatorias.map((fase) => ({
-        id: fase.id,
-        nombre: fase.nombre,
-        ronda: fase.ronda,
-        partidos: fase.partidos.map((p) => ({
-          id: p.id,
-          posicion: p.posicionEnRonda,
-          estado: p.estado,
-          fechaHora: p.fechaHora,
-          canchaNumero: p.canchaNumero,
-          origenPareja1: p.origenPareja1,
-          origenPareja2: p.origenPareja2,
-          pareja1Id: p.pareja1Id,
-          pareja2Id: p.pareja2Id,
-          ganadorId: p.ganadorId,
-          pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
-          pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
-          ganador: p.ganador ? `${p.ganador.jugador1} / ${p.ganador.jugador2}` : null,
-          sets: p.sets.map((s) => ({
-            gamesPareja1: s.gamesPareja1,
-            gamesPareja2: s.gamesPareja2,
-          })),
-        })),
-      })),
+      eliminatoria: (() => {
+        const fases = c.fasesEliminatorias || [];
+        if (fases.length === 0) return [];
+        const maxRondaCat = Math.max(...fases.map((f) => f.ronda));
+        const fasePrimera = fases.find((f) => f.ronda === maxRondaCat);
+        const primeraRondaMap = new Map();
+
+        if (fasePrimera) {
+          for (const p of fasePrimera.partidos) {
+            const has1 = Boolean(p.pareja1Id || p.origenPareja1);
+            const has2 = Boolean(p.pareja2Id || p.origenPareja2);
+            primeraRondaMap.set(p.posicionEnRonda, {
+              esBye: (has1 && !has2) || (!has1 && has2),
+              pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
+              pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
+              origenPareja1: p.origenPareja1,
+              origenPareja2: p.origenPareja2,
+            });
+          }
+        }
+
+        const sigRonda = maxRondaCat / 2;
+
+        return fases.map((fase) => ({
+          id: fase.id,
+          nombre: fase.nombre,
+          ronda: fase.ronda,
+          partidos: fase.partidos.map((p) => {
+            const isFirstRound = fase.ronda === maxRondaCat;
+            const has1 = Boolean(p.pareja1Id || p.origenPareja1);
+            const has2 = Boolean(p.pareja2Id || p.origenPareja2);
+            const esBye = isFirstRound && ((has1 && !has2) || (!has1 && has2));
+
+            let displayOrigenPareja1 = null;
+            let displayOrigenPareja2 = null;
+            let displayPareja1 = null;
+            let displayPareja2 = null;
+
+            if (fase.ronda === sigRonda) {
+              const prev1 = primeraRondaMap.get(2 * p.posicionEnRonda - 1);
+              if (prev1 && prev1.esBye) {
+                displayOrigenPareja1 = prev1.origenPareja1 || prev1.origenPareja2;
+                displayPareja1 = prev1.pareja1 || prev1.pareja2;
+              }
+              const prev2 = primeraRondaMap.get(2 * p.posicionEnRonda);
+              if (prev2 && prev2.esBye) {
+                displayOrigenPareja2 = prev2.origenPareja1 || prev2.origenPareja2;
+                displayPareja2 = prev2.pareja1 || prev2.pareja2;
+              }
+            }
+
+            return {
+              id: p.id,
+              posicion: p.posicionEnRonda,
+              estado: p.estado,
+              fechaHora: p.fechaHora,
+              canchaNumero: p.canchaNumero,
+              origenPareja1: p.origenPareja1,
+              origenPareja2: p.origenPareja2,
+              displayOrigenPareja1,
+              displayOrigenPareja2,
+              displayPareja1,
+              displayPareja2,
+              esBye,
+              pareja1Id: p.pareja1Id,
+              pareja2Id: p.pareja2Id,
+              ganadorId: p.ganadorId,
+              pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
+              pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
+              ganador: p.ganador ? `${p.ganador.jugador1} / ${p.ganador.jugador2}` : null,
+              sets: p.sets.map((s) => ({
+                gamesPareja1: s.gamesPareja1,
+                gamesPareja2: s.gamesPareja2,
+              })),
+            };
+          }),
+        }));
+      })(),
     }));
 
     res.json({

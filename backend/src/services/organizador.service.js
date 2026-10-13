@@ -1539,8 +1539,20 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
     });
   }
 
+  // Excluir partidos BYE de eliminatorias (no requieren horario ni rival)
+  const partidosSinBye = partidos.filter((p) => {
+    if (p.faseEliminatoriaId || p.faseEliminatoria) {
+      const has1 = Boolean(p.pareja1Id || p.origenPareja1);
+      const has2 = Boolean(p.pareja2Id || p.origenPareja2);
+      if ((has1 && !has2) || (!has1 && has2)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
   // Para cada partido sin horario calculamos slotsViables y nivel de urgencia
-  const partidosConUrgencia = partidos.map((p) => {
+  const partidosConUrgencia = partidosSinBye.map((p) => {
     const p1Slots = ordenarSlotsCronologicamente((p.pareja1?.slotsSeleccionados || []).map((s) => s.slotId));
     const p2Slots = ordenarSlotsCronologicamente((p.pareja2?.slotsSeleccionados || []).map((s) => s.slotId));
     const slotsEnComunOriginales = ordenarSlotsCronologicamente(p1Slots.filter((s) => p2Slots.includes(s)));
@@ -1879,6 +1891,23 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     });
   }
 
+  // Pre-calcular ronda máxima eliminatoria por categoría para detectar BYEs
+  const maxRondaPorCat = new Map();
+  for (const cat of categoriasTorneo) {
+    if (cat.fasesEliminatorias && cat.fasesEliminatorias.length > 0) {
+      maxRondaPorCat.set(cat.id, Math.max(...cat.fasesEliminatorias.map((f) => f.ronda)));
+    }
+  }
+
+  function esPartidoByeEnVivo(p) {
+    if (!p.faseEliminatoriaId || !p.faseEliminatoria) return false;
+    const maxRonda = maxRondaPorCat.get(p.categoriaId);
+    if (!maxRonda || p.faseEliminatoria.ronda !== maxRonda) return false;
+    const has1 = Boolean(p.pareja1Id || p.origenPareja1);
+    const has2 = Boolean(p.pareja2Id || p.origenPareja2);
+    return (has1 && !has2) || (!has1 && has2);
+  }
+
   // Clasificar partidos
   const partidosEnCursoList = [];
   const partidosEnCanchaFantasmaList = [];
@@ -1893,6 +1922,10 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   const canchaOcupadaPorPartido = new Map();
 
   for (const p of partidos) {
+    if (esPartidoByeEnVivo(p)) {
+      continue;
+    }
+
     const p1Nombre = formatPareja(p.pareja1, p.origenPareja1);
     const p2Nombre = formatPareja(p.pareja2, p.origenPareja2);
     const formatted = {
@@ -2080,7 +2113,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       return tB - tA;
     }),
     resumenEstado: {
-      totalPartidos: partidos.length,
+      totalPartidos: partidos.filter((p) => !esPartidoByeEnVivo(p)).length,
       finalizados: finalizadosCount,
       enCurso: enCursoCount,
       pendientesConHorario: pendientesConHorarioCount,
