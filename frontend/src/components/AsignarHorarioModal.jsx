@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { Clock, Star, Users, ChevronDown, ChevronUp, Loader2, AlertTriangle, X } from 'lucide-react';
-import { formatAjusteTiempo, formatDiaHorario, minutosCronologicosJornada } from '../utils/dateUtils';
+import { formatAjusteTiempo, formatDiaHorario, minutosCronologicosJornada, getSlotCalendario, formatSlotCalendario } from '../utils/dateUtils';
 import { rankearSlotsParaPartido } from '../utils/rankingSlots';
 
 const HORA_INICIO_NOCHE_DIECISEISAVOS = 18; // 18:00hs: inicio de franja nocturna post-zonas para Dieciseisavos
@@ -95,7 +95,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
         .trim();
-    return normalizar(fechaActualStr) === normalizar(`${s.dia} ${s.hora}`);
+    return normalizar(fechaActualStr) === normalizar(formatSlotCalendario(s.slotId));
   };
 
   // FILTRADO ESTRICTO DE FACTIBILIDAD Y CONTEXTO:
@@ -137,8 +137,10 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   const alternativas = rankedSlots.slice(1, 6);
   const restoAlternativasCount = Math.max(0, rankedSlots.length - 1);
 
-  const viernesViables = slotsValidos.filter((s) => s.dia === 'Viernes');
-  const sabadoViables = slotsValidos.filter((s) => s.dia === 'Sabado');
+  const viernesNormales = slotsValidos.filter((s) => s.dia === 'Viernes' && !getSlotCalendario(s.slotId)?.esMadrugada);
+  const viernesMadrugada = slotsValidos.filter((s) => s.dia === 'Viernes' && getSlotCalendario(s.slotId)?.esMadrugada);
+  const sabadoNormales = slotsValidos.filter((s) => s.dia === 'Sabado' && !getSlotCalendario(s.slotId)?.esMadrugada);
+  const sabadoMadrugada = slotsValidos.filter((s) => s.dia === 'Sabado' && getSlotCalendario(s.slotId)?.esMadrugada);
   const domingoViables = slotsValidos.filter((s) => s.dia === 'Domingo');
 
   const p1Nombre = partido.pareja1 ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}` : 'Pareja 1';
@@ -211,7 +213,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
           minHeight: '28px',
         }}
         onClick={() => handleAsignar(s)}
-        title={`Asignar ${s.slotId} (${s.canchasLibres?.length || 0} canchas libres)`}
+        title={`Asignar ${formatSlotCalendario(s.slotId)} (${s.canchasLibres?.length || 0} canchas libres)`}
       >
         {isApplying ? (
           <>
@@ -339,7 +341,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
               <Star size={14} style={{ color: '#eab308', fill: '#eab308', flexShrink: 0 }} />
             )}
             <strong style={{ color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
-              {opt.dia} {opt.hora}
+              {formatSlotCalendario(opt.slotId)}
             </strong>
             <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
               ({opt.canchasLibres.length} lib.)
@@ -589,9 +591,12 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                   border: '1px solid var(--color-border)',
                 }}
               >
-                {esPartidoZona && viernesViables.length > 0 && renderDiaBloques('Viernes', viernesViables)}
-                {esPartidoZona && sabadoViables.length > 0 && renderDiaBloques('Sábado', sabadoViables)}
-                {esDieciseisavos && sabadoViables.length > 0 && renderDiaBloques('Sábado (noche)', sabadoViables)}
+                {esPartidoZona && viernesNormales.length > 0 && renderDiaBloques('Viernes', viernesNormales)}
+                {esPartidoZona && viernesMadrugada.length > 0 && renderDiaBloques('Sábado (madrugada)', viernesMadrugada)}
+                {esPartidoZona && sabadoNormales.length > 0 && renderDiaBloques('Sábado', sabadoNormales)}
+                {esPartidoZona && sabadoMadrugada.length > 0 && renderDiaBloques('Domingo (madrugada)', sabadoMadrugada)}
+                {esDieciseisavos && sabadoNormales.length > 0 && renderDiaBloques('Sábado (noche)', sabadoNormales)}
+                {esDieciseisavos && sabadoMadrugada.length > 0 && renderDiaBloques('Domingo (madrugada)', sabadoMadrugada)}
                 {domingoViables.length > 0 && renderDiaBloques('Domingo', domingoViables)}
               </div>
             </div>
@@ -681,8 +686,10 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                       border: '1px solid var(--color-border)',
                     }}
                   >
-                    {renderDiaBloques('Viernes', viernesViables)}
-                    {renderDiaBloques('Sábado', sabadoViables)}
+                    {viernesNormales.length > 0 && renderDiaBloques('Viernes', viernesNormales)}
+                    {viernesMadrugada.length > 0 && renderDiaBloques('Sábado (madrugada)', viernesMadrugada)}
+                    {sabadoNormales.length > 0 && renderDiaBloques('Sábado', sabadoNormales)}
+                    {sabadoMadrugada.length > 0 && renderDiaBloques('Domingo (madrugada)', sabadoMadrugada)}
                     {domingoViables.length > 0 && renderDiaBloques('Domingo', domingoViables)}
                   </div>
                 )}

@@ -173,6 +173,29 @@ async function main() {
   console.log(`  ✓ Mediodía (15:00Z)         -> "${resMediodia}"`);
   console.log(`  ✓ Medianoche UTC (00:00Z)   -> "${resMedianoche}"`);
 
+  // 7. Verificación de rotulado de slot de trasnoche a día calendario
+  console.log('\n--- 7. Verificación de rotulado de slot de trasnoche a día calendario ---');
+  const casosSlot = [
+    { slot: 'Sabado-00:00', esperado: 'Domingo 00:00' },
+    { slot: 'Sabado-00:45', esperado: 'Domingo 00:45' },
+    { slot: 'Sabado-13:30', esperado: 'Sábado 13:30' },
+    { slot: 'Viernes-00:00', esperado: 'Sábado 00:00' },
+    { slot: 'Viernes-12:00', esperado: 'Viernes 12:00' },
+    { slot: 'Sabado-06:00', esperado: 'Sábado 06:00' },
+  ];
+
+  for (const { slot, esperado } of casosSlot) {
+    const obtenido = frontendMod.formatSlotCalendario(slot);
+    assert.strictEqual(
+      obtenido,
+      esperado,
+      `formatSlotCalendario('${slot}') debe ser '${esperado}', obtenido: '${obtenido}'`
+    );
+    const parsed = frontendMod.getSlotCalendario(slot);
+    assert.strictEqual(parsed.texto, esperado, `getSlotCalendario('${slot}').texto debe ser '${esperado}'`);
+    console.log(`  ✓ '${slot}' -> "${obtenido}"`);
+  }
+
   console.log('\n🎉 TODAS LAS PRUEBAS DE EQUIVALENCIA FRONTEND/BACKEND PASARON AL 100%!');
 }
 

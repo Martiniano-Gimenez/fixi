@@ -334,3 +334,57 @@ export function isViernes(fecha) {
   return parts ? parts.dayOfWeek === 5 : false;
 }
 
+/**
+ * Dado un slotId ("Dia-HH:mm", ej. 'Viernes-18:00' o 'Sabado-00:00'),
+ * devuelve el día calendario y la hora civil para mostrar:
+ * si la hora es de madrugada (< 06:00), el día calendario es el siguiente
+ * ('Viernes-00:30' → Sábado 00:30, 'Sabado-00:00' → Domingo 00:00);
+ * si es >= 06:00, se mantiene el mismo día.
+ *
+ * @param {string} slotId
+ * @returns {{ dia: string, hora: string, texto: string, esMadrugada: boolean } | null}
+ */
+export function getSlotCalendario(slotId) {
+  if (!slotId || typeof slotId !== 'string') return null;
+  const [diaRaw, horaRaw] = slotId.split('-');
+  if (!diaRaw || !horaRaw) return null;
+  const [hhStr, mmStr] = horaRaw.split(':');
+  const hh = parseInt(hhStr, 10);
+  const mm = parseInt(mmStr, 10);
+  if (isNaN(hh) || isNaN(mm)) return null;
+
+  const esMadrugada = hh < 6;
+  const diaNorm = diaRaw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  let dia = diaNorm === 'Sabado' ? 'Sábado' : diaNorm;
+
+  if (esMadrugada) {
+    if (diaNorm === 'Viernes') dia = 'Sábado';
+    else if (diaNorm === 'Sabado') dia = 'Domingo';
+    else if (diaNorm === 'Domingo') dia = 'Lunes';
+  }
+
+  const hora = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  const texto = `${dia} ${hora}`;
+
+  return {
+    dia,
+    hora,
+    texto,
+    esMadrugada,
+    toString() {
+      return texto;
+    },
+  };
+}
+
+/**
+ * Devuelve el string formateado del slot en día calendario y hora ("Domingo 00:00")
+ * @param {string} slotId
+ * @returns {string}
+ */
+export function formatSlotCalendario(slotId) {
+  const info = getSlotCalendario(slotId);
+  return info ? info.texto : '';
+}
+
+
