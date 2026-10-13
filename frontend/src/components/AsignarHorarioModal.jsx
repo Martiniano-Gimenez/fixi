@@ -432,56 +432,74 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             {cruceTexto}
           </div>
 
-          {partido.fechaHora && (
-            <div
-              style={{
-                marginTop: '0.45rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                fontSize: '11.5px',
-                color: 'var(--color-text-secondary)',
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid var(--color-border)',
-                padding: '0.25rem 0.6rem',
-                borderRadius: 'var(--radius-sm)',
-              }}
-            >
-              <Clock size={12} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-              <span>
-                <strong style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Actualmente:</strong>{' '}
-                <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>
-                  {formatDiaHorario(partido.fechaHora)}
-                  {partido.canchaNumero ? ` · Cancha ${partido.canchaNumero}` : ''}
-                </span>
-              </span>
-            </div>
-          )}
-
-          {!esPartidoEliminatoria && !esSinParejasDefinidas && (
-            slotsEnComunOriginales.length > 0 && slotsEnComunDisponibles.length === 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 0.75rem', marginTop: '0.5rem', alignItems: 'center' }}>
+            {partido.fechaHora && (
               <div
                 style={{
-                  marginTop: '0.35rem',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '0.35rem',
-                  fontSize: '11px',
-                  color: 'var(--color-warning)',
-                  background: 'rgba(245, 158, 11, 0.08)',
-                  padding: '0.2rem 0.5rem',
+                  gap: '0.4rem',
+                  fontSize: '11.5px',
+                  color: 'var(--color-text-secondary)',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid var(--color-border)',
+                  padding: '0.25rem 0.6rem',
                   borderRadius: 'var(--radius-sm)',
-                  border: '1px solid rgba(245, 158, 11, 0.25)',
                 }}
-                title="Coincidían en disponibilidad pero las canchas están 100% ocupadas en esos turnos"
               >
-                <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-                <span>Coincidían en {slotsEnComunOriginales.length} {slotsEnComunOriginales.length === 1 ? 'turno' : 'turnos'} pero sin canchas libres</span>
+                <Clock size={12} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                <span>
+                  <strong style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Actualmente:</strong>{' '}
+                  <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>
+                    {formatDiaHorario(partido.fechaHora)}
+                  </span>
+                </span>
               </div>
-            ) : slotsEnComunOriginales.length === 0 ? (
+            )}
+
+            {!esPartidoEliminatoria && !esSinParejasDefinidas && (
+              slotsEnComunOriginales.length > 0 && slotsEnComunDisponibles.length === 0 ? (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontSize: '11px',
+                    color: 'var(--color-warning)',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                  }}
+                  title="Coincidían en disponibilidad pero las canchas están 100% ocupadas en esos turnos"
+                >
+                  <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                  <span>Coincidían en {slotsEnComunOriginales.length} {slotsEnComunOriginales.length === 1 ? 'turno' : 'turnos'} pero sin canchas libres</span>
+                </div>
+              ) : slotsEnComunOriginales.length === 0 ? (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontSize: '11px',
+                    color: 'var(--color-text-secondary)',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                  }}
+                  title="Ambas parejas no tienen ninguna ventana horaria en común declarada"
+                >
+                  <Users size={12} style={{ flexShrink: 0 }} />
+                  <span>Sin coincidencia horaria directa</span>
+                </div>
+              ) : null
+            )}
+
+            {esSinParejasDefinidas && (
               <div
                 style={{
-                  marginTop: '0.35rem',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '0.35rem',
@@ -492,33 +510,12 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--color-border)',
                 }}
-                title="Ambas parejas no tienen ninguna ventana horaria en común declarada"
               >
-                <Users size={12} style={{ flexShrink: 0 }} />
-                <span>Sin coincidencia horaria directa</span>
+                <Clock size={12} style={{ flexShrink: 0 }} />
+                <span>Cruce pendiente de resultados previos. Podés fijar o cambiar su horario y cancha anticipadamente.</span>
               </div>
-            ) : null
-          )}
-
-          {esSinParejasDefinidas && (
-            <div
-              style={{
-                marginTop: '0.35rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                fontSize: '11px',
-                color: 'var(--color-text-secondary)',
-                background: 'rgba(255, 255, 255, 0.04)',
-                padding: '0.2rem 0.5rem',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--color-border)',
-              }}
-            >
-              <Clock size={12} style={{ flexShrink: 0 }} />
-              <span>Cruce pendiente de resultados previos. Podés fijar o cambiar su horario y cancha anticipadamente.</span>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {error && (
