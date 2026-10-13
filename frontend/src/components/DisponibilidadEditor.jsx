@@ -412,27 +412,7 @@ export default function DisponibilidadEditor({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {isControlled ? (
             <div>
-              {totalSlotsSeleccionados === 0 ? (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.65rem 0.85rem',
-                    background: 'rgba(0, 208, 132, 0.08)',
-                    border: '1px solid rgba(0, 208, 132, 0.25)',
-                    borderRadius: 'var(--border-radius-sm)',
-                    color: 'var(--color-text)',
-                    fontSize: 'var(--font-size-xs)',
-                    lineHeight: 1.4,
-                  }}
-                >
-                  <Info size={16} strokeWidth={2} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                  <span>
-                    <strong>Sin restricciones:</strong> la pareja se considerará disponible en cualquier horario.
-                  </span>
-                </div>
-              ) : (
+              {totalSlotsSeleccionados > 0 && (
                 <div
                   style={{
                     display: 'flex',
