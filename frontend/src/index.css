@@ -1057,31 +1057,25 @@ ul, ol {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    gap: 0.4rem;
-    padding-left: 1.85rem;
-    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding-left: 0;
+    flex-wrap: nowrap;
   }
 
   .pareja-chips-fila1 {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    flex-wrap: wrap;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
     flex-shrink: 0;
   }
 
   .pareja-chips-fila2 {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
     margin-left: auto;
     flex-shrink: 0;
-  }
-}
-
-@media (max-width: 360px) {
-  .pareja-chips-wrap {
-    padding-left: 0;
   }
 }
 

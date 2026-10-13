@@ -303,14 +303,14 @@ export function minutosCronologicosJornada(hora) {
 export function formatHorasDisponibles(cantSlots) {
   const totalMin = (cantSlots || 0) * 15;
   if (totalMin < 60) {
-    return `${totalMin} min`;
+    return `${totalMin}m`;
   }
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
   if (m === 0) {
-    return `${h} h`;
+    return `${h}h`;
   }
-  return `${h} h ${m} min`;
+  return `${h}h ${m}m`;
 }
 
 /**

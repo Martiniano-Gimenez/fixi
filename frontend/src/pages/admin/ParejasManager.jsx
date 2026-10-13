@@ -342,7 +342,7 @@ export default function ParejasManager() {
             let titleDisponibilidad = '';
 
             if (cantSlots === 0) {
-              textoDisponibilidad = isBorrador ? 'Sin cargar' : 'Sin restricción';
+              textoDisponibilidad = isBorrador ? 'Sin cargar' : 'Libre';
               titleDisponibilidad = isBorrador
                 ? 'Sin disponibilidad cargada (clic para configurar)'
                 : 'Sin restricción de horario (disponible para todo el torneo)';
