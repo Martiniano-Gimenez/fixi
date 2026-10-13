@@ -1819,14 +1819,17 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     throw error;
   }
 
-  let cleanSlotIds = [];
-  if (slotIds !== undefined && slotIds !== null) {
-    if (!Array.isArray(slotIds)) {
-      const error = new Error('slotIds debe ser un array de identificadores de horario.');
-      error.statusCode = 400;
-      throw error;
-    }
-    cleanSlotIds = [...new Set(slotIds)];
+  if (!slotIds || !Array.isArray(slotIds) || slotIds.length === 0) {
+    const error = new Error('La disponibilidad horaria de la pareja es obligatoria.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let cleanSlotIds = [...new Set(slotIds)];
+  if (cleanSlotIds.length === 0) {
+    const error = new Error('La disponibilidad horaria de la pareja es obligatoria.');
+    error.statusCode = 400;
+    throw error;
   }
 
   // 1. Validaciones previas

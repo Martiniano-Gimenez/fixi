@@ -157,8 +157,8 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!jugador1.trim() || !jugador2.trim() || !zonaDestinoId) {
-      setError('Completá los nombres de ambos jugadores y seleccioná la zona destino.');
+    if (!jugador1.trim() || !jugador2.trim() || !zonaDestinoId || !slotIds || slotIds.length === 0) {
+      setError('Completá los nombres de ambos jugadores, la zona destino y seleccioná al menos un horario.');
       return;
     }
 
@@ -170,7 +170,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
         zonaDestinoId,
         jugador1: jugador1.trim(),
         jugador2: jugador2.trim(),
-        slotIds: slotIds && slotIds.length > 0 ? slotIds : [],
+        slotIds,
       });
 
       if (onSuccess) {
@@ -362,12 +362,12 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
               </select>
             </div>
 
-            {/* Paso 3: Disponibilidad Horaria (opcional) */}
+            {/* Paso 3: Disponibilidad Horaria */}
             <div>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: '0.45rem' }}>
                 <StepBadge number={3} status={paso3Status} />
                 <span style={{ color: paso3Status === 'active' ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>
-                  Disponibilidad Horaria (opcional)
+                  Disponibilidad Horaria
                 </span>
               </label>
               <div
@@ -382,6 +382,9 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
                   value={slotIds}
                   onChange={setSlotIds}
                 />
+              </div>
+              <div style={{ marginTop: '0.4rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                Marcá al menos un horario. Si puede jugar cualquier día y hora, usá «Día completo».
               </div>
             </div>
 
@@ -403,7 +406,9 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
                   <span>Impacto de la incorporación:</span>
                 </div>
                 <div>• <strong>{jugador1.trim()} / {jugador2.trim()}</strong> ingresará como nueva pareja en <strong>{zonaDestinoSeleccionada.nombre}</strong> (pasará a tener {zonaDestinoSeleccionada.parejasCount + 1} parejas).</div>
-                <div>• Disponibilidad: {slotIds.length > 0 ? <strong>{slotIds.length} turnos seleccionados</strong> : <span>Sin restricciones (disponible en cualquier horario)</span>}.</div>
+                {slotIds.length > 0 && (
+                  <div>• Disponibilidad: <strong>{slotIds.length} turnos seleccionados</strong>.</div>
+                )}
                 <div>• Se regenerarán únicamente los partidos de esta zona y se programarán automáticamente sus horarios sin modificar otras zonas ni el cuadro eliminatorio.</div>
               </div>
             )}
@@ -436,7 +441,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
           <button
             type="submit"
             className="btn-primary"
-            disabled={!jugador1.trim() || !jugador2.trim() || !zonaDestinoId || loading}
+            disabled={!jugador1.trim() || !jugador2.trim() || !zonaDestinoId || !slotIds || slotIds.length === 0 || loading}
             style={{
               minHeight: '38px',
               padding: '0.5rem 1.15rem',

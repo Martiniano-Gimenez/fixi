@@ -320,7 +320,7 @@ export default function DisponibilidadEditor({
                     onClick={handleLimpiarTodoControlled}
                     style={{ fontSize: '11px', cursor: 'pointer', background: 'none', border: 'none' }}
                   >
-                    Quitar restricciones
+                    Limpiar horarios
                   </button>
                 </div>
               )}

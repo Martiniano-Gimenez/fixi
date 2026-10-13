@@ -100,32 +100,45 @@ async function testAltaTardiaFlujo() {
 
     await zonaService.regenerarPartidosZona(prisma, cat.id, zona1.id);
 
-    // Agregar pareja tardía sin slots
-    const resSinSlots = await zonaService.agregarParejaAZona(org.id, cat.id, {
-      zonaDestinoId: zona1.id,
-      jugador1: 'Tardío Juan',
-      jugador2: 'Tardío Pedro',
-      slotIds: [],
-    });
-
-    const parejaTardiaSinSlots = resSinSlots.pareja;
-    console.log(`✓ Pareja agregada sin slots: "${parejaTardiaSinSlots.jugador1} / ${parejaTardiaSinSlots.jugador2}"`);
-
-    const slotsCountSin = await prisma.slotPareja.count({
-      where: { parejaId: parejaTardiaSinSlots.id },
-    });
-    if (slotsCountSin !== 0) {
-      throw new Error(`Se esperaban 0 slots en DB para alta sin slots, pero se encontraron ${slotsCountSin}.`);
+    // --- SECCIÓN 1: Rechazo de alta sin slots (HTTP 400) ---
+    console.log('\n--- 1. Probando rechazo de alta tardía sin slots (HTTP 400) ---');
+    let errorSinSlotsCapturado = false;
+    try {
+      await zonaService.agregarParejaAZona(org.id, cat.id, {
+        zonaDestinoId: zona1.id,
+        jugador1: 'Tardío Juan',
+        jugador2: 'Tardío Pedro',
+        slotIds: [],
+      });
+    } catch (err) {
+      if (err.statusCode === 400 && err.message.includes('obligatoria')) {
+        errorSinSlotsCapturado = true;
+        console.log(`✓ Alta tardía con slotIds vacíos rechazada con 400: "${err.message}"`);
+      } else {
+        throw err;
+      }
     }
-    console.log('✓ Confirmado: 0 slots persistidos en DB.');
+    if (!errorSinSlotsCapturado) {
+      throw new Error('[FALLO] Se esperaba que alta tardía con slotIds vacíos fuera rechazada con 400.');
+    }
 
-    // Verificar partidos generados
-    const partidosZona1 = await prisma.partido.findMany({
-      where: { zonaId: zona1.id },
-    });
-    console.log(`✓ Partidos en Zona A post-incorporación: ${partidosZona1.length}`);
-    if (partidosZona1.length !== 3) {
-      throw new Error(`Se esperaban 3 partidos para zona de 3, pero hay ${partidosZona1.length}.`);
+    let errorAusenteCapturado = false;
+    try {
+      await zonaService.agregarParejaAZona(org.id, cat.id, {
+        zonaDestinoId: zona1.id,
+        jugador1: 'Tardío Juan',
+        jugador2: 'Tardío Pedro',
+      });
+    } catch (err) {
+      if (err.statusCode === 400 && err.message.includes('obligatoria')) {
+        errorAusenteCapturado = true;
+        console.log(`✓ Alta tardía con slotIds ausente rechazada con 400: "${err.message}"`);
+      } else {
+        throw err;
+      }
+    }
+    if (!errorAusenteCapturado) {
+      throw new Error('[FALLO] Se esperaba que alta tardía con slotIds ausente fuera rechazada con 400.');
     }
 
     // --- SECCIÓN 2: Validaciones de slot inválido → 400 ---

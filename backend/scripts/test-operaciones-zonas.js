@@ -19,6 +19,7 @@ const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../src/config/env');
 const { generarPartidosZonaHelper, asignarHorariosAutomatico } = require('../src/services/zona.service');
+const { getSlotsValidosSet } = require('../src/services/slots.service');
 
 const prisma = new PrismaClient();
 let BASE_URL = null;
@@ -101,6 +102,7 @@ async function runTests() {
     createdIds.organizadorId = org.id;
 
     token = jwt.sign({ id: org.id, email: org.email }, JWT_SECRET, { expiresIn: '2h' });
+    const clubSlots = Array.from(getSlotsValidosSet(org));
 
     // Torneo y Categoría en estado EN_CURSO
     const torneo = await prisma.torneo.create({
@@ -344,6 +346,7 @@ async function runTests() {
         zonaDestinoId: zonaA.id,
         jugador1: 'Martín Giménez',
         jugador2: 'Lucas Silva',
+        slotIds: clubSlots,
       }),
     });
 
@@ -447,6 +450,7 @@ async function runTests() {
         zonaDestinoId: zonaA.id,
         jugador1: 'Juan Ponce',
         jugador2: 'Pedro Leone',
+        slotIds: clubSlots,
       }),
     });
     const errAgregar1 = await resAgregarBloqueado1.json();
@@ -498,6 +502,7 @@ async function runTests() {
         zonaDestinoId: zonaB.id,
         jugador1: 'Claudio',
         jugador2: 'Marcos',
+        slotIds: clubSlots,
       }),
     });
     const errAgregar5ta = await resAgregar5ta.json();
