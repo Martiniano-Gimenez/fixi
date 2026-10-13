@@ -1826,11 +1826,6 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
   }
 
   let cleanSlotIds = [...new Set(slotIds)];
-  if (cleanSlotIds.length === 0) {
-    const error = new Error('La disponibilidad horaria de la pareja es obligatoria.');
-    error.statusCode = 400;
-    throw error;
-  }
 
   // 1. Validaciones previas
   const categoria = await getCategoriaById(organizadorId, categoriaId);

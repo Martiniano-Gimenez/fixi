@@ -295,36 +295,34 @@ export default function DisponibilidadEditor({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {isControlled ? (
-            <div>
-              {totalSlotsSeleccionados > 0 && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.55rem 0.85rem',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--border-radius-sm)',
-                    color: 'var(--color-text)',
-                    fontSize: 'var(--font-size-xs)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Check size={14} style={{ color: 'var(--color-primary)' }} />
-                    <span>Restricción horaria: <strong>{totalSlotsSeleccionados} turnos</strong> seleccionados</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-link-action text-danger"
-                    onClick={handleLimpiarTodoControlled}
-                    style={{ fontSize: '11px', cursor: 'pointer', background: 'none', border: 'none' }}
-                  >
-                    Limpiar horarios
-                  </button>
+            totalSlotsSeleccionados > 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.55rem 0.85rem',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--border-radius-sm)',
+                  color: 'var(--color-text)',
+                  fontSize: 'var(--font-size-xs)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Check size={14} style={{ color: 'var(--color-primary)' }} />
+                  <span>Restricción horaria: <strong>{totalSlotsSeleccionados} turnos</strong> seleccionados</span>
                 </div>
-              )}
-            </div>
+                <button
+                  type="button"
+                  className="btn-link-action text-danger"
+                  onClick={handleLimpiarTodoControlled}
+                  style={{ fontSize: '11px', cursor: 'pointer', background: 'none', border: 'none' }}
+                >
+                  Limpiar horarios
+                </button>
+              </div>
+            ) : null
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
               <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)', margin: 0 }}>
