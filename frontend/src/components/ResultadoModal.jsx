@@ -66,29 +66,38 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
     newSets[index][field] = finalVal;
     setSetsInput(newSets);
 
-    // Foco automático: al completar el segundo campo de un set (field === 'g2' no vacío con g1 también cargado)
-    if (field === 'g2' && finalVal !== '' && newSets[index].g1 !== '') {
+    const esSetValido = validarSet(newSets[index].g1, newSets[index].g2, index + 1) === null;
+
+    // Foco automático: solo salta cuando el segundo campo recién completado deja el set con un marcador válido por validarSet
+    if (field === 'g2' && esSetValido) {
       if (index === 0) {
         setTimeout(() => {
-          inputRefs.current['1-g1']?.focus();
-        }, 10);
+          const nextInput = inputRefs.current['1-g1'];
+          if (nextInput && !nextInput.disabled) {
+            nextInput.focus();
+            nextInput.select();
+          }
+        }, 30);
       } else if (index === 1) {
-        const s1g1 = parseInt(newSets[0].g1, 10);
-        const s1g2 = parseInt(newSets[0].g2, 10);
-        const s2g1 = parseInt(newSets[1].g1, 10);
-        const s2g2 = parseInt(finalVal, 10);
-        let set3Bloqueado = false;
-        if (!isNaN(s1g1) && !isNaN(s1g2) && !isNaN(s2g1) && !isNaN(s2g2)) {
+        const s1Valido = validarSet(newSets[0].g1, newSets[0].g2, 1) === null;
+        if (s1Valido) {
+          const s1g1 = parseInt(newSets[0].g1, 10);
+          const s1g2 = parseInt(newSets[0].g2, 10);
+          const s2g1 = parseInt(newSets[1].g1, 10);
+          const s2g2 = parseInt(newSets[1].g2, 10);
           const w1 = s1g1 > s1g2 ? 1 : (s1g2 > s1g1 ? 2 : null);
           const w2 = s2g1 > s2g2 ? 1 : (s2g2 > s2g1 ? 2 : null);
-          if (w1 && w2 && w1 === w2) {
-            set3Bloqueado = true;
+          const isSet3Bloqueado = Boolean(w1 && w2 && w1 === w2);
+
+          if (!isSet3Bloqueado) {
+            setTimeout(() => {
+              const nextInput = inputRefs.current['2-g1'];
+              if (nextInput && !nextInput.disabled) {
+                nextInput.focus();
+                nextInput.select();
+              }
+            }, 30);
           }
-        }
-        if (!set3Bloqueado) {
-          setTimeout(() => {
-            inputRefs.current['2-g1']?.focus();
-          }, 10);
         }
       }
     }
