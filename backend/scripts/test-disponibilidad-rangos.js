@@ -73,6 +73,24 @@ async function main() {
   assert.strictEqual(areSlotArraysEqual(s3, s3_rec), true, 'Slots de ambos rangos deben coincidir');
   console.log('  ✓ Dos rangos con separación de 2 turnos se conservan separados sin puentes artificiales.');
 
+  // --- Caso 3b: Dos rangos con hueco de 2 turnos y rango final de 1 solo turno (no se fusionan ni se expanden) ---
+  console.log('\n--- 3b. Dos rangos con hueco de 2 turnos y rango final de 1 solo turno ---');
+  // Rango 1: 2..5 (slots 2, 3, 4, 5). Hueco de 2 turnos (slots 6 y 7 libres). Rango 2: 8..8 (1 solo turno)
+  const r3b = [
+    { startIdx: 2, endIdx: 5 },
+    { startIdx: 8, endIdx: 8 },
+  ];
+  const s3b = rangosASlots(r3b, grillaViernes);
+  const rec3b = reconstruirRangos(s3b, grillaViernes, 'Viernes');
+  assert.strictEqual(rec3b.length, 2, 'Los dos rangos NO deben fusionarse');
+  assert.strictEqual(rec3b[0].startIdx, 2, 'Rango 1 startIdx debe ser 2');
+  assert.strictEqual(rec3b[0].endIdx, 5, 'Rango 1 endIdx debe ser 5');
+  assert.strictEqual(rec3b[1].startIdx, 8, 'Rango 2 startIdx debe ser 8');
+  assert.strictEqual(rec3b[1].endIdx, 8, 'Rango 2 endIdx debe ser exactamente 8 (no debe expandirse)');
+  const s3b_rec = rangosASlots(rec3b, grillaViernes);
+  assert.strictEqual(areSlotArraysEqual(s3b, s3b_rec), true, 'Slots generados antes y después de la reconstrucción deben ser idénticos');
+  console.log('  ✓ Dos rangos con rango final de 1 solo turno no se fusionan ni se expanden.');
+
   // --- Caso 4: Mover un extremo un paso cambia el slot final exactamente en uno ---
   console.log('\n--- 4. Mover un extremo un paso cambia exactamente en uno ---');
   // Incrementar 1 paso: de 32 a 33

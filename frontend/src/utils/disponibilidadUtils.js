@@ -37,14 +37,21 @@ export function reconstruirRangos(slotsGuardados, slotsDisponiblesDia, dia) {
 
   if (indicesGuardados.size === 0) return [];
 
-  // Expandir SOLO slots aislados (formato legado de 75 min).
-  // Si un slot tiene vecinos contiguos (idx - 1 o idx + 1), ya es parte de un rango continuo
-  // de 15 min y NO se expande hacia adelante para evitar inflar el final del rango.
+  // Detectar si el día contiene turnos contiguos (formato moderno de rangos).
+  // Si ya existen turnos contiguos en el día, los rangos son la fuente de verdad y ningún slot debe expandirse.
+  // Solo se expande si TODOS los slots del día están aislados (formato legado donde cada slot representaba 75 min).
+  let tieneContiguosEnElDia = false;
+  for (const idx of indicesGuardados) {
+    if (indicesGuardados.has(idx + 1)) {
+      tieneContiguosEnElDia = true;
+      break;
+    }
+  }
+
   const indicesExpandidos = new Set();
   for (const idx of indicesGuardados) {
     indicesExpandidos.add(idx);
-    const tieneVecino = indicesGuardados.has(idx - 1) || indicesGuardados.has(idx + 1);
-    if (!tieneVecino) {
+    if (!tieneContiguosEnElDia) {
       for (let offset = 1; offset <= 4; offset++) {
         const targetIdx = idx + offset;
         if (targetIdx < slotsDisponiblesDia.length) {

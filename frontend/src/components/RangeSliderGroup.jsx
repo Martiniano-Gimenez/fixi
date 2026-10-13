@@ -1,4 +1,4 @@
-import { Calendar, Plus, Check, X, RotateCcw } from 'lucide-react';
+import { Calendar, Plus } from 'lucide-react';
 import RangeSliderDia from './RangeSliderDia';
 
 function horaAMinutos(hora) {
