@@ -179,14 +179,14 @@ export default function MoverParejaModal({ isOpen, onClose, categoriaId, zonas =
     setError('');
 
     try {
-      await api.post(`/categorias/${categoriaId}/zonas/mover-pareja`, {
+      const res = await api.post(`/categorias/${categoriaId}/zonas/mover-pareja`, {
         parejaId,
         zonaOrigenId,
         zonaDestinoId,
       });
 
       if (onSuccess) {
-        onSuccess('Pareja reubicada correctamente. Los partidos y horarios fueron actualizados.');
+        onSuccess('Pareja reubicada correctamente. Los partidos y horarios fueron actualizados.', res);
       }
       onClose();
     } catch (err) {

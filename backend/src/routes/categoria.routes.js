@@ -32,6 +32,12 @@ router.post('/:id/zonas/agregar-pareja', zonaController.agregarPareja);
 router.post('/:id/generar-eliminatoria', faseEliminatoriaController.generarEliminatoria);
 router.get('/:id/fases-eliminatorias', faseEliminatoriaController.getFasesEliminatorias);
 router.delete('/:id/fases-eliminatorias', faseEliminatoriaController.deleteFasesEliminatorias);
+router.get('/:id/cuadro-estado', faseEliminatoriaController.getEstadoCuadro);
+router.post('/:id/sincronizar-cuadro', faseEliminatoriaController.sincronizarCuadro);
+router.get('/:id/sincronizar-cuadro', (req, res, next) => {
+  req.query.simular = 'true';
+  return faseEliminatoriaController.sincronizarCuadro(req, res, next);
+});
 
 // Partidos de la categoría
 router.get('/:id/partidos', partidoController.getPartidosByCategoria);

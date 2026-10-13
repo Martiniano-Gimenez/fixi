@@ -1715,6 +1715,29 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
     throw error;
   }
 
+  const countOrigenActual = zonaOrigen.zonaParejas.length;
+  const countDestinoActual = zonaDestino.zonaParejas.length;
+  const clasificanOrigenNuevo = (countOrigenActual - 1) === 4 ? 3 : 2;
+  const clasificanDestinoNuevo = (countDestinoActual + 1) === 4 ? 3 : 2;
+  const cambiaClasifican =
+    clasificanOrigenNuevo !== zonaOrigen.clasifican ||
+    clasificanDestinoNuevo !== zonaDestino.clasifican;
+
+  if (cambiaClasifican) {
+    const partidosEliminatoriaJugados = await prisma.partido.count({
+      where: {
+        categoriaId,
+        faseEliminatoriaId: { not: null },
+        estado: { not: 'PENDIENTE' },
+      },
+    });
+    if (partidosEliminatoriaJugados > 0) {
+      const error = new Error('No se puede modificar la zona porque cambiaría los clasificados y el cuadro eliminatorio ya está en juego.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
   // 2. Transacción atómica
   return await prisma.$transaction(async (tx) => {
     // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
@@ -1726,6 +1749,21 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
       const error = new Error('La categoría o el torneo ya no se encuentran en estado EN_CURSO.');
       error.statusCode = 400;
       throw error;
+    }
+
+    if (cambiaClasifican) {
+      const partidosEliminatoriaJugadosTx = await tx.partido.count({
+        where: {
+          categoriaId,
+          faseEliminatoriaId: { not: null },
+          estado: { not: 'PENDIENTE' },
+        },
+      });
+      if (partidosEliminatoriaJugadosTx > 0) {
+        const error = new Error('No se puede modificar la zona porque cambiaría los clasificados y el cuadro eliminatorio ya está en juego.');
+        error.statusCode = 400;
+        throw error;
+      }
     }
 
     const partidosNoPendientes = await tx.partido.findMany({
@@ -1790,12 +1828,22 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
     // Asignar horarios a los partidos nuevos dentro de la transacción externa
     await asignarHorariosAutomatico(organizadorId, [categoriaId], tx);
 
+    let cuadroDesactualizado = false;
+    try {
+      const { estadoCuadro } = require('./faseEliminatoria.service');
+      const est = await estadoCuadro(categoriaId, tx);
+      cuadroDesactualizado = est.desactualizado;
+    } catch (_) {
+      cuadroDesactualizado = cambiaClasifican;
+    }
+
     return {
       message: 'Pareja movida de zona correctamente.',
       categoriaId,
       zonaOrigenId,
       zonaDestinoId,
       parejaId,
+      cuadroDesactualizado,
     };
   });
 }
@@ -1893,6 +1941,26 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     throw error;
   }
 
+  const countDestinoActual = zonaDestino.zonaParejas.length;
+  const countDestinoNuevo = countDestinoActual + 1;
+  const clasificanDestinoNuevo = countDestinoNuevo === 4 ? 3 : 2;
+  const cambiaClasifican = clasificanDestinoNuevo !== zonaDestino.clasifican;
+
+  if (cambiaClasifican) {
+    const partidosEliminatoriaJugados = await prisma.partido.count({
+      where: {
+        categoriaId,
+        faseEliminatoriaId: { not: null },
+        estado: { not: 'PENDIENTE' },
+      },
+    });
+    if (partidosEliminatoriaJugados > 0) {
+      const error = new Error('No se puede modificar la zona porque cambiaría los clasificados y el cuadro eliminatorio ya está en juego.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
   // 2. Transacción atómica
   return await prisma.$transaction(async (tx) => {
     // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
@@ -1904,6 +1972,21 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
       const error = new Error('La categoría o el torneo ya no se encuentran en estado EN_CURSO.');
       error.statusCode = 400;
       throw error;
+    }
+
+    if (cambiaClasifican) {
+      const partidosEliminatoriaJugadosTx = await tx.partido.count({
+        where: {
+          categoriaId,
+          faseEliminatoriaId: { not: null },
+          estado: { not: 'PENDIENTE' },
+        },
+      });
+      if (partidosEliminatoriaJugadosTx > 0) {
+        const error = new Error('No se puede modificar la zona porque cambiaría los clasificados y el cuadro eliminatorio ya está en juego.');
+        error.statusCode = 400;
+        throw error;
+      }
     }
 
     const partidosNoPendientes = await tx.partido.findMany({
@@ -1973,11 +2056,21 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
       include: { slotsSeleccionados: true },
     });
 
+    let cuadroDesactualizado = false;
+    try {
+      const { estadoCuadro } = require('./faseEliminatoria.service');
+      const est = await estadoCuadro(categoriaId, tx);
+      cuadroDesactualizado = est.desactualizado;
+    } catch (_) {
+      cuadroDesactualizado = cambiaClasifican;
+    }
+
     return {
       message: 'Pareja agregada a la zona correctamente.',
       categoriaId,
       zonaDestinoId,
       pareja: parejaConSlots || nuevaPareja,
+      cuadroDesactualizado,
     };
   });
 }

@@ -166,7 +166,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
     setError('');
 
     try {
-      await api.post(`/categorias/${categoriaId}/zonas/agregar-pareja`, {
+      const res = await api.post(`/categorias/${categoriaId}/zonas/agregar-pareja`, {
         zonaDestinoId,
         jugador1: jugador1.trim(),
         jugador2: jugador2.trim(),
@@ -174,7 +174,10 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
       });
 
       if (onSuccess) {
-        onSuccess(`Pareja ${jugador1.trim()} / ${jugador2.trim()} agregada a ${zonaDestinoSeleccionada?.nombre || 'la zona'}. Partidos y horarios actualizados.`);
+        onSuccess(
+          `Pareja ${jugador1.trim()} / ${jugador2.trim()} agregada a ${zonaDestinoSeleccionada?.nombre || 'la zona'}. Partidos y horarios actualizados.`,
+          res
+        );
       }
       onClose();
     } catch (err) {

@@ -42,6 +42,7 @@ const TEST_SUITES = [
   'test-precheck-snapshot.js',
   'test-scheduler-backfill-regression.js',
   'test-scheduling-domingo.js',
+  'test-sincronizar-cuadro.js',
   'test-torneo-fecha-guard.js',
   'test-zona-horaria.js',
   'test-zona-horaria-frontend-parity.js',

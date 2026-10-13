@@ -41,12 +41,14 @@ function nombreRonda(ronda) {
  * Generar eliminatoria: obtener clasificadas y crear bracket por categoría
  * @param {string} organizadorId - ID del organizador
  * @param {string} categoriaId - ID de la categoría
+ * @param {object|null} [externalTx] - Transacción externa opcional
  */
-async function generarEliminatoria(organizadorId, categoriaId) {
-  await getCategoriaById(organizadorId, categoriaId);
+async function generarEliminatoria(organizadorId, categoriaId, externalTx = null) {
+  const db = externalTx || prisma;
+  await getCategoriaById(organizadorId, categoriaId, externalTx);
 
   // 0. Verificar si todos los partidos de las zonas están finalizados
-  const partidosPendientes = await prisma.partido.count({
+  const partidosPendientes = await db.partido.count({
     where: {
       categoriaId,
       zonaId: { not: null },
@@ -57,12 +59,15 @@ async function generarEliminatoria(organizadorId, categoriaId) {
   const gruposFinalizados = partidosPendientes === 0;
 
   // 1. Obtener zonas de la categoría
-  const zonas = await prisma.zona.findMany({
+  const zonas = await db.zona.findMany({
     where: { categoriaId },
     orderBy: { nombre: 'asc' },
     include: {
       zonaParejas: {
         include: { pareja: true },
+      },
+      partidos: {
+        select: { estado: true },
       },
     },
   });
@@ -82,11 +87,14 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     const ordenadas = ordenarZonaParejas(zona.zonaParejas, zona.formato);
     const topZona = ordenadas.slice(0, zona.clasifican);
     
+    // Una zona individual está finalizada si tiene partidos y todos están FINALIZADO
+    const zonaFinalizada = Array.isArray(zona.partidos) && zona.partidos.length > 0 && zona.partidos.every((p) => p.estado === 'FINALIZADO');
+
     for (let index = 0; index < zona.clasifican; index++) {
       let parejaId = null;
       let pareja = null;
       
-      if (gruposFinalizados && topZona[index]) {
+      if ((gruposFinalizados || zonaFinalizada) && topZona[index]) {
         parejaId = topZona[index].parejaId;
         pareja = topZona[index].pareja;
       }
@@ -113,7 +121,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
   }
 
   // 2.5. Si existen fases eliminatorias viejas, POBLAMOS el bracket en lugar de borrarlo
-  const faseViejas = await prisma.faseEliminatoria.findMany({
+  const faseViejas = await db.faseEliminatoria.findMany({
     where: { categoriaId },
   });
   
@@ -125,7 +133,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     const fasePrimeraRonda = faseViejas.find(f => f.ronda === primeraRondaNum);
     const esDieciseisavos = primeraRondaNum >= 32;
     
-    const partidosPrimeraRonda = await prisma.partido.findMany({ 
+    const partidosPrimeraRonda = await db.partido.findMany({ 
       where: { faseEliminatoriaId: fasePrimeraRonda.id },
       orderBy: { posicionEnRonda: 'asc' },
     });
@@ -177,7 +185,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
       }
 
       if (Object.keys(updateData).length > 0) {
-        await prisma.partido.update({ 
+        await db.partido.update({ 
           where: { id: partido.id }, 
           data: updateData 
         });
@@ -186,7 +194,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
         if (updateData.ganadorId) {
           const { propagarEliminatoria } = require('./partido.service');
           const updatedPartido = { ...partido, ...updateData };
-          await propagarEliminatoria(updatedPartido, updateData.ganadorId);
+          await propagarEliminatoria(updatedPartido, updateData.ganadorId, db);
         }
       }
     }
@@ -219,7 +227,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
   // 4. Crear FaseEliminatoria para cada ronda
   const fases = {};
   for (const ronda of rondas) {
-    const fase = await prisma.faseEliminatoria.create({
+    const fase = await db.faseEliminatoria.create({
       data: {
         categoriaId,
         nombre: nombreRonda(ronda),
@@ -338,13 +346,13 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     let estado = 'PENDIENTE';
     let ganadorId = null;
 
-    if (isBye && gruposFinalizados) {
+    if (isBye && (gruposFinalizados || (p1?.parejaId || p2?.parejaId))) {
       estado = 'FINALIZADO';
-      if (p1) ganadorId = p1.parejaId;
-      if (p2) ganadorId = p2.parejaId;
+      if (p1?.parejaId) ganadorId = p1.parejaId;
+      if (p2?.parejaId) ganadorId = p2.parejaId;
     }
 
-    const partido = await prisma.partido.create({
+    const partido = await db.partido.create({
       data: {
         categoriaId,
         faseEliminatoriaId: fases[primeraRonda],
@@ -370,7 +378,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
     const cantPartidosEnRonda = Math.floor(r / 2);
 
     for (let j = 0; j < cantPartidosEnRonda; j++) {
-      const p = await prisma.partido.create({
+      const p = await db.partido.create({
         data: {
           categoriaId,
           faseEliminatoriaId: fases[r],
@@ -415,7 +423,7 @@ async function generarEliminatoria(organizadorId, categoriaId) {
 
     if (!partidoDestinoId) continue;
 
-    await prisma.partido.update({
+    await db.partido.update({
       where: { id: partidoDestinoId },
       data: esSlotP1
         ? { pareja1Id: parejaAvanza, origenPareja1: origenAvanza }
@@ -467,10 +475,11 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
   });
 }
 
-async function borrarEliminatoria(organizadorId, categoriaId) {
-  await getCategoriaById(organizadorId, categoriaId);
+async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null) {
+  await getCategoriaById(organizadorId, categoriaId, externalTx);
+  const db = externalTx || prisma;
 
-  await prisma.$transaction(async (tx) => {
+  const performDelete = async (tx) => {
     await tx.partido.deleteMany({
       where: {
         categoriaId,
@@ -481,9 +490,246 @@ async function borrarEliminatoria(organizadorId, categoriaId) {
     await tx.faseEliminatoria.deleteMany({
       where: { categoriaId },
     });
-  });
+  };
+
+  if (externalTx) {
+    await performDelete(externalTx);
+  } else {
+    await prisma.$transaction(async (tx) => {
+      await performDelete(tx);
+    });
+  }
 
   return { message: 'Fase eliminatoria borrada exitosamente.' };
+}
+
+function simularSincronizacionHelper(
+  primeraFase,
+  partidosElimActuales,
+  lugaresEnPrimeraRonda,
+  totalClasificadosEsperados,
+  potenciaEsperada
+) {
+  const tamanoActual = primeraFase ? primeraFase.ronda : 0;
+  const tamanoNuevo = potenciaEsperada;
+
+  const rondaActual = tamanoActual ? nombreRonda(tamanoActual) : 'Sin cuadro';
+  const rondaNueva = nombreRonda(tamanoNuevo);
+
+  const byesActuales = tamanoActual ? Math.max(0, tamanoActual - lugaresEnPrimeraRonda) : 0;
+  const byesNuevos = Math.max(0, tamanoNuevo - totalClasificadosEsperados);
+
+  const partidosActuales = partidosElimActuales.length;
+  const partidosNuevos = tamanoNuevo > 1 ? tamanoNuevo - 1 : 0;
+
+  const horariosQueCambian = partidosElimActuales.filter((p) => p.fechaHora !== null).length;
+
+  return {
+    tamanoActual,
+    tamanoNuevo,
+    rondaActual,
+    rondaNueva,
+    rondasTexto: `${rondaActual} → ${rondaNueva}`,
+    totalClasificadosActual: lugaresEnPrimeraRonda,
+    totalClasificadosNuevo: totalClasificadosEsperados,
+    byesActuales,
+    byesNuevos,
+    partidosActuales,
+    partidosNuevos,
+    partidosAEliminar: partidosActuales,
+    partidosACrear: partidosNuevos,
+    horariosQueCambian,
+  };
+}
+
+/**
+ * Evalúa el estado del cuadro eliminatorio con respecto a los clasificados esperados por las zonas.
+ * @param {string} categoriaId - ID de la categoría
+ * @param {object|null} [externalTx] - Transacción externa opcional
+ */
+async function estadoCuadro(categoriaId, externalTx = null) {
+  const db = externalTx || prisma;
+
+  const zonas = await db.zona.findMany({
+    where: { categoriaId },
+    orderBy: { nombre: 'asc' },
+    include: {
+      zonaParejas: true,
+      partidos: { select: { estado: true } },
+    },
+  });
+
+  const totalClasificadosEsperados = zonas.reduce((acc, z) => acc + (z.clasifican || 0), 0);
+
+  const fases = await db.faseEliminatoria.findMany({
+    where: { categoriaId },
+    orderBy: { ronda: 'desc' },
+    include: {
+      partidos: {
+        orderBy: { posicionEnRonda: 'asc' },
+      },
+    },
+  });
+
+  const partidosElim = fases.flatMap((f) => f.partidos);
+  const huboJuegoEliminatoria = partidosElim.some((p) => p.estado !== 'PENDIENTE');
+
+  let lugaresEnPrimeraRonda = 0;
+  const placeholdersActuales = new Set();
+  const primeraFase = fases[0] || null;
+
+  if (primeraFase && primeraFase.partidos) {
+    for (const p of primeraFase.partidos) {
+      if (p.origenPareja1 || p.pareja1Id) {
+        lugaresEnPrimeraRonda++;
+        if (p.origenPareja1) placeholdersActuales.add(p.origenPareja1);
+      }
+      if (p.origenPareja2 || p.pareja2Id) {
+        lugaresEnPrimeraRonda++;
+        if (p.origenPareja2) placeholdersActuales.add(p.origenPareja2);
+      }
+    }
+  }
+
+  const potencias = [2, 4, 8, 16, 32, 64];
+  let potenciaEsperada = 2;
+  for (const p of potencias) {
+    if (p >= totalClasificadosEsperados) {
+      potenciaEsperada = p;
+      break;
+    }
+  }
+
+  const rondaActual = primeraFase ? primeraFase.ronda : 0;
+  const tamanoNoCoincide = rondaActual !== potenciaEsperada;
+
+  let faltanPlaceholders = false;
+  for (const z of zonas) {
+    for (let k = 1; k <= z.clasifican; k++) {
+      const orig = `${k}° ${z.nombre}`;
+      if (!placeholdersActuales.has(orig)) {
+        faltanPlaceholders = true;
+        break;
+      }
+    }
+    if (faltanPlaceholders) break;
+  }
+
+  const desactualizado = fases.length === 0
+    ? totalClasificadosEsperados > 0
+    : (tamanoNoCoincide || faltanPlaceholders || lugaresEnPrimeraRonda !== totalClasificadosEsperados);
+
+  const puedeSincronizar = Boolean(desactualizado && !huboJuegoEliminatoria);
+
+  const simulacion = simularSincronizacionHelper(
+    primeraFase,
+    partidosElim,
+    lugaresEnPrimeraRonda,
+    totalClasificadosEsperados,
+    potenciaEsperada
+  );
+
+  return {
+    totalClasificadosEsperados,
+    lugaresEnPrimeraRonda,
+    desactualizado,
+    huboJuegoEliminatoria,
+    puedeSincronizar,
+    simulacion,
+  };
+}
+
+/**
+ * Sincroniza el cuadro eliminatorio cuando cambiaron los clasificados de las zonas.
+ * @param {string} organizadorId
+ * @param {string} categoriaId
+ * @param {object} [options]
+ * @param {boolean} [options.simular]
+ */
+async function sincronizarCuadro(organizadorId, categoriaId, { simular = false } = {}) {
+  const categoria = await getCategoriaById(organizadorId, categoriaId);
+  const torneo = await prisma.torneo.findUnique({
+    where: { id: categoria.torneoId },
+  });
+
+  if (!torneo || torneo.estado !== 'EN_CURSO' || categoria.estado !== 'EN_CURSO') {
+    const error = new Error('El torneo y la categoría deben estar en estado EN_CURSO para sincronizar el cuadro.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Si es simulación, devolver sin alterar la base de datos
+  if (simular) {
+    const estado = await estadoCuadro(categoriaId);
+    return {
+      simulacion: true,
+      ...estado.simulacion,
+    };
+  }
+
+  // Validar si ya hay partidos eliminatorios jugados
+  const partidosJugados = await prisma.partido.count({
+    where: {
+      categoriaId,
+      faseEliminatoriaId: { not: null },
+      estado: { not: 'PENDIENTE' },
+    },
+  });
+
+  if (partidosJugados > 0) {
+    const error = new Error('No se puede sincronizar el cuadro porque ya hay partidos eliminatorios jugados.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let resultadoGenerar = null;
+  let schedulingResult = null;
+
+  await prisma.$transaction(async (tx) => {
+    const partidosJugadosTx = await tx.partido.count({
+      where: {
+        categoriaId,
+        faseEliminatoriaId: { not: null },
+        estado: { not: 'PENDIENTE' },
+      },
+    });
+    if (partidosJugadosTx > 0) {
+      const error = new Error('No se puede sincronizar el cuadro porque ya hay partidos eliminatorios jugados.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    // 1. Borrar eliminatorias existentes
+    await borrarEliminatoria(organizadorId, categoriaId, tx);
+
+    // 2. Generar eliminatorias nuevas
+    resultadoGenerar = await generarEliminatoria(organizadorId, categoriaId, tx);
+
+    // 3. Programar horarios de eliminatorias
+    const { programarHorariosEliminatorias } = require('./eliminatoriaScheduler.service');
+    try {
+      schedulingResult = await programarHorariosEliminatorias(organizadorId, categoria.torneoId, categoriaId, tx);
+    } catch (errSched) {
+      console.warn(`[sincronizarCuadro] Aviso al programar horarios de eliminatorias:`, errSched.message);
+      schedulingResult = {
+        error: errSched.message,
+        partidosAgendados: 0,
+        partidosSinHorario: 0,
+      };
+    }
+  }, {
+    maxWait: 10000,
+    timeout: 30000,
+  });
+
+  return {
+    message: 'Cuadro eliminatorio sincronizado exitosamente.',
+    categoriaId,
+    primeraRonda: resultadoGenerar?.primeraRonda,
+    totalParejas: resultadoGenerar?.totalParejas,
+    potencia: resultadoGenerar?.potencia,
+    schedulingResult,
+  };
 }
 
 module.exports = {
@@ -492,4 +738,6 @@ module.exports = {
   getFasesEliminatorias,
   borrarEliminatoria,
   esRondaDieciseisavos,
+  estadoCuadro,
+  sincronizarCuadro,
 };

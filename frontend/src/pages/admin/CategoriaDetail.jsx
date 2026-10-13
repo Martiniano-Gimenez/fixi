@@ -9,6 +9,7 @@ import {
   ArrowRightLeft,
   UserPlus,
   CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { estadoLabel } from '../../utils/estadoLabels';
@@ -43,6 +44,7 @@ export default function CategoriaDetail() {
 
   const [categoria, setCategoria] = useState(null);
   const [zonas, setZonas] = useState([]);
+  const [cuadroDesactualizadoAviso, setCuadroDesactualizadoAviso] = useState(false);
   const [partidos, setPartidos] = useState([]);
   const [_fasesEliminatorias, setFasesEliminatorias] = useState([]);
   const [parejas, setParejas] = useState([]);
@@ -168,6 +170,42 @@ export default function CategoriaDetail() {
           <ChevronLeft size={16} /> Volver a {categoria.torneo?.nombre || 'Torneo'}
         </Link>
       </div>
+
+      {cuadroDesactualizadoAviso && (
+        <div
+          style={{
+            background: 'rgba(234, 179, 8, 0.15)',
+            border: '1px solid rgba(234, 179, 8, 0.5)',
+            color: 'var(--color-text, #fff)',
+            padding: '0.85rem 1.25rem',
+            borderRadius: 'var(--radius-md, 8px)',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <AlertTriangle size={18} color="#eab308" />
+            <span>El cuadro eliminatorio quedó desactualizado por el cambio en los clasificados de la zona.</span>
+          </div>
+          <Link
+            to={`/admin/torneos/${torneoId || categoria?.torneoId}/categorias/${id}/eliminatoria`}
+            style={{
+              color: 'var(--color-primary, #00d084)',
+              fontWeight: 600,
+              textDecoration: 'underline',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+            }}
+          >
+            Ir al cuadro para sincronizarlo →
+          </Link>
+        </div>
+      )}
 
       {/* Header de la Categoría */}
       <div className="card" style={{ marginBottom: '1.5rem', background: 'var(--color-surface-elevated)' }}>
@@ -377,8 +415,11 @@ export default function CategoriaDetail() {
         categoriaId={id}
         zonas={zonas}
         partidos={partidos}
-        onSuccess={(msg) => {
+        onSuccess={(msg, res) => {
           fetchData();
+          if (res?.cuadroDesactualizado) {
+            setCuadroDesactualizadoAviso(true);
+          }
           setToastMessage(msg);
           setTimeout(() => setToastMessage(''), 5000);
         }}
@@ -391,8 +432,11 @@ export default function CategoriaDetail() {
         categoriaId={id}
         zonas={zonas}
         partidos={partidos}
-        onSuccess={(msg) => {
+        onSuccess={(msg, res) => {
           fetchData();
+          if (res?.cuadroDesactualizado) {
+            setCuadroDesactualizadoAviso(true);
+          }
           setToastMessage(msg);
           setTimeout(() => setToastMessage(''), 5000);
         }}

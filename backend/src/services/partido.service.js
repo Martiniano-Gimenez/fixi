@@ -364,8 +364,9 @@ async function cargarResultado(organizadorId, partidoId, data) {
  * Cuando se carga el resultado de un partido de fase eliminatoria,
  * busca el partido de la siguiente ronda y asigna el ganador en el slot correcto.
  */
-async function propagarEliminatoria(partido, ganadorId) {
-  const faseActual = await prisma.faseEliminatoria.findUnique({
+async function propagarEliminatoria(partido, ganadorId, externalTx = null) {
+  const db = externalTx || prisma;
+  const faseActual = await db.faseEliminatoria.findUnique({
     where: { id: partido.faseEliminatoriaId },
   });
 
@@ -376,7 +377,7 @@ async function propagarEliminatoria(partido, ganadorId) {
   const siguienteRondaNum = faseActual.ronda / 2;
 
   // Buscar la fase de la siguiente ronda dentro de la misma categoría
-  const faseSiguiente = await prisma.faseEliminatoria.findFirst({
+  const faseSiguiente = await db.faseEliminatoria.findFirst({
     where: {
       categoriaId: partido.categoriaId,
       ronda: siguienteRondaNum,
@@ -390,7 +391,7 @@ async function propagarEliminatoria(partido, ganadorId) {
   const esSlotP1 = posActual % 2 === 1; // impar → pareja1
 
   // Buscar el partido destino en la siguiente ronda
-  const partidoDestino = await prisma.partido.findFirst({
+  const partidoDestino = await db.partido.findFirst({
     where: {
       faseEliminatoriaId: faseSiguiente.id,
       posicionEnRonda: posSiguiente,
@@ -416,7 +417,7 @@ async function propagarEliminatoria(partido, ganadorId) {
     }
   }
 
-  await prisma.partido.update({
+  await db.partido.update({
     where: { id: partidoDestino.id },
     data: esSlotP1
       ? { pareja1Id: parejaGanadoraId, origenPareja1: origenGanador }

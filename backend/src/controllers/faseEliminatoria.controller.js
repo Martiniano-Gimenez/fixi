@@ -65,8 +65,42 @@ async function deleteFasesEliminatorias(req, res, next) {
   }
 }
 
+async function getEstadoCuadro(req, res, next) {
+  try {
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const organizadorId = getOrgId(req);
+
+    await getCategoriaById(organizadorId, categoriaId);
+    const estado = await faseEliminatoriaService.estadoCuadro(categoriaId);
+
+    res.status(200).json(estado);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function sincronizarCuadro(req, res, next) {
+  try {
+    const categoriaId = req.params.categoriaId || req.params.id;
+    const organizadorId = getOrgId(req);
+    const simular = req.query.simular === 'true' || req.body?.simular === true;
+
+    const resultado = await faseEliminatoriaService.sincronizarCuadro(
+      organizadorId,
+      categoriaId,
+      { simular }
+    );
+
+    res.status(200).json(resultado);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   generarEliminatoria,
   getFasesEliminatorias,
   deleteFasesEliminatorias,
+  getEstadoCuadro,
+  sincronizarCuadro,
 };

@@ -18,6 +18,9 @@ export default function EliminatoriaView() {
   const [zonas, setZonas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [estadoCuadro, setEstadoCuadro] = useState(null);
+  const [sincronizarModalOpen, setSincronizarModalOpen] = useState(false);
   const [error, setError] = useState(null);
   const [partidoModal, setPartidoModal] = useState(null);
   const [partidoReprogramar, setPartidoReprogramar] = useState(null);
@@ -32,18 +35,34 @@ export default function EliminatoriaView() {
   async function cargarDatos() {
     try {
       setLoading(true);
-      const [categoriaRes, fasesRes, zonasRes] = await Promise.all([
+      const [categoriaRes, fasesRes, zonasRes, estadoCuadroRes] = await Promise.all([
         api.get(`/categorias/${categoriaId}`),
         api.get(`/categorias/${categoriaId}/fases-eliminatorias`),
         api.get(`/categorias/${categoriaId}/zonas`),
+        api.get(`/categorias/${categoriaId}/cuadro-estado`).catch(() => null),
       ]);
       setCategoria(categoriaRes);
       setFases(fasesRes || []);
       setZonas(zonasRes || []);
+      setEstadoCuadro(estadoCuadroRes);
     } catch (err) {
       setError(err.message || 'Error al cargar la eliminatoria');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleConfirmarSincronizar() {
+    try {
+      setSincronizando(true);
+      setError(null);
+      await api.post(`/categorias/${categoriaId}/sincronizar-cuadro`);
+      setSincronizarModalOpen(false);
+      await cargarDatos();
+    } catch (err) {
+      setError(err.message || 'Error al sincronizar el cuadro eliminatorio');
+    } finally {
+      setSincronizando(false);
     }
   }
 
@@ -133,6 +152,66 @@ export default function EliminatoriaView() {
       </div>
 
       {error && <div className="error-message">{error}</div>}
+
+      {estadoCuadro?.desactualizado && (
+        <div
+          className="cuadro-desactualizado-banner"
+          style={{
+            background: 'rgba(234, 179, 8, 0.12)',
+            border: '1px solid rgba(234, 179, 8, 0.4)',
+            borderRadius: 'var(--radius-md, 8px)',
+            padding: '0.85rem 1.25rem',
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <AlertTriangle size={20} color="#eab308" />
+            <div>
+              <span style={{ fontWeight: 600, color: 'var(--color-text, #fff)' }}>
+                El cuadro está desactualizado:
+              </span>{' '}
+              <span style={{ color: 'var(--color-text-muted, #ccc)' }}>
+                las zonas esperan {estadoCuadro.totalClasificadosEsperados} clasificados y el cuadro reserva{' '}
+                {estadoCuadro.lugaresEnPrimeraRonda} lugares.
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              className="btn-primary"
+              onClick={() => setSincronizarModalOpen(true)}
+              disabled={estadoCuadro.huboJuegoEliminatoria || sincronizando}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.45rem 0.9rem',
+                fontSize: '0.85rem',
+                opacity: estadoCuadro.huboJuegoEliminatoria ? 0.5 : 1,
+                cursor: estadoCuadro.huboJuegoEliminatoria ? 'not-allowed' : 'pointer',
+              }}
+              title={
+                estadoCuadro.huboJuegoEliminatoria
+                  ? 'No se puede sincronizar porque ya hay partidos eliminatorios jugados o en juego'
+                  : 'Sincronizar el cuadro eliminatorio con las zonas actuales'
+              }
+            >
+              <GitBranch size={14} />
+              Sincronizar cuadro
+            </button>
+            {estadoCuadro.huboJuegoEliminatoria && (
+              <span style={{ fontSize: '0.8rem', color: '#ef4444' }}>
+                (Bloqueado: ya hay partidos eliminatorios jugados)
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {fases.length === 0 ? (
         <div className="no-eliminatoria">
@@ -353,6 +432,105 @@ export default function EliminatoriaView() {
             cargarDatos();
           }}
         />
+      )}
+
+      {sincronizarModalOpen && estadoCuadro?.simulacion && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1200,
+            backdropFilter: 'blur(4px)',
+            padding: '1rem',
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: '520px',
+              width: '100%',
+              background: 'var(--color-bg-card, #1e293b)',
+              border: '1px solid var(--color-border, #334155)',
+              borderRadius: 'var(--radius-lg, 12px)',
+              padding: '1.5rem',
+              boxShadow: 'var(--shadow-xl)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text, #fff)' }}>
+              <GitBranch size={20} color="var(--color-primary, #00d084)" />
+              Sincronizar Cuadro Eliminatorio
+            </h3>
+            <p style={{ color: 'var(--color-text-muted, #94a3b8)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+              Los clasificados de las zonas cambiaron. Esta acción regenerará la estructura de la llave y reprogramará los horarios respetando las zonas ya disputadas:
+            </p>
+
+            <div
+              style={{
+                background: 'rgba(0, 0, 0, 0.25)',
+                border: '1px solid var(--color-border, #334155)',
+                borderRadius: 'var(--radius-md, 8px)',
+                padding: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.6rem',
+                fontSize: '0.9rem',
+                marginBottom: '1.5rem',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Estructura de llaves:</span>
+                <strong style={{ color: 'var(--color-primary, #00d084)' }}>{estadoCuadro.simulacion.rondasTexto}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Tamaño del cuadro:</span>
+                <span>{estadoCuadro.simulacion.tamanoActual} cupos → <strong>{estadoCuadro.simulacion.tamanoNuevo} cupos</strong></span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Clasificados totales:</span>
+                <span>{estadoCuadro.simulacion.totalClasificadosActual} → <strong>{estadoCuadro.simulacion.totalClasificadosNuevo} parejas</strong></span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Pases directos (BYEs):</span>
+                <span>{estadoCuadro.simulacion.byesActuales} → <strong>{estadoCuadro.simulacion.byesNuevos} BYEs</strong></span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Partidos creados / reemplazados:</span>
+                <span><strong>{estadoCuadro.simulacion.partidosACrear} partidos</strong> (se reemplazan {estadoCuadro.simulacion.partidosAEliminar})</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Horarios a reprogramar:</span>
+                <span style={{ color: '#eab308' }}><strong>{estadoCuadro.simulacion.horariosQueCambian} cruces</strong> en cronograma</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setSincronizarModalOpen(false)}
+                disabled={sincronizando}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleConfirmarSincronizar}
+                disabled={sincronizando}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                {sincronizando ? 'Sincronizando...' : 'Confirmar Sincronización'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

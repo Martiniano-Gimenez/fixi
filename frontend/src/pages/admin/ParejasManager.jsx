@@ -33,6 +33,7 @@ export default function ParejasManager() {
   const [parejaToDelete, setParejaToDelete] = useState(null);
   const [expandedParejaId, setExpandedParejaId] = useState(queryParejaId || null);
   const [agregarModalOpen, setAgregarModalOpen] = useState(false);
+  const [cuadroDesactualizadoAviso, setCuadroDesactualizadoAviso] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
@@ -563,6 +564,43 @@ export default function ParejasManager() {
         </div>
       </div>
 
+      {cuadroDesactualizadoAviso && (
+        <div
+          style={{
+            background: 'rgba(234, 179, 8, 0.15)',
+            border: '1px solid rgba(234, 179, 8, 0.5)',
+            color: 'var(--color-text, #fff)',
+            padding: '0.85rem 1.25rem',
+            borderRadius: 'var(--radius-md, 8px)',
+            marginTop: '1rem',
+            marginBottom: '0.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <AlertTriangle size={18} color="#eab308" />
+            <span>El cuadro eliminatorio quedó desactualizado por el cambio en los clasificados de la zona.</span>
+          </div>
+          <Link
+            to={`/admin/torneos/${torneoId || categoria?.torneoId}/categorias/${id}/eliminatoria`}
+            style={{
+              color: 'var(--color-primary, #00d084)',
+              fontWeight: 600,
+              textDecoration: 'underline',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+            }}
+          >
+            Ir al cuadro para sincronizarlo →
+          </Link>
+        </div>
+      )}
+
       {isBorrador ? (
         <div className="manager-grid" style={{ marginTop: '1.5rem' }}>
           <div>
@@ -596,8 +634,11 @@ export default function ParejasManager() {
         categoriaId={id}
         zonas={zonas}
         partidos={partidos}
-        onSuccess={(msg) => {
+        onSuccess={(msg, res) => {
           fetchData();
+          if (res?.cuadroDesactualizado) {
+            setCuadroDesactualizadoAviso(true);
+          }
           if (msg) {
             setToastMessage(msg);
             setTimeout(() => setToastMessage(''), 5000);
