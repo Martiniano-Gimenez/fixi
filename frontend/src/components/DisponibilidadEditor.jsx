@@ -1,146 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import { AlertTriangle, Check, Loader2, Info } from 'lucide-react';
 import RangeSliderGroup from './RangeSliderGroup';
-
-function reconstruirRangos(slotsGuardados, slotsDisponiblesDia, dia) {
-  if (!slotsDisponiblesDia || slotsDisponiblesDia.length === 0) return [];
-  const guardadosDia = (slotsGuardados || []).filter((s) => s.startsWith(dia + '-'));
-  if (guardadosDia.length === 0) return [];
-
-  const slotsMap = new Map();
-  slotsDisponiblesDia.forEach((s, idx) => slotsMap.set(s, idx));
-
-  // Expandir slots guardados a su ventana real de 75 min (hasta 5 slots de 15 min: el propio + 4 siguientes)
-  const indicesExpandidos = new Set();
-  for (const sId of guardadosDia) {
-    const idx = slotsMap.get(sId);
-    if (idx !== undefined) {
-      for (let offset = 0; offset <= 4; offset++) {
-        const targetIdx = idx + offset;
-        if (targetIdx < slotsDisponiblesDia.length) {
-          indicesExpandidos.add(targetIdx);
-        }
-      }
-    }
-  }
-
-  if (indicesExpandidos.size === 0) return [];
-
-  const sorted = Array.from(indicesExpandidos).sort((a, b) => a - b);
-  const result = [];
-  let curStart = sorted[0];
-  let curEnd = sorted[0];
-
-  for (let i = 1; i < sorted.length; i++) {
-    const next = sorted[i];
-    if (next === curEnd + 1) {
-      curEnd = next;
-    } else {
-      result.push({
-        id: `rango-${curStart}-${curEnd}-${Math.random().toString(36).substr(2, 5)}`,
-        startIdx: curStart,
-        endIdx: curEnd,
-      });
-      curStart = next;
-      curEnd = next;
-    }
-  }
-  result.push({
-    id: `rango-${curStart}-${curEnd}-${Math.random().toString(36).substr(2, 5)}`,
-    startIdx: curStart,
-    endIdx: curEnd,
-  });
-
-  return result;
-}
-
-function rangosASlots(rangosViernes, grillaViernes, rangosSabado, grillaSabado) {
-  const result = new Set();
-  (rangosViernes || []).forEach((r) => {
-    for (let i = r.startIdx; i <= r.endIdx; i++) {
-      if (grillaViernes && grillaViernes[i]) result.add(grillaViernes[i]);
-    }
-  });
-  (rangosSabado || []).forEach((r) => {
-    for (let i = r.startIdx; i <= r.endIdx; i++) {
-      if (grillaSabado && grillaSabado[i]) result.add(grillaSabado[i]);
-    }
-  });
-  return Array.from(result);
-}
-
-function agruparSlotsEnRangos(slotIdsDelDia, grillaDelDia = []) {
-  if (!slotIdsDelDia || slotIdsDelDia.length === 0) {
-    return 'No disponible';
-  }
-
-  const slotsSet = new Set(slotIdsDelDia);
-  let sortedSlots = [];
-
-  if (grillaDelDia.length > 0) {
-    sortedSlots = grillaDelDia.filter((s) => slotsSet.has(s));
-    const enGrillaSet = new Set(sortedSlots);
-    for (const s of slotIdsDelDia) {
-      if (!enGrillaSet.has(s)) sortedSlots.push(s);
-    }
-  } else {
-    sortedSlots = [...slotIdsDelDia].sort((a, b) => {
-      const hA = a.split('-')[1] || '';
-      const hB = b.split('-')[1] || '';
-      return hA.localeCompare(hB);
-    });
-  }
-
-  if (sortedSlots.length === 0) return 'No disponible';
-
-  const parseMin = (slotId) => {
-    const hora = slotId.split('-')[1] || '';
-    const [h, m] = hora.split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
-
-  const rangos = [];
-  let rangoStart = sortedSlots[0];
-  let rangoEnd = sortedSlots[0];
-
-  for (let i = 1; i < sortedSlots.length; i++) {
-    const prev = sortedSlots[i - 1];
-    const curr = sortedSlots[i];
-
-    let esConsecutivo = false;
-    if (grillaDelDia.length > 0) {
-      const idxPrev = grillaDelDia.indexOf(prev);
-      const idxCurr = grillaDelDia.indexOf(curr);
-      if (idxPrev !== -1 && idxCurr === idxPrev + 1) {
-        esConsecutivo = true;
-      }
-    } else {
-      const minPrev = parseMin(prev);
-      const minCurr = parseMin(curr);
-      if (minCurr === minPrev + 15) {
-        esConsecutivo = true;
-      }
-    }
-
-    if (esConsecutivo) {
-      rangoEnd = curr;
-    } else {
-      rangos.push({ start: rangoStart, end: rangoEnd });
-      rangoStart = curr;
-      rangoEnd = curr;
-    }
-  }
-  rangos.push({ start: rangoStart, end: rangoEnd });
-
-  return rangos
-    .map((r) => {
-      const hStart = r.start.split('-')[1] || '';
-      const hEnd = r.end.split('-')[1] || '';
-      return hStart === hEnd ? hStart : `${hStart} a ${hEnd}`;
-    })
-    .join(', ');
-}
+import {
+  reconstruirRangos,
+  rangosASlots,
+  areSlotArraysEqual,
+  agruparSlotsEnRangos,
+} from '../utils/disponibilidadUtils';
 
 export default function DisponibilidadEditor({
   parejaId,
@@ -163,27 +30,33 @@ export default function DisponibilidadEditor({
   const [error, setError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  // Rastrea la última lista de slots emitida internamente por este editor
+  const lastEmittedSlotsRef = useRef(isControlled && Array.isArray(value) ? value : null);
+  const initialValueRef = useRef(value);
+
   useEffect(() => {
     let isCancelled = false;
 
     const cargarDatos = async () => {
-      setLoading(true);
       setError('');
       try {
         if (isControlled) {
           let g = grillaProp;
           if (!g) {
+            setLoading(true);
             const grillaData = await api.get('/organizador/slots');
             g = grillaData || { viernes: [], sabado: [] };
             if (!isCancelled) setGrilla(g);
           }
-          const s = value || [];
+          const s = initialValueRef.current || [];
           if (!isCancelled) {
+            lastEmittedSlotsRef.current = s;
             setRawSlots(s);
             setRangosViernes(reconstruirRangos(s, g?.viernes || [], 'Viernes'));
             setRangosSabado(reconstruirRangos(s, g?.sabado || [], 'Sabado'));
           }
         } else if (parejaId) {
+          setLoading(true);
           const [grillaData, slotsData] = await Promise.all([
             api.get('/organizador/slots'),
             api.get(`/parejas/${parejaId}/disponibilidad`),
@@ -210,16 +83,24 @@ export default function DisponibilidadEditor({
     return () => {
       isCancelled = true;
     };
-  }, [parejaId, torneoId, categoriaEstado, isControlled, grillaProp, value]);
+  }, [parejaId, torneoId, categoriaEstado, isControlled, grillaProp]);
 
-  // Sincronización en modo controlado cuando cambia `value` externo
+  // Sincronización en modo controlado cuando cambia `value` externo (ej. reset a [])
   useEffect(() => {
-    if (isControlled && Array.isArray(value)) {
+    if (!isControlled || !Array.isArray(value)) return;
+
+    // Si el nuevo `value` coincide con lo último emitido por este editor, no pisar lo editado
+    if (areSlotArraysEqual(value, lastEmittedSlotsRef.current)) {
       setRawSlots(value);
-      if (grilla) {
-        setRangosViernes(reconstruirRangos(value, grilla.viernes || [], 'Viernes'));
-        setRangosSabado(reconstruirRangos(value, grilla.sabado || [], 'Sabado'));
-      }
+      return;
+    }
+
+    // Cambio genuino proveniente de afuera: actualizar ref y reconstruir rangos locales
+    lastEmittedSlotsRef.current = value;
+    setRawSlots(value);
+    if (grilla) {
+      setRangosViernes(reconstruirRangos(value, grilla.viernes || [], 'Viernes'));
+      setRangosSabado(reconstruirRangos(value, grilla.sabado || [], 'Sabado'));
     }
   }, [value, isControlled, grilla]);
 
@@ -252,6 +133,7 @@ export default function DisponibilidadEditor({
     setRangosViernes(newRangos);
     if (isControlled) {
       const slotList = rangosASlots(newRangos, grilla.viernes, rangosSabado, grilla.sabado);
+      lastEmittedSlotsRef.current = slotList;
       setRawSlots(slotList);
       onChange(slotList);
     } else {
@@ -263,6 +145,7 @@ export default function DisponibilidadEditor({
     setRangosSabado(newRangos);
     if (isControlled) {
       const slotList = rangosASlots(rangosViernes, grilla.viernes, newRangos, grilla.sabado);
+      lastEmittedSlotsRef.current = slotList;
       setRawSlots(slotList);
       onChange(slotList);
     } else {
@@ -271,6 +154,7 @@ export default function DisponibilidadEditor({
   };
 
   const handleLimpiarTodoControlled = () => {
+    lastEmittedSlotsRef.current = [];
     setRangosViernes([]);
     setRangosSabado([]);
     setRawSlots([]);

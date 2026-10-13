@@ -28,6 +28,7 @@ const TEST_SUITES = [
   'test-auto-asignar-eliminatoria.js',
   'test-date-parsing.js',
   'test-disponibilidad-guard.js',
+  'test-disponibilidad-rangos.js',
   'test-eliminatoria-scheduler-completo.js',
   'test-mini-bracket-scheduling.js',
   'test-modo-dia-torneo.js',
