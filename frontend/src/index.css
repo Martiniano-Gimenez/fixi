@@ -1,5 +1,6 @@
 /* ─── Design Tokens ─────────────────────────────────────── */
 :root {
+  color-scheme: dark;
   /* Colores - Variante 1 Premium Deportivo */
   --color-primary: #00d084;
   --color-primary-hover: #00e691;
@@ -124,6 +125,15 @@ button {
 input, select, textarea {
   font-family: inherit;
   font-size: inherit;
+}
+
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: var(--bg-card-start, #12151c);
+  color: var(--color-text, #f1f3f5);
 }
 
 button:focus-visible,
@@ -3758,6 +3768,111 @@ tr:nth-child(1) .pos-number {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
+
+/* ─── Filtro de Zonas (ParejasManager) ─────────────────── */
+.zona-filter-container {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.zona-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.95rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full, 9999px);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  min-width: 140px;
+}
+
+.zona-filter-trigger:hover {
+  border-color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.zona-filter-trigger.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(0, 208, 132, 0.06);
+}
+
+.zona-filter-trigger:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 12px var(--color-accent-glow);
+}
+
+.zona-filter-icon {
+  color: var(--color-text-secondary);
+  transition: transform 0.2s ease, color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.zona-filter-trigger.active .zona-filter-icon {
+  color: var(--color-primary);
+}
+
+.zona-filter-icon.open {
+  transform: rotate(180deg);
+}
+
+.zona-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-card-end);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg), 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  padding: 0.35rem 0;
+  box-sizing: border-box;
+}
+
+.zona-filter-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.zona-filter-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.zona-filter-option.selected {
+  color: var(--color-primary);
+  font-weight: 600;
+  background: rgba(0, 208, 132, 0.08);
+}
+
+.zona-filter-check {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
 
 
 

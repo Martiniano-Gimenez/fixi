@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import DisponibilidadEditor from '../../components/DisponibilidadEditor';
 import AgregarParejaModal from '../../components/AgregarParejaModal';
+import ZonaDropdownFilter from '../../components/ZonaDropdownFilter';
 import { estadoLabel } from '../../utils/estadoLabels';
 import { formatHorasDisponibles } from '../../utils/dateUtils';
 import { normalizeText } from '../../utils/textUtils';
@@ -284,41 +285,11 @@ export default function ParejasManager() {
           </div>
 
           {zonas.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
-              <span
-                style={{
-                  fontSize: 'var(--font-size-xs)',
-                  color: 'var(--color-text-secondary)',
-                  fontWeight: 500,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Zona:
-              </span>
-              <select
-                value={zonaFiltro}
-                onChange={(e) => setZonaFiltro(e.target.value)}
-                aria-label="Filtrar por zona"
-                style={{
-                  padding: '0.45rem 0.75rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text)',
-                  fontSize: 'var(--font-size-sm)',
-                  cursor: 'pointer',
-                  minWidth: '110px',
-                  outline: 'none',
-                }}
-              >
-                <option value="todas">Todas</option>
-                {zonas.map((z) => (
-                  <option key={z.id} value={z.id}>
-                    {z.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ZonaDropdownFilter
+              zonas={zonas}
+              selectedZonaId={zonaFiltro}
+              onSelectZona={setZonaFiltro}
+            />
           )}
         </div>
       )}
