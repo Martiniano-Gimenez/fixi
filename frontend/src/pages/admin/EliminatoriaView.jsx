@@ -149,7 +149,7 @@ export default function EliminatoriaView() {
           )}
         </div>
         <h1>
-          {categoria.torneo?.nombre} — Categoría {categoria.nombre} (Fase Eliminatoria)
+          {categoria.torneo?.nombre} — {categoria.nombre}
         </h1>
         <div className="header-actions">
 
