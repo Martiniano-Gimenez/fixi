@@ -165,15 +165,35 @@ export default function EliminatoriaView() {
 
     // Parejas y orígenes a mostrar (incluyendo campos derivados de display de la ronda siguiente)
     const p1Pareja = partido.pareja1 || partido.displayPareja1;
-    const p1Origen = partido.origenPareja1 || partido.displayOrigenPareja1;
+    let p1Origen = partido.origenPareja1 || partido.displayOrigenPareja1;
     const p2Pareja = partido.pareja2 || partido.displayPareja2;
-    const p2Origen = partido.origenPareja2 || partido.displayOrigenPareja2;
+    let p2Origen = partido.origenPareja2 || partido.displayOrigenPareja2;
+
+    // Fallback para rondas siguientes si aún no tienen pareja ni origen definido
+    if (!p1Pareja && !p1Origen && fases && fases.length > 0) {
+      const fIdx = fases.findIndex((f) => f.id === partido.faseEliminatoriaId || f.partidos?.some((p) => p.id === partido.id));
+      if (fIdx > 0) {
+        const fPrev = fases[fIdx - 1];
+        const nCorto = (fPrev.nombre || '').replace(/\s+de\s+Final$/i, '').trim();
+        p1Origen = `Ganador ${nCorto} #${2 * partido.posicionEnRonda - 1}`;
+      }
+    }
+    if (!p2Pareja && !p2Origen && fases && fases.length > 0) {
+      const fIdx = fases.findIndex((f) => f.id === partido.faseEliminatoriaId || f.partidos?.some((p) => p.id === partido.id));
+      if (fIdx > 0) {
+        const fPrev = fases[fIdx - 1];
+        const nCorto = (fPrev.nombre || '').replace(/\s+de\s+Final$/i, '').trim();
+        p2Origen = `Ganador ${nCorto} #${2 * partido.posicionEnRonda}`;
+      }
+    }
 
     let titleTexto = 'Esperando clasificados';
     if (isBye) {
       titleTexto = 'Pase directo por BYE';
     } else if (isJugable) {
       titleTexto = isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado';
+    } else if (p1Origen || p2Origen) {
+      titleTexto = 'Esperando definición de cruces previos';
     }
 
     return (

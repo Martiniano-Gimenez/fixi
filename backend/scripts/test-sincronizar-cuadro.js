@@ -555,7 +555,24 @@ async function testSincronizarCuadro() {
     if (partido1Octavos.displayOrigenPareja1 !== origenByeP1) {
       throw new Error(`El displayOrigenPareja1 de Octavos debía ser "${origenByeP1}", recibido: "${partido1Octavos.displayOrigenPareja1}"`);
     }
-    console.log(`  ✅ [f.3] Display de Octavos proyecta correctamente el origen "${partido1Octavos.displayOrigenPareja1}".`);
+    if (partido1Octavos.displayOrigenPareja2 !== 'Ganador Dieciseisavos #2') {
+      throw new Error(`El displayOrigenPareja2 de Octavos debía ser "Ganador Dieciseisavos #2", recibido: "${partido1Octavos.displayOrigenPareja2}"`);
+    }
+
+    const faseCuartos32 = fasesCat32.find((f) => f.ronda === 8);
+    const partido1Cuartos = faseCuartos32?.partidos.find((p) => p.posicionEnRonda === 1);
+    if (!partido1Cuartos || partido1Cuartos.displayOrigenPareja1 !== 'Ganador Octavos #1' || partido1Cuartos.displayOrigenPareja2 !== 'Ganador Octavos #2') {
+      throw new Error(`Cuartos #1 debía proyectar "Ganador Octavos #1" y "Ganador Octavos #2", recibido: "${partido1Cuartos?.displayOrigenPareja1}" y "${partido1Cuartos?.displayOrigenPareja2}"`);
+    }
+
+    const faseFinal32 = fasesCat32.find((f) => f.ronda === 2);
+    const partido1Final = faseFinal32?.partidos.find((p) => p.posicionEnRonda === 1);
+    if (!partido1Final || partido1Final.displayOrigenPareja1 !== 'Ganador Semifinal #1' || partido1Final.displayOrigenPareja2 !== 'Ganador Semifinal #2') {
+      throw new Error(`Final #1 debía proyectar "Ganador Semifinal #1" y "Ganador Semifinal #2", recibido: "${partido1Final?.displayOrigenPareja1}" y "${partido1Final?.displayOrigenPareja2}"`);
+    }
+
+    console.log(`  ✅ [f.3] Display de Octavos proyecta "${partido1Octavos.displayOrigenPareja1}" y "${partido1Octavos.displayOrigenPareja2}".`);
+    console.log(`  ✅ [f.3] Display de Cuartos y Final proyecta correctamente "Ganador [Ronda] #[Pos]".`);
 
     // 4. Finalizar la Zona A: la pareja real avanza y reemplaza el texto en Dieciseisavos y Octavos
     console.log('  Finalizando los partidos de Zona A...');

@@ -482,64 +482,66 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
 
   if (!fases || fases.length === 0) return fases;
 
-  const maxRondaCat = Math.max(...fases.map((f) => f.ronda));
-  const fasePrimera = fases.find((f) => f.ronda === maxRondaCat);
-  const primeraRondaPartidosMap = new Map();
+  function nombreCortoRonda(ronda, nombreOriginal) {
+    if (ronda === 32) return 'Dieciseisavos';
+    if (ronda === 16) return 'Octavos';
+    if (ronda === 8) return 'Cuartos';
+    if (ronda === 4) return 'Semifinal';
+    if (ronda === 2) return 'Final';
+    if (nombreOriginal) {
+      return nombreOriginal.replace(/\s+de\s+Final$/i, '').trim();
+    }
+    return `Ronda de ${ronda}`;
+  }
 
   // 1. Identificar BYEs en la primera ronda (usando campo persistente esBye)
-  if (fasePrimera && Array.isArray(fasePrimera.partidos)) {
-    for (const p of fasePrimera.partidos) {
+  if (fases[0] && Array.isArray(fases[0].partidos)) {
+    for (const p of fases[0].partidos) {
       if (p.esBye) {
         // Los BYE no se juegan, no reciben horario ni se cuentan como "Sin horario"
         p.sinHorarioAsignado = false;
       }
-      primeraRondaPartidosMap.set(p.posicionEnRonda, p);
     }
   }
 
-  // 2. Proyectar origen/pareja en la ronda siguiente para cruces que reciben a un ganador de BYE
-  // CAMPOS DERIVADOS DE DISPLAY:
-  // - displayOrigenPareja1 / displayOrigenPareja2: texto de origen ("1° Zona A") que avanza por BYE cuando aún no se conoce la pareja
-  // - displayPareja1 / displayPareja2: pareja real que avanza por BYE si ya está clasificada
-  // Estos campos NO modifican origenPareja1 / origenPareja2 en la DB, preservando los placeholders originales necesarios para generarEliminatoria.
-  const siguienteRondaNum = maxRondaCat / 2;
-  const faseSiguiente = fases.find((f) => f.ronda === siguienteRondaNum);
+  // 2. Proyectar origen/pareja en las rondas siguientes:
+  // - Si viene de un BYE: avanza la pareja clasificada o el origen directo ("1° Zona A")
+  // - Si viene de cruce pendiente: placeholder explícito ("Ganador Dieciseisavos #2", "Ganador Octavos #1", etc.)
+  for (let idx = 1; idx < fases.length; idx++) {
+    const fase = fases[idx];
+    const fasePrevia = fases[idx - 1];
+    const nombrePrevia = nombreCortoRonda(fasePrevia.ronda, fasePrevia.nombre);
+    const prevMap = new Map(fasePrevia.partidos.map((p) => [p.posicionEnRonda, p]));
 
-  if (faseSiguiente && Array.isArray(faseSiguiente.partidos)) {
-    for (const p of faseSiguiente.partidos) {
+    for (const p of fase.partidos) {
       p.esBye = false;
 
-      // Slot 1 viene del partido (2 * pos - 1) de la primera ronda
+      // Slot 1 viene del partido (2 * pos - 1) de la ronda previa
       const posPrev1 = 2 * p.posicionEnRonda - 1;
-      const prevMatch1 = primeraRondaPartidosMap.get(posPrev1);
-      if (prevMatch1 && prevMatch1.esBye) {
-        const parejaAvance = prevMatch1.pareja1 || prevMatch1.pareja2 || null;
-        const origenAvance = prevMatch1.origenPareja1 || prevMatch1.origenPareja2 || null;
+      const prev1 = prevMap.get(posPrev1);
+      if (prev1 && prev1.esBye) {
+        const parejaAvance = prev1.pareja1 || prev1.pareja2 || prev1.displayPareja1 || null;
+        const origenAvance = prev1.origenPareja1 || prev1.origenPareja2 || prev1.displayOrigenPareja1 || null;
         p.displayOrigenPareja1 = origenAvance;
         if (parejaAvance) {
           p.displayPareja1 = parejaAvance;
         }
+      } else if (!p.pareja1 && !p.displayPareja1) {
+        p.displayOrigenPareja1 = `Ganador ${nombrePrevia} #${posPrev1}`;
       }
 
-      // Slot 2 viene del partido (2 * pos) de la primera ronda
+      // Slot 2 viene del partido (2 * pos) de la ronda previa
       const posPrev2 = 2 * p.posicionEnRonda;
-      const prevMatch2 = primeraRondaPartidosMap.get(posPrev2);
-      if (prevMatch2 && prevMatch2.esBye) {
-        const parejaAvance = prevMatch2.pareja1 || prevMatch2.pareja2 || null;
-        const origenAvance = prevMatch2.origenPareja1 || prevMatch2.origenPareja2 || null;
+      const prev2 = prevMap.get(posPrev2);
+      if (prev2 && prev2.esBye) {
+        const parejaAvance = prev2.pareja1 || prev2.pareja2 || prev2.displayPareja2 || null;
+        const origenAvance = prev2.origenPareja1 || prev2.origenPareja2 || prev2.displayOrigenPareja2 || null;
         p.displayOrigenPareja2 = origenAvance;
         if (parejaAvance) {
           p.displayPareja2 = parejaAvance;
         }
-      }
-    }
-  }
-
-  // Para el resto de las fases, asegurar esBye: false
-  for (const f of fases) {
-    if (f.ronda !== maxRondaCat && f.ronda !== siguienteRondaNum) {
-      for (const p of f.partidos) {
-        p.esBye = false;
+      } else if (!p.pareja2 && !p.displayPareja2) {
+        p.displayOrigenPareja2 = `Ganador ${nombrePrevia} #${posPrev2}`;
       }
     }
   }

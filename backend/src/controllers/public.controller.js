@@ -122,46 +122,55 @@ async function getTorneoPublico(req, res, next) {
       eliminatoria: (() => {
         const fases = c.fasesEliminatorias || [];
         if (fases.length === 0) return [];
-        const maxRondaCat = Math.max(...fases.map((f) => f.ronda));
-        const fasePrimera = fases.find((f) => f.ronda === maxRondaCat);
-        const primeraRondaMap = new Map();
 
-        if (fasePrimera) {
-          for (const p of fasePrimera.partidos) {
-            primeraRondaMap.set(p.posicionEnRonda, {
-              esBye: Boolean(p.esBye),
-              pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
-              pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
-              origenPareja1: p.origenPareja1,
-              origenPareja2: p.origenPareja2,
-            });
+        function nombreCortoRonda(ronda, nombreOriginal) {
+          if (ronda === 32) return 'Dieciseisavos';
+          if (ronda === 16) return 'Octavos';
+          if (ronda === 8) return 'Cuartos';
+          if (ronda === 4) return 'Semifinal';
+          if (ronda === 2) return 'Final';
+          if (nombreOriginal) {
+            return nombreOriginal.replace(/\s+de\s+Final$/i, '').trim();
           }
+          return `Ronda de ${ronda}`;
         }
 
-        const sigRonda = maxRondaCat / 2;
+        const fasesOrdenadas = [...fases].sort((a, b) => b.ronda - a.ronda);
+        const fasesProcesadas = [];
 
-        return fases.map((fase) => ({
-          id: fase.id,
-          nombre: fase.nombre,
-          ronda: fase.ronda,
-          partidos: fase.partidos.map((p) => {
+        for (let idx = 0; idx < fasesOrdenadas.length; idx++) {
+          const fase = fasesOrdenadas[idx];
+          const fasePrevia = idx > 0 ? fasesProcesadas[idx - 1] : null;
+          const nombrePrevia = fasePrevia ? nombreCortoRonda(fasePrevia.ronda, fasePrevia.nombre) : '';
+          const prevMap = fasePrevia ? new Map(fasePrevia.partidos.map((p) => [p.posicion, p])) : null;
+
+          const partidosFase = fase.partidos.map((p) => {
             const esBye = Boolean(p.esBye);
+            const p1Str = p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null;
+            const p2Str = p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null;
 
             let displayOrigenPareja1 = null;
             let displayOrigenPareja2 = null;
             let displayPareja1 = null;
             let displayPareja2 = null;
 
-            if (fase.ronda === sigRonda) {
-              const prev1 = primeraRondaMap.get(2 * p.posicionEnRonda - 1);
+            if (fasePrevia && prevMap) {
+              const posPrev1 = 2 * p.posicionEnRonda - 1;
+              const prev1 = prevMap.get(posPrev1);
               if (prev1 && prev1.esBye) {
-                displayOrigenPareja1 = prev1.origenPareja1 || prev1.origenPareja2;
-                displayPareja1 = prev1.pareja1 || prev1.pareja2;
+                displayOrigenPareja1 = prev1.origenPareja1 || prev1.origenPareja2 || prev1.displayOrigenPareja1;
+                displayPareja1 = prev1.pareja1 || prev1.pareja2 || prev1.displayPareja1;
+              } else if (!p1Str) {
+                displayOrigenPareja1 = `Ganador ${nombrePrevia} #${posPrev1}`;
               }
-              const prev2 = primeraRondaMap.get(2 * p.posicionEnRonda);
+
+              const posPrev2 = 2 * p.posicionEnRonda;
+              const prev2 = prevMap.get(posPrev2);
               if (prev2 && prev2.esBye) {
-                displayOrigenPareja2 = prev2.origenPareja1 || prev2.origenPareja2;
-                displayPareja2 = prev2.pareja1 || prev2.pareja2;
+                displayOrigenPareja2 = prev2.origenPareja1 || prev2.origenPareja2 || prev2.displayOrigenPareja2;
+                displayPareja2 = prev2.pareja1 || prev2.pareja2 || prev2.displayPareja2;
+              } else if (!p2Str) {
+                displayOrigenPareja2 = `Ganador ${nombrePrevia} #${posPrev2}`;
               }
             }
 
@@ -181,16 +190,25 @@ async function getTorneoPublico(req, res, next) {
               pareja1Id: p.pareja1Id,
               pareja2Id: p.pareja2Id,
               ganadorId: p.ganadorId,
-              pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
-              pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
+              pareja1: p1Str,
+              pareja2: p2Str,
               ganador: p.ganador ? `${p.ganador.jugador1} / ${p.ganador.jugador2}` : null,
               sets: p.sets.map((s) => ({
                 gamesPareja1: s.gamesPareja1,
                 gamesPareja2: s.gamesPareja2,
               })),
             };
-          }),
-        }));
+          });
+
+          fasesProcesadas.push({
+            id: fase.id,
+            nombre: fase.nombre,
+            ronda: fase.ronda,
+            partidos: partidosFase,
+          });
+        }
+
+        return fasesProcesadas;
       })(),
     }));
 
