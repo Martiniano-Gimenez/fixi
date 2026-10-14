@@ -2,6 +2,8 @@ const { ensureTestDb } = require('./utils/testEnvGuard');
 const prisma = require('../src/lib/prisma');
 const faseEliminatoriaService = require('../src/services/faseEliminatoria.service');
 const zonaService = require('../src/services/zona.service');
+const partidoService = require('../src/services/partido.service');
+const organizadorService = require('../src/services/organizador.service');
 const crypto = require('crypto');
 
 async function testSincronizarCuadro() {
@@ -232,6 +234,23 @@ async function testSincronizarCuadro() {
     }
     console.log('  ✅ [b] Cumplido: cuadro sincronizado a 16 con los 9 lugares y placeholders completos.');
 
+    // [b.c] Sincronizar el cuadro recalcula los esBye:
+    // Con 9 clasificados en cuadro de 16, hay exactamente 7 BYEs (16 - 9 = 7)
+    const byesPostSync = faseOctavos.partidos.filter((p) => p.esBye);
+    if (byesPostSync.length !== 7) {
+      throw new Error(`Tras sincronizar a 16 con 9 clasificados, se esperaban 7 BYEs con esBye=true, encontrado: ${byesPostSync.length}`);
+    }
+    const partidosPosteriores = await prisma.partido.findMany({
+      where: {
+        categoriaId: categoria.id,
+        faseEliminatoria: { ronda: { lt: 16 } },
+      },
+    });
+    if (partidosPosteriores.some((p) => p.esBye)) {
+      throw new Error('Ningún partido de fases posteriores debe tener esBye=true');
+    }
+    console.log('  ✅ [b.c] Cumplido: sincronizarCuadro recalculó exactamente 7 partidos con esBye=true.');
+
     // =========================================================================
     // TEST (c): Con un partido eliminatorio FINALIZADO, sincronizar -> 400 y cuadro no cambia
     // =========================================================================
@@ -423,6 +442,17 @@ async function testSincronizarCuadro() {
       throw new Error(`Se esperaban 3 cruces normales en Dieciseisavos, recibido: ${partidosNormales.length}`);
     }
 
+    // (a) Verificar que los 13 BYEs están en los primeros 13 cabezas de serie según la secuencia de seeding
+    const seq16 = [1, 16, 9, 8, 5, 12, 13, 4, 3, 14, 11, 6, 7, 10, 15, 2];
+    const posicionesEsperadasBye = new Set(seq16.slice(0, 13));
+    for (const p of faseDieciseisavos.partidos) {
+      const debeSerBye = posicionesEsperadasBye.has(p.posicionEnRonda);
+      if (p.esBye !== debeSerBye) {
+        throw new Error(`Partido #${p.posicionEnRonda} en DB tiene esBye=${p.esBye}, esperado: ${debeSerBye}`);
+      }
+    }
+    console.log('  ✅ [f.a] Exactamente 13 partidos con esBye=true en los primeros 13 cabezas de serie.');
+
     // 1. Ningún BYE tiene horario ni cancha ni sinHorarioAsignado = true
     for (const byeMatch of partidosBye) {
       if (byeMatch.fechaHora !== null) {
@@ -438,7 +468,6 @@ async function testSincronizarCuadro() {
     console.log('  ✅ [f.1] Ningún BYE tiene horario ni figura como sinHorarioAsignado.');
 
     // 2. Verificar que los reportes de sin horario no incluyen los BYEs
-    const organizadorService = require('../src/services/organizador.service');
     const sinHorarioList = await organizadorService.getPartidosSinHorarioTorneo(organizador.id, torneo.id);
     const byeIds = new Set(partidosBye.map((p) => p.id));
     const byeEnSinHorario = sinHorarioList.filter((p) => byeIds.has(p.id));
@@ -446,6 +475,64 @@ async function testSincronizarCuadro() {
       throw new Error(`Se encontraron ${byeEnSinHorario.length} BYEs en getPartidosSinHorarioTorneo!`);
     }
     console.log('  ✅ [f.2] Los BYEs no figuran en getPartidosSinHorarioTorneo.');
+
+    // (b) Edición manual: vaciar un lado de un cruce NO bye
+    const cruceNormal = partidosNormales[0];
+
+    // Intentar editar un BYE debe fallar con 400
+    let falloEditarBye = false;
+    try {
+      await partidoService.updateBracketMatch(organizador.id, partidosBye[0].id, {
+        origenPareja2: '2° Zona A',
+      });
+    } catch (err) {
+      falloEditarBye = true;
+      if (!err.message.includes('No se pueden editar cruces de un partido pase directo (BYE)')) {
+        throw new Error(`Mensaje inesperado al editar BYE: ${err.message}`);
+      }
+    }
+    if (!falloEditarBye) {
+      throw new Error('updateBracketMatch debió fallar al intentar editar un cruce BYE.');
+    }
+
+    // Vaciar el lado 2 del cruce normal
+    await partidoService.updateBracketMatch(organizador.id, cruceNormal.id, {
+      origenPareja2: null,
+    });
+
+    const cruceEditadoDb = await prisma.partido.findUnique({ where: { id: cruceNormal.id } });
+    if (cruceEditadoDb.esBye !== false) {
+      throw new Error(`Al vaciar un lado, el cruce NO debe convertirse en BYE. Recibido esBye=${cruceEditadoDb.esBye}`);
+    }
+    if (cruceEditadoDb.origenPareja2 !== null) {
+      throw new Error('origenPareja2 debió quedar en null');
+    }
+
+    // Comprobar que conserva su lugar en el scheduler (no se borró ni se convirtió en BYE)
+    if (!cruceEditadoDb.fechaHora || !cruceEditadoDb.canchaNumero) {
+      throw new Error('El cruce normal editado debe conservar su lugar asignado en el scheduler');
+    }
+
+    // Si el cruce normal queda pendiente sin horario asignado
+    await prisma.partido.update({
+      where: { id: cruceNormal.id },
+      data: { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true },
+    });
+
+    // Comprobar que aparece en el conteo de partidos sin horario (los BYE nunca aparecen)
+    const sinHorarioPostEdit = await organizadorService.getPartidosSinHorarioTorneo(organizador.id, torneo.id);
+    const estaEnSinHorario = sinHorarioPostEdit.some((p) => p.id === cruceNormal.id);
+    if (!estaEnSinHorario) {
+      throw new Error('El cruce normal con un lado vacío debe aparecer en getPartidosSinHorarioTorneo.');
+    }
+
+    // Y al re-ejecutar el scheduler, vuelve a recibir horario porque NO es un BYE
+    await programarHorariosEliminatorias(organizador.id, torneo.id, cat32.id);
+    const cruceReprogramado = await prisma.partido.findUnique({ where: { id: cruceNormal.id } });
+    if (!cruceReprogramado.fechaHora || !cruceReprogramado.canchaNumero) {
+      throw new Error('El scheduler debió reprogramar el cruce normal con lado vacío');
+    }
+    console.log('  ✅ [f.b] Cruce normal con lado vacío conserva esBye=false, se programa en scheduler y figura en conteo sin horario.');
 
     // 3. Verificar display de la ronda siguiente (Octavos = 16)
     const faseOctavos32 = fasesCat32.find((f) => f.ronda === 16);
@@ -490,7 +577,6 @@ async function testSincronizarCuadro() {
     });
 
     // Ejecutar verificación y autoasignación de la categoría
-    const partidoService = require('../src/services/partido.service');
     await partidoService.verificarYAutoAsignarEliminatoria(organizador.id, cat32.id);
 
     // Verificar que el partido #1 de Dieciseisavos ahora está FINALIZADO con la pareja ganadora

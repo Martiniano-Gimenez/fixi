@@ -173,6 +173,7 @@ model Partido {
   fechaHora          DateTime?
   canchaNumero       Int?
   sinHorarioAsignado Boolean   @default(false)
+  esBye              Boolean   @default(false)
 
   categoria        Categoria         @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
   zona             Zona?             @relation(fields: [zonaId], references: [id], onDelete: SetNull)

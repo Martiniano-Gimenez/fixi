@@ -128,10 +128,8 @@ async function getTorneoPublico(req, res, next) {
 
         if (fasePrimera) {
           for (const p of fasePrimera.partidos) {
-            const has1 = Boolean(p.pareja1Id || p.origenPareja1);
-            const has2 = Boolean(p.pareja2Id || p.origenPareja2);
             primeraRondaMap.set(p.posicionEnRonda, {
-              esBye: (has1 && !has2) || (!has1 && has2),
+              esBye: Boolean(p.esBye),
               pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
               pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
               origenPareja1: p.origenPareja1,
@@ -147,10 +145,7 @@ async function getTorneoPublico(req, res, next) {
           nombre: fase.nombre,
           ronda: fase.ronda,
           partidos: fase.partidos.map((p) => {
-            const isFirstRound = fase.ronda === maxRondaCat;
-            const has1 = Boolean(p.pareja1Id || p.origenPareja1);
-            const has2 = Boolean(p.pareja2Id || p.origenPareja2);
-            const esBye = isFirstRound && ((has1 && !has2) || (!has1 && has2));
+            const esBye = Boolean(p.esBye);
 
             let displayOrigenPareja1 = null;
             let displayOrigenPareja2 = null;

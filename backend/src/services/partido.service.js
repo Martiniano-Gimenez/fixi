@@ -489,6 +489,12 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
     throw error;
   }
 
+  if (partido.esBye) {
+    const error = new Error('No se pueden editar cruces de un partido pase directo (BYE).');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const { origenPareja1, origenPareja2, liberarEnOtros } = data;
 
   const nuevoOrigen1 = origenPareja1 !== undefined ? (origenPareja1 || null) : partido.origenPareja1;

@@ -141,9 +141,8 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
     for (const partido of partidosPrimeraRonda) {
       const updateData = {};
       
-      // Detectar BYE: un slot tiene origen pero la pareja contraria no tiene origen (es BYE)
-      const esBye = (partido.origenPareja1 && !partido.origenPareja2) || 
-                    (!partido.origenPareja1 && partido.origenPareja2);
+      // Detectar BYE: usar el campo persistente esBye del partido
+      const esBye = Boolean(partido.esBye);
 
       if (esDieciseisavos && partido.estado !== 'FINALIZADO' && !esBye) {
         updateData.sinHorarioAsignado = true;
@@ -369,6 +368,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
         ganadorId,
         estado,
         sinHorarioAsignado: esDieciseisavos && !isBye,
+        esBye: isBye,
       },
     });
 
@@ -391,6 +391,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
           pareja1Id: null,
           pareja2Id: null,
           estado: 'PENDIENTE',
+          esBye: false,
         },
       });
       partidosPorRondaYPos[`${r}:${j + 1}`] = p.id;
@@ -485,15 +486,10 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
   const fasePrimera = fases.find((f) => f.ronda === maxRondaCat);
   const primeraRondaPartidosMap = new Map();
 
-  // 1. Identificar BYEs en la primera ronda
+  // 1. Identificar BYEs en la primera ronda (usando campo persistente esBye)
   if (fasePrimera && Array.isArray(fasePrimera.partidos)) {
     for (const p of fasePrimera.partidos) {
-      const tieneLado1 = Boolean(p.pareja1Id || p.pareja1 || p.origenPareja1);
-      const tieneLado2 = Boolean(p.pareja2Id || p.pareja2 || p.origenPareja2);
-      const esBye = (tieneLado1 && !tieneLado2) || (!tieneLado1 && tieneLado2);
-
-      p.esBye = esBye;
-      if (esBye) {
+      if (p.esBye) {
         // Los BYE no se juegan, no reciben horario ni se cuentan como "Sin horario"
         p.sinHorarioAsignado = false;
       }

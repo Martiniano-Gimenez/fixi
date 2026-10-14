@@ -1540,16 +1540,7 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
   }
 
   // Excluir partidos BYE de eliminatorias (no requieren horario ni rival)
-  const partidosSinBye = partidos.filter((p) => {
-    if (p.faseEliminatoriaId || p.faseEliminatoria) {
-      const has1 = Boolean(p.pareja1Id || p.origenPareja1);
-      const has2 = Boolean(p.pareja2Id || p.origenPareja2);
-      if ((has1 && !has2) || (!has1 && has2)) {
-        return false;
-      }
-    }
-    return true;
-  });
+  const partidosSinBye = partidos.filter((p) => !p.esBye);
 
   // Para cada partido sin horario calculamos slotsViables y nivel de urgencia
   const partidosConUrgencia = partidosSinBye.map((p) => {
@@ -1891,21 +1882,8 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     });
   }
 
-  // Pre-calcular ronda máxima eliminatoria por categoría para detectar BYEs
-  const maxRondaPorCat = new Map();
-  for (const cat of categoriasTorneo) {
-    if (cat.fasesEliminatorias && cat.fasesEliminatorias.length > 0) {
-      maxRondaPorCat.set(cat.id, Math.max(...cat.fasesEliminatorias.map((f) => f.ronda)));
-    }
-  }
-
   function esPartidoByeEnVivo(p) {
-    if (!p.faseEliminatoriaId || !p.faseEliminatoria) return false;
-    const maxRonda = maxRondaPorCat.get(p.categoriaId);
-    if (!maxRonda || p.faseEliminatoria.ronda !== maxRonda) return false;
-    const has1 = Boolean(p.pareja1Id || p.origenPareja1);
-    const has2 = Boolean(p.pareja2Id || p.origenPareja2);
-    return (has1 && !has2) || (!has1 && has2);
+    return Boolean(p.esBye);
   }
 
   // Clasificar partidos

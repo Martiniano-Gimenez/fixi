@@ -21,17 +21,8 @@ function esRondaDieciseisavos(ronda) {
   return Number(ronda) >= 32;
 }
 
-function esPartidoBye(partido, fase, maxRondaCat) {
-  if (!fase || fase.ronda !== maxRondaCat) return false;
-  if (partido.estado === 'FINALIZADO' && ((partido.pareja1Id && !partido.pareja2Id && !partido.origenPareja2) || (!partido.pareja1Id && !partido.origenPareja1 && partido.pareja2Id))) {
-    return true;
-  }
-  const hasSide1 = Boolean(partido.pareja1Id || partido.origenPareja1);
-  const hasSide2 = Boolean(partido.pareja2Id || partido.origenPareja2);
-  if ((hasSide1 && !hasSide2) || (!hasSide1 && hasSide2)) {
-    return true;
-  }
-  return false;
+function esPartidoBye(partido) {
+  return Boolean(partido?.esBye);
 }
 
 /**
