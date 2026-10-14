@@ -519,6 +519,18 @@ async function testSincronizarCuadro() {
     if (!p1OctavosApi.pareja1 || p1OctavosApi.pareja1.id !== parejaGanadoraZonaA.id) {
       throw new Error('La respuesta de la API para Octavos debe incluir el objeto de pareja1 con la pareja ganadora.');
     }
+
+    // Verificación requerida: tipo y estructura de displayPareja1 en la ronda siguiente
+    if (typeof p1OctavosApi.displayPareja1 !== 'object' || p1OctavosApi.displayPareja1 === null) {
+      throw new Error(`displayPareja1 en admin debe ser un objeto de pareja, recibido: ${typeof p1OctavosApi.displayPareja1}`);
+    }
+    if (typeof p1OctavosApi.displayPareja1.jugador1 !== 'string' || typeof p1OctavosApi.displayPareja1.jugador2 !== 'string') {
+      throw new Error('displayPareja1 debe ser un objeto con jugador1 y jugador2 definidos como texto.');
+    }
+    if (p1OctavosApi.displayPareja1.id !== parejaGanadoraZonaA.id) {
+      throw new Error(`displayPareja1.id debe coincidir con la pareja ganadora (${parejaGanadoraZonaA.id}), recibido: ${p1OctavosApi.displayPareja1.id}`);
+    }
+    console.log(`  ✅ [f.4] displayPareja1 en Octavos es un objeto válido: "${p1OctavosApi.displayPareja1.jugador1} / ${p1OctavosApi.displayPareja1.jugador2}" (id: ${p1OctavosApi.displayPareja1.id}).`);
     console.log('  ✅ [f.4] Al finalizar la zona, el ganador del BYE avanzó y se muestra en Octavos.');
 
     console.log('\n🎉 ¡TODAS LAS ASSECIONES DE SINCRONIZACIÓN DE CUADRO PASARON EXITOSAMENTE!');

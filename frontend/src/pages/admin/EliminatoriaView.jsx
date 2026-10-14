@@ -11,6 +11,14 @@ import { formatDiaHorario } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
 import './EliminatoriaView.css';
 
+function formatParejaDisplay(pareja) {
+  if (!pareja) return '';
+  if (typeof pareja === 'string') return pareja;
+  if (pareja.jugador1 && pareja.jugador2) return `${pareja.jugador1} / ${pareja.jugador2}`;
+  if (pareja.jugador1) return pareja.jugador1;
+  return pareja.nombre || '';
+}
+
 export default function EliminatoriaView() {
   const { torneoId, id: categoriaId } = useParams();
   const [categoria, setCategoria] = useState(null);
@@ -350,7 +358,7 @@ export default function EliminatoriaView() {
                                     <span className="pareja-bye">BYE</span>
                                   ) : p1Pareja ? (
                                     <span className="pareja-nombre">
-                                      {p1Pareja.jugador1} / {p1Pareja.jugador2}
+                                      {formatParejaDisplay(p1Pareja)}
                                     </span>
                                   ) : (
                                     <span className="pareja-esperando">
@@ -375,7 +383,7 @@ export default function EliminatoriaView() {
                                     <span className="pareja-bye">BYE</span>
                                   ) : p2Pareja ? (
                                     <span className="pareja-nombre">
-                                      {p2Pareja.jugador1} / {p2Pareja.jugador2}
+                                      {formatParejaDisplay(p2Pareja)}
                                     </span>
                                   ) : (
                                     <span className="pareja-esperando">
