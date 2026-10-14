@@ -362,7 +362,7 @@ export default function EliminatoriaView() {
                                     </span>
                                   ) : (
                                     <span className="pareja-esperando">
-                                      {p1Origen ? `Esperando ${p1Origen}` : 'Esperando...'}
+                                      {p1Origen || 'Esperando...'}
                                     </span>
                                   )}
                                 </div>
@@ -387,7 +387,7 @@ export default function EliminatoriaView() {
                                     </span>
                                   ) : (
                                     <span className="pareja-esperando">
-                                      {p2Origen ? `Esperando ${p2Origen}` : 'Esperando...'}
+                                      {p2Origen || 'Esperando...'}
                                     </span>
                                   )}
                                 </div>

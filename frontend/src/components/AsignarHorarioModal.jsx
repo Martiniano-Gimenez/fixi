@@ -155,8 +155,8 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}`
       : `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}`;
     const pendiente = partido.pareja1
-      ? (partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando clasificado...')
-      : (partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando clasificado...');
+      ? (partido.origenPareja2 || 'Esperando clasificado...')
+      : (partido.origenPareja1 || 'Esperando clasificado...');
     cruceTexto = `${definida} vs ${pendiente}`;
   } else if (partido.origenPareja1 || partido.origenPareja2) {
     cruceTexto = `${partido.origenPareja1 || 'Esperando...'} vs ${partido.origenPareja2 || 'Esperando...'}`;

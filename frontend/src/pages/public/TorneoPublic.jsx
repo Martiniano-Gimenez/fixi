@@ -94,8 +94,10 @@ function PublicMatchCard({ partido, label = '', isMobile = false, isFav = false 
   const tieneSets = Array.isArray(partido.sets) && partido.sets.length > 0;
 
   // Nombres con fallback "Esperando..."
-  const nombreP1 = partido.pareja1 || (partido.origenPareja1 ? `Esperando ${partido.origenPareja1}` : 'Esperando...');
-  const nombreP2 = partido.pareja2 || (partido.origenPareja2 ? `Esperando ${partido.origenPareja2}` : 'Esperando...');
+  const origenP1 = partido.origenPareja1 || partido.displayOrigenPareja1;
+  const origenP2 = partido.origenPareja2 || partido.displayOrigenPareja2;
+  const nombreP1 = partido.pareja1 || partido.displayPareja1 || origenP1 || 'Esperando...';
+  const nombreP2 = partido.pareja2 || partido.displayPareja2 || origenP2 || 'Esperando...';
 
   const row1Class = p1esGanador
     ? 'winner'
