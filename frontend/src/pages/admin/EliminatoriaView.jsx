@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ResultadoModal from '../../components/ResultadoModal';
@@ -34,7 +34,51 @@ export default function EliminatoriaView() {
   const [partidoReprogramar, setPartidoReprogramar] = useState(null);
   const [editBracketModal, setEditBracketModal] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null });
+  const [activeRoundId, setActiveRoundId] = useState(null);
   const bracketScrollRef = useRef(null);
+
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 768px)').matches;
+  });
+
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 768px)');
+    const onChange = (e) => setIsMobile(e.matches);
+    if (mql.addEventListener) {
+      mql.addEventListener('change', onChange);
+    } else {
+      mql.addListener(onChange);
+    }
+    return () => {
+      if (mql.removeEventListener) {
+        mql.removeEventListener('change', onChange);
+      } else {
+        mql.removeListener(onChange);
+      }
+    };
+  }, []);
+
+  const rondaMasAvanzadaConParejas = useMemo(() => {
+    if (!fases || fases.length === 0) return null;
+    for (let i = fases.length - 1; i >= 0; i--) {
+      const fase = fases[i];
+      const tieneDefinido = fase.partidos.some(
+        (p) => Boolean(p.pareja1 && p.pareja2) || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO'
+      );
+      if (tieneDefinido) return fase.id;
+    }
+    return fases[0].id;
+  }, [fases]);
+
+  const activeFaseMobile = useMemo(() => {
+    if (!fases || fases.length === 0) return null;
+    return (
+      fases.find((f) => f.id === activeRoundId) ||
+      fases.find((f) => f.id === rondaMasAvanzadaConParejas) ||
+      fases[0]
+    );
+  }, [fases, activeRoundId, rondaMasAvanzadaConParejas]);
 
   useEffect(() => {
     cargarDatos();
@@ -108,6 +152,175 @@ export default function EliminatoriaView() {
     }
   }
 
+  const renderMatch = (partido) => {
+    const isBye = Boolean(partido.esBye);
+    const isFinalizado = partido.estado === 'FINALIZADO';
+    const isJugable = !isBye && Boolean(partido.pareja1Id && partido.pareja2Id);
+    const p1esGanador = isFinalizado && partido.ganadorId === partido.pareja1Id;
+    const p2esGanador = isFinalizado && partido.ganadorId === partido.pareja2Id;
+
+    // Lados definidos en la tarjeta (para identificar el slot BYE)
+    const lado1Definido = Boolean(partido.pareja1 || partido.pareja1Id || partido.origenPareja1);
+    const lado2Definido = Boolean(partido.pareja2 || partido.pareja2Id || partido.origenPareja2);
+
+    // Parejas y orígenes a mostrar (incluyendo campos derivados de display de la ronda siguiente)
+    const p1Pareja = partido.pareja1 || partido.displayPareja1;
+    const p1Origen = partido.origenPareja1 || partido.displayOrigenPareja1;
+    const p2Pareja = partido.pareja2 || partido.displayPareja2;
+    const p2Origen = partido.origenPareja2 || partido.displayOrigenPareja2;
+
+    let titleTexto = 'Esperando clasificados';
+    if (isBye) {
+      titleTexto = 'Pase directo por BYE';
+    } else if (isJugable) {
+      titleTexto = isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado';
+    }
+
+    return (
+      <div key={partido.id} className="bracket-match-wrapper">
+        <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div
+            className={`match-card ${isBye ? 'bye-card' : ''} ${isFinalizado && !isBye ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
+            onClick={() => {
+              if (!isBye && isJugable) {
+                handleClickPartido(partido);
+              }
+            }}
+            title={titleTexto}
+          >
+            <div className="match-card-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {(isFinalizado || isJugable) && !isBye && (
+                  <span className={`match-status-badge ${isFinalizado ? 'finalizado' : 'pendiente'}`}>
+                    {isFinalizado ? 'Finalizado' : 'Pendiente'}
+                  </span>
+                )}
+                {!isFinalizado && !isBye && (
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      className="btn-icon"
+                      title="Editar cruce"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditBracketModal(partido);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        color: 'var(--color-text-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        transition: 'color 0.2s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+                    >
+                      <Settings size={13} strokeWidth={2} />
+                    </button>
+                    <button
+                      className="btn-icon"
+                      title={partido.fechaHora ? "Reprogramar horario y cancha" : "Asignar horario y cancha"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPartidoReprogramar(partido);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        color: 'var(--color-text-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        transition: 'color 0.2s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+                    >
+                      <Clock size={13} strokeWidth={2} />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <span className="match-position">#{partido.posicionEnRonda}</span>
+            </div>
+
+            {!isBye && (
+              partido.fechaHora ? (
+                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                    <Clock size={11} style={{ color: 'var(--color-primary)' }} />
+                    {formatDiaHorario(partido.fechaHora)}
+                  </div>
+                </div>
+              ) : (
+                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-warning)', fontWeight: 600 }}>
+                    <AlertTriangle size={10} /> Sin horario
+                  </div>
+                </div>
+              )
+            )}
+
+            <div className="parejas-list">
+              <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
+                <div className="pareja-info">
+                  {isBye && !lado1Definido ? (
+                    <span className="pareja-bye">BYE</span>
+                  ) : p1Pareja ? (
+                    <span className="pareja-nombre">
+                      {formatParejaDisplay(p1Pareja)}
+                    </span>
+                  ) : (
+                    <span className="pareja-esperando">
+                      {p1Origen || 'Esperando...'}
+                    </span>
+                  )}
+                </div>
+                {partido.sets && partido.sets.length > 0 && (
+                  <div className="sets-container">
+                    {partido.sets.map((set, idx) => (
+                      <span key={idx} className="set-score">
+                        {set.gamesPareja1}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className={`pareja-row ${p2esGanador ? 'ganador' : ''}`}>
+                <div className="pareja-info">
+                  {isBye && !lado2Definido ? (
+                    <span className="pareja-bye">BYE</span>
+                  ) : p2Pareja ? (
+                    <span className="pareja-nombre">
+                      {formatParejaDisplay(p2Pareja)}
+                    </span>
+                  ) : (
+                    <span className="pareja-esperando">
+                      {p2Origen || 'Esperando...'}
+                    </span>
+                  )}
+                </div>
+                {partido.sets && partido.sets.length > 0 && (
+                  <div className="sets-container">
+                    {partido.sets.map((set, idx) => (
+                      <span key={idx} className="set-score">
+                        {set.gamesPareja2}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return <div className="loading">Cargando...</div>;
   }
@@ -148,9 +361,14 @@ export default function EliminatoriaView() {
             </Link>
           )}
         </div>
-        <h1>
-          {categoria.torneo?.nombre} — {categoria.nombre}
-        </h1>
+        <div className="eliminatoria-title-container">
+          {categoria.torneo?.nombre && (
+            <span className="eliminatoria-torneo-sub">{categoria.torneo.nombre}</span>
+          )}
+          <h1 className="eliminatoria-header-title">
+            {categoria.nombre}
+          </h1>
+        </div>
         <div className="header-actions">
 
           <span className={`badge badge-${(categoria.estado || '').toLowerCase()}`}>
@@ -234,6 +452,32 @@ export default function EliminatoriaView() {
             {generando ? 'Generando...' : 'Generar Eliminatoria'}
           </button>
         </div>
+      ) : isMobile ? (
+        <div className="eliminatoria-bracket-mobile">
+          <div className="eliminatoria-bracket-tabs" role="tablist" aria-label="Rondas eliminatorias">
+            {fases.map((fase) => {
+              const isActive = (activeFaseMobile ? activeFaseMobile.id : activeRoundId) === fase.id;
+              return (
+                <button
+                  key={fase.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`eliminatoria-bracket-tab ${isActive ? 'active' : ''}`}
+                  onClick={() => setActiveRoundId(fase.id)}
+                >
+                  <span>{fase.nombre}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {activeFaseMobile && (
+            <div className="eliminatoria-mobile-matches">
+              {activeFaseMobile.partidos.map((partido) => renderMatch(partido))}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="bracket-container">
           <div className="bracket-scroll" ref={bracketScrollRef} style={{ position: 'relative' }}>
@@ -241,174 +485,7 @@ export default function EliminatoriaView() {
               <div key={fase.id} className="ronda-section bracket-section">
                 <h3 className="ronda-title">{fase.nombre}</h3>
                 <div className="ronda-matches bracket-matches-column">
-                  {fase.partidos.map((partido) => {
-                    const isBye = Boolean(partido.esBye);
-                    const isFinalizado = partido.estado === 'FINALIZADO';
-                    const isJugable = !isBye && Boolean(partido.pareja1Id && partido.pareja2Id);
-                    const p1esGanador = isFinalizado && partido.ganadorId === partido.pareja1Id;
-                    const p2esGanador = isFinalizado && partido.ganadorId === partido.pareja2Id;
-
-                    // Lados definidos en la tarjeta (para identificar el slot BYE)
-                    const lado1Definido = Boolean(partido.pareja1 || partido.pareja1Id || partido.origenPareja1);
-                    const lado2Definido = Boolean(partido.pareja2 || partido.pareja2Id || partido.origenPareja2);
-
-                    // Parejas y orígenes a mostrar (incluyendo campos derivados de display de la ronda siguiente)
-                    const p1Pareja = partido.pareja1 || partido.displayPareja1;
-                    const p1Origen = partido.origenPareja1 || partido.displayOrigenPareja1;
-                    const p2Pareja = partido.pareja2 || partido.displayPareja2;
-                    const p2Origen = partido.origenPareja2 || partido.displayOrigenPareja2;
-
-                    let titleTexto = 'Esperando clasificados';
-                    if (isBye) {
-                      titleTexto = 'Pase directo por BYE';
-                    } else if (isJugable) {
-                      titleTexto = isFinalizado ? 'Click para editar resultado' : 'Click para cargar resultado';
-                    }
-
-                    return (
-                      <div key={partido.id} className="bracket-match-wrapper">
-                        <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div
-                            className={`match-card ${isBye ? 'bye-card' : ''} ${isFinalizado && !isBye ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
-                            onClick={() => {
-                              if (!isBye && isJugable) {
-                                handleClickPartido(partido);
-                              }
-                            }}
-                            title={titleTexto}
-                          >
-                            <div className="match-card-header">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                {(isFinalizado || isJugable) && !isBye && (
-                                  <span className={`match-status-badge ${isFinalizado ? 'finalizado' : 'pendiente'}`}>
-                                    {isFinalizado ? 'Finalizado' : 'Pendiente'}
-                                  </span>
-                                )}
-                                {!isFinalizado && !isBye && (
-                                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <button
-                                      className="btn-icon"
-                                      title="Editar cruce"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditBracketModal(partido);
-                                      }}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        padding: '2px',
-                                        color: 'var(--color-text-muted)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        transition: 'color 0.2s',
-                                      }}
-                                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
-                                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
-                                    >
-                                      <Settings size={13} strokeWidth={2} />
-                                    </button>
-                                    <button
-                                      className="btn-icon"
-                                      title={partido.fechaHora ? "Reprogramar horario y cancha" : "Asignar horario y cancha"}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setPartidoReprogramar(partido);
-                                      }}
-                                      style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        padding: '2px',
-                                        color: 'var(--color-text-muted)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        transition: 'color 0.2s',
-                                      }}
-                                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
-                                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
-                                    >
-                                      <Clock size={13} strokeWidth={2} />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                              <span className="match-position">#{partido.posicionEnRonda}</span>
-                            </div>
-
-                            {!isBye && (
-                              partido.fechaHora ? (
-                                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                                    <Clock size={11} style={{ color: 'var(--color-primary)' }} />
-                                    {formatDiaHorario(partido.fechaHora)}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                    <AlertTriangle size={10} /> Sin horario
-                                  </div>
-                                </div>
-                              )
-                            )}
-
-                            <div className="parejas-list">
-                              <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
-                                <div className="pareja-info">
-                                  {isBye && !lado1Definido ? (
-                                    <span className="pareja-bye">BYE</span>
-                                  ) : p1Pareja ? (
-                                    <span className="pareja-nombre">
-                                      {formatParejaDisplay(p1Pareja)}
-                                    </span>
-                                  ) : (
-                                    <span className="pareja-esperando">
-                                      {p1Origen || 'Esperando...'}
-                                    </span>
-                                  )}
-                                </div>
-                                {partido.sets && partido.sets.length > 0 && (
-                                  <div className="sets-container">
-                                    {partido.sets.map((set, idx) => (
-                                      <span key={idx} className="set-score">
-                                        {set.gamesPareja1}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className={`pareja-row ${p2esGanador ? 'ganador' : ''}`}>
-                                <div className="pareja-info">
-                                  {isBye && !lado2Definido ? (
-                                    <span className="pareja-bye">BYE</span>
-                                  ) : p2Pareja ? (
-                                    <span className="pareja-nombre">
-                                      {formatParejaDisplay(p2Pareja)}
-                                    </span>
-                                  ) : (
-                                    <span className="pareja-esperando">
-                                      {p2Origen || 'Esperando...'}
-                                    </span>
-                                  )}
-                                </div>
-                                {partido.sets && partido.sets.length > 0 && (
-                                  <div className="sets-container">
-                                    {partido.sets.map((set, idx) => (
-                                      <span key={idx} className="set-score">
-                                        {set.gamesPareja2}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {fase.partidos.map((partido) => renderMatch(partido))}
                 </div>
               </div>
             ))}
