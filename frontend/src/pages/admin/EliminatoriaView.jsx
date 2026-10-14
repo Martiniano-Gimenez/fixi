@@ -363,7 +363,10 @@ export default function EliminatoriaView() {
         </div>
         <div className="eliminatoria-title-container">
           {categoria.torneo?.nombre && (
-            <span className="eliminatoria-torneo-sub">{categoria.torneo.nombre}</span>
+            <>
+              <span className="eliminatoria-torneo-sub">{categoria.torneo.nombre}</span>
+              <span className="eliminatoria-title-sep">—</span>
+            </>
           )}
           <h1 className="eliminatoria-header-title">
             {categoria.nombre}

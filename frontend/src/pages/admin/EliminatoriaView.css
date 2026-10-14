@@ -37,28 +37,35 @@
   border-color: var(--color-primary);
 }
 
-.eliminatoria-container .header h1,
-.eliminatoria-header-title {
-  font-size: var(--font-size-2xl);
-  margin: 0;
-  color: var(--color-text);
-  line-height: 1.2;
-}
-
 .eliminatoria-title-container {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  align-items: baseline;
+  gap: 0.45rem;
   flex: 1;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .eliminatoria-torneo-sub {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-text-muted, #94a3b8);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.eliminatoria-title-sep {
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+.eliminatoria-container .header h1,
+.eliminatoria-header-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-text);
+  line-height: 1.2;
 }
 
 .eliminatoria-container .status {
@@ -413,12 +420,20 @@
     padding-bottom: 1rem;
   }
 
+  .eliminatoria-title-container {
+    gap: 0.35rem;
+  }
+
   .eliminatoria-header-title {
-    font-size: 1.35rem;
+    font-size: 1.2rem;
   }
 
   .eliminatoria-torneo-sub {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .eliminatoria-title-sep {
+    font-size: 0.85rem;
   }
 
   .bracket-scroll {
