@@ -134,10 +134,12 @@ function PublicMatchCard({ partido, label = '', isMobile = false, isFav = false 
               <span />
             )}
 
-            <span className={`pub-match-status ${statusClass}`}>
-              {isEnCurso && <span className="pub-match-dot" aria-hidden="true" />}
-              {statusText}
-            </span>
+            {statusText && statusText !== 'Esperando' && !partido.esBye && (
+              <span className={`pub-match-status ${statusClass}`}>
+                {isEnCurso && <span className="pub-match-dot" aria-hidden="true" />}
+                {statusText}
+              </span>
+            )}
           </div>
 
           <div className="pub-match-body">

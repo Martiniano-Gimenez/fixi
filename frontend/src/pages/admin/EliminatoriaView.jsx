@@ -279,9 +279,11 @@ export default function EliminatoriaView() {
                           >
                             <div className="match-card-header">
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span className={`match-status-badge ${isBye ? 'bye' : isFinalizado ? 'finalizado' : isJugable ? 'pendiente' : 'esperando'}`}>
-                                  {isBye ? 'Pase directo' : isFinalizado ? 'Finalizado' : isJugable ? 'Pendiente' : 'Esperando...'}
-                                </span>
+                                {(isFinalizado || isJugable) && !isBye && (
+                                  <span className={`match-status-badge ${isFinalizado ? 'finalizado' : 'pendiente'}`}>
+                                    {isFinalizado ? 'Finalizado' : 'Pendiente'}
+                                  </span>
+                                )}
                                 {!isFinalizado && !isBye && (
                                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                     <button
