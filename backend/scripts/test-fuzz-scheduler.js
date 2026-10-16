@@ -198,6 +198,7 @@ function verificarInvariantesPorEtapa({
   etapa,
   allowDayLimitMs = false,
   partidosSinSlotMap = {},
+  overrideDiaKey = null,
 }) {
   const ventanasClub = getVentanasClub(organizador, refFecha);
 
@@ -312,7 +313,7 @@ function verificarInvariantesPorEtapa({
   }
 
   // 5. P3/P4 de mini-bracket empiezan después del fin de P1 y P2
-  // (Se permite P3/P4 con horario si P1/P2 están en partidosSinSlot del día afectado)
+  // (P3/P4 con horario se permiten con P1/P2 en partidosSinSlot solo si P3/P4 están en una jornada distinta de la del override. Si están en el mismo día, es falla.)
   const zonasMiniBracket = zonas.filter((z) => z.formato === 'MINI_BRACKET');
   for (const z of zonasMiniBracket) {
     const zPartidos = partidos.filter((p) => p.zonaId === z.id);
@@ -326,8 +327,12 @@ function verificarInvariantesPorEtapa({
         const mStart = new Date(m.fechaHora).getTime();
         const p1Valid = p1 && p1.fechaHora && !p1.sinHorarioAsignado;
         const p2Valid = p2 && p2.fechaHora && !p2.sinHorarioAsignado;
-        const p1Allowed = p1Valid || Boolean(p1 && partidosSinSlotMap[p1.id]);
-        const p2Allowed = p2Valid || Boolean(p2 && partidosSinSlotMap[p2.id]);
+
+        const mDiaKey = getDiaCalendarioConTrasnoche(m.fechaHora, organizador)?.key;
+        const esDistintaJornada = Boolean(overrideDiaKey && mDiaKey && mDiaKey !== overrideDiaKey);
+
+        const p1Allowed = p1Valid || (esDistintaJornada && Boolean(p1 && partidosSinSlotMap[p1.id]));
+        const p2Allowed = p2Valid || (esDistintaJornada && Boolean(p2 && partidosSinSlotMap[p2.id]));
         if (!p1Allowed || !p2Allowed) {
           recordFailure(
             `mini_bracket_orden_p3_p4:${etapa}`,
@@ -816,6 +821,7 @@ async function runSingleSeed(seed, recordFailure) {
       etapa: 'post-reduccion',
       allowDayLimitMs: true,
       partidosSinSlotMap,
+      overrideDiaKey: targetDiaKey,
     });
 
     // =========================================================================
