@@ -938,6 +938,139 @@ async function reproCasoCruzadoMiniBracketOtraJornada(registrarResultado) {
   );
 }
 
+/**
+ * TEST NUEVO (1): R1 FINALIZADO, P3/P4 ya tienen parejas definidas; al reducir canchas el mismo día,
+ * P3/P4 no pueden empezar antes de max(fin P1, fin P2).
+ */
+async function reproMiniBracketP3P4ConParejasDefinidas(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club MB P3P4 Con Parejas',
+      email: 'repro-mb-p3p4-parejas@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 2,
+      viernesInicio: '18:00',
+      viernesFin: '23:30',
+      sabadoInicio: '09:00',
+      sabadoFin: '22:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo MB P3P4 Con Parejas',
+      slug: 'torneo-mb-p3p4-parejas',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'EN_CURSO',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' },
+  });
+
+  const zona = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona A', formato: 'MINI_BRACKET', clasifican: 3 },
+  });
+
+  const parejas = [];
+  for (let i = 1; i <= 4; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `M1_${i}`, jugador2: `M2_${i}`, orden: i },
+    });
+    parejas.push(p);
+    await prisma.zonaPareja.create({ data: { zonaId: zona.id, parejaId: p.id } });
+  }
+
+  // P1 y P2 jugados (FINALIZADO) a las 19:15 (terminan 20:30). El turno de las 18:00 está libre.
+  // P3 y P4 ya tienen parejas definidas (ganadores y perdedores de R1) y están agendados a las 20:30 en Canchas 1 y 2.
+  const vie19_15 = parseFechaLocal('2026-09-04');
+  vie19_15.setHours(19, 15, 0, 0);
+  const vie20_30 = parseFechaLocal('2026-09-04');
+  vie20_30.setHours(20, 30, 0, 0);
+
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 1,
+      pareja1Id: parejas[0].id,
+      pareja2Id: parejas[3].id,
+      ganadorId: parejas[0].id,
+      estado: 'FINALIZADO',
+      fechaHora: vie19_15,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 2,
+      pareja1Id: parejas[1].id,
+      pareja2Id: parejas[2].id,
+      ganadorId: parejas[1].id,
+      estado: 'FINALIZADO',
+      fechaHora: vie19_15,
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  const p3 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 3,
+      pareja1Id: parejas[0].id,
+      pareja2Id: parejas[1].id,
+      estado: 'PENDIENTE',
+      fechaHora: vie20_30,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  const p4 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 4,
+      pareja1Id: parejas[3].id,
+      pareja2Id: parejas[2].id,
+      estado: 'PENDIENTE',
+      fechaHora: vie20_30,
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-04');
+
+  const p3Post = await prisma.partido.findUnique({ where: { id: p3.id } });
+  const p4Post = await prisma.partido.findUnique({ where: { id: p4.id } });
+  const minAllowedMs = vie19_15.getTime() + DURACION_MS; // 20:30
+
+  const p3StartMs = p3Post.fechaHora ? new Date(p3Post.fechaHora).getTime() : 0;
+  const p4StartMs = p4Post.fechaHora ? new Date(p4Post.fechaHora).getTime() : 0;
+  const ok = p3StartMs >= minAllowedMs && p4StartMs >= minAllowedMs;
+
+  registrarResultado(
+    'lluvia_mb_p3_p4_con_parejas:post-reduccion',
+    ok,
+    ok
+      ? 'OK'
+      : `P3 (${p3Post.fechaHora?.toISOString()}) o P4 (${p4Post.fechaHora?.toISOString()}) empezó antes del fin de R1 (${new Date(minAllowedMs).toISOString()})`
+  );
+}
+
 async function runAllRepros() {
   await ensureTestDb();
   resetTestDb();
@@ -967,6 +1100,7 @@ async function runAllRepros() {
     await reproEmergenciaIntactoLluvia(registrarResultado);
     await reproReduccionEscalonada6a4a3YRestaurar(registrarResultado);
     await reproCasoCruzadoMiniBracketOtraJornada(registrarResultado);
+    await reproMiniBracketP3P4ConParejasDefinidas(registrarResultado);
   } finally {
     await limpiarDb();
     await prisma.$disconnect();
