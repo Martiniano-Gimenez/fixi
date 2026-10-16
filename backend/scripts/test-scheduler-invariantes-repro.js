@@ -1490,6 +1490,409 @@ async function reproRestauracionSinDiaKeyMultiDia(registrarResultado) {
   );
 }
 
+/**
+ * TEST DETERMINÍSTICO (12): Escenario completo de 3 días (Viernes, Sábado y Domingo):
+ * - Reducción en Viernes (zonas con partidos desplazados a partidosSinSlot).
+ * - Reducción en Sábado (zonas con partidos desplazados a partidosSinSlot).
+ * - Reducción en Domingo (eliminatorias reprogramadas a canchas reducidas).
+ * - Restauración general sin diaKey: verifica recuperación cronológica de los 3 días,
+ *   limpieza completa de DB (0 overrides) y mide duración de la transacción atómica.
+ */
+async function reproRestauracionSinDiaKey3DiasViernesSabadoDomingo(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club 3 Dias Lluvia',
+      email: 'repro-3dias@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 2,
+      viernesInicio: '18:00',
+      viernesFin: '22:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '13:00',
+      domingoInicio: '09:00',
+      domingoFin: '17:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo 3 Dias Lluvia',
+      slug: 'torneo-3dias-lluvia',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'EN_CURSO',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' },
+  });
+
+  const zonaVie = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona Vie', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+  const zonaSab = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona Sab', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+
+  const parejas = [];
+  for (let i = 1; i <= 16; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+    parejas.push(p);
+  }
+
+  // Viernes: 3 FINALIZADOS en Cancha 1 (18:00, 19:15, 20:30), 2 PENDIENTES en Cancha 2 (18:00, 19:15)
+  const turnosVie = [
+    new Date(2026, 8, 4, 18, 0, 0, 0),
+    new Date(2026, 8, 4, 19, 15, 0, 0),
+    new Date(2026, 8, 4, 20, 30, 0, 0),
+  ];
+  for (let idx = 0; idx < 3; idx++) {
+    await prisma.partido.create({
+      data: {
+        categoriaId: cat.id,
+        zonaId: zonaVie.id,
+        posicionEnRonda: idx + 1,
+        pareja1Id: parejas[idx * 2].id,
+        pareja2Id: parejas[idx * 2 + 1].id,
+        ganadorId: parejas[idx * 2].id,
+        estado: 'FINALIZADO',
+        fechaHora: turnosVie[idx],
+        canchaNumero: 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+  const pViePend1 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaVie.id,
+      posicionEnRonda: 4,
+      pareja1Id: parejas[6].id,
+      pareja2Id: parejas[7].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosVie[0],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+  const pViePend2 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaVie.id,
+      posicionEnRonda: 5,
+      pareja1Id: parejas[0].id,
+      pareja2Id: parejas[7].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosVie[1],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Sábado: 3 FINALIZADOS en Cancha 1 (09:00, 10:15, 11:30), 2 PENDIENTES en Cancha 2 (09:00, 10:15)
+  const turnosSab = [
+    new Date(2026, 8, 5, 9, 0, 0, 0),
+    new Date(2026, 8, 5, 10, 15, 0, 0),
+    new Date(2026, 8, 5, 11, 30, 0, 0),
+  ];
+  for (let idx = 0; idx < 3; idx++) {
+    await prisma.partido.create({
+      data: {
+        categoriaId: cat.id,
+        zonaId: zonaSab.id,
+        posicionEnRonda: idx + 1,
+        pareja1Id: parejas[8 + idx * 2].id,
+        pareja2Id: parejas[8 + idx * 2 + 1].id,
+        ganadorId: parejas[8 + idx * 2].id,
+        estado: 'FINALIZADO',
+        fechaHora: turnosSab[idx],
+        canchaNumero: 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+  const pSabPend1 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaSab.id,
+      posicionEnRonda: 4,
+      pareja1Id: parejas[14].id,
+      pareja2Id: parejas[15].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosSab[0],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+  const pSabPend2 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaSab.id,
+      posicionEnRonda: 5,
+      pareja1Id: parejas[8].id,
+      pareja2Id: parejas[15].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosSab[1],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Domingo: Eliminatorias (Semifinales)
+  const fase = await prisma.faseEliminatoria.create({
+    data: {
+      categoriaId: cat.id,
+      nombre: 'Semifinales',
+      ronda: 4,
+    },
+  });
+  const pDom1 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase.id,
+      posicionEnRonda: 1,
+      pareja1Id: parejas[0].id,
+      pareja2Id: parejas[1].id,
+      estado: 'PENDIENTE',
+      fechaHora: new Date(2026, 8, 6, 9, 0, 0, 0),
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+    },
+  });
+  const pDom2 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase.id,
+      posicionEnRonda: 2,
+      pareja1Id: parejas[2].id,
+      pareja2Id: parejas[3].id,
+      estado: 'PENDIENTE',
+      fechaHora: new Date(2026, 8, 6, 9, 0, 0, 0),
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Reducción Viernes (1 cancha)
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-04');
+  const ovVie = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 2);
+  const desplazadosVieIds = Object.keys(ovVie.partidosSinSlot || {});
+
+  // Reducción Sábado (1 cancha)
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-05');
+  const ovSab = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-05', 2);
+  const desplazadosSabIds = Object.keys(ovSab.partidosSinSlot || {});
+
+  // Reducción Domingo (1 cancha)
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-06');
+
+  const initialOverrides = await prisma.overrideCanchasDia.findMany({ where: { torneoId: torneo.id } });
+  console.log(`[3-Dias Test] Overrides creados antes de restaurar: ${initialOverrides.length} (Viernes, Sábado, Domingo)`);
+
+  // Medir duración de la transacción atómica
+  const startNano = process.hrtime.bigint();
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, null);
+  const endNano = process.hrtime.bigint();
+  const duracionMs = Number(endNano - startNano) / 1e6;
+  console.log(`⏱️ [Benchmark Transacción Multi-Día] Duración: ${duracionMs.toFixed(2)} ms (timeout configurado: 20000 ms)`);
+
+  // Verificaciones post-restauración
+  const partidosViePost = await prisma.partido.findMany({ where: { id: { in: desplazadosVieIds } } });
+  const partidosSabPost = await prisma.partido.findMany({ where: { id: { in: desplazadosSabIds } } });
+  const partidosDomPost = await prisma.partido.findMany({ where: { id: { in: [pDom1.id, pDom2.id] } } });
+
+  const vieRecuperados = partidosViePost.filter((p) => p.fechaHora !== null && !p.sinHorarioAsignado).length;
+  const sabRecuperados = partidosSabPost.filter((p) => p.fechaHora !== null && !p.sinHorarioAsignado).length;
+  const domRecuperados = partidosDomPost.filter((p) => p.fechaHora !== null && !p.sinHorarioAsignado).length;
+
+  const overridesRestantes = await prisma.overrideCanchasDia.findMany({ where: { torneoId: torneo.id } });
+  const cacheRestante = canchasOverridesService.getOverridesTorneo(torneo.id);
+  const cacheEmpty = !cacheRestante || Object.keys(cacheRestante).length === 0;
+
+  const passed =
+    initialOverrides.length === 3 &&
+    vieRecuperados === desplazadosVieIds.length &&
+    sabRecuperados === desplazadosSabIds.length &&
+    domRecuperados === 2 &&
+    overridesRestantes.length === 0 &&
+    cacheEmpty &&
+    duracionMs < 20000;
+
+  registrarResultado(
+    'lluvia_restauracion_3_dias:post-restauracion',
+    passed,
+    passed
+      ? `OK (${duracionMs.toFixed(2)} ms)`
+      : `FALLA: initialOverrides=${initialOverrides.length}, vieRecuperados=${vieRecuperados}/${desplazadosVieIds.length}, sabRecuperados=${sabRecuperados}/${desplazadosSabIds.length}, domRecuperados=${domRecuperados}/2, overridesRestantes=${overridesRestantes.length}, cacheEmpty=${cacheEmpty}, duracionMs=${duracionMs}`
+  );
+}
+
+/**
+ * TEST DETERMINÍSTICO (13): Atomicidad y Rollback completo en restauración multi-día:
+ * - Se configuran overrides y partidos desplazados en múltiples jornadas.
+ * - Se simula un fallo no controlado dentro de prisma.$transaction (después de ejecutar
+ *   reprogramaciones de jornadas iniciales).
+ * - Se verifica que NINGÚN cambio de partidos se persista en DB, NINGÚN override sea
+ *   eliminado de la DB y la caché en memoria permanezca intacta (sin mutaciones pendientes).
+ */
+async function reproAtomicidadRollbackRestauracion(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Atomicidad Lluvia',
+      email: 'repro-atomicidad@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 2,
+      viernesInicio: '18:00',
+      viernesFin: '22:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '13:00',
+      domingoInicio: '09:00',
+      domingoFin: '17:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Atomicidad Lluvia',
+      slug: 'torneo-atomicidad-lluvia',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'EN_CURSO',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' },
+  });
+
+  const zonaVie = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona Vie', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+  const zonaSab = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona Sab', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+
+  const parejas = [];
+  for (let i = 1; i <= 8; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `A1_${i}`, jugador2: `A2_${i}`, orden: i },
+    });
+    parejas.push(p);
+  }
+
+  // Viernes: 3 FINALIZADOS en Cancha 1, 1 PENDIENTE en Cancha 2
+  const turnosVie = [
+    new Date(2026, 8, 4, 18, 0, 0, 0),
+    new Date(2026, 8, 4, 19, 15, 0, 0),
+    new Date(2026, 8, 4, 20, 30, 0, 0),
+  ];
+  for (let idx = 0; idx < 3; idx++) {
+    await prisma.partido.create({
+      data: {
+        categoriaId: cat.id,
+        zonaId: zonaVie.id,
+        posicionEnRonda: idx + 1,
+        pareja1Id: parejas[idx].id,
+        pareja2Id: parejas[idx + 1].id,
+        ganadorId: parejas[idx].id,
+        estado: 'FINALIZADO',
+        fechaHora: turnosVie[idx],
+        canchaNumero: 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+  const pViePend = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaVie.id,
+      posicionEnRonda: 4,
+      pareja1Id: parejas[0].id,
+      pareja2Id: parejas[3].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosVie[0],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Reducir Viernes -> pViePend a partidosSinSlot
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-04');
+
+  // Override manual Sábado
+  await canchasOverridesService.setOverrideDia(
+    torneo.id,
+    '2026-09-05',
+    1,
+    new Date(2026, 8, 5, 9, 0, 0, 0),
+    {}
+  );
+  await prisma.torneo.update({
+    where: { id: torneo.id },
+    data: { overrideActivoDesde: new Date(2026, 8, 5, 9, 0, 0, 0), canchasDisponiblesOverride: 1 },
+  });
+
+  // Estado previo a la restauración:
+  const dbOverridesAntes = await prisma.overrideCanchasDia.findMany({ where: { torneoId: torneo.id } });
+  const pVieAntes = await prisma.partido.findUnique({ where: { id: pViePend.id } });
+  const cacheAntes = JSON.parse(JSON.stringify(canchasOverridesService.getOverridesTorneo(torneo.id) || {}));
+
+  // Interceptar la transacción para provocar un fallo simulado durante la eliminación de overrides
+  const origTransaction = prisma.$transaction.bind(prisma);
+  let errorSimuladoCapturado = false;
+
+  prisma.$transaction = async (fn, opts) => {
+    return origTransaction(async (tx) => {
+      tx.overrideCanchasDia.deleteMany = async (...args) => {
+        throw new Error('SIMULATED_TRANSACTION_ROLLBACK_ERROR');
+      };
+      return fn(tx);
+    }, opts);
+  };
+
+  try {
+    await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, null);
+  } catch (err) {
+    if (err.message && err.message.includes('SIMULATED_TRANSACTION_ROLLBACK_ERROR')) {
+      errorSimuladoCapturado = true;
+    }
+  } finally {
+    prisma.$transaction = origTransaction;
+  }
+
+  // Verificaciones de Rollback:
+  const dbOverridesDespues = await prisma.overrideCanchasDia.findMany({ where: { torneoId: torneo.id } });
+  const pVieDespues = await prisma.partido.findUnique({ where: { id: pViePend.id } });
+  const cacheDespues = canchasOverridesService.getOverridesTorneo(torneo.id) || {};
+
+  const rollbackOverridesOk = dbOverridesDespues.length === dbOverridesAntes.length;
+  const rollbackPartidoOk =
+    pVieDespues.sinHorarioAsignado === pVieAntes.sinHorarioAsignado &&
+    pVieDespues.canchaNumero === pVieAntes.canchaNumero;
+  const rollbackCacheOk = Object.keys(cacheDespues).length === Object.keys(cacheAntes).length;
+
+  const passed =
+    errorSimuladoCapturado &&
+    rollbackOverridesOk &&
+    rollbackPartidoOk &&
+    rollbackCacheOk;
+
+  registrarResultado(
+    'lluvia_atomicidad_rollback:post-restauracion',
+    passed,
+    passed
+      ? 'OK'
+      : `FALLA_ATOMICIDAD: errorSimuladoCapturado=${errorSimuladoCapturado}, rollbackOverridesOk=${rollbackOverridesOk}, rollbackPartidoOk=${rollbackPartidoOk}, rollbackCacheOk=${rollbackCacheOk}`
+  );
+}
+
 async function runAllRepros() {
   await ensureTestDb();
   resetTestDb();
@@ -1522,6 +1925,8 @@ async function runAllRepros() {
     await reproMiniBracketP3P4ConParejasDefinidas(registrarResultado);
     await reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado);
     await reproRestauracionSinDiaKeyMultiDia(registrarResultado);
+    await reproRestauracionSinDiaKey3DiasViernesSabadoDomingo(registrarResultado);
+    await reproAtomicidadRollbackRestauracion(registrarResultado);
   } finally {
     await limpiarDb();
     await prisma.$disconnect();
