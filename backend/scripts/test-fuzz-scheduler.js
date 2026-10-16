@@ -197,6 +197,8 @@ function verificarInvariantesPorEtapa({
   seed,
   etapa,
   allowDayLimitMs = false,
+  partidosSinSlotMap = {},
+  overrideDiaKey = null,
 }) {
   const ventanasClub = getVentanasClub(organizador, refFecha);
 
@@ -311,6 +313,7 @@ function verificarInvariantesPorEtapa({
   }
 
   // 5. P3/P4 de mini-bracket empiezan después del fin de P1 y P2
+  // (P3/P4 con horario se permiten con P1/P2 en partidosSinSlot solo si P3/P4 están en una jornada distinta de la del override. Si están en el mismo día, es falla.)
   const zonasMiniBracket = zonas.filter((z) => z.formato === 'MINI_BRACKET');
   for (const z of zonasMiniBracket) {
     const zPartidos = partidos.filter((p) => p.zonaId === z.id);
@@ -324,23 +327,31 @@ function verificarInvariantesPorEtapa({
         const mStart = new Date(m.fechaHora).getTime();
         const p1Valid = p1 && p1.fechaHora && !p1.sinHorarioAsignado;
         const p2Valid = p2 && p2.fechaHora && !p2.sinHorarioAsignado;
-        if (!p1Valid || !p2Valid) {
+
+        const mDiaKey = getDiaCalendarioConTrasnoche(m.fechaHora, organizador)?.key;
+        const esDistintaJornada = Boolean(overrideDiaKey && mDiaKey && mDiaKey !== overrideDiaKey);
+
+        const p1Allowed = p1Valid || (esDistintaJornada && Boolean(p1 && partidosSinSlotMap[p1.id]));
+        const p2Allowed = p2Valid || (esDistintaJornada && Boolean(p2 && partidosSinSlotMap[p2.id]));
+        if (!p1Allowed || !p2Allowed) {
           recordFailure(
             `mini_bracket_orden_p3_p4:${etapa}`,
             seed,
             `Zona ${z.nombre}: P${m.posicionEnRonda} tiene horario (${new Date(mStart).toISOString()}) pero P1 o P2 no tienen horario`
           );
         } else {
-          const minAllowed = Math.max(
-            new Date(p1.fechaHora).getTime() + DURACION_MS,
-            new Date(p2.fechaHora).getTime() + DURACION_MS
-          );
-          if (mStart < minAllowed) {
-            recordFailure(
-              `mini_bracket_orden_p3_p4:${etapa}`,
-              seed,
-              `Zona ${z.nombre}: P${m.posicionEnRonda} empieza en ${new Date(mStart).toISOString()} antes del fin de P1/P2 (${new Date(minAllowed).toISOString()})`
-            );
+          const endTimes = [];
+          if (p1Valid) endTimes.push(new Date(p1.fechaHora).getTime() + DURACION_MS);
+          if (p2Valid) endTimes.push(new Date(p2.fechaHora).getTime() + DURACION_MS);
+          if (endTimes.length > 0) {
+            const minAllowed = Math.max(...endTimes);
+            if (mStart < minAllowed) {
+              recordFailure(
+                `mini_bracket_orden_p3_p4:${etapa}`,
+                seed,
+                `Zona ${z.nombre}: P${m.posicionEnRonda} empieza en ${new Date(mStart).toISOString()} antes del fin de P1/P2 (${new Date(minAllowed).toISOString()})`
+              );
+            }
           }
         }
       }
@@ -809,6 +820,8 @@ async function runSingleSeed(seed, recordFailure) {
       seed,
       etapa: 'post-reduccion',
       allowDayLimitMs: true,
+      partidosSinSlotMap,
+      overrideDiaKey: targetDiaKey,
     });
 
     // =========================================================================

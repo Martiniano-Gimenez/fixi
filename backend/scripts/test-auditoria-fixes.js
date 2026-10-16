@@ -359,8 +359,8 @@ async function main() {
     },
   });
 
-  // Partido de zona sin horario (salida de emergencia)
-  const pSinHorario = await prisma.partido.create({
+  // Partido de zona sin horario previo pero registrado en partidosSinSlot (Tier 0 al final por fechaHora null)
+  const pSinHorarioEnMapa = await prisma.partido.create({
     data: {
       categoriaId: cat5.id,
       zonaId: zona5.id,
@@ -374,21 +374,58 @@ async function main() {
     },
   });
 
+  // Partido de zona sin horario NO registrado en partidosSinSlot (debe quedar intacto)
+  const p5_5 = await prisma.pareja.create({ data: { categoriaId: cat5.id, jugador1: 'P9', jugador2: 'P10' } });
+  const p5_6 = await prisma.pareja.create({ data: { categoriaId: cat5.id, jugador1: 'P11', jugador2: 'P12' } });
+  const pSinHorarioFueraMapa = await prisma.partido.create({
+    data: {
+      categoriaId: cat5.id,
+      zonaId: zona5.id,
+      posicionEnRonda: 3,
+      pareja1Id: p5_5.id,
+      pareja2Id: p5_6.id,
+      estado: 'PENDIENTE',
+      fechaHora: null,
+      canchaNumero: null,
+      sinHorarioAsignado: true,
+    },
+  });
+
+  // Registrar pSinHorarioEnMapa en el mapa de partidosSinSlot de la jornada ('2026-09-11')
+  await canchasOverridesService.setOverrideDia(
+    torneo5.id,
+    '2026-09-11',
+    2,
+    new Date('2026-09-11T12:00:00.000Z'),
+    { [pSinHorarioEnMapa.id]: 'Sin cancha activa libre disponible en ese horario' }
+  );
+
   // Ejecutamos Modo Lluvia
   await prisma.$transaction(async (tx) => {
     await asignarHorariosModoLluviaMCF(organizador.id, torneo5.id, 2, tx, new Date('2026-09-11T12:00:00.000Z'));
   });
 
   const pConHorarioPost = await prisma.partido.findUnique({ where: { id: pConHorario.id } });
-  const pSinHorarioPost = await prisma.partido.findUnique({ where: { id: pSinHorario.id } });
+  const pSinHorarioEnMapaPost = await prisma.partido.findUnique({ where: { id: pSinHorarioEnMapa.id } });
+  const pSinHorarioFueraMapaPost = await prisma.partido.findUnique({ where: { id: pSinHorarioFueraMapa.id } });
+
+  // 1. Contrato: El partido pendiente fuera del mapa NO se toca
+  if (pSinHorarioFueraMapaPost.fechaHora !== null || !pSinHorarioFueraMapaPost.sinHorarioAsignado) {
+    throw new Error('FALLO: El partido sin horario fuera de partidosSinSlot fue modificado cuando debía quedar intacto!');
+  }
+
+  // 2. Contrato: El partido en mapa se agenda y respeta prioridad (después del que tenía horario asignado)
+  if (!pSinHorarioEnMapaPost.fechaHora) {
+    throw new Error('FALLO: El partido en partidosSinSlot no recibió fechaHora!');
+  }
 
   const tCon = new Date(pConHorarioPost.fechaHora).getTime();
-  const tSin = new Date(pSinHorarioPost.fechaHora).getTime();
+  const tSin = new Date(pSinHorarioEnMapaPost.fechaHora).getTime();
 
   if (tCon > tSin) {
-    throw new Error('FALLO: El partido sin horario previo saltó antes del partido que tenía horario asignado!');
+    throw new Error('FALLO: El partido sin horario previo en mapa saltó antes del partido que tenía horario asignado!');
   }
-  console.log(`  ✅ Verificado: Partido con horario (${new Date(pConHorarioPost.fechaHora).toISOString()}) tuvo prioridad sobre el partido sin horario (${new Date(pSinHorarioPost.fechaHora).toISOString()}).`);
+  console.log(`  ✅ Verificado: Partido fuera del mapa quedó intacto (sin horario), y partido en mapa (${new Date(pSinHorarioEnMapaPost.fechaHora).toISOString()}) quedó después del partido con horario previo (${new Date(pConHorarioPost.fechaHora).toISOString()}).`);
 
   console.log('\n🎉 TODOS LOS TESTS DE AUDITORÍA PASARON EXITOSAMENTE AL 100%!');
   } finally {
