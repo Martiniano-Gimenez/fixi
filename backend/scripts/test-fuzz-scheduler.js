@@ -24,6 +24,16 @@ const {
 const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 const TOTAL_SEEDS = Number(process.env.FUZZ_SEEDS || 500);
 
+const manualFuzzStats = {
+  totalSeedsConZonasDe4: new Set(),
+  seedsConReasignacionAceptada: new Set(),
+  intentosPartidos: 0,
+  llamadasAsignar: 0,
+  aceptadas: 0,
+  rechazadas: 0,
+  mensajesRechazo: {},
+};
+
 /**
  * PRNG determinístico (Mulberry32)
  */
@@ -708,6 +718,11 @@ async function runSingleSeed(seed, recordFailure) {
     const partidosManualesSet = new Set();
     const ventanasFuzz = getVentanasClub(organizador, refFecha);
 
+    const hasMiniBracket = zonasTorneo.some((z) => z.formato === 'MINI_BRACKET');
+    if (hasMiniBracket) {
+      manualFuzzStats.totalSeedsConZonasDe4.add(seed);
+    }
+
     for (const z of zonasTorneo) {
       if (z.formato !== 'MINI_BRACKET') continue;
       const zPartidos = partidosIniciales.filter((p) => p.zonaId === z.id);
@@ -737,20 +752,26 @@ async function runSingleSeed(seed, recordFailure) {
           }
 
           if (candidateStarts.length > 0) {
+            manualFuzzStats.intentosPartidos++;
             const shufStarts = rng.shuffle(candidateStarts);
             let asignado = false;
             for (const tCand of shufStarts.slice(0, 6)) {
               for (let c = 1; c <= cantidadCanchas; c++) {
+                manualFuzzStats.llamadasAsignar++;
                 try {
                   await partidoService.asignarHorarioManual(organizador.id, m.id, {
                     fechaHora: new Date(tCand),
                     canchaNumero: c,
                   });
+                  manualFuzzStats.aceptadas++;
+                  manualFuzzStats.seedsConReasignacionAceptada.add(seed);
                   partidosManualesSet.add(m.id);
                   asignado = true;
                   break;
-                } catch (_) {
-                  // Colisión de cancha u ocupación
+                } catch (err) {
+                  manualFuzzStats.rechazadas++;
+                  const msg = err.message || 'Sin mensaje';
+                  manualFuzzStats.mensajesRechazo[msg] = (manualFuzzStats.mensajesRechazo[msg] || 0) + 1;
                 }
               }
               if (asignado) break;
@@ -1089,6 +1110,25 @@ async function runFuzzSuite() {
   });
 
   console.table(resumenTabla);
+
+  console.log('\n' + '='.repeat(85));
+  console.log('📌 ESTADÍSTICAS DE REASIGNACIÓN MANUAL P3/P4 PRE-R1:');
+  console.log('='.repeat(85));
+  console.log(`- Semillas con zonas de 4 (MINI_BRACKET): ${manualFuzzStats.totalSeedsConZonasDe4.size}`);
+  console.log(`- Semillas con al menos una reasignación aceptada: ${manualFuzzStats.seedsConReasignacionAceptada.size}`);
+  const pct = manualFuzzStats.totalSeedsConZonasDe4.size > 0
+    ? ((manualFuzzStats.seedsConReasignacionAceptada.size / manualFuzzStats.totalSeedsConZonasDe4.size) * 100).toFixed(1)
+    : '0';
+  console.log(`- Porcentaje de semillas con zonas de 4 con reasignación aceptada: ${pct}%`);
+  console.log(`- Partidos P3/P4 candidatos con intento: ${manualFuzzStats.intentosPartidos}`);
+  console.log(`- Total llamadas a asignarHorarioManual: ${manualFuzzStats.llamadasAsignar}`);
+  console.log(`- Llamadas aceptadas: ${manualFuzzStats.aceptadas}`);
+  console.log(`- Llamadas rechazadas: ${manualFuzzStats.rechazadas}`);
+  console.log('- Detalle de mensajes de rechazo:');
+  for (const [msg, cnt] of Object.entries(manualFuzzStats.mensajesRechazo)) {
+    console.log(`    * [${cnt} veces] ${msg}`);
+  }
+  console.log('='.repeat(85) + '\n');
 
   let hayFallas = false;
   for (const k of INVARIANT_KEYS) {
