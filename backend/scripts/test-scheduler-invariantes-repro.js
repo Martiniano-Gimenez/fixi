@@ -1893,6 +1893,135 @@ async function reproAtomicidadRollbackRestauracion(registrarResultado) {
   );
 }
 
+/**
+ * TEST DETERMINÍSTICO (14): Partido desplazado que no entra aun con todas las canchas:
+ * - Se satura al 100% la capacidad de una jornada (ej. Viernes 22:00 a 01:45 en 2 canchas = 6 partidos FINALIZADOS).
+ * - Un partido desplazado en partidosSinSlot no cabe aun con todas las canchas (2) disponibles.
+ * - Tras reprogramarPorReduccionCanchas sin diaKey:
+ *   - El partido permanece con sinHorarioAsignado: true, fechaHora: null, canchaNumero: null.
+ *   - Aparece en getPartidosSinHorarioTorneo (sección de pendientes del organizador).
+ *   - Sus relaciones (categoría, parejas, torneo) se mantienen intactas (no queda huérfano).
+ */
+async function reproPartidoSinSlotNoHuerfano(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Capacidad Estricta',
+      email: 'capacidad-estricta@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 2,
+      viernesInicio: '22:00',
+      viernesFin: '01:45',
+      sabadoInicio: '01:45',
+      sabadoFin: '22:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Saturación',
+      slug: 'torneo-saturacion',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'EN_CURSO',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' },
+  });
+
+  const zona = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona A', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+
+  const parejas = [];
+  for (let i = 1; i <= 14; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `S1_${i}`, jugador2: `S2_${i}`, orden: i },
+    });
+    parejas.push(p);
+  }
+
+  // 6 partidos FINALIZADOS que agotan el 100% de la capacidad de Viernes en ambas canchas:
+  const turnosVie = [
+    new Date(2026, 8, 4, 22, 0, 0, 0),
+    new Date(2026, 8, 4, 23, 15, 0, 0),
+    new Date(2026, 8, 5, 0, 30, 0, 0),
+  ];
+  let pCount = 0;
+  for (let c = 1; c <= 2; c++) {
+    for (let t = 0; t < 3; t++) {
+      await prisma.partido.create({
+        data: {
+          categoriaId: cat.id,
+          zonaId: zona.id,
+          posicionEnRonda: pCount + 1,
+          pareja1Id: parejas[pCount].id,
+          pareja2Id: parejas[pCount + 1].id,
+          ganadorId: parejas[pCount].id,
+          estado: 'FINALIZADO',
+          fechaHora: turnosVie[t],
+          canchaNumero: c,
+          sinHorarioAsignado: false,
+        },
+      });
+      pCount++;
+    }
+  }
+
+  // Partido 7: PENDIENTE desplazado
+  const pDesplazado = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 7,
+      pareja1Id: parejas[12].id,
+      pareja2Id: parejas[13].id,
+      estado: 'PENDIENTE',
+      fechaHora: null,
+      canchaNumero: null,
+      sinHorarioAsignado: true,
+    },
+  });
+
+  // Override en Viernes con el partido 7 en partidosSinSlot
+  await canchasOverridesService.setOverrideDia(
+    torneo.id,
+    '2026-09-04',
+    1,
+    turnosVie[0],
+    { [pDesplazado.id]: 'Sin cancha activa disponible' }
+  );
+
+  // Restaurar sin diaKey a todas las canchas (2 canchas)
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, null);
+
+  const pPost = await prisma.partido.findUnique({ where: { id: pDesplazado.id } });
+  const pendientesRes = await organizadorService.getPartidosSinHorarioTorneo(org.id, torneo.id);
+  const estaEnPendientes = pendientesRes.some((p) => p.id === pDesplazado.id);
+  const matchPendiente = pendientesRes.find((p) => p.id === pDesplazado.id);
+
+  const passed =
+    pPost.sinHorarioAsignado === true &&
+    pPost.fechaHora === null &&
+    pPost.canchaNumero === null &&
+    estaEnPendientes === true &&
+    Boolean(matchPendiente?.categoriaId) &&
+    matchPendiente.categoriaId === cat.id;
+
+  registrarResultado(
+    'lluvia_partido_sin_slot_no_huerfano:post-restauracion',
+    passed,
+    passed
+      ? 'OK'
+      : `FALLA: sinHorarioAsignado=${pPost.sinHorarioAsignado}, estaEnPendientes=${estaEnPendientes}`
+  );
+}
+
 async function runAllRepros() {
   await ensureTestDb();
   resetTestDb();
@@ -1927,6 +2056,7 @@ async function runAllRepros() {
     await reproRestauracionSinDiaKeyMultiDia(registrarResultado);
     await reproRestauracionSinDiaKey3DiasViernesSabadoDomingo(registrarResultado);
     await reproAtomicidadRollbackRestauracion(registrarResultado);
+    await reproPartidoSinSlotNoHuerfano(registrarResultado);
   } finally {
     await limpiarDb();
     await prisma.$disconnect();
