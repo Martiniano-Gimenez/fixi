@@ -1271,6 +1271,225 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
   );
 }
 
+/**
+ * TEST NUEVO (4): Restauración sin diaKey con partidos desplazados en múltiples días:
+ * - Se generan desplazados en Viernes y en Sábado en sendos overrides.
+ * - Se llama a reprogramarPorReduccionCanchas(org.id, torneo.id, null) sin diaKey.
+ * - Se inspecciona qué pasa con los desplazados de cada jornada.
+ */
+async function reproRestauracionSinDiaKeyMultiDia(registrarResultado) {
+  await limpiarDb();
+
+  // Club con 2 canchas:
+  // Viernes 22:00 a 01:45 (dayLimitMs = Sábado 01:45) -> 3 slots por cancha (22:00, 23:15, 00:30)
+  // Sábado 01:45 a 05:30 (dayLimitMs = Domingo 05:30) -> 3 slots por cancha (01:45, 03:00, 04:15)
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club MultiDia Sin DiaKey',
+      email: 'repro-sin-diakey-multidia@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 2,
+      viernesInicio: '22:00',
+      viernesFin: '01:45',
+      sabadoInicio: '01:45',
+      sabadoFin: '05:30',
+      domingoInicio: '05:30',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo MultiDia Sin DiaKey',
+      slug: 'torneo-sin-diakey-multidia',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'EN_CURSO',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' },
+  });
+
+  const zonaVie = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona Vie', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+  const zonaSab = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona Sab', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+
+  const parejas = [];
+  for (let i = 1; i <= 16; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+    parejas.push(p);
+  }
+
+  // Ocupar los 3 turnos de Cancha 1 el Viernes con FINALIZADO (22:00, 23:15, 00:30)
+  const turnosVie = [
+    new Date(2026, 8, 4, 22, 0, 0, 0),
+    new Date(2026, 8, 4, 23, 15, 0, 0),
+    new Date(2026, 8, 5, 0, 30, 0, 0),
+  ];
+  for (let idx = 0; idx < 3; idx++) {
+    await prisma.partido.create({
+      data: {
+        categoriaId: cat.id,
+        zonaId: zonaVie.id,
+        posicionEnRonda: idx + 1,
+        pareja1Id: parejas[idx * 2].id,
+        pareja2Id: parejas[idx * 2 + 1].id,
+        ganadorId: parejas[idx * 2].id,
+        estado: 'FINALIZADO',
+        fechaHora: turnosVie[idx],
+        canchaNumero: 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  // PENDIENTES en Cancha 2 Viernes (22:00 y 23:15)
+  const pViePend1 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaVie.id,
+      posicionEnRonda: 4,
+      pareja1Id: parejas[6].id,
+      pareja2Id: parejas[7].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosVie[0],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+  const pViePend2 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaVie.id,
+      posicionEnRonda: 5,
+      pareja1Id: parejas[0].id,
+      pareja2Id: parejas[7].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosVie[1],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Ocupar los 3 turnos de Cancha 1 el Sábado con FINALIZADO (01:45, 03:00, 04:15)
+  const turnosSab = [
+    new Date(2026, 8, 5, 1, 45, 0, 0),
+    new Date(2026, 8, 5, 3, 0, 0, 0),
+    new Date(2026, 8, 5, 4, 15, 0, 0),
+  ];
+  for (let idx = 0; idx < 3; idx++) {
+    await prisma.partido.create({
+      data: {
+        categoriaId: cat.id,
+        zonaId: zonaSab.id,
+        posicionEnRonda: idx + 1,
+        pareja1Id: parejas[8 + idx * 2].id,
+        pareja2Id: parejas[8 + idx * 2 + 1].id,
+        ganadorId: parejas[8 + idx * 2].id,
+        estado: 'FINALIZADO',
+        fechaHora: turnosSab[idx],
+        canchaNumero: 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  // PENDIENTES en Cancha 2 Sábado (01:45 y 03:00)
+  const pSabPend1 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaSab.id,
+      posicionEnRonda: 4,
+      pareja1Id: parejas[14].id,
+      pareja2Id: parejas[15].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosSab[0],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+  const pSabPend2 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaSab.id,
+      posicionEnRonda: 5,
+      pareja1Id: parejas[8].id,
+      pareja2Id: parejas[15].id,
+      estado: 'PENDIENTE',
+      fechaHora: turnosSab[1],
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // 1. Reducir Viernes (2026-09-04) a 1 cancha -> Cancha 1 llena, pViePend1 y pViePend2 entran a partidosSinSlot de Viernes
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-04');
+  const ovVie = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 2);
+  const desplazadosVieIds = Object.keys(ovVie.partidosSinSlot || {});
+
+  // 2. Override en Sábado (2026-09-05) a 1 cancha con 2 partidos desplazados en partidosSinSlot
+  await prisma.partido.update({
+    where: { id: pSabPend1.id },
+    data: { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true },
+  });
+  await prisma.partido.update({
+    where: { id: pSabPend2.id },
+    data: { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true },
+  });
+  await canchasOverridesService.setOverrideDia(
+    torneo.id,
+    '2026-09-05',
+    1,
+    turnosSab[0],
+    {
+      [pSabPend1.id]: 'Sin cancha activa libre disponible en ese horario',
+      [pSabPend2.id]: 'Sin cancha activa libre disponible en ese horario',
+    }
+  );
+  await prisma.torneo.update({
+    where: { id: torneo.id },
+    data: { overrideActivoDesde: turnosSab[0], canchasDisponiblesOverride: 1 },
+  });
+  const ovSab = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-05', 2);
+  const desplazadosSabIds = Object.keys(ovSab.partidosSinSlot || {});
+
+  console.log(`[MultiDia Test] Desplazados Viernes: ${desplazadosVieIds.length}, Desplazados Sábado: ${desplazadosSabIds.length}`);
+
+  // 3. Restaurar sin diaKey (ruta legacy / general):
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, null);
+
+  // 4. Analizar estado de los partidos desplazados de cada jornada tras la restauración sin diaKey:
+  const partidosViePost = await prisma.partido.findMany({ where: { id: { in: desplazadosVieIds } } });
+  const partidosSabPost = await prisma.partido.findMany({ where: { id: { in: desplazadosSabIds } } });
+
+  const vieRecuperados = partidosViePost.filter((p) => p.fechaHora !== null && !p.sinHorarioAsignado).length;
+  const sabRecuperados = partidosSabPost.filter((p) => p.fechaHora !== null && !p.sinHorarioAsignado).length;
+
+  const overridesRestantes = await prisma.overrideCanchasDia.findMany({ where: { torneoId: torneo.id } });
+
+  console.log(`[MultiDia Test] Tras restaurar sin diaKey:`);
+  console.log(`  - Viernes recuperados: ${vieRecuperados}/${desplazadosVieIds.length}`);
+  console.log(`  - Sábado recuperados: ${sabRecuperados}/${desplazadosSabIds.length}`);
+  console.log(`  - Overrides restantes en DB: ${overridesRestantes.length}`);
+
+  const todosRecuperados = vieRecuperados === desplazadosVieIds.length && sabRecuperados === desplazadosSabIds.length;
+
+  registrarResultado(
+    'lluvia_restauracion_sin_diakey_multidia:post-restauracion',
+    todosRecuperados,
+    todosRecuperados
+      ? 'OK'
+      : `PERDIDA_PARTIDOS: vieRecuperados=${vieRecuperados}/${desplazadosVieIds.length}, sabRecuperados=${sabRecuperados}/${desplazadosSabIds.length}, overridesRestantes=${overridesRestantes.length}`
+  );
+}
+
 async function runAllRepros() {
   await ensureTestDb();
   resetTestDb();
@@ -1302,6 +1521,7 @@ async function runAllRepros() {
     await reproCasoCruzadoMiniBracketOtraJornada(registrarResultado);
     await reproMiniBracketP3P4ConParejasDefinidas(registrarResultado);
     await reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado);
+    await reproRestauracionSinDiaKeyMultiDia(registrarResultado);
   } finally {
     await limpiarDb();
     await prisma.$disconnect();
