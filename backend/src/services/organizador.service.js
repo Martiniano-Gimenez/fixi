@@ -2201,8 +2201,21 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     ? canchasOverridesService.getCanchasDia(torneoId, overrideDiaKey, canchasClub).canchas
     : canchasEfectivasActuales;
 
-  // 2. Si no hay cambio en la cantidad de canchas activas para esta jornada específica, no hacer nada
-  if (overrideNum === canchasActualesDia && (esRestauracion || !diaKey || esMismoDia)) {
+  const allOverridesMap = canchasOverridesService.getOverridesTorneo(torneoId);
+  const hasActiveOverrides = allOverridesMap && Object.keys(allOverridesMap).length > 0;
+
+  // 2. Si no hay cambio en la cantidad de canchas activas para esta jornada específica, no hacer nada.
+  // En restauración sin diaKey, solo retornar temprano si ya NO quedan overrides activos en el torneo.
+  if (esRestauracion && !diaKey) {
+    if (!hasActiveOverrides && overrideNum === canchasClub) {
+      return {
+        message: `El torneo ya cuenta con todas las canchas (${canchasClub}) activas.`,
+        canchasActivas: canchasClub,
+        overrideActivoDesde: null,
+        reprogramacion: { ejecutada: false },
+      };
+    }
+  } else if (overrideNum === canchasActualesDia && (!diaKey || esMismoDia)) {
     return {
       message: `La cantidad de canchas activas para ${diaNombre || 'la jornada'} ya es ${overrideNum}.`,
       canchasActivas: overrideNum,
@@ -2253,7 +2266,77 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   const { res: mcfRes, pendingMutations } = await prisma.$transaction(async (tx) => {
     let res;
 
-    if (esDomingo) {
+    if (esRestauracion && !diaKey) {
+      // Restauración global multi-día sin diaKey:
+      // Consultar todos los overrides activos del torneo en DB ordenados cronológicamente
+      const activeOverrides = await tx.overrideCanchasDia.findMany({
+        where: { torneoId },
+        orderBy: { diaKey: 'asc' },
+      });
+
+      if (activeOverrides.length > 0) {
+        let totalReprogramados = 0;
+        let totalSinCambio = 0;
+        let totalSinHorarioNuevo = 0;
+        const allCambios = [];
+        const allPartidosSinSlot = {};
+
+        for (const ov of activeOverrides) {
+          const diaTs = parseFechaLocal(ov.diaKey);
+          const ovDiaInfo = getDiaCalendarioConTrasnoche(diaTs, horariosClubObj);
+          const ovEsDomingo = ovDiaInfo?.logicalDate
+            ? ovDiaInfo.logicalDate.getDay() === 0
+            : false;
+
+          let dayRes;
+          if (ovEsDomingo) {
+            const schedRes = await programarHorariosEliminatorias(
+              organizadorId,
+              torneoId,
+              null,
+              tx,
+              canchasClub
+            );
+            dayRes = {
+              partidosReprogramados: schedRes.partidosAgendados,
+              partidosSinCambio: 0,
+              partidosSinHorarioNuevo: schedRes.partidosSinHorario,
+              cambios: [],
+            };
+          } else {
+            dayRes = await asignarHorariosModoLluviaMCF(
+              organizadorId,
+              torneoId,
+              canchasClub,
+              tx,
+              diaTs
+            );
+          }
+
+          totalReprogramados += dayRes?.partidosReprogramados || 0;
+          totalSinCambio += dayRes?.partidosSinCambio || 0;
+          totalSinHorarioNuevo += dayRes?.partidosSinHorarioNuevo || 0;
+          if (dayRes?.cambios) allCambios.push(...dayRes.cambios);
+          if (dayRes?.partidosSinSlot) Object.assign(allPartidosSinSlot, dayRes.partidosSinSlot);
+        }
+
+        res = {
+          partidosReprogramados: totalReprogramados,
+          partidosSinCambio: totalSinCambio,
+          partidosSinHorarioNuevo: totalSinHorarioNuevo,
+          cambios: allCambios,
+          partidosSinSlot: allPartidosSinSlot,
+        };
+      } else {
+        res = await asignarHorariosModoLluviaMCF(
+          organizadorId,
+          torneoId,
+          overrideNum,
+          tx,
+          diaOverrideTs
+        );
+      }
+    } else if (esDomingo) {
       // En Domingo todas las fases son eliminatorias/playoffs.
       // Delegamos en programarHorariosEliminatorias con las canchas reducidas y descansos reales.
       const schedRes = await programarHorariosEliminatorias(
