@@ -490,11 +490,14 @@ async function testModoDiaTorneo() {
   console.log('✅ TEST B PASÓ: Restauración simétrica respetó el sábado, evaluó todos los partidos del viernes y reseteó overrideDiaKey limpiamente.');
 
   // =======================================================================
-  // 15. Test C: Determinismo de partido sin fechaHora contra torneo.fecha
+  // 15. Test C: Determinismo de partido sin fechaHora con el contrato nuevo:
+  // - Un pendiente que no está en partidosSinSlot no se toca.
+  // - Un partido que sí está en el mapa, al restaurar debe quedar agendado
+  //   en el día del override sin depender de torneo.fecha ni del reloj del sistema.
   // =======================================================================
-  console.log('\n🎯 TEST C: Determinismo de partido sin fechaHora contra torneo.fecha...');
+  console.log('\n🎯 TEST C: Contrato nuevo para partidos sin horario: no tocar pendientes fuera del mapa y agendar en el día del override a los que sí están...');
 
-  // Tomamos un partido del viernes y lo forzamos a estado sin horario
+  // Tomamos un partido del viernes y lo forzamos a estado sin horario (NO está en el mapa partidosSinSlot)
   const pSinHorario = pendientesViernesPost[0];
   await prisma.partido.update({
     where: { id: pSinHorario.id },
@@ -506,24 +509,82 @@ async function testModoDiaTorneo() {
     },
   });
 
+  // Tomamos otro partido del viernes para que SÍ esté en el mapa partidosSinSlot
+  const pEnMapa = pendientesViernesPost[1];
+  await prisma.partido.update({
+    where: { id: pEnMapa.id },
+    data: {
+      estado: 'PENDIENTE',
+      fechaHora: null,
+      canchaNumero: null,
+      sinHorarioAsignado: true,
+    },
+  });
+
+  const diaOverrideViernesEsperado = getDiaCalendarioConTrasnoche(dViernesLluvia, horariosClubTest).key;
+
   // Activar lluvia un viernes
   await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4, dViernesLluvia);
 
-  const pSinHorarioPost = await prisma.partido.findUnique({ where: { id: pSinHorario.id } });
-  assert.ok(pSinHorarioPost.fechaHora !== null, 'FALLÓ TEST C: El partido sin horario no recibió fechaHora');
-  assert.ok(pSinHorarioPost.canchaNumero !== null && pSinHorarioPost.canchaNumero <= 4, 'FALLÓ TEST C: No se le asignó cancha válida');
-  assert.strictEqual(pSinHorarioPost.sinHorarioAsignado, false, 'FALLÓ TEST C: sinHorarioAsignado debería ser false');
-
-  // Aserción explícita contractual: El día asignado DEBE coincidir con el derivado de torneo.fecha
-  const diaTorneoEsperado = getDiaCalendarioConTrasnoche(parseFechaLocal(torneo.fecha), horariosClubTest).key;
-  const diaPartidoAsignado = getDiaCalendarioConTrasnoche(pSinHorarioPost.fechaHora, horariosClubTest).key;
-
-  assert.strictEqual(
-    diaPartidoAsignado,
-    diaTorneoEsperado,
-    `FALLÓ TEST C: El partido sin fechaHora fue asignado a ${diaPartidoAsignado}, pero el fallback debe ser ${diaTorneoEsperado} (derivado de torneo.fecha: ${torneo.fecha})`
+  // Registrar pEnMapa en el override del día viernes
+  await canchasOverridesService.setOverrideDia(
+    torneo.id,
+    diaOverrideViernesEsperado,
+    4,
+    dViernesLluvia,
+    { [pEnMapa.id]: 'Sin cancha activa libre disponible en ese horario' }
   );
-  console.log(`✅ TEST C PASÓ: Partido sin horario asignado contractualmente al día lógico de torneo.fecha (${diaTorneoEsperado}).`);
+
+  // 1. Verificación en reducción: pSinHorario (fuera de mapa) NO se toca
+  const pSinHorarioPostRed = await prisma.partido.findUnique({ where: { id: pSinHorario.id } });
+  assert.strictEqual(
+    pSinHorarioPostRed.fechaHora,
+    null,
+    'FALLÓ TEST C: El partido sin horario fuera de partidosSinSlot fue modificado en reducción'
+  );
+  assert.strictEqual(pSinHorarioPostRed.sinHorarioAsignado, true);
+
+  // Modificar torneo.fecha a un día arbitrario diferente (ej. Martes) para verificar que
+  // la restauración del partido en mapa NO depende de torneo.fecha ni del reloj del sistema.
+  const fechaTorneoOriginal = torneo.fecha;
+  await prisma.torneo.update({
+    where: { id: torneo.id },
+    data: { fecha: new Date('2026-09-01T12:00:00.000Z') }, // Martes arbitrario
+  });
+
+  try {
+    // Restaurar a 6 canchas para el día del override (Viernes)
+    await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null, dViernesLluvia);
+
+    // 2. Verificación al restaurar:
+    // - pSinHorario (fuera de mapa) sigue sin tocarse
+    const pSinHorarioPostRest = await prisma.partido.findUnique({ where: { id: pSinHorario.id } });
+    assert.strictEqual(
+      pSinHorarioPostRest.fechaHora,
+      null,
+      'FALLÓ TEST C: El partido sin horario fuera de partidosSinSlot fue modificado en restauración'
+    );
+    assert.strictEqual(pSinHorarioPostRest.sinHorarioAsignado, true);
+
+    // - pEnMapa (que sí estaba en partidosSinSlot) debe quedar agendado en el día del override (Viernes)
+    const pEnMapaPost = await prisma.partido.findUnique({ where: { id: pEnMapa.id } });
+    assert.ok(pEnMapaPost.fechaHora !== null, 'FALLÓ TEST C: El partido en partidosSinSlot no recibió fechaHora al restaurar');
+    assert.strictEqual(pEnMapaPost.sinHorarioAsignado, false, 'FALLÓ TEST C: sinHorarioAsignado debería ser false al restaurar');
+
+    const diaPartidoAsignado = getDiaCalendarioConTrasnoche(pEnMapaPost.fechaHora, horariosClubTest).key;
+    assert.strictEqual(
+      diaPartidoAsignado,
+      diaOverrideViernesEsperado,
+      `FALLÓ TEST C: El partido en mapa fue asignado a ${diaPartidoAsignado}, pero debe coincidir con el día del override (${diaOverrideViernesEsperado}), sin depender de torneo.fecha`
+    );
+    console.log(`✅ TEST C PASÓ: Partido fuera de mapa no se tocó; partido en mapa quedó agendado en el día del override (${diaOverrideViernesEsperado}) sin depender de torneo.fecha.`);
+  } finally {
+    // Restaurar torneo.fecha original para los tests siguientes
+    await prisma.torneo.update({
+      where: { id: torneo.id },
+      data: { fecha: fechaTorneoOriginal },
+    });
+  }
 
   // =======================================================================
   // 16. Test Concurrencia y Atomicidad: Operaciones concurrentes durante reducción
