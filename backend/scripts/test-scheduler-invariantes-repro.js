@@ -587,9 +587,361 @@ async function reproEliminatoriasAntesDeFinZonas(registrarResultado) {
   await checkEtapa('post-restauracion');
 }
 
+/**
+ * TEST NUEVO (a): Pendiente de inicio de emergencia queda intacto tras reducir y restaurar.
+ */
+async function reproEmergenciaIntactoLluvia(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Emergencia Intacto',
+      email: 'repro-emergencia-intacto@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 2,
+      viernesInicio: '18:00',
+      viernesFin: '22:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '22:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Emergencia Intacto',
+      slug: 'torneo-emergencia-intacto',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'EN_CURSO',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' },
+  });
+
+  const zonaA = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona A', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+  const zonaB = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona B', formato: 'ROUND_ROBIN', clasifican: 2 },
+  });
+
+  const parejas = [];
+  for (let i = 1; i <= 4; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `E1_${i}`, jugador2: `E2_${i}`, orden: i },
+    });
+    parejas.push(p);
+    await prisma.zonaPareja.create({
+      data: { zonaId: i <= 2 ? zonaA.id : zonaB.id, parejaId: p.id },
+    });
+  }
+
+  const viernes18 = parseFechaLocal('2026-09-04');
+  viernes18.setHours(18, 0, 0, 0);
+
+  // Partido agendado en Cancha 2 el viernes
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaA.id,
+      posicionEnRonda: 1,
+      pareja1Id: parejas[0].id,
+      pareja2Id: parejas[1].id,
+      estado: 'PENDIENTE',
+      fechaHora: viernes18,
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Partido pendiente de inicio de emergencia (sin horario, no está en partidosSinSlot)
+  const pEmergencia = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zonaB.id,
+      posicionEnRonda: 1,
+      pareja1Id: parejas[2].id,
+      pareja2Id: parejas[3].id,
+      estado: 'PENDIENTE',
+      fechaHora: null,
+      canchaNumero: null,
+      sinHorarioAsignado: true,
+    },
+  });
+
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-04');
+  const postRed = await prisma.partido.findUnique({ where: { id: pEmergencia.id } });
+
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, null, '2026-09-04');
+  const postRest = await prisma.partido.findUnique({ where: { id: pEmergencia.id } });
+
+  const intacto =
+    postRed.fechaHora === null &&
+    postRed.canchaNumero === null &&
+    postRed.sinHorarioAsignado === true &&
+    postRest.fechaHora === null &&
+    postRest.canchaNumero === null &&
+    postRest.sinHorarioAsignado === true;
+
+  registrarResultado(
+    'lluvia_emergencia_intacto:post-restauracion',
+    intacto,
+    intacto
+      ? 'OK'
+      : `Pendiente de emergencia fue alterado: postRed=${postRed.fechaHora}, postRest=${postRest.fechaHora}`
+  );
+}
+
+/**
+ * TEST NUEVO (b): Reducir 6->4 y luego 4->3 y restaurar recupera todos los partidos.
+ */
+async function reproReduccionEscalonada6a4a3YRestaurar(registrarResultado) {
+  await limpiarDb();
+
+  // Viernes 22:00 a 04:15 con sabadoInicio=04:15 -> dayLimitMs de Viernes = Sábado 04:15 (375 min = 5 turnos exactos de 75 min por cancha).
+  // En 6 canchas entran hasta 30 partidos; en 4 canchas entran 20; en 3 canchas entran 15.
+  // Con 24 zonas de 2 parejas = 24 partidos independientes:
+  // - Inicio (6 canchas): 24 agendados.
+  // - Reducir 6->4: 20 agendados, 4 en partidosSinSlot.
+  // - Reducir 4->3: 15 agendados, 9 en partidosSinSlot (4 previos + 5 nuevos).
+  // - Restaurar 3->6: 24 agendados, 0 en partidosSinSlot.
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Escalona 6-4-3',
+      email: 'repro-6-4-3@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 6,
+      viernesInicio: '22:00',
+      viernesFin: '04:15',
+      sabadoInicio: '04:15',
+      sabadoFin: '22:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Escalona 6-4-3',
+      slug: 'torneo-escalona-6-4-3',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'EN_CURSO',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' },
+  });
+
+  const slotsVie = [
+    'Viernes-22:00',
+    'Viernes-23:15',
+    'Viernes-00:30',
+    'Viernes-01:45',
+    'Viernes-03:00',
+  ];
+  let orden = 1;
+  for (let zIdx = 1; zIdx <= 24; zIdx++) {
+    const z = await prisma.zona.create({
+      data: { categoriaId: cat.id, nombre: `Zona ${zIdx}`, formato: 'ROUND_ROBIN', clasifican: 2 },
+    });
+    const pZ = [];
+    for (let i = 1; i <= 2; i++) {
+      const p = await prisma.pareja.create({
+        data: { categoriaId: cat.id, jugador1: `S${zIdx}_1_${i}`, jugador2: `S${zIdx}_2_${i}`, orden: orden++ },
+      });
+      pZ.push(p);
+      await prisma.zonaPareja.create({ data: { zonaId: z.id, parejaId: p.id } });
+      await prisma.slotPareja.createMany({
+        data: slotsVie.map((slotId) => ({ parejaId: p.id, slotId })),
+      });
+    }
+    await zonaService.generarPartidosZonaHelper(prisma, cat.id, z.id, 'ROUND_ROBIN', 2, pZ);
+  }
+
+  await zonaService.asignarHorariosAutomatico(org.id, [cat.id]);
+
+  const inicial = await prisma.partido.findMany({ where: { categoriaId: cat.id } });
+  const agendadosInicial = inicial.filter((p) => p.fechaHora && !p.sinHorarioAsignado).length;
+
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-04');
+  const ov4 = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6);
+  const sinSlot4Count = Object.keys(ov4.partidosSinSlot || {}).length;
+
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 3, null, '2026-09-04');
+  const ov3 = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6);
+  const sinSlot3Count = Object.keys(ov3.partidosSinSlot || {}).length;
+
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 6, null, '2026-09-04');
+  const finalPartidos = await prisma.partido.findMany({ where: { categoriaId: cat.id } });
+  const agendadosFinal = finalPartidos.filter((p) => p.fechaHora && !p.sinHorarioAsignado).length;
+  const ovRest = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6);
+  const sinSlotRestCount = Object.keys(ovRest.partidosSinSlot || {}).length;
+
+  const ok =
+    agendadosInicial === 24 &&
+    sinSlot4Count === 4 &&
+    sinSlot3Count === 9 &&
+    agendadosFinal === 24 &&
+    sinSlotRestCount === 0;
+
+  registrarResultado(
+    'lluvia_escalonada_6_4_3:post-restauracion',
+    ok,
+    ok
+      ? 'OK'
+      : `Esperado inicial=24, sinSlot4=4, sinSlot3=9, final=24, sinSlotRest=0; obtenido inicial=${agendadosInicial}, sinSlot4=${sinSlot4Count}, sinSlot3=${sinSlot3Count}, final=${agendadosFinal}, sinSlotRest=${sinSlotRestCount}`
+  );
+}
+
+/**
+ * TEST NUEVO (c): Caso cruzado — P3/P4 fijos en otra jornada y fin(P1/P2) nuevo queda mayor que su inicio -> desplazados.
+ */
+async function reproCasoCruzadoMiniBracketOtraJornada(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Caso Cruzado MB',
+      email: 'repro-cruzado-mb@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 2,
+      viernesInicio: '18:00',
+      viernesFin: '22:00',
+      sabadoInicio: '10:00',
+      sabadoFin: '22:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Caso Cruzado MB',
+      slug: 'torneo-cruzado-mb',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'EN_CURSO',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' },
+  });
+
+  const zona = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona A', formato: 'MINI_BRACKET', clasifican: 3 },
+  });
+
+  const parejas = [];
+  for (let i = 1; i <= 4; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `C1_${i}`, jugador2: `C2_${i}`, orden: i },
+    });
+    parejas.push(p);
+    await prisma.zonaPareja.create({ data: { zonaId: zona.id, parejaId: p.id } });
+  }
+
+  // P1 y P2 en Sábado (2026-09-05) a las 10:00 (Canchas 1 y 2).
+  // P3 y P4 fijos en otra jornada (Viernes 2026-09-04 a las 20:00, Canchas 1 y 2), cuyo inicio < fin(P1/P2).
+  const sab10 = parseFechaLocal('2026-09-05');
+  sab10.setHours(10, 0, 0, 0);
+  const vie20 = parseFechaLocal('2026-09-04');
+  vie20.setHours(20, 0, 0, 0);
+
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 1,
+      pareja1Id: parejas[0].id,
+      pareja2Id: parejas[3].id,
+      estado: 'PENDIENTE',
+      fechaHora: sab10,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 2,
+      pareja1Id: parejas[1].id,
+      pareja2Id: parejas[2].id,
+      estado: 'PENDIENTE',
+      fechaHora: sab10,
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  const p3 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 3,
+      pareja1Id: null,
+      pareja2Id: null,
+      estado: 'PENDIENTE',
+      fechaHora: vie20,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  const p4 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 4,
+      pareja1Id: null,
+      pareja2Id: null,
+      estado: 'PENDIENTE',
+      fechaHora: vie20,
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Reducir Sábado (2026-09-05) de 2 a 1 cancha -> P1 y P2 se reprograman en Sábado (fin = 12:30 > vie20),
+  // por lo que P3 y P4 (en otra jornada con inicio < fin nuevo de P1/P2) deben quedar desplazados.
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-05');
+
+  const p3Post = await prisma.partido.findUnique({ where: { id: p3.id } });
+  const p4Post = await prisma.partido.findUnique({ where: { id: p4.id } });
+  const ovSab = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-05', 2);
+  const sinSlot = ovSab.partidosSinSlot || {};
+
+  const ok =
+    p3Post.fechaHora === null &&
+    p3Post.canchaNumero === null &&
+    p3Post.sinHorarioAsignado === true &&
+    Boolean(sinSlot[p3.id]) &&
+    p4Post.fechaHora === null &&
+    p4Post.canchaNumero === null &&
+    p4Post.sinHorarioAsignado === true &&
+    Boolean(sinSlot[p4.id]);
+
+  registrarResultado(
+    'lluvia_caso_cruzado_mb:post-reduccion',
+    ok,
+    ok
+      ? 'OK'
+      : `P3/P4 no fueron desplazados correctamente: p3.fechaHora=${p3Post.fechaHora}, p4.fechaHora=${p4Post.fechaHora}, sinSlot=${JSON.stringify(sinSlot)}`
+  );
+}
+
 async function runAllRepros() {
   await ensureTestDb();
   resetTestDb();
+  await canchasOverridesService.loadFromDb();
 
   console.log('='.repeat(85));
   console.log('🔬 REPRODUCTORES DETERMINÍSTICOS MÍNIMOS (SIN PRNG)');
@@ -612,6 +964,9 @@ async function runAllRepros() {
     await reproModoLluviaMiniBracketYColisiones(registrarResultado);
     await reproSabadoRestauracionPerdidaYMiniBracket(registrarResultado);
     await reproEliminatoriasAntesDeFinZonas(registrarResultado);
+    await reproEmergenciaIntactoLluvia(registrarResultado);
+    await reproReduccionEscalonada6a4a3YRestaurar(registrarResultado);
+    await reproCasoCruzadoMiniBracketOtraJornada(registrarResultado);
   } finally {
     await limpiarDb();
     await prisma.$disconnect();

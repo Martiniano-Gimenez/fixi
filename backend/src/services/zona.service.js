@@ -10,6 +10,7 @@ const {
   getSlotsValidosSet,
 } = require('./slots.service');
 const { parseFechaLocal, requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
+const canchasOverridesService = require('./canchasOverrides.service');
 
 // Fisher-Yates shuffle
 function shuffleArray(array) {
@@ -1182,7 +1183,6 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   // Pre-sembrar partidos inmutables: FINALIZADO y EN_CURSO
   const partidosAAsignar = [];
   const partidosMiniBracketOtraJornada = [];
-  const partidosSinSlotMotivos = new Map();
 
   // Calcular día lógico afectado por el override (si se proporciona)
   let overrideDiaKey = null;
@@ -1190,6 +1190,47 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     const overrideDiaInfo = getDiaCalendarioConTrasnoche(overrideTimestamp, organizador);
     overrideDiaKey = overrideDiaInfo?.key || null;
   }
+
+  // Leer el mapa previo de partidosSinSlot para overrideDiaKey antes de que la tx lo modifique o borre:
+  // Usar la caché si expone partidosSinSlot; si no, consultar la tabla OverrideCanchasDia con el mismo db (tx).
+  let prevPartidosSinSlot = {};
+  if (overrideDiaKey) {
+    let loadedFromCache = false;
+    try {
+      const cachedDia = canchasOverridesService.getCanchasDia(torneoId, overrideDiaKey, canchasClub);
+      if (cachedDia && cachedDia.partidosSinSlot && typeof cachedDia.partidosSinSlot === 'object') {
+        prevPartidosSinSlot = { ...cachedDia.partidosSinSlot };
+        loadedFromCache = true;
+      }
+    } catch (_) {
+      loadedFromCache = false;
+    }
+
+    if (!loadedFromCache) {
+      const ovRecord = await db.overrideCanchasDia.findUnique({
+        where: {
+          torneoId_diaKey: {
+            torneoId,
+            diaKey: overrideDiaKey,
+          },
+        },
+      });
+      if (ovRecord && ovRecord.partidosSinSlot) {
+        if (typeof ovRecord.partidosSinSlot === 'string') {
+          try {
+            prevPartidosSinSlot = JSON.parse(ovRecord.partidosSinSlot);
+          } catch (_) {
+            prevPartidosSinSlot = {};
+          }
+        } else if (typeof ovRecord.partidosSinSlot === 'object') {
+          prevPartidosSinSlot = { ...ovRecord.partidosSinSlot };
+        }
+      }
+    }
+  }
+
+  // Inicializar con entradas previas: en cada corrida queda = (previas que siguen sin horario) + (nuevos desplazados) - (los que volvieron a tener horario)
+  const partidosSinSlotMotivos = new Map(Object.entries(prevPartidosSinSlot));
 
   // Registrar el horario de fin más tardío de partidos de zona por categoría
   const maxEndPorCategoriaZona = new Map();
@@ -1208,6 +1249,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     }
 
     if (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') {
+      partidosSinSlotMotivos.delete(p.id);
       if (p.fechaHora) {
         const startMs = new Date(p.fechaHora).getTime();
         const endMs = startMs + DURACION_MS;
@@ -1221,17 +1263,24 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
         }
       }
     } else if (p.estado === 'PENDIENTE') {
-      const pDiaInfo = p.fechaHora
-        ? getDiaCalendarioConTrasnoche(p.fechaHora, organizador)
-        : getDiaCalendarioConTrasnoche(parseFechaLocal(refFecha), organizador);
+      const tieneHorario = Boolean(p.fechaHora && !p.sinHorarioAsignado);
+      const enMapaSinSlotDia = Boolean(
+        overrideDiaKey && Object.prototype.hasOwnProperty.call(prevPartidosSinSlot, p.id)
+      );
+
+      // Si el partido no tiene horario asignado, solo se reprograma si está en el mapa partidosSinSlot de ese día.
+      // Si no está en el mapa (ej. pendiente de inicio de emergencia o cruce manual), no se toca.
+      if (!tieneHorario) {
+        if (enMapaSinSlotDia && ((p.pareja1Id && p.pareja2Id) || p.zonaId)) {
+          partidosAAsignar.push(p);
+        }
+        continue;
+      }
+
+      const pDiaInfo = getDiaCalendarioConTrasnoche(p.fechaHora, organizador);
       const esMismaJornada = !overrideDiaKey || (pDiaInfo && pDiaInfo.key === overrideDiaKey);
 
       if (p.pareja1Id && p.pareja2Id) {
-        // Cruces de eliminatoria sin horario asignado (ej. dieciseisavos) quedan para asignación manual
-        if (p.faseEliminatoriaId && (p.sinHorarioAsignado || !p.fechaHora)) {
-          continue;
-        }
-
         if (!esMismaJornada) {
           // Partido de otro día lógico → tratar como ocupación fija si tiene horario
           if (p.fechaHora && p.canchaNumero) {
@@ -1262,9 +1311,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
           continue;
         }
 
-        if (p.fechaHora && !p.sinHorarioAsignado) {
-          partidosAAsignar.push(p);
-        }
+        partidosAAsignar.push(p);
       } else {
         // Cruces sin parejas definidas (ej. dieciseisavos con placeholders origenPareja1 / origenPareja2)
         if (p.faseEliminatoriaId && p.fechaHora && !p.sinHorarioAsignado && p.canchaNumero) {
@@ -1281,6 +1328,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
             partidosAAsignar.push(p);
           } else {
             // Su cancha ya está en cancha activa (1..cantidadCanchas) → NO alterar, pre-sembrar slot como ocupado
+            partidosSinSlotMotivos.delete(p.id);
             const startMs = new Date(p.fechaHora).getTime();
             const endMs = startMs + DURACION_MS;
             addInterval(p.canchaNumero, null, null, startMs, endMs);
@@ -1364,7 +1412,10 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   // 4. Asignación Global Earliest-Fit para cada partido
   for (const partido of partidosAAsignar) {
     const origStartMs = partido.fechaHora ? new Date(partido.fechaHora).getTime() : null;
-    const origDate = origStartMs ? new Date(origStartMs) : parseFechaLocal(refFecha);
+    // Usar overrideTimestamp solo para calcular el día cuando el partido viene sin horario (recuperado de partidosSinSlot)
+    const origDate = origStartMs
+      ? new Date(origStartMs)
+      : (overrideTimestamp ? new Date(overrideTimestamp) : parseFechaLocal(refFecha));
     const origDiaInfo = getDiaCalendarioConTrasnoche(origDate, organizador);
     const dayLimitMs = origDiaInfo.dayLimitMs;
     const isFriday = origDiaInfo.logicalDate.getDay() === 5;
@@ -1427,6 +1478,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
           maxEndPorCategoriaZona.set(partido.categoriaId, newEnd);
         }
       }
+      partidosSinSlotMotivos.delete(partido.id);
       updatesMap.set(partido.id, {
         id: partido.id,
         sinHorarioAsignado: false,
