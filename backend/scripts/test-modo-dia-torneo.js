@@ -544,16 +544,28 @@ async function testModoDiaTorneo() {
   );
   assert.strictEqual(pSinHorarioPostRed.sinHorarioAsignado, true);
 
-  // Modificar torneo.fecha a un día arbitrario diferente (ej. Martes) para verificar que
-  // la restauración del partido en mapa NO depende de torneo.fecha ni del reloj del sistema.
-  const fechaTorneoOriginal = torneo.fecha;
-  await prisma.torneo.update({
-    where: { id: torneo.id },
-    data: { fecha: new Date('2026-09-01T12:00:00.000Z') }, // Martes arbitrario
-  });
+  // Para verificar que la asignación del partido en mapa no depende del reloj del sistema,
+  // mockeamos global.Date y Date.now a un año futuro distante (2038).
+  const OriginalDate = global.Date;
+  const mockFutureMs = new OriginalDate('2038-03-15T12:00:00.000Z').getTime();
+
+  class MockDate extends OriginalDate {
+    constructor(...args) {
+      if (args.length === 0) {
+        super(mockFutureMs);
+      } else {
+        super(...args);
+      }
+    }
+    static now() {
+      return mockFutureMs;
+    }
+  }
+
+  global.Date = MockDate;
 
   try {
-    // Restaurar a 6 canchas para el día del override (Viernes)
+    // Restaurar a 6 canchas para el día del override (Viernes) con reloj en 2038
     await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, null, dViernesLluvia);
 
     // 2. Verificación al restaurar:
@@ -575,15 +587,20 @@ async function testModoDiaTorneo() {
     assert.strictEqual(
       diaPartidoAsignado,
       diaOverrideViernesEsperado,
-      `FALLÓ TEST C: El partido en mapa fue asignado a ${diaPartidoAsignado}, pero debe coincidir con el día del override (${diaOverrideViernesEsperado}), sin depender de torneo.fecha`
+      `FALLÓ TEST C: El partido en mapa fue asignado a ${diaPartidoAsignado}, pero debe coincidir con el día del override (${diaOverrideViernesEsperado}), sin depender del reloj del sistema`
     );
-    console.log(`✅ TEST C PASÓ: Partido fuera de mapa no se tocó; partido en mapa quedó agendado en el día del override (${diaOverrideViernesEsperado}) sin depender de torneo.fecha.`);
+
+    const anioAsignado = new OriginalDate(pEnMapaPost.fechaHora).getFullYear();
+    const anioEsperado = new OriginalDate(fechaTorneo).getFullYear();
+    assert.strictEqual(
+      anioAsignado,
+      anioEsperado,
+      `FALLÓ TEST C: El año asignado (${anioAsignado}) fue influenciado por el reloj del sistema mockeado (2038)`
+    );
+
+    console.log(`✅ TEST C PASÓ: Partido fuera de mapa no se tocó; partido en mapa quedó agendado en el día del override (${diaOverrideViernesEsperado}) sin depender del reloj del sistema.`);
   } finally {
-    // Restaurar torneo.fecha original para los tests siguientes
-    await prisma.torneo.update({
-      where: { id: torneo.id },
-      data: { fecha: fechaTorneoOriginal },
-    });
+    global.Date = OriginalDate;
   }
 
   // =======================================================================
