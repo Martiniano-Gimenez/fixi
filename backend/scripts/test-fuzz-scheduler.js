@@ -7,6 +7,7 @@ const prisma = require('../src/lib/prisma');
 const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
 const disponibilidadService = require('../src/services/disponibilidad.service');
+const partidoService = require('../src/services/partido.service');
 const { generarEliminatoria } = require('../src/services/faseEliminatoria.service');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
@@ -199,6 +200,7 @@ function verificarInvariantesPorEtapa({
   allowDayLimitMs = false,
   partidosSinSlotMap = {},
   overrideDiaKey = null,
+  partidosManualesSet = new Set(),
 }) {
   const ventanasClub = getVentanasClub(organizador, refFecha);
 
@@ -339,7 +341,7 @@ function verificarInvariantesPorEtapa({
             seed,
             `Zona ${z.nombre}: P${m.posicionEnRonda} tiene horario (${new Date(mStart).toISOString()}) pero P1 o P2 no tienen horario`
           );
-        } else {
+        } else if (!partidosManualesSet.has(m.id)) {
           const endTimes = [];
           if (p1Valid) endTimes.push(new Date(p1.fechaHora).getTime() + DURACION_MS);
           if (p2Valid) endTimes.push(new Date(p2.fechaHora).getTime() + DURACION_MS);
@@ -702,6 +704,62 @@ async function runSingleSeed(seed, recordFailure) {
       domingoFin: organizador.domingoFin,
     };
 
+    // Reasignar al azar algunos P3/P4 con asignarHorarioManual a horarios anteriores al fin de su R1 (permitido por diseño)
+    const partidosManualesSet = new Set();
+    const ventanasFuzz = getVentanasClub(organizador, refFecha);
+
+    for (const z of zonasTorneo) {
+      if (z.formato !== 'MINI_BRACKET') continue;
+      const zPartidos = partidosIniciales.filter((p) => p.zonaId === z.id);
+      const p1 = zPartidos.find((p) => p.posicionEnRonda === 1);
+      const p2 = zPartidos.find((p) => p.posicionEnRonda === 2);
+      const p3 = zPartidos.find((p) => p.posicionEnRonda === 3);
+      const p4 = zPartidos.find((p) => p.posicionEnRonda === 4);
+
+      if (!p1?.fechaHora || !p2?.fechaHora) continue;
+      const r1EndMax = Math.max(
+        new Date(p1.fechaHora).getTime() + DURACION_MS,
+        new Date(p2.fechaHora).getTime() + DURACION_MS
+      );
+
+      for (const m of [p3, p4].filter(Boolean)) {
+        if (!m.fechaHora || m.sinHorarioAsignado) continue;
+        if (rng.next() < 0.35) {
+          const targetDayInfo = getDiaCalendarioConTrasnoche(m.fechaHora, horariosClubObj);
+          if (!targetDayInfo) continue;
+          const isFriday = targetDayInfo.logicalDate.getDay() === 5;
+          const dayWindow = isFriday ? ventanasFuzz.viernes : ventanasFuzz.sabado;
+          const dayStartMs = dayWindow.startMs;
+
+          const candidateStarts = [];
+          for (let t = dayStartMs; t + DURACION_MS <= r1EndMax; t += 15 * 60 * 1000) {
+            candidateStarts.push(t);
+          }
+
+          if (candidateStarts.length > 0) {
+            const shufStarts = rng.shuffle(candidateStarts);
+            let asignado = false;
+            for (const tCand of shufStarts.slice(0, 6)) {
+              for (let c = 1; c <= cantidadCanchas; c++) {
+                try {
+                  await partidoService.asignarHorarioManual(organizador.id, m.id, {
+                    fechaHora: new Date(tCand),
+                    canchaNumero: c,
+                  });
+                  partidosManualesSet.add(m.id);
+                  asignado = true;
+                  break;
+                } catch (_) {
+                  // Colisión de cancha u ocupación
+                }
+              }
+              if (asignado) break;
+            }
+          }
+        }
+      }
+    }
+
     const baseFriday = zonaService.proximaFechaPorDia('Viernes', refFecha);
     const baseSaturday = zonaService.proximaFechaPorDia('Sabado', refFecha);
     const friKey = getDiaCalendarioConTrasnoche(parseFechaLocal(baseFriday), horariosClubObj).key;
@@ -710,7 +768,12 @@ async function runSingleSeed(seed, recordFailure) {
     const targetDiaKey = rng.next() < 0.5 ? friKey : satKey;
     const canchasReducidas = rng.int(1, cantidadCanchas - 1);
 
-    const candidatosEstado = partidosIniciales.filter((p) => {
+    const partidosTrasManual = await prisma.partido.findMany({
+      where: { categoria: { torneoId: torneo.id } },
+      include: { faseEliminatoria: true },
+    });
+
+    const candidatosEstado = partidosTrasManual.filter((p) => {
       if (!p.fechaHora || !p.canchaNumero || p.sinHorarioAsignado || p.esBye) return false;
       if (!p.pareja1Id || !p.pareja2Id) return false;
       const dKey = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key;
@@ -753,6 +816,21 @@ async function runSingleSeed(seed, recordFailure) {
       cantidadCanchas
     );
     const partidosSinSlotMap = diaOverrideInfo?.partidosSinSlot || {};
+
+    // Invariante: que no aparezcan ids de otras jornadas en partidosSinSlot del día reducido
+    for (const sinSlotId of Object.keys(partidosSinSlotMap)) {
+      const orig = antesMap.get(sinSlotId);
+      if (orig && orig.fechaHora) {
+        const origDiaKey = getDiaCalendarioConTrasnoche(orig.fechaHora, horariosClubObj)?.key;
+        if (origDiaKey && origDiaKey !== targetDiaKey) {
+          recordFailure(
+            'modo_lluvia:post-reduccion',
+            seed,
+            `partidosSinSlot de ${targetDiaKey} contiene el partido ${sinSlotId} que pertenece a otra jornada (${origDiaKey})`
+          );
+        }
+      }
+    }
 
     const partidosPostReduccion = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
@@ -822,6 +900,7 @@ async function runSingleSeed(seed, recordFailure) {
       allowDayLimitMs: true,
       partidosSinSlotMap,
       overrideDiaKey: targetDiaKey,
+      partidosManualesSet,
     });
 
     // =========================================================================
@@ -897,6 +976,7 @@ async function runSingleSeed(seed, recordFailure) {
       seed,
       etapa: 'post-restauracion',
       allowDayLimitMs: true,
+      partidosManualesSet,
     });
   } finally {
     Math.random = origRandom;
