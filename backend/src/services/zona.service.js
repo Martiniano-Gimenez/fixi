@@ -1181,6 +1181,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
 
   // Pre-sembrar partidos inmutables: FINALIZADO y EN_CURSO
   const partidosAAsignar = [];
+  const partidosMiniBracketOtraJornada = [];
   const partidosSinSlotMotivos = new Map();
 
   // Calcular día lógico afectado por el override (si se proporciona)
@@ -1197,7 +1198,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   let latestFinishedOrEnCursoMs = 0;
 
   for (const p of todosLosPartidos) {
-    if (p.fechaHora && p.zonaId) {
+    if (p.fechaHora && p.zonaId && (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')) {
       const pStart = new Date(p.fechaHora).getTime();
       const pEnd = pStart + DURACION_MS;
       const currentMax = maxEndPorCategoriaZona.get(p.categoriaId) || 0;
@@ -1237,12 +1238,33 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
             const startMs = new Date(p.fechaHora).getTime();
             const endMs = startMs + DURACION_MS;
             addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, endMs);
+            if (p.zonaId) {
+              const currentMax = maxEndPorCategoriaZona.get(p.categoriaId) || 0;
+              if (endMs > currentMax) maxEndPorCategoriaZona.set(p.categoriaId, endMs);
+            }
           }
           continue;
         }
 
         // Partido del día afectado → candidato a reprogramar
         partidosAAsignar.push(p);
+      } else if (p.zonaId) {
+        // P3/P4 de MINI_BRACKET (PENDIENTE, zonaId != null, sin parejas)
+        if (!esMismaJornada) {
+          if (p.fechaHora && !p.sinHorarioAsignado && p.canchaNumero) {
+            const startMs = new Date(p.fechaHora).getTime();
+            const endMs = startMs + DURACION_MS;
+            addInterval(p.canchaNumero, null, null, startMs, endMs);
+            partidosMiniBracketOtraJornada.push(p);
+            const currentMax = maxEndPorCategoriaZona.get(p.categoriaId) || 0;
+            if (endMs > currentMax) maxEndPorCategoriaZona.set(p.categoriaId, endMs);
+          }
+          continue;
+        }
+
+        if (p.fechaHora && !p.sinHorarioAsignado) {
+          partidosAAsignar.push(p);
+        }
       } else {
         // Cruces sin parejas definidas (ej. dieciseisavos con placeholders origenPareja1 / origenPareja2)
         if (p.faseEliminatoriaId && p.fechaHora && !p.sinHorarioAsignado && p.canchaNumero) {
@@ -1268,13 +1290,27 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     }
   }
 
-  // 3. Ordenar partidos pendientes cronológicamente por horario original (preservando antigüedad de turno)
+  // 3. Ordenar partidos pendientes:
+  //    Tier 0 (zonas con parejas / P1-P2) -> Tier 1 (P3-P4 de MINI_BRACKET) -> Tier 2 (eliminatorias),
+  //    y dentro de cada tier cronológicamente por horario original (preservando antigüedad de turno).
+  function getSchedulingTier(p) {
+    if (p.zonaId && p.pareja1Id && p.pareja2Id) return 0;
+    if (p.zonaId && (!p.pareja1Id || !p.pareja2Id)) return 1;
+    return 2;
+  }
+
   partidosAAsignar.sort((a, b) => {
+    const tierA = getSchedulingTier(a);
+    const tierB = getSchedulingTier(b);
+    if (tierA !== tierB) return tierA - tierB;
     const tA = a.fechaHora ? new Date(a.fechaHora).getTime() : Infinity;
     const tB = b.fechaHora ? new Date(b.fechaHora).getTime() : Infinity;
     if (tA !== tB) return tA - tB;
     if ((a.canchaNumero || 0) !== (b.canchaNumero || 0)) {
       return (a.canchaNumero || 0) - (b.canchaNumero || 0);
+    }
+    if ((a.posicionEnRonda || 0) !== (b.posicionEnRonda || 0)) {
+      return (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
     }
     return a.id.localeCompare(b.id);
   });
@@ -1302,6 +1338,29 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     return true;
   }
 
+  function getRonda1InfoZona(zonaId, excludeId) {
+    const r1Partidos = todosLosPartidos.filter(
+      (m) =>
+        m.zonaId === zonaId &&
+        m.id !== excludeId &&
+        ((m.posicionEnRonda && m.posicionEnRonda <= 2) || (m.pareja1Id && m.pareja2Id))
+    );
+    let maxEndMs = 0;
+    let r1SinHorario = r1Partidos.length < 2;
+    for (const r1 of r1Partidos) {
+      const uR1 = updatesMap.get(r1.id);
+      const effFechaHora = uR1 !== undefined ? uR1.fechaHora : r1.fechaHora;
+      const effSinHorario = uR1 !== undefined ? uR1.sinHorarioAsignado : r1.sinHorarioAsignado;
+      if (!effFechaHora || effSinHorario) {
+        r1SinHorario = true;
+      } else {
+        const endMs = new Date(effFechaHora).getTime() + DURACION_MS;
+        if (endMs > maxEndMs) maxEndMs = endMs;
+      }
+    }
+    return { maxEndMs, r1SinHorario };
+  }
+
   // 4. Asignación Global Earliest-Fit para cada partido
   for (const partido of partidosAAsignar) {
     const origStartMs = partido.fechaHora ? new Date(partido.fechaHora).getTime() : null;
@@ -1311,11 +1370,20 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     const isFriday = origDiaInfo.logicalDate.getDay() === 5;
     const sessionDayStartMs = isFriday ? friDayStartMs : satDayStartMs;
 
+    const isMiniBracketR2 = Boolean(partido.zonaId && (!partido.pareja1Id || !partido.pareja2Id));
+    let ronda1SinHorario = false;
+
     // Para partidos de eliminatoria (dieciseisavos, etc.):
     // - No pueden arrancar antes de que finalicen las zonas de su categoría (catZoneFloorMs).
     // - Si ya tenían horario asignado por el organizador (origStartMs), respetarlo como piso mínimo para no adelantarse hacia el pasado.
     let minSearchMs = sessionDayStartMs;
-    if (partido.faseEliminatoriaId) {
+    if (isMiniBracketR2) {
+      const r1Info = getRonda1InfoZona(partido.zonaId, partido.id);
+      ronda1SinHorario = r1Info.r1SinHorario;
+      if (!ronda1SinHorario) {
+        minSearchMs = Math.max(minSearchMs, r1Info.maxEndMs);
+      }
+    } else if (partido.faseEliminatoriaId) {
       const catZoneFloorMs = maxEndPorCategoriaZona.get(partido.categoriaId) || 0;
       minSearchMs = Math.max(minSearchMs, catZoneFloorMs);
       if (origStartMs) {
@@ -1332,24 +1400,33 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     let bestCandidate = null;
     let T = minSearchMs;
 
-    while (T + DURACION_MS <= dayLimitMs) {
-      const tEnd = T + DURACION_MS;
-      for (let c = 1; c <= cantidadCanchas; c++) {
-        if (
-          isCourtFree(c, T, tEnd) &&
-          isPairFree(partido.pareja1Id, T, tEnd) &&
-          isPairFree(partido.pareja2Id, T, tEnd)
-        ) {
-          bestCandidate = { T, cancha: c };
-          break;
+    if (!ronda1SinHorario) {
+      while (T + DURACION_MS <= dayLimitMs) {
+        const tEnd = T + DURACION_MS;
+        for (let c = 1; c <= cantidadCanchas; c++) {
+          if (
+            isCourtFree(c, T, tEnd) &&
+            isPairFree(partido.pareja1Id, T, tEnd) &&
+            isPairFree(partido.pareja2Id, T, tEnd)
+          ) {
+            bestCandidate = { T, cancha: c };
+            break;
+          }
         }
+        if (bestCandidate !== null) break;
+        T += 15 * 60 * 1000;
       }
-      if (bestCandidate !== null) break;
-      T += 15 * 60 * 1000;
     }
 
     if (bestCandidate !== null) {
       addInterval(bestCandidate.cancha, partido.pareja1Id, partido.pareja2Id, bestCandidate.T, bestCandidate.T + DURACION_MS);
+      if (partido.zonaId) {
+        const newEnd = bestCandidate.T + DURACION_MS;
+        const currentMax = maxEndPorCategoriaZona.get(partido.categoriaId) || 0;
+        if (newEnd > currentMax) {
+          maxEndPorCategoriaZona.set(partido.categoriaId, newEnd);
+        }
+      }
       updatesMap.set(partido.id, {
         id: partido.id,
         sinHorarioAsignado: false,
@@ -1358,9 +1435,10 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       });
     } else {
       // Si no hay slot libre antes de dayLimitMs:
-      // Si es un partido sin parejas definidas, NO borrar horario ni cancha: queda como está
+      // Si es un cruce de eliminatoria sin parejas definidas, NO borrar horario ni cancha: queda como está
       // y se reporta en el aviso naranja con motivo "Sin cancha activa libre disponible en ese horario".
-      if (!partido.pareja1Id || !partido.pareja2Id) {
+      // Si es un partido de zona (con parejas o P3/P4 de MINI_BRACKET), se limpia su horario y se registra en partidosSinSlot.
+      if (partido.faseEliminatoriaId && (!partido.pareja1Id || !partido.pareja2Id)) {
         partidosSinSlotMotivos.set(partido.id, 'Sin cancha activa libre disponible en ese horario');
       } else {
         updatesMap.set(partido.id, {
@@ -1369,7 +1447,33 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
           fechaHora: null,
           canchaNumero: null,
         });
+        partidosSinSlotMotivos.set(
+          partido.id,
+          ronda1SinHorario
+            ? 'Sin horario disponible porque Ronda 1 (P1/P2) quedó sin horario asignado'
+            : 'Sin cancha activa libre disponible en ese horario'
+        );
       }
+    }
+  }
+
+  // Caso cruzado: si P3/P4 están fijos en otra jornada y fin(P1/P2) nuevo queda mayor que su inicio,
+  // tratarlos como desplazados (limpiar horario y registrar motivo) en vez de dejarlos fijos.
+  for (const pOtra of partidosMiniBracketOtraJornada) {
+    if (!pOtra.fechaHora) continue;
+    const pOtraStartMs = new Date(pOtra.fechaHora).getTime();
+    const r1Info = getRonda1InfoZona(pOtra.zonaId, pOtra.id);
+    if (r1Info.maxEndMs > pOtraStartMs) {
+      updatesMap.set(pOtra.id, {
+        id: pOtra.id,
+        sinHorarioAsignado: true,
+        fechaHora: null,
+        canchaNumero: null,
+      });
+      partidosSinSlotMotivos.set(
+        pOtra.id,
+        'Desplazado porque el nuevo fin de P1/P2 supera su horario de inicio'
+      );
     }
   }
 
