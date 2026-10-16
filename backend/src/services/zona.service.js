@@ -1136,31 +1136,9 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   const cantidadCanchas = Math.max(1, overrideCanchas || canchasClub);
   const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 
-  const refFecha = torneo.fecha
-    ? parseFechaLocal(torneo.fecha)
-    : (overrideTimestamp ? parseFechaLocal(overrideTimestamp) : null);
-  if (!refFecha) requireTorneoFecha(torneo);
-
-  let refBase = refFecha;
-  if (overrideTimestamp) {
-    const overrideDiaInfo = getDiaCalendarioConTrasnoche(overrideTimestamp, organizador);
-    if (overrideDiaInfo?.logicalDate) {
-      const logDate = overrideDiaInfo.logicalDate;
-      const logDay = logDate.getDay();
-      if (logDay === 5) {
-        refBase = logDate;
-      } else if (logDay === 6) {
-        const prevFri = new Date(logDate);
-        prevFri.setDate(logDate.getDate() - 1);
-        refBase = prevFri;
-      } else {
-        refBase = logDate;
-      }
-    }
-  }
-
-  const baseFriday = proximaFechaPorDia('Viernes', refBase);
-  const baseSaturday = proximaFechaPorDia('Sabado', refBase);
+  const refFecha = requireTorneoFecha(torneo);
+  const baseFriday = proximaFechaPorDia('Viernes', refFecha);
+  const baseSaturday = proximaFechaPorDia('Sabado', refFecha);
 
   const friInicioMin = horaAMinutos(organizador.viernesInicio);
   const friDayStartMs = baseFriday.getTime() + friInicioMin * 60 * 1000;
