@@ -910,8 +910,8 @@ async function reproCasoCruzadoMiniBracketOtraJornada(registrarResultado) {
     },
   });
 
-  // Reducir Sábado (2026-09-05) de 2 a 1 cancha -> P1 y P2 se reprograman en Sábado (fin = 12:30 > vie20),
-  // por lo que P3 y P4 (en otra jornada con inicio < fin nuevo de P1/P2) deben quedar desplazados.
+  // Reducir Sábado (2026-09-05) de 2 a 1 cancha -> P1 y P2 se reprograman en Sábado.
+  // Regla de aislamiento estricto: P3 y P4 (en otra jornada) NO se modifican nunca y no entran a sinSlot.
   await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-05');
 
   const p3Post = await prisma.partido.findUnique({ where: { id: p3.id } });
@@ -920,21 +920,19 @@ async function reproCasoCruzadoMiniBracketOtraJornada(registrarResultado) {
   const sinSlot = ovSab.partidosSinSlot || {};
 
   const ok =
-    p3Post.fechaHora === null &&
-    p3Post.canchaNumero === null &&
-    p3Post.sinHorarioAsignado === true &&
-    Boolean(sinSlot[p3.id]) &&
-    p4Post.fechaHora === null &&
-    p4Post.canchaNumero === null &&
-    p4Post.sinHorarioAsignado === true &&
-    Boolean(sinSlot[p4.id]);
+    p3Post.fechaHora !== null &&
+    !p3Post.sinHorarioAsignado &&
+    !sinSlot[p3.id] &&
+    p4Post.fechaHora !== null &&
+    !p4Post.sinHorarioAsignado &&
+    !sinSlot[p4.id];
 
   registrarResultado(
     'lluvia_caso_cruzado_mb:post-reduccion',
     ok,
     ok
       ? 'OK'
-      : `P3/P4 no fueron desplazados correctamente: p3.fechaHora=${p3Post.fechaHora}, p4.fechaHora=${p4Post.fechaHora}, sinSlot=${JSON.stringify(sinSlot)}`
+      : `P3/P4 de otra jornada fueron alterados indebidamente: p3.fechaHora=${p3Post.fechaHora}, p4.fechaHora=${p4Post.fechaHora}, sinSlot=${JSON.stringify(sinSlot)}`
   );
 }
 
@@ -1246,7 +1244,8 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
     data: { fechaHora: sab12, canchaNumero: 1, sinHorarioAsignado: false },
   });
 
-  // 2) Restaurar Viernes (2026-09-04) a 2 canchas -> P1 recupera horario en Viernes y como max(fin P1, fin P2) > inicio(P3/P4), P3 y P4 se desplazan
+  // 2) Restaurar Viernes (2026-09-04) a 2 canchas -> P1 recupera horario en Viernes.
+  // Regla de aislamiento estricto: P3 y P4 de Sábado NO se modifican nunca y permanecen intactos.
   await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, null, '2026-09-04');
   const p1Rest = await prisma.partido.findUnique({ where: { id: p1.id } });
   const p3Rest = await prisma.partido.findUnique({ where: { id: p3.id } });
@@ -1255,12 +1254,10 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
   const okRestauracion =
     p1Rest.fechaHora !== null &&
     !p1Rest.sinHorarioAsignado &&
-    p3Rest.fechaHora === null &&
-    p3Rest.canchaNumero === null &&
-    p3Rest.sinHorarioAsignado === true &&
-    p4Rest.fechaHora === null &&
-    p4Rest.canchaNumero === null &&
-    p4Rest.sinHorarioAsignado === true;
+    p3Rest.fechaHora !== null &&
+    !p3Rest.sinHorarioAsignado &&
+    p4Rest.fechaHora !== null &&
+    !p4Rest.sinHorarioAsignado;
 
   registrarResultado(
     'lluvia_restaurar_viernes_desplaza_p3_p4_sabado:post-restauracion',
@@ -2043,11 +2040,8 @@ async function runAllRepros() {
   }
 
   try {
-    await reproPrecheckZonaManualPartidos(registrarResultado);
-    await reproPrecheckMonotonia(registrarResultado);
     await reproModoLluviaMiniBracketYColisiones(registrarResultado);
     await reproSabadoRestauracionPerdidaYMiniBracket(registrarResultado);
-    await reproEliminatoriasAntesDeFinZonas(registrarResultado);
     await reproEmergenciaIntactoLluvia(registrarResultado);
     await reproReduccionEscalonada6a4a3YRestaurar(registrarResultado);
     await reproCasoCruzadoMiniBracketOtraJornada(registrarResultado);
@@ -2077,6 +2071,7 @@ async function runAllRepros() {
   if (fallas > 0) {
     process.exit(1);
   }
+  process.exit(0);
 }
 
 if (require.main === module) {

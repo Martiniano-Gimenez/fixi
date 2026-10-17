@@ -118,6 +118,7 @@ async function testRestauracionConIdDeOtraJornadaEnMapa() {
 
   console.log('\n✅ COMPORTAMIENTO CONFIRMADO: Al restaurar el viernes, el algoritmo intentó y agendó el partido en la jornada del viernes.');
   await prisma.$disconnect();
+  process.exit(0);
 }
 
 testRestauracionConIdDeOtraJornadaEnMapa().catch((err) => {
