@@ -383,6 +383,65 @@ async function testB_reducirYRestaurarMantieneSabadoIdentico() {
   console.log('✅ TEST (b) PASÓ: El sábado quedó exactamente idéntico tras reducir y restaurar el viernes.');
 }
 
+async function testC_guardEnEscritura_bloqueaIdsDeOtraJornada() {
+  console.log('\n======================================================================');
+  console.log('TEST (c): Guard en escritura impide que IDs de sábado se registren en viernes');
+  console.log('======================================================================');
+
+  const { org, torneo, idsSabado, sabadoPartidos } = await setupEscenario();
+
+  // Escenario: El override de viernes ya viene con un mapa corrupto que contiene un ID de sábado
+  const unPartidoSabado = sabadoPartidos[0];
+  const mapaCorrupto = {
+    [unPartidoSabado.id]: 'Desplazado erróneamente en corrida previa',
+  };
+
+  await canchasOverridesService.setOverrideDia(
+    torneo.id,
+    '2026-09-04',
+    4,
+    new Date('2026-09-04T12:00:00.000Z'),
+    mapaCorrupto
+  );
+
+  // Ejecutar reducción del viernes a 4 canchas
+  console.log('Ejecutando reducción de viernes con mapa previo corrupto...');
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-04');
+
+  // Verificar que el guard de saneamiento y el guard en escritura eliminaron el ID de sábado
+  const ovViernes = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6);
+  const sinSlotViernes = ovViernes.partidosSinSlot || {};
+  const idsSabadoEnMapa = Object.keys(sinSlotViernes).filter((id) => idsSabado.has(id));
+
+  assert.strictEqual(
+    idsSabadoEnMapa.length,
+    0,
+    `El mapa partidosSinSlot del viernes no debe contener IDs de sábado. Encontrados: ${JSON.stringify(idsSabadoEnMapa)}`
+  );
+
+  // Verificar que el partido de sábado no fue alterado en la base de datos
+  const partidoDb = await prisma.partido.findUnique({
+    where: { id: unPartidoSabado.id },
+  });
+  assert.strictEqual(
+    partidoDb.sinHorarioAsignado,
+    false,
+    'El partido de sábado no debe quedar sinHorarioAsignado=true'
+  );
+  assert.notStrictEqual(
+    partidoDb.fechaHora,
+    null,
+    'El partido de sábado no debe perder su fechaHora'
+  );
+  assert.strictEqual(
+    partidoDb.canchaNumero,
+    unPartidoSabado.canchaNumero,
+    'El partido de sábado debe conservar su cancha'
+  );
+
+  console.log('✅ TEST (c) PASÓ: El guard en escritura y saneamiento bloqueó la persistencia de IDs de sábado en viernes.');
+}
+
 async function run() {
   let fallas = 0;
   try {
@@ -397,12 +456,20 @@ async function run() {
     fallas++;
   }
 
+  try {
+    await testC_guardEnEscritura_bloqueaIdsDeOtraJornada();
+  } catch (err) {
+    console.error('Error en Test (c):', err);
+    fallas++;
+  }
+
   await prisma.$disconnect();
 
   if (fallas > 0) {
     console.error(`\n❌ ${fallas} test(s) fallaron.`);
     process.exit(1);
   }
+  process.exit(0);
 }
 
 run().catch((err) => {
