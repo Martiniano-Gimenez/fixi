@@ -1191,7 +1191,6 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
 
   // Pre-sembrar partidos inmutables: FINALIZADO y EN_CURSO
   const partidosAAsignar = [];
-  const partidosMiniBracketOtraJornada = [];
 
   // Calcular día lógico afectado por el override (si se proporciona)
   let overrideDiaKey = null;
@@ -1238,8 +1237,54 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     }
   }
 
+  // Mapear fechaHora previa de todos los partidos para el guard en escritura
+  const fechaHoraPreviaPorPartido = new Map();
+  for (const p of todosLosPartidos) {
+    if (p.fechaHora) {
+      fechaHoraPreviaPorPartido.set(p.id, p.fechaHora);
+    }
+  }
+
   // Inicializar con entradas previas: en cada corrida queda = (previas que siguen sin horario) + (nuevos desplazados) - (los que volvieron a tener horario)
-  const partidosSinSlotMotivos = new Map(Object.entries(prevPartidosSinSlot));
+  // Guard de saneamiento: omitir cualquier ID previo cuya jornada original no coincida con overrideDiaKey
+  const partidosSinSlotMotivos = new Map();
+  for (const [pId, motivo] of Object.entries(prevPartidosSinSlot)) {
+    const fechaPrevia = fechaHoraPreviaPorPartido.get(pId);
+    if (fechaPrevia) {
+      const dKey = getDiaCalendarioConTrasnoche(fechaPrevia, organizador)?.key;
+      if (overrideDiaKey && dKey && dKey !== overrideDiaKey) {
+        console.warn(
+          `[Modo Lluvia Guard] Bug interno detectado / saneamiento: ID ${pId} pertenece a la jornada '${dKey}', pero estaba en el mapa previo de '${overrideDiaKey}'. Se omite del mapa.`
+        );
+        continue;
+      }
+    }
+    partidosSinSlotMotivos.set(pId, motivo);
+  }
+
+  // Guard en escritura: solo registrar en partidosSinSlotMotivos partidos cuya jornada original (por fechaHora previa) coincide con overrideDiaKey
+  function registrarPartidoSinSlot(partidoId, motivo) {
+    const fechaPrevia = fechaHoraPreviaPorPartido.get(partidoId);
+    if (fechaPrevia) {
+      const diaPrevioInfo = getDiaCalendarioConTrasnoche(fechaPrevia, organizador);
+      const diaPrevioKey = diaPrevioInfo?.key;
+      if (overrideDiaKey && diaPrevioKey && diaPrevioKey !== overrideDiaKey) {
+        console.warn(
+          `[Modo Lluvia Guard] Bug interno detectado: intento de registrar en partidosSinSlot de '${overrideDiaKey}' el partido ${partidoId} cuya jornada original era '${diaPrevioKey}'. Se omite el registro.`
+        );
+        return;
+      }
+    } else {
+      // Si el partido no tenía fechaHora al ingresar a la corrida, solo puede pertenecer al mapa si ya venía en prevPartidosSinSlot de este mismo overrideDiaKey
+      if (overrideDiaKey && !Object.prototype.hasOwnProperty.call(prevPartidosSinSlot, partidoId)) {
+        console.warn(
+          `[Modo Lluvia Guard] Bug interno detectado: intento de registrar en partidosSinSlot de '${overrideDiaKey}' el partido ${partidoId} sin fechaHora previa y no presente en prevPartidosSinSlot. Se omite el registro.`
+        );
+        return;
+      }
+    }
+    partidosSinSlotMotivos.set(partidoId, motivo);
+  }
 
   // Registrar el horario de fin más tardío de partidos de zona por categoría
   const maxEndPorCategoriaZona = new Map();
@@ -1296,7 +1341,6 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
             const startMs = new Date(p.fechaHora).getTime();
             const endMs = startMs + DURACION_MS;
             addInterval(p.canchaNumero, p.pareja1Id, p.pareja2Id, startMs, endMs);
-            partidosMiniBracketOtraJornada.push(p);
             const currentMax = maxEndPorCategoriaZona.get(p.categoriaId) || 0;
             if (endMs > currentMax) maxEndPorCategoriaZona.set(p.categoriaId, endMs);
           }
@@ -1501,41 +1545,29 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       // y se reporta en el aviso naranja con motivo "Sin cancha activa libre disponible en ese horario".
       // Si es un partido de zona (con parejas o P3/P4 de MINI_BRACKET), se limpia su horario y se registra en partidosSinSlot.
       if (partido.faseEliminatoriaId && (!partido.pareja1Id || !partido.pareja2Id)) {
-        partidosSinSlotMotivos.set(partido.id, 'Sin cancha activa libre disponible en ese horario');
+        registrarPartidoSinSlot(partido.id, 'Sin cancha activa libre disponible en ese horario');
       } else {
-        updatesMap.set(partido.id, {
-          id: partido.id,
-          sinHorarioAsignado: true,
-          fechaHora: null,
-          canchaNumero: null,
-        });
-        partidosSinSlotMotivos.set(
-          partido.id,
-          ronda1SinHorario
-            ? 'Sin horario disponible porque Ronda 1 (P1/P2) quedó sin horario asignado'
-            : 'Sin cancha activa libre disponible en ese horario'
-        );
+        const fechaPrevia = fechaHoraPreviaPorPartido.get(partido.id);
+        const diaPrevioKey = fechaPrevia ? getDiaCalendarioConTrasnoche(fechaPrevia, organizador)?.key : null;
+        if (overrideDiaKey && diaPrevioKey && diaPrevioKey !== overrideDiaKey) {
+          console.warn(
+            `[Modo Lluvia Guard] Bug interno detectado: intento de desasignar partido ${partido.id} de '${diaPrevioKey}' durante override de '${overrideDiaKey}'. Se omite la desasignación.`
+          );
+        } else {
+          updatesMap.set(partido.id, {
+            id: partido.id,
+            sinHorarioAsignado: true,
+            fechaHora: null,
+            canchaNumero: null,
+          });
+          registrarPartidoSinSlot(
+            partido.id,
+            ronda1SinHorario
+              ? 'Sin horario disponible porque Ronda 1 (P1/P2) quedó sin horario asignado'
+              : 'Sin cancha activa libre disponible en ese horario'
+          );
+        }
       }
-    }
-  }
-
-  // Caso cruzado: si P3/P4 están fijos en otra jornada y fin(P1/P2) nuevo queda mayor que su inicio,
-  // tratarlos como desplazados (limpiar horario y registrar motivo) en vez de dejarlos fijos.
-  for (const pOtra of partidosMiniBracketOtraJornada) {
-    if (!pOtra.fechaHora) continue;
-    const pOtraStartMs = new Date(pOtra.fechaHora).getTime();
-    const r1Info = getRonda1InfoZona(pOtra.zonaId, pOtra.id);
-    if (r1Info.maxEndMs > pOtraStartMs) {
-      updatesMap.set(pOtra.id, {
-        id: pOtra.id,
-        sinHorarioAsignado: true,
-        fechaHora: null,
-        canchaNumero: null,
-      });
-      partidosSinSlotMotivos.set(
-        pOtra.id,
-        'Desplazado porque el nuevo fin de P1/P2 supera su horario de inicio'
-      );
     }
   }
 
