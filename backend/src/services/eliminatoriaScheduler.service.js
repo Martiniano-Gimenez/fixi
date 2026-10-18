@@ -269,9 +269,61 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
       (p) => !esPartidoBye(p, fase32, maxRonda) && p.estado !== 'FINALIZADO' && p.estado !== 'EN_CURSO'
     );
 
+    if (pendingMatches.length === 0) continue;
+
+    // Consultar todos los partidos de zona de esta categoría
+    const partidosZonaCat = await db.partido.findMany({
+      where: {
+        categoriaId: cat.id,
+        zonaId: { not: null },
+      },
+      select: {
+        id: true,
+        fechaHora: true,
+        sinHorarioAsignado: true,
+      },
+    });
+
+    // Si algún partido de zona de la categoría no tiene horario, R32 no puede calcular su inicio
+    // y debe quedar pendiente (sinHorarioAsignado: true)
+    const tienePartidosZonaSinHorario = partidosZonaCat.some(
+      (p) => !p.fechaHora || p.sinHorarioAsignado
+    );
+
+    if (tienePartidosZonaSinHorario) {
+      for (const partido of pendingMatches) {
+        updates.push({
+          id: partido.id,
+          fechaHora: null,
+          canchaNumero: null,
+          sinHorarioAsignado: true,
+        });
+      }
+      continue;
+    }
+
+    // Calcular fin del último partido de zona de esta categoría
+    let maxZonaEnd = 0;
+    for (const p of partidosZonaCat) {
+      if (p.fechaHora && !p.sinHorarioAsignado) {
+        const pEnd = new Date(p.fechaHora).getTime() + DURACION_MS;
+        if (pEnd > maxZonaEnd) maxZonaEnd = pEnd;
+      }
+    }
+
+    // Piso de búsqueda para R32 = max(sabNightStartMs, fin del último partido de zona de ESA categoría)
+    let searchStartMs = Math.max(sabNightStartMs, maxZonaEnd);
+    if (searchStartMs > sabNightStartMs) {
+      const offset = searchStartMs - sabNightStartMs;
+      const rem = offset % STEP_MS;
+      if (rem > 0) {
+        searchStartMs += (STEP_MS - rem);
+      }
+    }
+
     for (const partido of pendingMatches) {
       let asignado = false;
-      for (let T = sabNightStartMs; T + DURACION_MS <= sabNightEndMs; T += STEP_MS) {
+      for (let T = searchStartMs; T + DURACION_MS <= sabNightEndMs; T += STEP_MS) {
         const tEnd = T + DURACION_MS;
         for (let c = 1; c <= cantidadCanchas; c++) {
           if (

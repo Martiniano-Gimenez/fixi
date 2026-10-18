@@ -444,6 +444,9 @@ organizadores que hoy llevan todo en papel.
   - **Cuadro Eliminatorio Mobile con Pestañas:** Reemplazo automático del bracket tradicional por navegación de solapas por ronda en $\le 768\text{px}$, renderizando la fase activa a ancho completo sin scroll horizontal ni líneas SVG.
   - **Alineación Horizontal de Título:** Cabecera concisa `[Torneo] — [Categoría]` (`IMPARES AGOSTO — 5ta`) sin textos redundantes como "Categoría" o "(Fase Eliminatoria)".
 
+## Casos conocidos y tickets pendientes de resolución
+- **Categorías con una zona manual todavía sin partidos:** En torneos con zonas manuales (`requiereArmadoManual: true`), los partidos de la zona no se generan de forma automática hasta que el organizador confirme la distribución de parejas. En consecuencia, el scheduler de eliminatorias no dispone de partidos de zona para calcular el fin de zonas de esa categoría (se abordará de forma integral en el ticket de zonas manuales).
+
 ## Reglas de trabajo
 - Trabajar en ramas por feature (`feature/nombre-ticket`), nunca directo a main.
 - Commits chicos y descriptivos (`feat:`, `fix:`, `chore:`, `docs:`).
