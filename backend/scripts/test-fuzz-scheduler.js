@@ -22,7 +22,17 @@ const {
 } = require('../src/utils/dateUtils');
 
 const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
+const START_SEED = Number(process.env.START_SEED || 1);
 const TOTAL_SEEDS = Number(process.env.FUZZ_SEEDS || 500);
+
+const FUZZ_METRICAS = process.env.FUZZ_METRICAS === '1';
+
+const r32FuzzStats = {
+  totalR32NoBye: 0,
+  sinHorarioR32: 0,
+  seedsConR32: new Set(),
+  seedsConSinHorarioR32: new Set(),
+};
 
 const manualFuzzStats = {
   totalSeedsConZonasDe4: new Set(),
@@ -702,6 +712,23 @@ async function runSingleSeed(seed, recordFailure) {
       allowDayLimitMs: false,
     });
 
+    if (FUZZ_METRICAS) {
+      let seedHasR32 = false;
+      let seedHasSinHorario = false;
+      for (const p of partidosIniciales) {
+        if (p.faseEliminatoria && p.faseEliminatoria.ronda >= 32 && !p.esBye) {
+          r32FuzzStats.totalR32NoBye++;
+          seedHasR32 = true;
+          if (!p.fechaHora || p.sinHorarioAsignado) {
+            r32FuzzStats.sinHorarioR32++;
+            seedHasSinHorario = true;
+          }
+        }
+      }
+      if (seedHasR32) r32FuzzStats.seedsConR32.add(seed);
+      if (seedHasSinHorario) r32FuzzStats.seedsConSinHorarioR32.add(seed);
+    }
+
     // =========================================================================
     // ETAPA 2: POST-REDUCCION (MODO LLUVIA)
     // =========================================================================
@@ -1058,7 +1085,7 @@ async function runFuzzSuite() {
   const startTime = Date.now();
 
   try {
-    for (let seed = 1; seed <= TOTAL_SEEDS; seed++) {
+    for (let seed = START_SEED; seed <= TOTAL_SEEDS; seed++) {
       const beforeSeedFailures = INVARIANT_KEYS.reduce(
         (acc, k) => acc + stats[k].semillasAfectadas.size,
         0
@@ -1129,6 +1156,20 @@ async function runFuzzSuite() {
     console.log(`    * [${cnt} veces] ${msg}`);
   }
   console.log('='.repeat(85) + '\n');
+
+  if (FUZZ_METRICAS) {
+    console.log('='.repeat(85));
+    console.log('📊 MÉTRICAS R32 EN POST-INICIO (FUZZ_METRICAS=1):');
+    console.log('='.repeat(85));
+    console.log(`- Semillas con partidos R32 no-BYE: ${r32FuzzStats.seedsConR32.size} (${((r32FuzzStats.seedsConR32.size / TOTAL_SEEDS) * 100).toFixed(1)}%)`);
+    console.log(`- Total de partidos R32 no-BYE generados: ${r32FuzzStats.totalR32NoBye}`);
+    console.log(`- Partidos R32 no-BYE sin horario: ${r32FuzzStats.sinHorarioR32}`);
+    const pctP = r32FuzzStats.totalR32NoBye > 0 ? ((r32FuzzStats.sinHorarioR32 / r32FuzzStats.totalR32NoBye) * 100).toFixed(1) : '0';
+    console.log(`- Porcentaje de partidos R32 sin horario: ${pctP}% (${r32FuzzStats.sinHorarioR32}/${r32FuzzStats.totalR32NoBye})`);
+    const pctS = r32FuzzStats.seedsConR32.size > 0 ? ((r32FuzzStats.seedsConSinHorarioR32.size / r32FuzzStats.seedsConR32.size) * 100).toFixed(1) : '0';
+    console.log(`- Semillas con al menos un R32 sin horario: ${r32FuzzStats.seedsConSinHorarioR32.size}/${r32FuzzStats.seedsConR32.size} (${pctS}%)`);
+    console.log('='.repeat(85) + '\n');
+  }
 
   let hayFallas = false;
   for (const k of INVARIANT_KEYS) {
