@@ -43,6 +43,7 @@ const TEST_SUITES = [
   'test-precheck-snapshot.js',
   'test-repro-lluvia-sabado.js',
   'test-restauracion-partido-otra-jornada.js',
+  'test-r32-inmutabilidad.js',
   'test-scheduler-backfill-regression.js',
   'test-scheduler-invariantes-repro.js',
   'test-scheduler-r32-fin-zonas.js',
