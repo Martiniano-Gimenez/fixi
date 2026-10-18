@@ -5,6 +5,7 @@
  * Reproductores mínimos determinísticos correspondientes a tickets pendientes de resolución:
  * 1. Zona manual (`precheck_zona_manual_partidos:post-inicio`)
  * 2. Monotonía de pre-check (`precheck_monotonia:post-inicio`)
+ * 3. Lluvia empuja zonas más allá de R32 ya fijado (`eliminatorias_descanso_y_post_zonas:post-reduccion`)
  *
  * Mantenido fuera de run-all-tests.js hasta la implementación de sus respectivos tickets.
  */
@@ -16,6 +17,7 @@ const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
 const disponibilidadService = require('../src/services/disponibilidad.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
+const partidoService = require('../src/services/partido.service');
 const { generarEliminatoria } = require('../src/services/faseEliminatoria.service');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
 const { parseFechaLocal } = require('../src/utils/dateUtils');
@@ -211,6 +213,296 @@ async function reproPrecheckMonotonia(registrarResultado) {
   }
 }
 
+/**
+ * CASO 3: Reproductor mínimo de `eliminatorias_descanso_y_post_zonas:post-reduccion`
+ * Escenario:
+ * - 4 canchas, 1 categoría de 25 parejas (tiene R32).
+ * - En post-inicio, con 4 canchas, las zonas se juegan el sábado a la tarde y terminan a las 19:00 / 20:15.
+ * - R32 se agenda normalmente el sábado a las 20:45 en Cancha 1.
+ * - Al reducir canchas a 1 en Sábado por lluvia, los partidos de zona de la tarde se compactan en fila india
+ *   y terminan después de las 20:45 (ej. a las 22:30 o posterior).
+ * - R32 (ya fijado a las 20:45) queda iniciando ANTES de que terminen las zonas de su categoría.
+ * - En post-restauración, las canchas vuelven a 4 y las zonas vuelven a terminar antes de las 20:45.
+ */
+async function reproLluviaEmpujaZonasMasAllaR32(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Repro Lluvia R32',
+      email: 'repro-lluvia-r32@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '18:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Repro Lluvia R32',
+      slug: 'torneo-repro-lluvia-r32',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'BORRADOR' },
+  });
+
+  // 25 parejas con slots suficientes en Sábado de 09:00 a 17:45 (zonas terminan a las 17:45 con 4 canchas)
+  const slotsSabado = [
+    'Sabado-09:00', 'Sabado-10:15', 'Sabado-11:30', 'Sabado-12:45',
+    'Sabado-14:00', 'Sabado-15:15', 'Sabado-16:30', 'Sabado-17:45'
+  ];
+  for (let i = 1; i <= 25; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+    for (const s of slotsSabado) {
+      await prisma.slotPareja.create({ data: { parejaId: p.id, slotId: s } });
+    }
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  await zonaService.asignarHorariosAutomatico(org.id, [cat.id]);
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+  await programarHorariosEliminatorias(org.id, torneo.id);
+
+  const checkEtapa = async (etapa) => {
+    const partidos = await prisma.partido.findMany({
+      where: { categoriaId: cat.id },
+      include: { faseEliminatoria: true },
+    });
+    const maxZonaEnd = Math.max(
+      ...partidos
+        .filter((p) => p.zonaId && p.fechaHora && !p.sinHorarioAsignado)
+        .map((p) => new Date(p.fechaHora).getTime() + DURACION_MS)
+    );
+    const elimAntes = partidos.find(
+      (p) =>
+        p.faseEliminatoriaId &&
+        p.fechaHora &&
+        !p.sinHorarioAsignado &&
+        !p.esBye &&
+        new Date(p.fechaHora).getTime() < maxZonaEnd
+    );
+    registrarResultado(
+      `eliminatorias_descanso_y_post_zonas:${etapa}`,
+      !elimAntes,
+      elimAntes
+        ? `Ronda ${elimAntes.faseEliminatoria.ronda} empieza en ${new Date(elimAntes.fechaHora).toISOString()} antes del fin de zonas (${new Date(maxZonaEnd).toISOString()})`
+        : 'OK'
+    );
+  };
+
+  await checkEtapa('post-inicio');
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-05');
+  await checkEtapa('post-reduccion');
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-05');
+  await checkEtapa('post-restauracion');
+}
+
+/**
+ * CASO 4: Reproductor mínimo de R32 asignado a mano (ticket pendiente)
+ * Un R32 asignado manualmente por el organizador no debe ser sobreescrito
+ * por ejecuciones posteriores de programarHorariosEliminatorias.
+ */
+async function reproR32AsignadoAMano(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Repro R32 Manual',
+      email: 'repro-r32-manual@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '15:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Repro R32 Manual',
+      slug: 'torneo-repro-r32-manual',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'BORRADOR' },
+  });
+
+  for (let i = 1; i <= 25; i++) {
+    await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+
+  // Asignar todas las zonas el viernes
+  const baseFriday = zonaService.proximaFechaPorDia('Viernes', parseFechaLocal('2026-09-04'));
+  const partidosZona = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, zonaId: { not: null } },
+  });
+  for (const pz of partidosZona) {
+    await prisma.partido.update({
+      where: { id: pz.id },
+      data: {
+        fechaHora: new Date(baseFriday.getTime() + 18 * 60 * 60 * 1000),
+        canchaNumero: 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  // Buscar un partido de R32 (no bye)
+  const partidoR32 = await prisma.partido.findFirst({
+    where: {
+      categoriaId: cat.id,
+      faseEliminatoria: { ronda: { gte: 32 } },
+      esBye: false,
+    },
+  });
+
+  const baseSaturday = zonaService.proximaFechaPorDia('Sabado', parseFechaLocal('2026-09-04'));
+  const horaManual = new Date(baseSaturday.getTime() + (22 * 60 + 30) * 60 * 1000); // 22:30
+  const canchaManual = 3;
+
+  await partidoService.asignarHorarioManual(org.id, partidoR32.id, {
+    fechaHora: horaManual,
+    canchaNumero: canchaManual,
+  });
+
+  // Re-ejecutar scheduler
+  await programarHorariosEliminatorias(org.id, torneo.id);
+
+  const despues = await prisma.partido.findUnique({ where: { id: partidoR32.id } });
+  const horaCoincide = despues.fechaHora && new Date(despues.fechaHora).getTime() === horaManual.getTime();
+  const canchaCoincide = despues.canchaNumero === canchaManual;
+
+  registrarResultado(
+    'r32_inmutabilidad_manual:post-scheduler',
+    Boolean(horaCoincide && canchaCoincide),
+    horaCoincide && canchaCoincide
+      ? 'OK'
+      : `R32 manual fue sobreescrito: esperado ${horaManual.toISOString()} C${canchaManual}, recibido ${despues.fechaHora ? new Date(despues.fechaHora).toISOString() : null} C${despues.canchaNumero}`
+  );
+}
+
+/**
+ * CASO 5: Reproductor mínimo de re-ejecución del scheduler vía restauración sin diaKey (ticket pendiente)
+ */
+async function reproR32ReejecucionSchedulerRestauracion(registrarResultado) {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Repro R32 Restauracion',
+      email: 'repro-r32-restauracion@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '15:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Repro R32 Restauracion',
+      slug: 'torneo-repro-r32-restauracion',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'BORRADOR' },
+  });
+
+  for (let i = 1; i <= 25; i++) {
+    await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+
+  // Asignar todas las zonas el viernes
+  const baseFriday = zonaService.proximaFechaPorDia('Viernes', parseFechaLocal('2026-09-04'));
+  const partidosZona = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, zonaId: { not: null } },
+  });
+  for (const pz of partidosZona) {
+    await prisma.partido.update({
+      where: { id: pz.id },
+      data: {
+        fechaHora: new Date(baseFriday.getTime() + 18 * 60 * 60 * 1000),
+        canchaNumero: 1,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  const partidoR32 = await prisma.partido.findFirst({
+    where: {
+      categoriaId: cat.id,
+      faseEliminatoria: { ronda: { gte: 32 } },
+      esBye: false,
+    },
+  });
+
+  const baseSaturday = zonaService.proximaFechaPorDia('Sabado', parseFechaLocal('2026-09-04'));
+  const horaManual = new Date(baseSaturday.getTime() + (22 * 60 + 30) * 60 * 1000);
+  const canchaManual = 3;
+
+  await partidoService.asignarHorarioManual(org.id, partidoR32.id, {
+    fechaHora: horaManual,
+    canchaNumero: canchaManual,
+  });
+
+  // Override en domingo y restauración global sin diaKey
+  const baseSunday = zonaService.proximaFechaPorDia('Domingo', parseFechaLocal('2026-09-04'));
+  await canchasOverridesService.setOverrideDia(torneo.id, '2026-09-06', 2, baseSunday);
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, null);
+
+  const despues = await prisma.partido.findUnique({ where: { id: partidoR32.id } });
+  const horaCoincide = despues.fechaHora && new Date(despues.fechaHora).getTime() === horaManual.getTime();
+  const canchaCoincide = despues.canchaNumero === canchaManual;
+
+  registrarResultado(
+    'r32_inmutabilidad_manual:post-restauracion',
+    Boolean(horaCoincide && canchaCoincide),
+    horaCoincide && canchaCoincide
+      ? 'OK'
+      : `R32 manual fue sobreescrito tras restauración: esperado ${horaManual.toISOString()} C${canchaManual}, recibido ${despues.fechaHora ? new Date(despues.fechaHora).toISOString() : null} C${despues.canchaNumero}`
+  );
+}
+
 async function runPendingTickets() {
   await ensureTestDb();
   resetTestDb();
@@ -233,6 +525,9 @@ async function runPendingTickets() {
   try {
     await reproPrecheckZonaManualPartidos(registrarResultado);
     await reproPrecheckMonotonia(registrarResultado);
+    await reproLluviaEmpujaZonasMasAllaR32(registrarResultado);
+    await reproR32AsignadoAMano(registrarResultado);
+    await reproR32ReejecucionSchedulerRestauracion(registrarResultado);
   } finally {
     await limpiarDb();
     await prisma.$disconnect();
