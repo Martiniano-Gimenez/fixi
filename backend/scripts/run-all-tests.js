@@ -45,6 +45,7 @@ const TEST_SUITES = [
   'test-restauracion-partido-otra-jornada.js',
   'test-scheduler-backfill-regression.js',
   'test-scheduler-invariantes-repro.js',
+  'test-scheduler-r32-fin-zonas.js',
   'test-scheduling-domingo.js',
   'test-sincronizar-cuadro.js',
   'test-torneo-fecha-guard.js',

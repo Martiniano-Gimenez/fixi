@@ -5,7 +5,6 @@
  * Reproductores mínimos determinísticos correspondientes a tickets pendientes de resolución:
  * 1. Zona manual (`precheck_zona_manual_partidos:post-inicio`)
  * 2. Monotonía de pre-check (`precheck_monotonia:post-inicio`)
- * 3. Descanso de eliminatorias Ronda 32 (`eliminatorias_descanso_y_post_zonas`)
  *
  * Mantenido fuera de run-all-tests.js hasta la implementación de sus respectivos tickets.
  */
@@ -212,90 +211,6 @@ async function reproPrecheckMonotonia(registrarResultado) {
   }
 }
 
-/**
- * CASO 5: Reproductor mínimo de `eliminatorias_descanso_y_post_zonas` (R32)
- */
-async function reproEliminatoriasAntesDeFinZonas(registrarResultado) {
-  await limpiarDb();
-
-  const org = await prisma.organizador.create({
-    data: {
-      nombre: 'Club Repro R32',
-      email: 'repro-r32@padel.test',
-      passwordHash: 'hash',
-      cantidadCanchas: 2,
-      viernesInicio: '18:00',
-      viernesFin: '23:00',
-      sabadoInicio: '09:00',
-      sabadoFin: '23:00',
-      domingoInicio: '09:00',
-      domingoFin: '22:00',
-    },
-  });
-
-  const torneo = await prisma.torneo.create({
-    data: {
-      nombre: 'Torneo Repro R32',
-      slug: 'torneo-repro-r32',
-      fecha: parseFechaLocal('2026-09-04'),
-      estado: 'BORRADOR',
-      organizadorId: org.id,
-    },
-  });
-
-  const cat = await prisma.categoria.create({
-    data: { torneoId: torneo.id, nombre: '6ta', estado: 'BORRADOR' },
-  });
-
-  for (let i = 1; i <= 25; i++) {
-    const p = await prisma.pareja.create({
-      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
-    });
-    if (i <= 4) {
-      await prisma.slotPareja.create({ data: { parejaId: p.id, slotId: 'Sabado-22:00' } });
-    }
-  }
-
-  await zonaService.iniciarCategoria(org.id, cat.id);
-  await zonaService.asignarHorariosAutomatico(org.id, [cat.id]);
-  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
-  await generarEliminatoria(org.id, cat.id);
-  await programarHorariosEliminatorias(org.id, torneo.id);
-
-  const checkEtapa = async (etapa) => {
-    const partidos = await prisma.partido.findMany({
-      where: { categoriaId: cat.id },
-      include: { faseEliminatoria: true },
-    });
-    const maxZonaEnd = Math.max(
-      ...partidos
-        .filter((p) => p.zonaId && p.fechaHora && !p.sinHorarioAsignado)
-        .map((p) => new Date(p.fechaHora).getTime() + DURACION_MS)
-    );
-    const elimAntes = partidos.find(
-      (p) =>
-        p.faseEliminatoriaId &&
-        p.fechaHora &&
-        !p.sinHorarioAsignado &&
-        !p.esBye &&
-        new Date(p.fechaHora).getTime() < maxZonaEnd
-    );
-    registrarResultado(
-      `eliminatorias_descanso_y_post_zonas:${etapa}`,
-      !elimAntes,
-      elimAntes
-        ? `2 canchas, 1 cat, 25 parejas: Ronda ${elimAntes.faseEliminatoria.ronda} empieza en ${new Date(elimAntes.fechaHora).toISOString()} antes del fin de zonas (${new Date(maxZonaEnd).toISOString()})`
-        : 'OK'
-    );
-  };
-
-  await checkEtapa('post-inicio');
-  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-04');
-  await checkEtapa('post-reduccion');
-  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, null, '2026-09-04');
-  await checkEtapa('post-restauracion');
-}
-
 async function runPendingTickets() {
   await ensureTestDb();
   resetTestDb();
@@ -318,7 +233,6 @@ async function runPendingTickets() {
   try {
     await reproPrecheckZonaManualPartidos(registrarResultado);
     await reproPrecheckMonotonia(registrarResultado);
-    await reproEliminatoriasAntesDeFinZonas(registrarResultado);
   } finally {
     await limpiarDb();
     await prisma.$disconnect();
