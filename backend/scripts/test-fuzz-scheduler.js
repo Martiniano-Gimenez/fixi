@@ -24,6 +24,7 @@ const {
 const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 const START_SEED = Number(process.env.START_SEED || 1);
 const TOTAL_SEEDS = Number(process.env.FUZZ_SEEDS || 500);
+const END_SEED = START_SEED + TOTAL_SEEDS - 1;
 
 const FUZZ_METRICAS = process.env.FUZZ_METRICAS === '1';
 
@@ -1037,7 +1038,7 @@ async function runFuzzSuite() {
   const { server, baseUrl } = await startTestServer();
 
   console.log('='.repeat(85));
-  console.log(`🎲 FUZZ SCHEDULER SUITE POR ETAPA (${TOTAL_SEEDS} semillas reproducibles)`);
+  console.log(`🎲 FUZZ SCHEDULER SUITE POR ETAPA (${TOTAL_SEEDS} semillas reproducibles, rango ${START_SEED}..${END_SEED})`);
   console.log(`🌐 Test Server activo en: ${baseUrl}`);
   console.log('='.repeat(85));
 
@@ -1085,7 +1086,7 @@ async function runFuzzSuite() {
   const startTime = Date.now();
 
   try {
-    for (let seed = START_SEED; seed <= TOTAL_SEEDS; seed++) {
+    for (let seed = START_SEED; seed <= END_SEED; seed++) {
       const beforeSeedFailures = INVARIANT_KEYS.reduce(
         (acc, k) => acc + stats[k].semillasAfectadas.size,
         0
@@ -1110,9 +1111,10 @@ async function runFuzzSuite() {
         console.log(`⚠️  Semilla ${seed} falló en: ${failedInvariantsForSeed.join(', ')}`);
       }
 
-      if (seed % 50 === 0) {
+      const semillasEjecutadas = seed - START_SEED + 1;
+      if (semillasEjecutadas % 50 === 0) {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`⏱️  Progreso: ${seed}/${TOTAL_SEEDS} semillas ejecutadas (${elapsed}s)`);
+        console.log(`⏱️  Progreso: ${semillasEjecutadas}/${TOTAL_SEEDS} semillas ejecutadas (${elapsed}s)`);
       }
     }
   } finally {
