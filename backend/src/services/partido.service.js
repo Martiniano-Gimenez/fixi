@@ -467,9 +467,17 @@ async function borrarResultado(organizadorId, partidoId) {
 
 async function updateFechaHora(organizadorId, partidoId, fechaHora) {
   await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  const data = {
+    fechaHora: fechaHora ? new Date(fechaHora) : null,
+  };
+  if (!fechaHora) {
+    data.canchaNumero = null;
+    data.sinHorarioAsignado = true;
+    data.horarioManual = false;
+  }
   const partido = await prisma.partido.update({
     where: { id: partidoId },
-    data: { fechaHora: fechaHora ? new Date(fechaHora) : null },
+    data,
   });
   return partido;
 }
@@ -750,6 +758,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
       fechaHora: targetDate,
       canchaNumero: canchaNum,
       sinHorarioAsignado: false,
+      horarioManual: true,
     },
     include: {
       categoria: { select: { id: true, nombre: true } },

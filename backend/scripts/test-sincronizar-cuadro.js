@@ -378,6 +378,7 @@ async function testSincronizarCuadro() {
       }
 
       // Crear al menos 1 partido pendiente en cada zona para simular que el torneo está en curso
+      const mockZonaFecha = new Date('2026-09-11T21:00:00.000Z'); // Viernes 18:00 ART
       if (tamaniosZonas[i] === 4) {
         await prisma.partido.create({
           data: {
@@ -387,6 +388,9 @@ async function testSincronizarCuadro() {
             pareja2Id: parejasPorZona[z.id][1].id,
             posicionEnRonda: 1,
             estado: 'PENDIENTE',
+            fechaHora: mockZonaFecha,
+            canchaNumero: 1,
+            sinHorarioAsignado: false,
           },
         });
         await prisma.partido.create({
@@ -397,6 +401,9 @@ async function testSincronizarCuadro() {
             pareja2Id: parejasPorZona[z.id][3].id,
             posicionEnRonda: 2,
             estado: 'PENDIENTE',
+            fechaHora: mockZonaFecha,
+            canchaNumero: 2,
+            sinHorarioAsignado: false,
           },
         });
       } else {
@@ -408,6 +415,9 @@ async function testSincronizarCuadro() {
             pareja2Id: parejasPorZona[z.id][1].id,
             posicionEnRonda: 1,
             estado: 'PENDIENTE',
+            fechaHora: mockZonaFecha,
+            canchaNumero: 1,
+            sinHorarioAsignado: false,
           },
         });
       }
