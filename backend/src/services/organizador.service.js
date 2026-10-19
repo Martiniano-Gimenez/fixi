@@ -2298,10 +2298,10 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
               canchasClub
             );
             dayRes = {
-              partidosReprogramados: schedRes.partidosAgendados,
-              partidosSinCambio: 0,
+              partidosReprogramados: schedRes.cambios ? schedRes.cambios.length : schedRes.partidosAgendados,
+              partidosSinCambio: schedRes.total - (schedRes.cambios ? schedRes.cambios.length : 0),
               partidosSinHorarioNuevo: schedRes.partidosSinHorario,
-              cambios: [],
+              cambios: schedRes.cambios || [],
             };
           } else {
             dayRes = await asignarHorariosModoLluviaMCF(
@@ -2347,10 +2347,10 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         overrideNum
       );
       res = {
-        partidosReprogramados: schedRes.partidosAgendados,
-        partidosSinCambio: 0,
+        partidosReprogramados: schedRes.cambios ? schedRes.cambios.length : schedRes.partidosAgendados,
+        partidosSinCambio: schedRes.total - (schedRes.cambios ? schedRes.cambios.length : 0),
         partidosSinHorarioNuevo: schedRes.partidosSinHorario,
-        cambios: [],
+        cambios: schedRes.cambios || [],
       };
     } else {
       // Viernes o Sábado (zonas): ejecutar el Scheduler Continuo MCF dentro de tx (scopeado al día lógico)
