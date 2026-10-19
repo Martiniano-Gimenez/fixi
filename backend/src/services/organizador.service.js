@@ -2295,7 +2295,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
               torneoId,
               null,
               tx,
-              canchasClub
+              canchasClub,
+              { soloDomingo: true }
             );
             dayRes = {
               partidosReprogramados: schedRes.cambios ? schedRes.cambios.length : schedRes.partidosAgendados,
@@ -2344,7 +2345,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         torneoId,
         null,
         tx,
-        overrideNum
+        overrideNum,
+        { soloDomingo: true }
       );
       res = {
         partidosReprogramados: schedRes.cambios ? schedRes.cambios.length : schedRes.partidosAgendados,

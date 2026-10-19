@@ -933,6 +933,21 @@ async function reproEquivalenciaSoloDomingo(registrarResultado) {
   });
 
   const setupTorneo = async (slug) => {
+    const org = await prisma.organizador.create({
+      data: {
+        nombre: `Club ${slug}`,
+        email: `${slug}@padel.test`,
+        passwordHash: 'hash',
+        cantidadCanchas: 4,
+        viernesInicio: '14:00',
+        viernesFin: '23:00',
+        sabadoInicio: '09:00',
+        sabadoFin: '24:00',
+        domingoInicio: '09:00',
+        domingoFin: '22:00',
+      },
+    });
+
     const torneo = await prisma.torneo.create({
       data: {
         nombre: `Torneo ${slug}`,
@@ -988,12 +1003,12 @@ async function reproEquivalenciaSoloDomingo(registrarResultado) {
       },
     });
 
-    return { torneo, cat, r32, fechaSabado22 };
+    return { org, torneo, cat, r32, fechaSabado22 };
   };
 
   // Torneo A: corrida completa
-  const { torneo: torneoA, cat: catA } = await setupTorneo('torneo-a-completo');
-  await programarHorariosEliminatorias(org.id, torneoA.id, catA.id);
+  const { org: orgA, torneo: torneoA, cat: catA } = await setupTorneo('torneo-a-completo');
+  await programarHorariosEliminatorias(orgA.id, torneoA.id, catA.id);
 
   const partidosA = await prisma.partido.findMany({
     where: { categoriaId: catA.id, faseEliminatoria: { ronda: { lt: 32 } } },
@@ -1002,8 +1017,8 @@ async function reproEquivalenciaSoloDomingo(registrarResultado) {
   });
 
   // Torneo B: corrida con soloDomingo: true
-  const { torneo: torneoB, cat: catB, r32: r32B, fechaSabado22 } = await setupTorneo('torneo-b-solodomingo');
-  await programarHorariosEliminatorias(org.id, torneoB.id, catB.id, null, null, { soloDomingo: true });
+  const { org: orgB, torneo: torneoB, cat: catB, r32: r32B, fechaSabado22 } = await setupTorneo('torneo-b-solodomingo');
+  await programarHorariosEliminatorias(orgB.id, torneoB.id, catB.id, null, null, { soloDomingo: true });
 
   const r32PostB = await prisma.partido.findUnique({ where: { id: r32B.id } });
   const r32IntactoB = r32PostB.fechaHora?.getTime() === fechaSabado22.getTime() && r32PostB.canchaNumero === 3;

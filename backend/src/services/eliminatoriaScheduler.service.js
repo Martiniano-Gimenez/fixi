@@ -38,7 +38,15 @@ function esPartidoBye(partido) {
  * @param {object|null} [externalTx] - Transacción Prisma externa opcional.
  * @param {number|null} [canchasOverride] - Cantidad de canchas reducidas explícita (ej. Modo Lluvia).
  */
-async function programarHorariosEliminatorias(organizadorId, torneoId, categoriaId = null, externalTx = null, canchasOverride = null) {
+async function programarHorariosEliminatorias(
+  organizadorId,
+  torneoId,
+  categoriaId = null,
+  externalTx = null,
+  canchasOverride = null,
+  options = {}
+) {
+  const { soloDomingo = false } = typeof options === 'object' && options !== null ? options : {};
   const db = externalTx || prisma;
 
   const organizador = await db.organizador.findUnique({
@@ -248,13 +256,15 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
             canchaNumero: null,
             isBye: true,
           });
-          updates.push({
-            id: p.id,
-            fechaHora: null,
-            canchaNumero: null,
-            sinHorarioAsignado: false,
-            horarioManual: false,
-          });
+          if (!soloDomingo || fase.ronda < 32) {
+            updates.push({
+              id: p.id,
+              fechaHora: null,
+              canchaNumero: null,
+              sinHorarioAsignado: false,
+              horarioManual: false,
+            });
+          }
         } else {
           const esManualActivo =
             Boolean(p.horarioManual) &&
@@ -263,7 +273,14 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
             !p.sinHorarioAsignado &&
             p.canchaNumero <= cantidadCanchas;
 
-          if ((p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || esManualActivo) && p.fechaHora) {
+          const esR32Fijo =
+            soloDomingo &&
+            fase.ronda >= 32 &&
+            Boolean(p.fechaHora) &&
+            Boolean(p.canchaNumero) &&
+            !p.sinHorarioAsignado;
+
+          if ((p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || esManualActivo || esR32Fijo) && p.fechaHora) {
             const pStart = new Date(p.fechaHora).getTime();
             const pEnd = pStart + DURACION_MS;
             matchScheduleMap.set(`${cat.id}:${fase.ronda}:${p.posicionEnRonda}`, {
@@ -295,110 +312,113 @@ async function programarHorariosEliminatorias(organizadorId, torneoId, categoria
   }
 
   // 4. Sábado: Programar Dieciseisavos (Ronda >= 32)
-  for (const cat of catsToSchedule) {
-    const fase32 = cat.fasesEliminatorias.find((f) => f.ronda >= 32);
-    if (!fase32) continue;
-    const maxRonda = Math.max(...cat.fasesEliminatorias.map((f) => f.ronda));
+  if (!soloDomingo) {
+    for (const cat of catsToSchedule) {
+      const fase32 = cat.fasesEliminatorias.find((f) => f.ronda >= 32);
+      if (!fase32) continue;
+      const maxRonda = Math.max(...cat.fasesEliminatorias.map((f) => f.ronda));
 
-    const pendingMatches = fase32.partidos.filter((p) => {
-      if (esPartidoBye(p, fase32, maxRonda)) return false;
-      if (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') return false;
-      const esManualActivo =
-        Boolean(p.horarioManual) &&
-        Boolean(p.fechaHora) &&
-        Boolean(p.canchaNumero) &&
-        !p.sinHorarioAsignado &&
-        p.canchaNumero <= cantidadCanchas;
-      return !esManualActivo;
-    });
+      const pendingMatches = fase32.partidos.filter((p) => {
+        if (esPartidoBye(p, fase32, maxRonda)) return false;
+        if (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') return false;
+        const esManualActivo =
+          Boolean(p.horarioManual) &&
+          Boolean(p.fechaHora) &&
+          Boolean(p.canchaNumero) &&
+          !p.sinHorarioAsignado &&
+          p.canchaNumero <= cantidadCanchas;
+        return !esManualActivo;
+      });
 
-    if (pendingMatches.length === 0) continue;
+      if (pendingMatches.length === 0) continue;
 
-    // Consultar todos los partidos de zona de esta categoría
-    const partidosZonaCat = await db.partido.findMany({
-      where: {
-        categoriaId: cat.id,
-        zonaId: { not: null },
-      },
-      select: {
-        id: true,
-        fechaHora: true,
-        sinHorarioAsignado: true,
-      },
-    });
-
-    // Si algún partido de zona de la categoría no tiene horario, R32 no puede calcular su inicio
-    // y debe quedar pendiente (sinHorarioAsignado: true)
-    const tienePartidosZonaSinHorario = partidosZonaCat.some(
-      (p) => !p.fechaHora || p.sinHorarioAsignado
-    );
-
-    if (tienePartidosZonaSinHorario) {
-      for (const partido of pendingMatches) {
-        updates.push({
-          id: partido.id,
-          fechaHora: null,
-          canchaNumero: null,
+      // Consultar todos los partidos de zona de esta categoría
+      const partidosZonaCat = await db.partido.findMany({
+        where: {
+          categoriaId: cat.id,
+          zonaId: { not: null },
+        },
+        select: {
+          id: true,
+          fechaHora: true,
           sinHorarioAsignado: true,
-          horarioManual: false,
-        });
-      }
-      continue;
-    }
+        },
+      });
 
-    // Calcular fin del último partido de zona de esta categoría
-    let maxZonaEnd = 0;
-    for (const p of partidosZonaCat) {
-      if (p.fechaHora && !p.sinHorarioAsignado) {
-        const pEnd = new Date(p.fechaHora).getTime() + DURACION_MS;
-        if (pEnd > maxZonaEnd) maxZonaEnd = pEnd;
-      }
-    }
+      // Si algún partido de zona de la categoría no tiene horario, R32 no puede calcular su inicio
+      // y debe quedar pendiente (sinHorarioAsignado: true) SOLO para aquellos cruces que NO tenían horario.
+      // Si un R32 ya tenía horario fijado, se respeta intacto y no se borra.
+      const tienePartidosZonaSinHorario = partidosZonaCat.some(
+        (p) => !p.fechaHora || p.sinHorarioAsignado
+      );
 
-    // Piso de búsqueda para R32 = max(sabNightStartMs, fin del último partido de zona de ESA categoría)
-    let searchStartMs = Math.max(sabNightStartMs, maxZonaEnd);
-    if (searchStartMs > sabNightStartMs) {
-      const offset = searchStartMs - sabNightStartMs;
-      const rem = offset % STEP_MS;
-      if (rem > 0) {
-        searchStartMs += (STEP_MS - rem);
-      }
-    }
-
-    for (const partido of pendingMatches) {
-      let asignado = false;
-      for (let T = searchStartMs; T + DURACION_MS <= sabNightEndMs; T += STEP_MS) {
-        const tEnd = T + DURACION_MS;
-        for (let c = 1; c <= cantidadCanchas; c++) {
-          if (
-            isCourtFree(saturdayCourtTimelines, c, T, tEnd) &&
-            isPairFree(partido.pareja1Id, T, tEnd) &&
-            isPairFree(partido.pareja2Id, T, tEnd)
-          ) {
-            saturdayCourtTimelines.get(c).push({ startMs: T, endMs: tEnd });
-            matchScheduleMap.set(`${cat.id}:${fase32.ronda}:${partido.posicionEnRonda}`, { startMs: T, endMs: tEnd });
-            updates.push({
-              id: partido.id,
-              fechaHora: new Date(T),
-              canchaNumero: c,
-              sinHorarioAsignado: false,
-              horarioManual: false,
-            });
-            asignado = true;
-            break;
-          }
+      if (tienePartidosZonaSinHorario) {
+        for (const partido of pendingMatches) {
+          updates.push({
+            id: partido.id,
+            fechaHora: null,
+            canchaNumero: null,
+            sinHorarioAsignado: true,
+            horarioManual: false,
+          });
         }
-        if (asignado) break;
+        continue;
       }
 
-      if (!asignado) {
-        updates.push({
-          id: partido.id,
-          fechaHora: null,
-          canchaNumero: null,
-          sinHorarioAsignado: true,
-          horarioManual: false,
-        });
+      // Calcular fin del último partido de zona de esta categoría
+      let maxZonaEnd = 0;
+      for (const p of partidosZonaCat) {
+        if (p.fechaHora && !p.sinHorarioAsignado) {
+          const pEnd = new Date(p.fechaHora).getTime() + DURACION_MS;
+          if (pEnd > maxZonaEnd) maxZonaEnd = pEnd;
+        }
+      }
+
+      // Piso de búsqueda para R32 = max(sabNightStartMs, fin del último partido de zona de ESA categoría)
+      let searchStartMs = Math.max(sabNightStartMs, maxZonaEnd);
+      if (searchStartMs > sabNightStartMs) {
+        const offset = searchStartMs - sabNightStartMs;
+        const rem = offset % STEP_MS;
+        if (rem > 0) {
+          searchStartMs += (STEP_MS - rem);
+        }
+      }
+
+      for (const partido of pendingMatches) {
+        let asignado = false;
+        for (let T = searchStartMs; T + DURACION_MS <= sabNightEndMs; T += STEP_MS) {
+          const tEnd = T + DURACION_MS;
+          for (let c = 1; c <= cantidadCanchas; c++) {
+            if (
+              isCourtFree(saturdayCourtTimelines, c, T, tEnd) &&
+              isPairFree(partido.pareja1Id, T, tEnd) &&
+              isPairFree(partido.pareja2Id, T, tEnd)
+            ) {
+              saturdayCourtTimelines.get(c).push({ startMs: T, endMs: tEnd });
+              matchScheduleMap.set(`${cat.id}:${fase32.ronda}:${partido.posicionEnRonda}`, { startMs: T, endMs: tEnd });
+              updates.push({
+                id: partido.id,
+                fechaHora: new Date(T),
+                canchaNumero: c,
+                sinHorarioAsignado: false,
+                horarioManual: false,
+              });
+              asignado = true;
+              break;
+            }
+          }
+          if (asignado) break;
+        }
+
+        if (!asignado) {
+          updates.push({
+            id: partido.id,
+            fechaHora: null,
+            canchaNumero: null,
+            sinHorarioAsignado: true,
+            horarioManual: false,
+          });
+        }
       }
     }
   }
