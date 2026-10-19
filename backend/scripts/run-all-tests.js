@@ -30,6 +30,7 @@ const TEST_SUITES = [
   'test-disponibilidad-guard.js',
   'test-disponibilidad-rangos.js',
   'test-eliminatoria-scheduler-completo.js',
+  'test-eliminatoria-inmutabilidad-manual.js',
   'test-lluvia-cruce-otra-jornada.js',
   'test-mini-bracket-scheduling.js',
   'test-modo-dia-torneo.js',
