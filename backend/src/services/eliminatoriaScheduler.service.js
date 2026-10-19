@@ -354,13 +354,37 @@ async function programarHorariosEliminatorias(
 
       if (tienePartidosZonaSinHorario) {
         for (const partido of pendingMatches) {
-          updates.push({
-            id: partido.id,
-            fechaHora: null,
-            canchaNumero: null,
-            sinHorarioAsignado: true,
-            horarioManual: false,
-          });
+          if (!partido.fechaHora || partido.sinHorarioAsignado) {
+            updates.push({
+              id: partido.id,
+              fechaHora: null,
+              canchaNumero: null,
+              sinHorarioAsignado: true,
+              horarioManual: false,
+            });
+          } else {
+            // Ya tenía horario asignado válido: mantenerlo y registrarlo en matchScheduleMap y timelines
+            const pStart = new Date(partido.fechaHora).getTime();
+            const pEnd = pStart + DURACION_MS;
+            matchScheduleMap.set(`${cat.id}:${fase32.ronda}:${partido.posicionEnRonda}`, {
+              startMs: pStart,
+              endMs: pEnd,
+              fechaHora: partido.fechaHora,
+              canchaNumero: partido.canchaNumero,
+              isBye: false,
+            });
+            if (partido.canchaNumero && partido.canchaNumero <= cantidadCanchas) {
+              saturdayCourtTimelines.get(partido.canchaNumero).push({ startMs: pStart, endMs: pEnd });
+            }
+            if (partido.pareja1Id) {
+              if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
+              parejaAssignments.get(partido.pareja1Id).push({ startMs: pStart, endMs: pEnd });
+            }
+            if (partido.pareja2Id) {
+              if (!parejaAssignments.has(partido.pareja2Id)) parejaAssignments.set(partido.pareja2Id, []);
+              parejaAssignments.get(partido.pareja2Id).push({ startMs: pStart, endMs: pEnd });
+            }
+          }
         }
         continue;
       }
