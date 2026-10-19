@@ -32,6 +32,7 @@ const r32FuzzStats = {
   totalR32NoBye: 0,
   sinHorarioR32: 0,
   seedsConR32: new Set(),
+  seedsConR32ConHorario: new Set(),
   seedsConSinHorarioR32: new Set(),
 };
 
@@ -442,11 +443,16 @@ async function runSingleSeed(seed, recordFailure) {
   try {
     await limpiarDatosTorneo();
 
-    const cantidadCanchas = rng.int(2, 6);
+    const perfilGenerador = rng.pick(['standard', 'sabado_extendido']);
+    const esPerfilExtendido = perfilGenerador === 'sabado_extendido';
+
+    const cantidadCanchas = esPerfilExtendido ? rng.int(4, 6) : rng.int(2, 6);
     const viernesInicio = rng.pick(['15:00', '16:00', '17:00', '18:00']);
     const viernesFin = rng.pick(['23:30', '00:30', '01:30', '02:00']);
-    const sabadoInicio = rng.pick(['08:00', '09:00', '10:00']);
-    const sabadoFin = rng.pick(['23:30', '00:30', '01:30', '02:00']);
+    const sabadoInicio = esPerfilExtendido ? '08:00' : rng.pick(['08:00', '09:00', '10:00']);
+    const sabadoFin = esPerfilExtendido
+      ? rng.pick(['01:30', '02:00', '02:30', '03:00'])
+      : rng.pick(['23:30', '00:30', '01:30', '02:00']);
     const domingoInicio = rng.pick(['08:00', '09:00', '10:00']);
     const domingoFin = rng.pick(['21:00', '22:00', '23:00']);
 
@@ -478,7 +484,7 @@ async function runSingleSeed(seed, recordFailure) {
     });
 
     const grilla = generarGrillaOrganizador(organizador);
-    const numCategorias = rng.int(2, 3);
+    const numCategorias = esPerfilExtendido ? rng.int(1, 2) : rng.int(2, 3);
     const nombresCat = ['4ta', '5ta', '6ta', '7ma'];
     const categorias = [];
 
@@ -492,7 +498,7 @@ async function runSingleSeed(seed, recordFailure) {
       });
       categorias.push(cat);
 
-      const numParejas = rng.int(8, 30);
+      const numParejas = esPerfilExtendido && cIdx === 0 ? rng.int(27, 28) : rng.int(8, 30);
       const parejasData = [];
       const slotsPorOrden = new Map();
 
@@ -713,22 +719,24 @@ async function runSingleSeed(seed, recordFailure) {
       allowDayLimitMs: false,
     });
 
-    if (FUZZ_METRICAS) {
-      let seedHasR32 = false;
-      let seedHasSinHorario = false;
-      for (const p of partidosIniciales) {
-        if (p.faseEliminatoria && p.faseEliminatoria.ronda >= 32 && !p.esBye) {
-          r32FuzzStats.totalR32NoBye++;
-          seedHasR32 = true;
-          if (!p.fechaHora || p.sinHorarioAsignado) {
-            r32FuzzStats.sinHorarioR32++;
-            seedHasSinHorario = true;
-          }
+    let seedHasR32 = false;
+    let seedHasR32ConHorario = false;
+    let seedHasSinHorario = false;
+    for (const p of partidosIniciales) {
+      if (p.faseEliminatoria && p.faseEliminatoria.ronda >= 32 && !p.esBye) {
+        r32FuzzStats.totalR32NoBye++;
+        seedHasR32 = true;
+        if (p.fechaHora && !p.sinHorarioAsignado) {
+          seedHasR32ConHorario = true;
+        } else {
+          r32FuzzStats.sinHorarioR32++;
+          seedHasSinHorario = true;
         }
       }
-      if (seedHasR32) r32FuzzStats.seedsConR32.add(seed);
-      if (seedHasSinHorario) r32FuzzStats.seedsConSinHorarioR32.add(seed);
     }
+    if (seedHasR32) r32FuzzStats.seedsConR32.add(seed);
+    if (seedHasR32ConHorario) r32FuzzStats.seedsConR32ConHorario.add(seed);
+    if (seedHasSinHorario) r32FuzzStats.seedsConSinHorarioR32.add(seed);
 
     // =========================================================================
     // ETAPA 2: POST-REDUCCION (MODO LLUVIA)
@@ -1027,6 +1035,109 @@ async function runSingleSeed(seed, recordFailure) {
       allowDayLimitMs: true,
       partidosManualesSet,
     });
+
+    // =========================================================================
+    // ETAPA 4: DOMINGO - REDUCCION Y RESTAURACION (INVARIANTE OTRAS JORNADAS INTACTAS)
+    // =========================================================================
+    const baseSunday = zonaService.proximaFechaPorDia('Domingo', refFecha);
+    const domKey = getDiaCalendarioConTrasnoche(parseFechaLocal(baseSunday), horariosClubObj).key;
+
+    const partidosAntesLluviaDom = await prisma.partido.findMany({
+      where: { categoria: { torneoId: torneo.id } },
+      include: { faseEliminatoria: true },
+    });
+    const antesDomMap = new Map(partidosAntesLluviaDom.map((p) => [p.id, p]));
+
+    const canchasReducidasDom = rng.int(1, cantidadCanchas - 1);
+
+    const domPartidosCandidatos = partidosAntesLluviaDom.filter((p) => {
+      if (!p.fechaHora || !p.canchaNumero || p.sinHorarioAsignado || p.esBye) return false;
+      const dKey = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key;
+      return dKey === domKey && p.canchaNumero <= canchasReducidasDom;
+    });
+    if (domPartidosCandidatos.length >= 1) {
+      await prisma.partido.update({
+        where: { id: domPartidosCandidatos[0].id },
+        data: {
+          estado: 'FINALIZADO',
+          ganadorId: domPartidosCandidatos[0].pareja1Id || domPartidosCandidatos[0].pareja2Id,
+        },
+      });
+    }
+
+    await organizadorService.reprogramarPorReduccionCanchas(
+      organizador.id,
+      torneo.id,
+      canchasReducidasDom,
+      null,
+      domKey
+    );
+
+    const partidosPostReduccionDom = await prisma.partido.findMany({
+      where: { categoria: { torneoId: torneo.id } },
+      include: { faseEliminatoria: true },
+    });
+
+    for (const p of partidosPostReduccionDom) {
+      const orig = antesDomMap.get(p.id);
+      if (!orig) continue;
+
+      if (orig.fechaHora) {
+        const origDiaKey = getDiaCalendarioConTrasnoche(orig.fechaHora, horariosClubObj)?.key;
+        if (origDiaKey && origDiaKey !== domKey) {
+          const origTime = new Date(orig.fechaHora).getTime();
+          const newTime = p.fechaHora ? new Date(p.fechaHora).getTime() : null;
+          if (
+            origTime !== newTime ||
+            orig.canchaNumero !== p.canchaNumero ||
+            orig.sinHorarioAsignado !== p.sinHorarioAsignado
+          ) {
+            recordFailure(
+              'modo_lluvia_domingo:post-reduccion',
+              seed,
+              `Partido ${p.id} de otra jornada (${origDiaKey} != ${domKey}) fue modificado en reducción de domingo`
+            );
+          }
+        }
+      }
+    }
+
+    await organizadorService.reprogramarPorReduccionCanchas(
+      organizador.id,
+      torneo.id,
+      cantidadCanchas,
+      null,
+      domKey
+    );
+
+    const partidosPostRestauracionDom = await prisma.partido.findMany({
+      where: { categoria: { torneoId: torneo.id } },
+      include: { faseEliminatoria: true },
+    });
+
+    for (const p of partidosPostRestauracionDom) {
+      const orig = antesDomMap.get(p.id);
+      if (!orig) continue;
+
+      if (orig.fechaHora) {
+        const origDiaKey = getDiaCalendarioConTrasnoche(orig.fechaHora, horariosClubObj)?.key;
+        if (origDiaKey && origDiaKey !== domKey) {
+          const origTime = new Date(orig.fechaHora).getTime();
+          const newTime = p.fechaHora ? new Date(p.fechaHora).getTime() : null;
+          if (
+            origTime !== newTime ||
+            orig.canchaNumero !== p.canchaNumero ||
+            orig.sinHorarioAsignado !== p.sinHorarioAsignado
+          ) {
+            recordFailure(
+              'modo_lluvia_domingo:post-restauracion',
+              seed,
+              `Partido ${p.id} de otra jornada (${origDiaKey} != ${domKey}) fue modificado en restauración de domingo`
+            );
+          }
+        }
+      }
+    }
   } finally {
     Math.random = origRandom;
   }
@@ -1056,6 +1167,8 @@ async function runFuzzSuite() {
     ...STATIC_BASE_KEYS.flatMap((base) => STAGES.map((st) => `${base}:${st}`)),
     'modo_lluvia:post-reduccion',
     'modo_lluvia:post-restauracion',
+    'modo_lluvia_domingo:post-reduccion',
+    'modo_lluvia_domingo:post-restauracion',
     'precheck_monotonia:post-inicio',
     'precheck_zona_manual_partidos:post-inicio',
   ];
@@ -1159,19 +1272,21 @@ async function runFuzzSuite() {
   }
   console.log('='.repeat(85) + '\n');
 
-  if (FUZZ_METRICAS) {
-    console.log('='.repeat(85));
-    console.log('📊 MÉTRICAS R32 EN POST-INICIO (FUZZ_METRICAS=1):');
-    console.log('='.repeat(85));
-    console.log(`- Semillas con partidos R32 no-BYE: ${r32FuzzStats.seedsConR32.size} (${((r32FuzzStats.seedsConR32.size / TOTAL_SEEDS) * 100).toFixed(1)}%)`);
-    console.log(`- Total de partidos R32 no-BYE generados: ${r32FuzzStats.totalR32NoBye}`);
-    console.log(`- Partidos R32 no-BYE sin horario: ${r32FuzzStats.sinHorarioR32}`);
-    const pctP = r32FuzzStats.totalR32NoBye > 0 ? ((r32FuzzStats.sinHorarioR32 / r32FuzzStats.totalR32NoBye) * 100).toFixed(1) : '0';
-    console.log(`- Porcentaje de partidos R32 sin horario: ${pctP}% (${r32FuzzStats.sinHorarioR32}/${r32FuzzStats.totalR32NoBye})`);
-    const pctS = r32FuzzStats.seedsConR32.size > 0 ? ((r32FuzzStats.seedsConSinHorarioR32.size / r32FuzzStats.seedsConR32.size) * 100).toFixed(1) : '0';
-    console.log(`- Semillas con al menos un R32 sin horario: ${r32FuzzStats.seedsConSinHorarioR32.size}/${r32FuzzStats.seedsConR32.size} (${pctS}%)`);
-    console.log('='.repeat(85) + '\n');
-  }
+  console.log('='.repeat(85));
+  console.log('📊 MÉTRICAS R32 EN POST-INICIO:');
+  console.log('='.repeat(85));
+  console.log(`- Semillas con partidos R32 no-BYE: ${r32FuzzStats.seedsConR32.size} (${((r32FuzzStats.seedsConR32.size / TOTAL_SEEDS) * 100).toFixed(1)}%)`);
+  const pctConHorario = r32FuzzStats.seedsConR32.size > 0
+    ? ((r32FuzzStats.seedsConR32ConHorario.size / r32FuzzStats.seedsConR32.size) * 100).toFixed(1)
+    : '0';
+  console.log(`- Semillas con R32 con horario asignado: ${r32FuzzStats.seedsConR32ConHorario.size}/${r32FuzzStats.seedsConR32.size} (${pctConHorario}%)`);
+  console.log(`- Total de partidos R32 no-BYE generados: ${r32FuzzStats.totalR32NoBye}`);
+  console.log(`- Partidos R32 no-BYE sin horario: ${r32FuzzStats.sinHorarioR32}`);
+  const pctP = r32FuzzStats.totalR32NoBye > 0 ? ((r32FuzzStats.sinHorarioR32 / r32FuzzStats.totalR32NoBye) * 100).toFixed(1) : '0';
+  console.log(`- Porcentaje de partidos R32 sin horario: ${pctP}% (${r32FuzzStats.sinHorarioR32}/${r32FuzzStats.totalR32NoBye})`);
+  const pctS = r32FuzzStats.seedsConR32.size > 0 ? ((r32FuzzStats.seedsConSinHorarioR32.size / r32FuzzStats.seedsConR32.size) * 100).toFixed(1) : '0';
+  console.log(`- Semillas con al menos un R32 sin horario: ${r32FuzzStats.seedsConSinHorarioR32.size}/${r32FuzzStats.seedsConR32.size} (${pctS}%)`);
+  console.log('='.repeat(85) + '\n');
 
   let hayFallas = false;
   for (const k of INVARIANT_KEYS) {
