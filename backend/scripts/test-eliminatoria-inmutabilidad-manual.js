@@ -617,6 +617,706 @@ async function testHorarioManualCicloDeVida() {
   console.log('✅ Caso 6 PASS: Ciclo de vida completo verificado (nace en false -> true -> false al quitar -> false en sincronizarCuadro).');
 }
 
+const DURACION_MS = 75 * 60 * 1000;
+
+/**
+ * CASO 7 (Caso 4): R32 con horario válido en sábado + lluvia en domingo + restauración en domingo.
+ */
+async function testR32SabadoLluviaDomingo() {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Test R32 Sábado Lluvia Domingo',
+      email: 'r32-domingo-rain@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '14:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Test R32 Domingo Rain',
+      slug: 'torneo-test-r32-domingo-rain',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '5ta', estado: 'BORRADOR' },
+  });
+
+  for (let i = 1; i <= 25; i++) {
+    await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+
+  const baseSaturday = zonaService.proximaFechaPorDia('Sabado', parseFechaLocal('2026-09-04'));
+  const partidosZona = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, zonaId: { not: null } },
+  });
+  for (let i = 0; i < partidosZona.length; i++) {
+    const cancha = (i % 4) + 1;
+    const horaOffset = Math.floor(i / 4) * DURACION_MS;
+    await prisma.partido.update({
+      where: { id: partidosZona[i].id },
+      data: {
+        fechaHora: new Date(baseSaturday.getTime() + 10 * 3600 * 1000 + horaOffset),
+        canchaNumero: cancha,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  const r32 = await prisma.partido.findFirst({
+    where: { categoriaId: cat.id, faseEliminatoria: { ronda: 32 }, esBye: false },
+  });
+
+  const fechaSabado22 = new Date(baseSaturday.getTime() + 22 * 3600 * 1000);
+  await prisma.partido.update({
+    where: { id: r32.id },
+    data: {
+      fechaHora: fechaSabado22,
+      canchaNumero: 3,
+      sinHorarioAsignado: false,
+      horarioManual: false,
+    },
+  });
+
+  // 1. Reducción en domingo a 2 canchas
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, null, '2026-09-06');
+  const r32PostRed = await prisma.partido.findUnique({ where: { id: r32.id } });
+  if (
+    r32PostRed.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    r32PostRed.canchaNumero !== 3 ||
+    r32PostRed.sinHorarioAsignado !== false
+  ) {
+    throw new Error(`R32 mutó en domingo a fecha=${r32PostRed.fechaHora?.toISOString()}, cancha=${r32PostRed.canchaNumero}`);
+  }
+
+  // 2. Restauración en domingo a 4 canchas
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-06');
+  const r32PostRest = await prisma.partido.findUnique({ where: { id: r32.id } });
+  if (
+    r32PostRest.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    r32PostRest.canchaNumero !== 3 ||
+    r32PostRest.sinHorarioAsignado !== false
+  ) {
+    throw new Error(`R32 mutó en restauración a fecha=${r32PostRest.fechaHora?.toISOString()}, cancha=${r32PostRest.canchaNumero}`);
+  }
+
+  console.log('✅ Caso 7 PASS: R32 sábado con horario válido intacto tras lluvia y restauración en domingo.');
+}
+
+/**
+ * CASO 8 (Caso 5): R32 con horario válido en sábado intacto tras lluvia en domingo con zona incompleta.
+ */
+async function testR32SabadoLluviaDomingoZonaIncompleta() {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Test R32 Sábado Lluvia Domingo Incompleta',
+      email: 'r32-domingo-rain-incompleta@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '14:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Test R32 Domingo Rain Incompleta',
+      slug: 'torneo-test-r32-domingo-rain-incompleta',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '5ta', estado: 'BORRADOR' },
+  });
+
+  for (let i = 1; i <= 25; i++) {
+    await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+
+  const baseSaturday = zonaService.proximaFechaPorDia('Sabado', parseFechaLocal('2026-09-04'));
+  const partidosZona = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, zonaId: { not: null } },
+  });
+  for (let i = 0; i < partidosZona.length - 1; i++) {
+    const cancha = (i % 4) + 1;
+    const horaOffset = Math.floor(i / 4) * DURACION_MS;
+    await prisma.partido.update({
+      where: { id: partidosZona[i].id },
+      data: {
+        fechaHora: new Date(baseSaturday.getTime() + 10 * 3600 * 1000 + horaOffset),
+        canchaNumero: cancha,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+  // Último partido de zona queda sin horario
+  await prisma.partido.update({
+    where: { id: partidosZona[partidosZona.length - 1].id },
+    data: {
+      fechaHora: null,
+      canchaNumero: null,
+      sinHorarioAsignado: true,
+    },
+  });
+
+  const r32 = await prisma.partido.findFirst({
+    where: { categoriaId: cat.id, faseEliminatoria: { ronda: 32 }, esBye: false },
+  });
+
+  const fechaSabado22 = new Date(baseSaturday.getTime() + 22 * 3600 * 1000);
+  await prisma.partido.update({
+    where: { id: r32.id },
+    data: {
+      fechaHora: fechaSabado22,
+      canchaNumero: 3,
+      sinHorarioAsignado: false,
+      horarioManual: false,
+    },
+  });
+
+  // 1. Reducción en domingo a 2 canchas
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, null, '2026-09-06');
+  const r32PostRed = await prisma.partido.findUnique({ where: { id: r32.id } });
+  if (
+    r32PostRed.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    r32PostRed.canchaNumero !== 3 ||
+    r32PostRed.sinHorarioAsignado !== false
+  ) {
+    throw new Error(`R32 mutó en domingo a fecha=${r32PostRed.fechaHora?.toISOString()}, cancha=${r32PostRed.canchaNumero}`);
+  }
+
+  // 2. Restauración en domingo a 4 canchas
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-06');
+  const r32PostRest = await prisma.partido.findUnique({ where: { id: r32.id } });
+  if (
+    r32PostRest.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    r32PostRest.canchaNumero !== 3 ||
+    r32PostRest.sinHorarioAsignado !== false
+  ) {
+    throw new Error(`R32 mutó en restauración a fecha=${r32PostRest.fechaHora?.toISOString()}, cancha=${r32PostRest.canchaNumero}`);
+  }
+
+  console.log('✅ Caso 8 PASS: R32 sábado con horario válido intacto tras lluvia en domingo con zona incompleta.');
+}
+
+/**
+ * CASO 9 (Caso a): R32 manual y auto en sábado intactos con lluvia de domingo (R32 en cancha cerrada el domingo).
+ */
+async function testR32ManualYAutoSabadoLluviaDomingoCanchaCerrada() {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Test R32 Manual y Auto',
+      email: 'r32-manual-auto@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '14:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Test R32 Manual y Auto',
+      slug: 'torneo-r32-manual-auto',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '5ta', estado: 'BORRADOR' },
+  });
+
+  for (let i = 1; i <= 25; i++) {
+    await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  const zonasCat = await prisma.zona.findMany({ where: { categoriaId: cat.id } });
+  await prisma.zona.update({ where: { id: zonasCat[0].id }, data: { clasifican: 3 } });
+  await prisma.zona.update({ where: { id: zonasCat[1].id }, data: { clasifican: 3 } });
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+
+  const baseSaturday = zonaService.proximaFechaPorDia('Sabado', parseFechaLocal('2026-09-04'));
+  const partidosZona = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, zonaId: { not: null } },
+  });
+  for (let i = 0; i < partidosZona.length; i++) {
+    const cancha = (i % 4) + 1;
+    const horaOffset = Math.floor(i / 4) * DURACION_MS;
+    await prisma.partido.update({
+      where: { id: partidosZona[i].id },
+      data: {
+        fechaHora: new Date(baseSaturday.getTime() + 10 * 3600 * 1000 + horaOffset),
+        canchaNumero: cancha,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  const r32Matches = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, faseEliminatoria: { ronda: 32 }, esBye: false },
+    take: 2,
+  });
+
+  const fechaSabado22 = new Date(baseSaturday.getTime() + 22 * 3600 * 1000);
+  // R32_1: Automático en Cancha 3
+  await prisma.partido.update({
+    where: { id: r32Matches[0].id },
+    data: {
+      fechaHora: fechaSabado22,
+      canchaNumero: 3,
+      sinHorarioAsignado: false,
+      horarioManual: false,
+    },
+  });
+
+  // R32_2: Manual en Cancha 4 (cancha que queda cerrada en domingo al reducir a 2 canchas)
+  await prisma.partido.update({
+    where: { id: r32Matches[1].id },
+    data: {
+      fechaHora: fechaSabado22,
+      canchaNumero: 4,
+      sinHorarioAsignado: false,
+      horarioManual: true,
+    },
+  });
+
+  // 1. Reducción en domingo a 2 canchas
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, null, '2026-09-06');
+  const p1Red = await prisma.partido.findUnique({ where: { id: r32Matches[0].id } });
+  const p2Red = await prisma.partido.findUnique({ where: { id: r32Matches[1].id } });
+
+  if (
+    p1Red.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    p1Red.canchaNumero !== 3 ||
+    p1Red.sinHorarioAsignado !== false ||
+    p2Red.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    p2Red.canchaNumero !== 4 ||
+    p2Red.horarioManual !== true ||
+    p2Red.sinHorarioAsignado !== false
+  ) {
+    throw new Error('R32 manual o auto mutaron tras reducción de domingo');
+  }
+
+  // 2. Restauración en domingo a 4 canchas
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-06');
+  const p1Rest = await prisma.partido.findUnique({ where: { id: r32Matches[0].id } });
+  const p2Rest = await prisma.partido.findUnique({ where: { id: r32Matches[1].id } });
+
+  if (
+    p1Rest.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    p1Rest.canchaNumero !== 3 ||
+    p1Rest.sinHorarioAsignado !== false ||
+    p2Rest.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    p2Rest.canchaNumero !== 4 ||
+    p2Rest.horarioManual !== true ||
+    p2Rest.sinHorarioAsignado !== false
+  ) {
+    throw new Error('R32 manual o auto mutaron tras restauración de domingo');
+  }
+
+  console.log('✅ Caso 9 PASS: R32 manual y auto en sábado intactos con lluvia de domingo (cancha cerrada en domingo).');
+}
+
+/**
+ * CASO 10 (Caso b): Octavos en adelante SÍ se reubican con lluvia de domingo y se compactan al restaurar.
+ */
+async function testOctavosSeReubicanLluviaDomingo() {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Test Octavos Lluvia',
+      email: 'octavos-lluvia@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '14:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Test Octavos Lluvia',
+      slug: 'torneo-octavos-lluvia',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '6ta', estado: 'BORRADOR' },
+  });
+
+  for (let i = 1; i <= 16; i++) {
+    await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+  await programarHorariosEliminatorias(org.id, torneo.id);
+
+  // Reducción domingo a 2 canchas
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, null, '2026-09-06');
+  const partidosRed = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, faseEliminatoriaId: { not: null }, fechaHora: { not: null }, sinHorarioAsignado: false },
+  });
+
+  if (!partidosRed.every((p) => p.canchaNumero <= 2) || partidosRed.length === 0) {
+    throw new Error('Octavos no se reubicaron dentro de las 2 canchas activas en reducción');
+  }
+
+  // Restauración domingo a 4 canchas
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-06');
+  const partidosRest = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, faseEliminatoriaId: { not: null }, fechaHora: { not: null }, sinHorarioAsignado: false },
+  });
+
+  if (!partidosRest.some((p) => p.canchaNumero > 2)) {
+    throw new Error('Octavos no se expandieron a canchas 3 o 4 tras restaurar');
+  }
+
+  console.log('✅ Caso 10 PASS: Octavos en adelante SÍ se reubican con lluvia de domingo y se compactan al restaurar.');
+}
+
+/**
+ * CASO 11 (Caso c): R32 recién generado con zonas incompletas queda pendiente.
+ */
+async function testR32RecienGeneradoZonasIncompletasQuedaPendiente() {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Test R32 Recien Generado',
+      email: 'r32-nuevo-incompleto@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '14:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Test R32 Nuevo',
+      slug: 'torneo-r32-nuevo',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '5ta', estado: 'BORRADOR' },
+  });
+
+  for (let i = 1; i <= 25; i++) {
+    await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+
+  // Dejamos un partido de zona sin horario
+  const primerPartidoZona = await prisma.partido.findFirst({
+    where: { categoriaId: cat.id, zonaId: { not: null } },
+  });
+  await prisma.partido.update({
+    where: { id: primerPartidoZona.id },
+    data: { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true },
+  });
+
+  await programarHorariosEliminatorias(org.id, torneo.id, cat.id);
+
+  const r32Matches = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, faseEliminatoria: { ronda: 32 }, esBye: false },
+  });
+
+  if (!r32Matches.every((p) => p.sinHorarioAsignado === true && p.fechaHora === null) || r32Matches.length === 0) {
+    throw new Error('Algún R32 recibió horario a pesar de zonas incompletas');
+  }
+
+  console.log('✅ Caso 11 PASS: R32 recién generado con zonas incompletas queda pendiente.');
+}
+
+/**
+ * CASO 12 (Caso d): Restauración global sin diaKey con overrides de sábado y domingo: la iteración de domingo no modifica ningún R32 del sábado.
+ */
+async function testRestauracionGlobalSinDiaKeyNoModificaR32() {
+  await limpiarDb();
+
+  const org = await prisma.organizador.create({
+    data: {
+      nombre: 'Club Test Global Sin DiaKey',
+      email: 'global-sin-diakey@padel.test',
+      passwordHash: 'hash',
+      cantidadCanchas: 4,
+      viernesInicio: '14:00',
+      viernesFin: '23:00',
+      sabadoInicio: '09:00',
+      sabadoFin: '24:00',
+      domingoInicio: '09:00',
+      domingoFin: '22:00',
+    },
+  });
+
+  const torneo = await prisma.torneo.create({
+    data: {
+      nombre: 'Torneo Test Global Sin DiaKey',
+      slug: 'torneo-global-sin-diakey',
+      fecha: parseFechaLocal('2026-09-04'),
+      estado: 'BORRADOR',
+      organizadorId: org.id,
+    },
+  });
+
+  const cat = await prisma.categoria.create({
+    data: { torneoId: torneo.id, nombre: '5ta', estado: 'BORRADOR' },
+  });
+
+  for (let i = 1; i <= 25; i++) {
+    await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+    });
+  }
+
+  await zonaService.iniciarCategoria(org.id, cat.id);
+  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+  await generarEliminatoria(org.id, cat.id);
+
+  const baseSaturday = zonaService.proximaFechaPorDia('Sabado', parseFechaLocal('2026-09-04'));
+  const partidosZona = await prisma.partido.findMany({
+    where: { categoriaId: cat.id, zonaId: { not: null } },
+  });
+  for (let i = 0; i < partidosZona.length; i++) {
+    const cancha = (i % 4) + 1;
+    const horaOffset = Math.floor(i / 4) * DURACION_MS;
+    await prisma.partido.update({
+      where: { id: partidosZona[i].id },
+      data: {
+        fechaHora: new Date(baseSaturday.getTime() + 10 * 3600 * 1000 + horaOffset),
+        canchaNumero: cancha,
+        sinHorarioAsignado: false,
+      },
+    });
+  }
+
+  const r32 = await prisma.partido.findFirst({
+    where: { categoriaId: cat.id, faseEliminatoria: { ronda: 32 }, esBye: false },
+  });
+
+  const fechaSabado22 = new Date(baseSaturday.getTime() + 22 * 3600 * 1000);
+  await prisma.partido.update({
+    where: { id: r32.id },
+    data: {
+      fechaHora: fechaSabado22,
+      canchaNumero: 3,
+      sinHorarioAsignado: false,
+      horarioManual: false,
+    },
+  });
+
+  // Creamos overrides en Sábado (3 canchas) y en Domingo (2 canchas)
+  await canchasOverridesService.setOverrideDia(torneo.id, '2026-09-05', 3, new Date(), {});
+  await canchasOverridesService.setOverrideDia(torneo.id, '2026-09-06', 2, new Date(), {});
+
+  // Ejecutar restauración global sin diaKey (restaurar todas las canchas a 4)
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, null);
+
+  const r32Post = await prisma.partido.findUnique({ where: { id: r32.id } });
+  if (
+    r32Post.fechaHora?.getTime() !== fechaSabado22.getTime() ||
+    r32Post.canchaNumero !== 3 ||
+    r32Post.sinHorarioAsignado !== false
+  ) {
+    throw new Error('R32 mutó tras restauración global sin diaKey');
+  }
+
+  console.log('✅ Caso 12 PASS: Restauración global sin diaKey con overrides de sábado y domingo no modifica R32 de sábado.');
+}
+
+/**
+ * CASO 13 (Equivalencia): Con un R32 con horario válido, los Octavos en adelante quedan
+ * idénticos corriendo con soloDomingo: true que con la corrida completa.
+ */
+async function testEquivalenciaSoloDomingo() {
+  await limpiarDb();
+
+  const setupTorneo = async (slug) => {
+    const org = await prisma.organizador.create({
+      data: {
+        nombre: `Club ${slug}`,
+        email: `${slug}@padel.test`,
+        passwordHash: 'hash',
+        cantidadCanchas: 4,
+        viernesInicio: '14:00',
+        viernesFin: '23:00',
+        sabadoInicio: '09:00',
+        sabadoFin: '24:00',
+        domingoInicio: '09:00',
+        domingoFin: '22:00',
+      },
+    });
+
+    const torneo = await prisma.torneo.create({
+      data: {
+        nombre: `Torneo ${slug}`,
+        slug,
+        fecha: parseFechaLocal('2026-09-04'),
+        estado: 'BORRADOR',
+        organizadorId: org.id,
+      },
+    });
+
+    const cat = await prisma.categoria.create({
+      data: { torneoId: torneo.id, nombre: '5ta', estado: 'BORRADOR' },
+    });
+
+    for (let i = 1; i <= 25; i++) {
+      await prisma.pareja.create({
+        data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
+      });
+    }
+
+    await zonaService.iniciarCategoria(org.id, cat.id);
+    await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+    await generarEliminatoria(org.id, cat.id);
+
+    const baseSaturday = zonaService.proximaFechaPorDia('Sabado', parseFechaLocal('2026-09-04'));
+    const partidosZona = await prisma.partido.findMany({
+      where: { categoriaId: cat.id, zonaId: { not: null } },
+    });
+    for (let i = 0; i < partidosZona.length; i++) {
+      const cancha = (i % 4) + 1;
+      const horaOffset = Math.floor(i / 4) * DURACION_MS;
+      await prisma.partido.update({
+        where: { id: partidosZona[i].id },
+        data: {
+          fechaHora: new Date(baseSaturday.getTime() + 10 * 3600 * 1000 + horaOffset),
+          canchaNumero: cancha,
+          sinHorarioAsignado: false,
+        },
+      });
+    }
+
+    const r32 = await prisma.partido.findFirst({
+      where: { categoriaId: cat.id, faseEliminatoria: { ronda: 32 }, esBye: false },
+    });
+    const fechaSabado22 = new Date(baseSaturday.getTime() + 22 * 3600 * 1000);
+    await prisma.partido.update({
+      where: { id: r32.id },
+      data: {
+        fechaHora: fechaSabado22,
+        canchaNumero: 3,
+        sinHorarioAsignado: false,
+        horarioManual: false,
+      },
+    });
+
+    return { org, torneo, cat, r32, fechaSabado22 };
+  };
+
+  // Torneo A: corrida completa
+  const { org: orgA, torneo: torneoA, cat: catA } = await setupTorneo('torneo-a-completo');
+  await programarHorariosEliminatorias(orgA.id, torneoA.id, catA.id);
+
+  const partidosA = await prisma.partido.findMany({
+    where: { categoriaId: catA.id, faseEliminatoria: { ronda: { lt: 32 } } },
+    include: { faseEliminatoria: true },
+    orderBy: [{ faseEliminatoria: { ronda: 'desc' } }, { posicionEnRonda: 'asc' }],
+  });
+
+  // Torneo B: corrida con soloDomingo: true
+  const { org: orgB, torneo: torneoB, cat: catB, r32: r32B, fechaSabado22 } = await setupTorneo('torneo-b-solodomingo');
+  await programarHorariosEliminatorias(orgB.id, torneoB.id, catB.id, null, null, { soloDomingo: true });
+
+  const r32PostB = await prisma.partido.findUnique({ where: { id: r32B.id } });
+  if (r32PostB.fechaHora?.getTime() !== fechaSabado22.getTime() || r32PostB.canchaNumero !== 3) {
+    throw new Error('R32 mutó en corrida con soloDomingo: true');
+  }
+
+  const partidosB = await prisma.partido.findMany({
+    where: { categoriaId: catB.id, faseEliminatoria: { ronda: { lt: 32 } } },
+    include: { faseEliminatoria: true },
+    orderBy: [{ faseEliminatoria: { ronda: 'desc' } }, { posicionEnRonda: 'asc' }],
+  });
+
+  if (partidosA.length !== partidosB.length) {
+    throw new Error(`Cantidad distinta de partidos de domingo: A=${partidosA.length}, B=${partidosB.length}`);
+  }
+
+  for (let i = 0; i < partidosA.length; i++) {
+    const pA = partidosA[i];
+    const pB = partidosB[i];
+    const tA = pA.fechaHora ? new Date(pA.fechaHora).getTime() : null;
+    const tB = pB.fechaHora ? new Date(pB.fechaHora).getTime() : null;
+    if (tA !== tB || pA.canchaNumero !== pB.canchaNumero || pA.sinHorarioAsignado !== pB.sinHorarioAsignado) {
+      throw new Error(`Diferencia en Ronda ${pA.faseEliminatoria.ronda} Pos ${pA.posicionEnRonda}: A=(t=${pA.fechaHora?.toISOString()}, c=${pA.canchaNumero}) vs B=(t=${pB.fechaHora?.toISOString()}, c=${pB.canchaNumero})`);
+    }
+  }
+
+  console.log('✅ Caso 13 PASS: Equivalencia soloDomingo: partidos de domingo idénticos a corrida completa.');
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -632,6 +1332,13 @@ async function run() {
   await testEliminatoriaManualLluviaCanchaCerradaReubicadaYPierdeMarca();
   await testEliminatoriaAutomaticaCompactacionRestauracion();
   await testHorarioManualCicloDeVida();
+  await testR32SabadoLluviaDomingo();
+  await testR32SabadoLluviaDomingoZonaIncompleta();
+  await testR32ManualYAutoSabadoLluviaDomingoCanchaCerrada();
+  await testOctavosSeReubicanLluviaDomingo();
+  await testR32RecienGeneradoZonasIncompletasQuedaPendiente();
+  await testRestauracionGlobalSinDiaKeyNoModificaR32();
+  await testEquivalenciaSoloDomingo();
 
   await limpiarDb();
   await prisma.$disconnect();
