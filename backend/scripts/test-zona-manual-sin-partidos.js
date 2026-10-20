@@ -817,6 +817,101 @@ async function test9_planesCacheAislamientoEIdempotencia() {
   console.log('   ✓ Test 9 superado.');
 }
 
+// ---------------------------------------------------------------------------
+// TEST 10: Zona manual de 5 parejas con slotsQueDestraban vacío (Fix B)
+// ---------------------------------------------------------------------------
+async function test10_zona5_slotsQueDestrabanVacio() {
+  console.log('\n▶️ TEST 10: Zona manual de 5 parejas -> slotsQueDestraban debe ser vacío (Fix B)...');
+  const { org, torneo, cat } = await setupBaseClub({ cantidadCanchas: 2, viernesFin: '22:00' });
+
+  const parejas = [];
+  const slotsDisjuntos = ['Viernes-18:00', 'Viernes-19:15', 'Viernes-20:30', 'Sabado-09:00', 'Sabado-10:15'];
+  for (let i = 1; i <= 5; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `A${i}`, jugador2: `B${i}`, orden: i },
+    });
+    parejas.push(p);
+    await prisma.slotPareja.create({ data: { parejaId: p.id, slotId: slotsDisjuntos[i - 1] } });
+  }
+
+  // PreCheck 1: las 5 parejas quedan juntas en sinGrupo (tamanoZona: 5)
+  const pre1 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id);
+  assert.strictEqual(pre1.bloqueado, true);
+
+  // Destrabe aparente: P1..P4 comparten 18:00, P5 en 19:15.
+  // P5 podría agregar 18:00 y hacer a las 5 compatibles pairwise.
+  // Sin el guard, P5 vería 18:00 como slotQueDestraba aunque la zona de 5 es antirreglamentaria.
+  await disponibilidadService.setDisponibilidad(org.id, parejas[0].id, ['Viernes-18:00']);
+  await disponibilidadService.setDisponibilidad(org.id, parejas[1].id, ['Viernes-18:00']);
+  await disponibilidadService.setDisponibilidad(org.id, parejas[2].id, ['Viernes-18:00']);
+  await disponibilidadService.setDisponibilidad(org.id, parejas[3].id, ['Viernes-18:00']);
+  await disponibilidadService.setDisponibilidad(org.id, parejas[4].id, ['Viernes-19:15']);
+
+  const pre2 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id, { isReCheck: true });
+  assert.strictEqual(pre2.bloqueado, true);
+
+  const conf = pre2.conflictos[0]?.partidosSinHorario?.find((c) => c.motivo === 'ZONA_MANUAL_INCOMPLETA');
+  assert.ok(conf, 'Debe haber un conflicto ZONA_MANUAL_INCOMPLETA');
+  assert.strictEqual(conf.tamanoZona, 5, 'El tamaño de zona debe ser 5');
+  assert.ok(Array.isArray(conf.parejasManuales), 'Debe tener parejasManuales');
+
+  for (const pm of conf.parejasManuales) {
+    assert.deepStrictEqual(
+      pm.slotsQueDestraban,
+      [],
+      `En zona de 5 parejas, pareja ${pm.nombre} debe tener slotsQueDestraban=[] (encontrados: ${JSON.stringify(pm.slotsQueDestraban)})`
+    );
+  }
+
+  console.log('   ✓ Test 10 superado.');
+}
+
+// ---------------------------------------------------------------------------
+// TEST 11: Zona de 3 con 2 partidos sin cancha no duplica reportes (fca62f4 / Punto 6)
+// ---------------------------------------------------------------------------
+async function test11_destrabeZona3Con2PartidosSinCanchaNoDuplica() {
+  console.log('\n▶️ TEST 11: Zona de 3 destrabada con 2 partidos sin cancha (no duplicados)...');
+  // Club con 1 cancha y viernesFin '19:15' (solo 1 slot: 18:00 a 19:15)
+  const { org, torneo, cat } = await setupBaseClub({ cantidadCanchas: 1, viernesFin: '19:15' });
+
+  const p1 = await prisma.pareja.create({ data: { categoriaId: cat.id, jugador1: 'P1A', jugador2: 'P1B', orden: 1 } });
+  const p2 = await prisma.pareja.create({ data: { categoriaId: cat.id, jugador1: 'P2A', jugador2: 'P2B', orden: 2 } });
+  const p3 = await prisma.pareja.create({ data: { categoriaId: cat.id, jugador1: 'P3A', jugador2: 'P3B', orden: 3 } });
+
+  // Incompatibles de inicio
+  await prisma.slotPareja.createMany({
+    data: [
+      { parejaId: p1.id, slotId: 'Viernes-18:00' },
+      { parejaId: p2.id, slotId: 'Viernes-18:00' },
+      { parejaId: p3.id, slotId: 'Viernes-19:15' },
+    ],
+  });
+
+  const pre1 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id);
+  assert.strictEqual(pre1.bloqueado, true);
+
+  // Destrabe mutuo
+  const slotsCompat = ['Viernes-18:00', 'Viernes-19:15'];
+  await disponibilidadService.setDisponibilidadDoble(org.id, p1.id, slotsCompat, p2.id, slotsCompat);
+  await disponibilidadService.setDisponibilidad(org.id, p3.id, slotsCompat);
+
+  const pre2 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id, { isReCheck: true });
+  assert.strictEqual(pre2.bloqueado, true, 'Debe estar bloqueado por capacidad');
+
+  const confs = pre2.conflictos[0]?.partidosSinHorario || [];
+  const confsManual = confs.filter((c) => c.motivo === 'ZONA_MANUAL_INCOMPLETA');
+  assert.strictEqual(confsManual.length, 0, 'No debe haber conflicto de zona manual');
+
+  const confsSinCancha = confs.filter((c) => c.motivo === 'SIN_CANCHA_DISPONIBLE');
+  assert.strictEqual(confsSinCancha.length, 2, 'Deben reportarse exactamente 2 partidos sin cancha');
+
+  const ids = confsSinCancha.map((c) => c.partidoId);
+  const idsUnicos = new Set(ids);
+  assert.strictEqual(idsUnicos.size, 2, 'Cada partido sin cancha debe aparecer EXACTAMENTE UNA VEZ (sin duplicados)');
+
+  console.log(`   ✓ Test 11 superado: 2 partidos sin cancha reportados, IDs únicos: ${JSON.stringify(ids)}.`);
+}
+
 async function runSuite() {
   await ensureTestDb();
   resetTestDb();
@@ -824,7 +919,7 @@ async function runSuite() {
   const specificTest = process.argv[2];
 
   console.log('='.repeat(85));
-  console.log('🧪 SUITE OFICIAL: ZONAS MANUALES EN PRE-CHECK E INICIO (11 CASOS)');
+  console.log('🧪 SUITE OFICIAL: ZONAS MANUALES EN PRE-CHECK E INICIO (12 CASOS)');
   console.log('='.repeat(85));
 
   const allTests = [
@@ -839,6 +934,8 @@ async function runSuite() {
     { id: '7', nombre: 'Test 7: Zona de 2 parejas (1 partido en DB)', fn: test7_zona2_destrabeGenera1Partido },
     { id: '8', nombre: 'Test 8: Inicio real directo sin pre-check (3 partidos, no agendados, regenerar reemplaza)', fn: test8_inicioRealDirectoZonaManual },
     { id: '9', nombre: 'Test 9: Aislamiento planesCache (Fix A) e idempotencia', fn: test9_planesCacheAislamientoEIdempotencia },
+    { id: '10', nombre: 'Test 10: Zona 5 parejas con slotsQueDestraban vacío (Fix B)', fn: test10_zona5_slotsQueDestrabanVacio },
+    { id: '11', nombre: 'Test 11: Zona de 3 con 2 partidos sin cancha no duplica (Punto 6)', fn: test11_destrabeZona3Con2PartidosSinCanchaNoDuplica },
   ];
 
   const testsToRun = specificTest

@@ -732,23 +732,25 @@ function evaluarAsignacionesIncrementales({
               return true;
             });
 
-            const slotsQueDestraban = slotsViables.filter((sId) => {
-              const simulated = rawZonaParejas.map((item) => {
-                if (item.id === p.id) {
-                  return Array.from(new Set([...item.slotIds, sId]));
-                }
-                return item.slotIds;
-              });
-              for (let i = 0; i < simulated.length; i++) {
-                for (let j = i + 1; j < simulated.length; j++) {
-                  const s1 = simulated[i];
-                  const s2 = simulated[j];
-                  const shared = s1.filter((slot) => s2.includes(slot));
-                  if (shared.length === 0) return false;
-                }
-              }
-              return true;
-            });
+            const slotsQueDestraban = (rawZonaParejas.length <= 1 || rawZonaParejas.length >= 5)
+              ? []
+              : slotsViables.filter((sId) => {
+                  const simulated = rawZonaParejas.map((item) => {
+                    if (item.id === p.id) {
+                      return Array.from(new Set([...item.slotIds, sId]));
+                    }
+                    return item.slotIds;
+                  });
+                  for (let i = 0; i < simulated.length; i++) {
+                    for (let j = i + 1; j < simulated.length; j++) {
+                      const s1 = simulated[i];
+                      const s2 = simulated[j];
+                      const shared = s1.filter((slot) => s2.includes(slot));
+                      if (shared.length === 0) return false;
+                    }
+                  }
+                  return true;
+                });
 
             return {
               id: p.id,
