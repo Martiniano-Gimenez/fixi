@@ -260,6 +260,7 @@ function evaluarAsignacionesIncrementales({
   // 1. Intentar asignar partidos que estaban sin horario
   for (const cPlan of categoriasPlan) {
     for (const zona of cPlan.zonas) {
+      if (zona.requiereArmadoManual) continue;
       for (const partido of zona.partidos) {
         if (!partido.sinHorarioAsignado) continue;
 
@@ -361,117 +362,122 @@ function evaluarAsignacionesIncrementales({
     }
   }
 
-  // 1b. Intentar asignar partidos MINI_BRACKET de ronda 2 (P3 y P4) que estaban sin horario
+  // 1b. Función auxiliar para asignar partidos MINI_BRACKET de ronda 2 (P3 y P4) que estaban sin horario
+  function asignarMiniBracketRonda2Zona(zona) {
+    if (zona.formato !== 'MINI_BRACKET') return;
+
+    const p1 = zona.partidos.find((p) => p.posicionEnRonda === 1);
+    const p2 = zona.partidos.find((p) => p.posicionEnRonda === 2);
+    const p3 = zona.partidos.find((p) => p.posicionEnRonda === 3);
+    const p4 = zona.partidos.find((p) => p.posicionEnRonda === 4);
+
+    if (!p1?.fechaHora || !p2?.fechaHora || p1.sinHorarioAsignado || p2.sinHorarioAsignado) return;
+
+    const minStartMs = Math.max(new Date(p1.fechaHora).getTime(), new Date(p2.fechaHora).getTime()) + DURACION_MS;
+
+    const rawZonaParejas = (zona.parejaIds || []).map((pId) => parejasMap.get(pId)).filter(Boolean);
+    const slotsLists = rawZonaParejas.map((p) => ordenarSlotsCronologicamente((p.slotsSeleccionados || []).map((s) => s.slotId)));
+
+    let shared4 = [];
+    const conSlotsLists = slotsLists.filter((l) => l.length > 0);
+    if (conSlotsLists.length === 0) {
+      if (organizador.viernesInicio && organizador.viernesFin) {
+        shared4.push({ dia: 'Viernes', startMs: friDayStartMs, endMs: friDayEndMs });
+      }
+      if (organizador.sabadoInicio && organizador.sabadoFin) {
+        shared4.push({ dia: 'Sabado', startMs: satDayStartMs, endMs: satDayEndMs });
+      }
+    } else {
+      const windowsList = conSlotsLists.map((l) => fusionarSlotsEnVentanas(l, refFecha));
+      shared4 = windowsList[0];
+      for (let i = 1; i < windowsList.length; i++) {
+        shared4 = interseccionVentanas(shared4, windowsList[i]);
+      }
+    }
+
+    let commonSlots4 = [];
+    if (conSlotsLists.length > 0) {
+      commonSlots4 = conSlotsLists[0];
+      for (let i = 1; i < conSlotsLists.length; i++) {
+        commonSlots4 = commonSlots4.filter((s) => conSlotsLists[i].includes(s));
+      }
+      commonSlots4 = ordenarSlotsCronologicamente(commonSlots4);
+    }
+
+    const matchesToAssign = [p3, p4].filter((p) => p && p.sinHorarioAsignado);
+    for (const m of matchesToAssign) {
+      let asignado = false;
+
+      for (const sId of commonSlots4) {
+        const sWin = slotIdToMsWindow(sId, refFecha);
+        if (!sWin || sWin.startMs < minStartMs) continue;
+
+        let withinShared = false;
+        for (const w of shared4) {
+          if (w.dia === sWin.dia && sWin.startMs >= w.startMs && sWin.endMs <= w.endMs) {
+            withinShared = true;
+            break;
+          }
+        }
+        if (!withinShared) continue;
+
+        for (let c = 1; c <= cantidadCanchas; c++) {
+          if (isCourtFree(c, sWin.startMs, sWin.endMs)) {
+            if (!courtTimelines.has(c)) courtTimelines.set(c, []);
+            courtTimelines.get(c).push({ startMs: sWin.startMs, endMs: sWin.endMs });
+
+            m.fechaHora = new Date(sWin.startMs);
+            m.canchaNumero = c;
+            m.sinHorarioAsignado = false;
+            asignado = true;
+            break;
+          }
+        }
+        if (asignado) break;
+      }
+
+      if (!asignado) {
+        for (const window of shared4) {
+          const isFri = window.dia === 'Viernes';
+          const dayStartMs = isFri ? friDayStartMs : satDayStartMs;
+          const dayEndMs = isFri ? friDayEndMs : satDayEndMs;
+          const wStart = Math.max(window.startMs, dayStartMs, minStartMs);
+          const wEnd = Math.min(window.endMs, dayEndMs);
+
+          let bestCand = null;
+          for (let c = 1; c <= cantidadCanchas; c++) {
+            let T = wStart;
+            while (T + DURACION_MS <= wEnd) {
+              const tEnd = T + DURACION_MS;
+              if (isCourtFree(c, T, tEnd)) {
+                if (bestCand === null || T < bestCand.T) {
+                  bestCand = { T, cancha: c };
+                }
+                break;
+              }
+              T += 15 * 60 * 1000;
+            }
+          }
+
+          if (bestCand !== null) {
+            if (!courtTimelines.has(bestCand.cancha)) courtTimelines.set(bestCand.cancha, []);
+            courtTimelines.get(bestCand.cancha).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
+
+            m.fechaHora = new Date(bestCand.T);
+            m.canchaNumero = bestCand.cancha;
+            m.sinHorarioAsignado = false;
+            asignado = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+
   for (const cPlan of categoriasPlan) {
     for (const zona of cPlan.zonas) {
-      if (zona.formato !== 'MINI_BRACKET') continue;
-
-      const p1 = zona.partidos.find((p) => p.posicionEnRonda === 1);
-      const p2 = zona.partidos.find((p) => p.posicionEnRonda === 2);
-      const p3 = zona.partidos.find((p) => p.posicionEnRonda === 3);
-      const p4 = zona.partidos.find((p) => p.posicionEnRonda === 4);
-
-      if (!p1?.fechaHora || !p2?.fechaHora || p1.sinHorarioAsignado || p2.sinHorarioAsignado) continue;
-
-      const minStartMs = Math.max(new Date(p1.fechaHora).getTime(), new Date(p2.fechaHora).getTime()) + DURACION_MS;
-
-      const rawZonaParejas = (zona.parejaIds || []).map((pId) => parejasMap.get(pId)).filter(Boolean);
-      const slotsLists = rawZonaParejas.map((p) => ordenarSlotsCronologicamente((p.slotsSeleccionados || []).map((s) => s.slotId)));
-
-      let shared4 = [];
-      const conSlotsLists = slotsLists.filter((l) => l.length > 0);
-      if (conSlotsLists.length === 0) {
-        if (organizador.viernesInicio && organizador.viernesFin) {
-          shared4.push({ dia: 'Viernes', startMs: friDayStartMs, endMs: friDayEndMs });
-        }
-        if (organizador.sabadoInicio && organizador.sabadoFin) {
-          shared4.push({ dia: 'Sabado', startMs: satDayStartMs, endMs: satDayEndMs });
-        }
-      } else {
-        const windowsList = conSlotsLists.map((l) => fusionarSlotsEnVentanas(l, refFecha));
-        shared4 = windowsList[0];
-        for (let i = 1; i < windowsList.length; i++) {
-          shared4 = interseccionVentanas(shared4, windowsList[i]);
-        }
-      }
-
-      let commonSlots4 = [];
-      if (conSlotsLists.length > 0) {
-        commonSlots4 = conSlotsLists[0];
-        for (let i = 1; i < conSlotsLists.length; i++) {
-          commonSlots4 = commonSlots4.filter((s) => conSlotsLists[i].includes(s));
-        }
-        commonSlots4 = ordenarSlotsCronologicamente(commonSlots4);
-      }
-
-      const matchesToAssign = [p3, p4].filter((p) => p && p.sinHorarioAsignado);
-      for (const m of matchesToAssign) {
-        let asignado = false;
-
-        for (const sId of commonSlots4) {
-          const sWin = slotIdToMsWindow(sId, refFecha);
-          if (!sWin || sWin.startMs < minStartMs) continue;
-
-          let withinShared = false;
-          for (const w of shared4) {
-            if (w.dia === sWin.dia && sWin.startMs >= w.startMs && sWin.endMs <= w.endMs) {
-              withinShared = true;
-              break;
-            }
-          }
-          if (!withinShared) continue;
-
-          for (let c = 1; c <= cantidadCanchas; c++) {
-            if (isCourtFree(c, sWin.startMs, sWin.endMs)) {
-              if (!courtTimelines.has(c)) courtTimelines.set(c, []);
-              courtTimelines.get(c).push({ startMs: sWin.startMs, endMs: sWin.endMs });
-
-              m.fechaHora = new Date(sWin.startMs);
-              m.canchaNumero = c;
-              m.sinHorarioAsignado = false;
-              asignado = true;
-              break;
-            }
-          }
-          if (asignado) break;
-        }
-
-        if (!asignado) {
-          for (const window of shared4) {
-            const isFri = window.dia === 'Viernes';
-            const dayStartMs = isFri ? friDayStartMs : satDayStartMs;
-            const dayEndMs = isFri ? friDayEndMs : satDayEndMs;
-            const wStart = Math.max(window.startMs, dayStartMs, minStartMs);
-            const wEnd = Math.min(window.endMs, dayEndMs);
-
-            let bestCand = null;
-            for (let c = 1; c <= cantidadCanchas; c++) {
-              let T = wStart;
-              while (T + DURACION_MS <= wEnd) {
-                const tEnd = T + DURACION_MS;
-                if (isCourtFree(c, T, tEnd)) {
-                  if (bestCand === null || T < bestCand.T) {
-                    bestCand = { T, cancha: c };
-                  }
-                  break;
-                }
-                T += 15 * 60 * 1000;
-              }
-            }
-
-            if (bestCand !== null) {
-              if (!courtTimelines.has(bestCand.cancha)) courtTimelines.set(bestCand.cancha, []);
-              courtTimelines.get(bestCand.cancha).push({ startMs: bestCand.T, endMs: bestCand.T + DURACION_MS });
-
-              m.fechaHora = new Date(bestCand.T);
-              m.canchaNumero = bestCand.cancha;
-              m.sinHorarioAsignado = false;
-              asignado = true;
-              break;
-            }
-          }
-        }
-      }
+      if (zona.requiereArmadoManual) continue;
+      asignarMiniBracketRonda2Zona(zona);
     }
   }
 
@@ -663,6 +669,10 @@ function evaluarAsignacionesIncrementales({
                 }
               }
             }
+          }
+
+          if (z.formato === 'MINI_BRACKET') {
+            asignarMiniBracketRonda2Zona(z);
           }
         } else {
           // La zona sigue siendo incompatible — reportar como ZONA_MANUAL_INCOMPLETA
