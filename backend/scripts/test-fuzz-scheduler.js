@@ -69,6 +69,19 @@ const manualFuzzStats = {
   mensajesRechazo: {},
 };
 
+const manualFuzzInvariantsStats = {
+  failingSeeds: new Set(),
+  porRegla: {
+    loopDestrabeSinPartidos: new Set(),
+    regla1o5Parejas: new Set(),
+    formatoCantidadPartidos: new Set(),
+    parejasNullOOrigen: new Set(),
+    horarioOPendiente: new Set(),
+    miniBracketOrigenPersistido: new Set(),
+    excepcionesNoControladas: new Set(),
+  },
+};
+
 /**
  * PRNG determinístico (Mulberry32)
  */
@@ -676,6 +689,8 @@ async function runSingleSeed(seed, recordFailure) {
             const zKey = `${cPlan.categoriaId}:${z.nombre}`;
             if (zonasManualesVistas.has(zKey) && !z.requiereArmadoManual) {
               if (!Array.isArray(z.partidos) || z.partidos.length === 0) {
+                manualFuzzInvariantsStats.failingSeeds.add(seed);
+                manualFuzzInvariantsStats.porRegla.loopDestrabeSinPartidos.add(seed);
                 recordFailure(
                   'precheck_zona_manual_partidos:post-inicio',
                   seed,
@@ -730,7 +745,103 @@ async function runSingleSeed(seed, recordFailure) {
     });
     const zonasTorneo = await prisma.zona.findMany({
       where: { categoria: { torneoId: torneo.id } },
+      include: { zonaParejas: true, partidos: true },
     });
+
+    // Invariante 1: Origen persistido en MINI_BRACKET (aplica a TODAS las zonas MINI_BRACKET del torneo)
+    for (const z of zonasTorneo) {
+      if (z.formato === 'MINI_BRACKET') {
+        for (const p of z.partidos) {
+          if (p.posicionEnRonda >= 3) {
+            if (!p.origenPareja1 || !p.origenPareja2) {
+              manualFuzzInvariantsStats.porRegla.miniBracketOrigenPersistido.add(seed);
+              recordFailure(
+                'mini_bracket_origen_persistido:post-inicio',
+                seed,
+                `Partido P${p.posicionEnRonda} de MINI_BRACKET (zona ${z.nombre}) no tiene origen definido`
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Invariante 2: Zonas manuales en DB (aplica ÚNICAMENTE a zonas que nacieron como manuales)
+    for (const z of zonasTorneo) {
+      const zKey = `${z.categoriaId}:${z.nombre}`;
+      const esManualNacida = zonasManualesVistas.has(zKey);
+      if (!esManualNacida) continue;
+
+      const pCount = z.zonaParejas.length;
+      // Regla: zonas de 1 o de 5+ parejas nunca pueden quedar con requiereArmadoManual false
+      if ((pCount <= 1 || pCount >= 5) && !z.requiereArmadoManual) {
+        manualFuzzInvariantsStats.failingSeeds.add(seed);
+        manualFuzzInvariantsStats.porRegla.regla1o5Parejas.add(seed);
+        recordFailure(
+          'precheck_zona_manual_partidos:post-inicio',
+          seed,
+          `Zona manual "${z.nombre}" tiene ${pCount} parejas pero quedó con requiereArmadoManual=false en la base`
+        );
+      }
+
+      if (!z.requiereArmadoManual) {
+        let expectedPartidos = 0;
+        if (z.formato === 'MINI_BRACKET') {
+          expectedPartidos = 4;
+        } else if (z.formato === 'ROUND_ROBIN') {
+          if (pCount === 2) expectedPartidos = 1;
+          else if (pCount === 3) expectedPartidos = 3;
+          else if (pCount === 4) expectedPartidos = 6;
+          else expectedPartidos = (pCount * (pCount - 1)) / 2;
+        }
+
+        if (z.partidos.length !== expectedPartidos) {
+          manualFuzzInvariantsStats.failingSeeds.add(seed);
+          manualFuzzInvariantsStats.porRegla.formatoCantidadPartidos.add(seed);
+          recordFailure(
+            'precheck_zona_manual_partidos:post-inicio',
+            seed,
+            `Zona manual "${z.nombre}" (${z.formato}, ${pCount} parejas) tiene ${z.partidos.length} partidos en DB pero se esperaban ${expectedPartidos}`
+          );
+        }
+
+        for (const p of z.partidos) {
+          if (z.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3) {
+            if (p.pareja1Id !== null || p.pareja2Id !== null) {
+              manualFuzzInvariantsStats.failingSeeds.add(seed);
+              manualFuzzInvariantsStats.porRegla.parejasNullOOrigen.add(seed);
+              recordFailure(
+                'precheck_zona_manual_partidos:post-inicio',
+                seed,
+                `Partido P${p.posicionEnRonda} de MINI_BRACKET manual tiene parejas definidas en DB en lugar de null`
+              );
+            }
+          } else {
+            if (!p.pareja1Id || !p.pareja2Id) {
+              manualFuzzInvariantsStats.failingSeeds.add(seed);
+              manualFuzzInvariantsStats.porRegla.parejasNullOOrigen.add(seed);
+              recordFailure(
+                'precheck_zona_manual_partidos:post-inicio',
+                seed,
+                `Partido ${p.id} de zona manual ${z.nombre} tiene parejas null inesperadas`
+              );
+            }
+          }
+
+          const tieneHorarioCancha = Boolean(p.fechaHora && p.canchaNumero);
+          const esPendiente = Boolean(p.sinHorarioAsignado || p.estado === 'PENDIENTE');
+          if (!tieneHorarioCancha && !esPendiente) {
+            manualFuzzInvariantsStats.failingSeeds.add(seed);
+            manualFuzzInvariantsStats.porRegla.horarioOPendiente.add(seed);
+            recordFailure(
+              'precheck_zona_manual_partidos:post-inicio',
+              seed,
+              `Partido ${p.id} de zona manual no tiene horario/cancha ni está marcado como pendiente/sinHorarioAsignado`
+            );
+          }
+        }
+      }
+    }
 
     verificarInvariantesPorEtapa({
       partidos: partidosIniciales,
@@ -1206,6 +1317,8 @@ async function runFuzzSuite() {
     'modo_lluvia_domingo:post-restauracion',
     'precheck_monotonia:post-inicio',
     'precheck_zona_manual_partidos:post-inicio',
+    'mini_bracket_origen_persistido:post-inicio',
+    'excepcion_no_controlada:fuzz',
   ];
 
   const stats = {};
@@ -1250,7 +1363,12 @@ async function runFuzzSuite() {
         await runSingleSeed(seed, recordFailure);
       } catch (err) {
         console.error(`❌ [SEED ${seed}] Excepción no controlada: ${err.message}`);
-        throw err;
+        manualFuzzInvariantsStats.porRegla.excepcionesNoControladas.add(seed);
+        recordFailure(
+          'excepcion_no_controlada:fuzz',
+          seed,
+          `${err.message} - Stack: ${err.stack?.split('\n')[1]?.trim() || ''}`
+        );
       }
 
       const afterSeedFailures = INVARIANT_KEYS.reduce(
@@ -1326,9 +1444,37 @@ async function runFuzzSuite() {
   console.log(`- Llamadas aceptadas: ${manualFuzzStats.aceptadas}`);
   console.log(`- Llamadas rechazadas: ${manualFuzzStats.rechazadas}`);
   console.log('- Detalle de mensajes de rechazo:');
-  for (const [msg, cnt] of Object.entries(manualFuzzStats.mensajesRechazo)) {
-    console.log(`    * [${cnt} veces] ${msg}`);
-  }
+  console.log('='.repeat(85) + '\n');
+
+  console.log('='.repeat(85));
+  console.log('📌 DESGLOSE PRECHECK_ZONA_MANUAL_PARTIDOS (REGLAS DEL INVARIANTE REFORZADO):');
+  console.log('='.repeat(85));
+  const failingSeedsArr = Array.from(manualFuzzInvariantsStats.failingSeeds).sort((a, b) => a - b);
+  console.log(`- Total semillas con fallas en zona manual: ${failingSeedsArr.length}`);
+  console.log(`- Semilla mínima: ${failingSeedsArr[0] ?? '-'}`);
+  console.log(`- Conteo por regla nueva:`);
+  console.log(`    * [Loop destrabe sin partidos (memoria)]: ${manualFuzzInvariantsStats.porRegla.loopDestrabeSinPartidos.size} semillas`);
+  console.log(`    * [Formato / cantidad partidos (DB)]: ${manualFuzzInvariantsStats.porRegla.formatoCantidadPartidos.size} semillas`);
+  console.log(`    * [Parejas null indebidas / origen faltante (DB)]: ${manualFuzzInvariantsStats.porRegla.parejasNullOOrigen.size} semillas`);
+  console.log(`    * [Horario / cancha vs pendiente (DB)]: ${manualFuzzInvariantsStats.porRegla.horarioOPendiente.size} semillas`);
+  console.log(`    * [Regla 1 o 5+ parejas (no permitir false)]: ${manualFuzzInvariantsStats.porRegla.regla1o5Parejas.size} semillas`);
+  console.log(`    * [Mini bracket sin origen persistido (global)]: ${manualFuzzInvariantsStats.porRegla.miniBracketOrigenPersistido.size} semillas`);
+  console.log(`    * [Excepciones no controladas]: ${manualFuzzInvariantsStats.porRegla.excepcionesNoControladas.size} semillas`);
+
+  const LISTA_85_PREVIA = [
+    8, 10, 16, 23, 34, 40, 50, 69, 70, 76, 78, 80, 86, 90, 104, 112, 116, 127, 130, 132, 133, 138, 142, 144, 147, 148, 158, 162, 165, 166, 168, 174, 185, 186, 188, 191, 212, 218, 228, 232, 236, 240, 245, 250, 264, 270, 274, 279, 280, 310, 313, 323, 325, 328, 330, 340, 352, 353, 362, 363, 366, 367, 373, 374, 378, 380, 382, 385, 386, 390, 405, 409, 420, 439, 440, 443, 448, 455, 456, 471, 472, 476, 482, 491, 492
+  ];
+  const setRunner = new Set(failingSeedsArr);
+  const setPrevia = new Set(LISTA_85_PREVIA);
+
+  const enRunnerNoPrevia = failingSeedsArr.filter((s) => !setPrevia.has(s));
+  const enPreviaNoRunner = LISTA_85_PREVIA.filter((s) => !setRunner.has(s));
+
+  console.log(`- Comparación de semillas (Runner vs Lista 85):`);
+  console.log(`    * Semillas en runner pero NO en lista de 85: ${JSON.stringify(enRunnerNoPrevia)}`);
+  console.log(`    * Semillas en lista de 85 pero NO en runner: ${JSON.stringify(enPreviaNoRunner)}`);
+  console.log(`    * Coincidencia exacta: ${enRunnerNoPrevia.length === 0 && enPreviaNoRunner.length === 0 ? 'SÍ (100% idénticas)' : 'NO'}`);
+  console.log(`- Semillas afectadas del runner: ${JSON.stringify(failingSeedsArr)}`);
   console.log('='.repeat(85) + '\n');
 
   console.log('='.repeat(85));
@@ -1375,6 +1521,7 @@ async function runFuzzSuite() {
   if (hayFallas) {
     process.exit(1);
   }
+  process.exit(0);
 }
 
 if (require.main === module) {
