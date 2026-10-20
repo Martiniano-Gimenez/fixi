@@ -82,6 +82,16 @@ const manualFuzzInvariantsStats = {
   },
 };
 
+const bloqueoTerminalStats = {
+  totalCategorias: 0,
+  seeds: new Set(),
+};
+
+const perfilManual4Stats = {
+  totalSeeds: 0,
+  seeds: new Set(),
+};
+
 /**
  * PRNG determinístico (Mulberry32)
  */
@@ -521,6 +531,12 @@ async function runSingleSeed(seed, recordFailure) {
     });
 
     const grilla = generarGrillaOrganizador(organizador);
+    const esPerfilManual4 = seed % 5 === 0;
+    if (esPerfilManual4) {
+      perfilManual4Stats.totalSeeds++;
+      perfilManual4Stats.seeds.add(seed);
+    }
+
     const numCategorias = esPerfilExtendido ? rng.int(1, 2) : rng.int(2, 3);
     const nombresCat = ['4ta', '5ta', '6ta', '7ma'];
     const categorias = [];
@@ -534,6 +550,40 @@ async function runSingleSeed(seed, recordFailure) {
         },
       });
       categorias.push(cat);
+
+      if (esPerfilManual4 && cIdx === 0) {
+        const numParejas = 4;
+        const parejasData = [];
+        for (let pIdx = 1; pIdx <= numParejas; pIdx++) {
+          parejasData.push({
+            categoriaId: cat.id,
+            jugador1: `S${seed}_M4_P${pIdx}_A`,
+            jugador2: `S${seed}_M4_P${pIdx}_B`,
+            orden: pIdx,
+          });
+        }
+        await prisma.pareja.createMany({ data: parejasData });
+        const parejasCreadas = await prisma.pareja.findMany({
+          where: { categoriaId: cat.id },
+          orderBy: { orden: 'asc' },
+        });
+
+        // Forzar incompatibilidad: P1 y P2 en Viernes-18:00, P3 y P4 en Viernes-19:15
+        const manualSlots = [
+          ['Viernes-18:00'],
+          ['Viernes-18:00'],
+          ['Viernes-19:15'],
+          ['Viernes-19:15'],
+        ];
+        const slotParejaRows = [];
+        for (let i = 0; i < parejasCreadas.length; i++) {
+          for (const slotId of manualSlots[i]) {
+            slotParejaRows.push({ parejaId: parejasCreadas[i].id, slotId });
+          }
+        }
+        await prisma.slotPareja.createMany({ data: slotParejaRows });
+        continue;
+      }
 
       const numParejas = esPerfilExtendido && cIdx === 0 ? rng.int(27, 28) : rng.int(8, 30);
       const parejasData = [];
@@ -719,25 +769,31 @@ async function runSingleSeed(seed, recordFailure) {
     // =========================================================================
     // ETAPA 1: POST-INICIO
     // =========================================================================
-    const planIdToUse = preCheck.planId || preCheck.planEmergenciaId || null;
-    if (planIdToUse) {
-      await organizadorService.iniciarTorneoMultiCategoria(organizador.id, torneo.id, planIdToUse);
-    } else {
-      for (const cat of categorias) {
-        await zonaService.iniciarCategoria(organizador.id, cat.id);
-      }
-      await zonaService.asignarHorariosAutomatico(
-        organizador.id,
-        categorias.map((c) => c.id)
+    let planIdToUse = preCheck.planId || (preCheck.permiteInicioEmergencia ? preCheck.planEmergenciaId : null);
+
+    // Ante una categoría con zona de 5+ bloqueada: intentar forceReset (re-pre-check completo)
+    if (!planIdToUse && preCheck.bloqueado) {
+      const tieneZona5Plus = (preCheck.conflictos || []).some((catConf) =>
+        (catConf.partidosSinHorario || []).some(
+          (c) => c.motivo === 'ZONA_MANUAL_INCOMPLETA' && (c.tamanoZona >= 5 || (c.pareja1 && c.pareja1.includes('5 parejas')))
+        )
       );
-      await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
-      for (const cat of categorias) {
-        try {
-          await generarEliminatoria(organizador.id, cat.id);
-        } catch (_) {}
+
+      if (tieneZona5Plus) {
+        preCheck = await organizadorService.preCheckInicioTorneo(organizador.id, torneo.id, { forceReset: true });
+        planIdToUse = preCheck.planId || (preCheck.permiteInicioEmergencia ? preCheck.planEmergenciaId : null);
       }
-      await programarHorariosEliminatorias(organizador.id, torneo.id);
     }
+
+    if (!planIdToUse) {
+      // Sigue bloqueada: registrar bloqueo_terminal con semilla y contador
+      const catsBloqueadas = (preCheck.conflictos || []).length || 1;
+      bloqueoTerminalStats.totalCategorias += catsBloqueadas;
+      bloqueoTerminalStats.seeds.add(seed);
+      return; // No usar iniciarCategoria como atajo
+    }
+
+    await organizadorService.iniciarTorneoMultiCategoria(organizador.id, torneo.id, planIdToUse);
 
     const partidosIniciales = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
@@ -1447,6 +1503,16 @@ async function runFuzzSuite() {
   console.log('='.repeat(85) + '\n');
 
   console.log('='.repeat(85));
+  console.log('📌 PERFIL ZONAS MANUALES DE 4 Y BLOQUEOS TERMINALES:');
+  console.log('='.repeat(85));
+  console.log(`- Semillas que ejercitan perfil zonas manuales de 4: ${perfilManual4Stats.totalSeeds}`);
+  console.log(`- Total categorías con bloqueo terminal tras forceReset: ${bloqueoTerminalStats.totalCategorias} (en ${bloqueoTerminalStats.seeds.size} semillas)`);
+  if (bloqueoTerminalStats.seeds.size > 0) {
+    console.log(`- Semillas con bloqueo terminal: ${JSON.stringify(Array.from(bloqueoTerminalStats.seeds).sort((a, b) => a - b))}`);
+  }
+  console.log('='.repeat(85) + '\n');
+
+  console.log('='.repeat(85));
   console.log('📌 DESGLOSE PRECHECK_ZONA_MANUAL_PARTIDOS (REGLAS DEL INVARIANTE REFORZADO):');
   console.log('='.repeat(85));
   const failingSeedsArr = Array.from(manualFuzzInvariantsStats.failingSeeds).sort((a, b) => a - b);
@@ -1531,4 +1597,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runFuzzSuite };
+module.exports = { runFuzzSuite, runSingleSeed };
