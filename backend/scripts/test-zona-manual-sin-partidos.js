@@ -718,6 +718,105 @@ async function test8_inicioRealDirectoZonaManual() {
   console.log('   ✓ Test 8 superado.');
 }
 
+// ---------------------------------------------------------------------------
+// TEST 9: Aislamiento de snapshots en planesCache (Fix A) e idempotencia
+// ---------------------------------------------------------------------------
+async function test9_planesCacheAislamientoEIdempotencia() {
+  console.log('\n▶️ TEST 9: Aislamiento de planesCache y re-check idempotente...');
+  // Club con 1 cancha y 2 slots (18:00 a 20:30)
+  const { org, torneo, cat } = await setupBaseClub({ cantidadCanchas: 1, viernesFin: '20:30' });
+
+  const p1 = await prisma.pareja.create({ data: { categoriaId: cat.id, jugador1: 'A1', jugador2: 'A2', orden: 1 } });
+  const p2 = await prisma.pareja.create({ data: { categoriaId: cat.id, jugador1: 'B1', jugador2: 'B2', orden: 2 } });
+  const p3 = await prisma.pareja.create({ data: { categoriaId: cat.id, jugador1: 'C1', jugador2: 'C2', orden: 3 } });
+
+  // Incompatibles: P1 y P2 en 18:00, P3 en 20:30
+  await prisma.slotPareja.createMany({
+    data: [
+      { parejaId: p1.id, slotId: 'Viernes-18:00' },
+      { parejaId: p2.id, slotId: 'Viernes-18:00' },
+      { parejaId: p3.id, slotId: 'Viernes-20:30' },
+    ],
+  });
+
+  const pre1 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id);
+  assert.strictEqual(pre1.bloqueado, true);
+
+  // Destrabe: todos cubren 18:00 y 19:15
+  const slotsCompat = ['Viernes-18:00', 'Viernes-19:15'];
+  await disponibilidadService.setDisponibilidadDoble(org.id, p1.id, slotsCompat, p2.id, slotsCompat);
+  await disponibilidadService.setDisponibilidad(org.id, p3.id, slotsCompat);
+
+  const pre2 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id, { isReCheck: true });
+  assert.ok(pre2.planEmergenciaId, 'Debe emitir planEmergenciaId');
+
+  const planViejoId = pre2.planEmergenciaId;
+  const planViejoAntes = organizadorService.planesCache.get(planViejoId);
+  assert.ok(planViejoAntes, 'El plan de emergencia debe estar en planesCache');
+  const zonaViejaAntes = planViejoAntes.categoriasPlan[0].zonas[0];
+  const agendadosAntes = zonaViejaAntes.partidos.filter((p) => !p.sinHorarioAsignado && p.fechaHora !== null);
+  assert.strictEqual(agendadosAntes.length, 2, 'Deben existir 2 partidos con cancha/fecha asignados en el plan de emergencia');
+
+  // Ahora el organizador quita una franja y vuelve incompatible la zona
+  await disponibilidadService.setDisponibilidad(org.id, p3.id, ['Viernes-20:30']);
+
+  // PreCheck 3 revierte la zona
+  const pre3 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id, { isReCheck: true });
+  assert.strictEqual(pre3.bloqueado, true, 'Pre-check 3 debe estar bloqueado');
+
+  // Comprobar si el plan de emergencia viejo conservó sus fechas/canchas o si fue mutado
+  const planViejoDespues = organizadorService.planesCache.get(planViejoId);
+  assert.ok(planViejoDespues, 'El plan viejo debe seguir existiendo en planesCache');
+  const zonaViejaDespues = planViejoDespues.categoriasPlan[0].zonas[0];
+  const agendadosDespues = zonaViejaDespues.partidos.filter((p) => !p.sinHorarioAsignado && p.fechaHora !== null);
+  assert.strictEqual(
+    agendadosDespues.length,
+    2,
+    `El plan viejo en planesCache debe conservar 2 partidos agendados (encontrados: ${agendadosDespues.length}). Si da 0, fue mutado por el re-check posterior.`
+  );
+
+  // Comprobar qué pasa al iniciar con ese plan viejo:
+  // Se bloquea con 409 Conflict porque las disponibilidades cambiaron y el fingerprint no coincide
+  let errorInicio = null;
+  try {
+    await organizadorService.iniciarTorneoMultiCategoria(org.id, torneo.id, planViejoId);
+  } catch (err) {
+    errorInicio = err;
+  }
+  assert.ok(errorInicio, 'Debe bloquear el inicio con un plan viejo tras cambios de disponibilidad');
+  assert.strictEqual(errorInicio.statusCode, 409, 'Debe fallar con código 409 Conflict');
+  assert.ok(
+    errorInicio.message.includes('cambiaron desde la última verificación'),
+    'El mensaje debe indicar que los datos cambiaron'
+  );
+
+  // Idempotencia: en una nueva sesión, dos re-checks seguidos sin cambios producen el mismo plan
+  const clubIdemp = await setupBaseClub({ cantidadCanchas: 2, viernesFin: '22:00' });
+  const ip1 = await prisma.pareja.create({ data: { categoriaId: clubIdemp.cat.id, jugador1: 'IA1', jugador2: 'IA2', orden: 1 } });
+  const ip2 = await prisma.pareja.create({ data: { categoriaId: clubIdemp.cat.id, jugador1: 'IB1', jugador2: 'IB2', orden: 2 } });
+  await prisma.slotPareja.createMany({
+    data: [
+      { parejaId: ip1.id, slotId: 'Viernes-18:00' },
+      { parejaId: ip2.id, slotId: 'Viernes-18:00' },
+    ],
+  });
+  await organizadorService.preCheckInicioTorneo(clubIdemp.org.id, clubIdemp.torneo.id);
+
+  const recheckA = await organizadorService.preCheckInicioTorneo(clubIdemp.org.id, clubIdemp.torneo.id, { isReCheck: true });
+  const sessionA = organizadorService.preCheckSessions.get(clubIdemp.torneo.id);
+  const snapshotA = JSON.stringify(sessionA.categoriasPlan);
+
+  const recheckB = await organizadorService.preCheckInicioTorneo(clubIdemp.org.id, clubIdemp.torneo.id, { isReCheck: true });
+  const sessionB = organizadorService.preCheckSessions.get(clubIdemp.torneo.id);
+  const snapshotB = JSON.stringify(sessionB.categoriasPlan);
+
+  assert.strictEqual(recheckA.bloqueado, recheckB.bloqueado, 'El estado de bloqueo debe ser idéntico');
+  assert.strictEqual(recheckA.conflictos?.length || 0, recheckB.conflictos?.length || 0, 'La cantidad de conflictos debe ser idéntica');
+  assert.strictEqual(snapshotA, snapshotB, 'El plan (fechaHora y canchas por partido) debe ser idéntico entre dos re-checks sin cambios');
+
+  console.log('   ✓ Test 9 superado.');
+}
+
 async function runSuite() {
   await ensureTestDb();
   resetTestDb();
@@ -725,7 +824,7 @@ async function runSuite() {
   const specificTest = process.argv[2];
 
   console.log('='.repeat(85));
-  console.log('🧪 SUITE OFICIAL: ZONAS MANUALES EN PRE-CHECK E INICIO (10 CASOS)');
+  console.log('🧪 SUITE OFICIAL: ZONAS MANUALES EN PRE-CHECK E INICIO (11 CASOS)');
   console.log('='.repeat(85));
 
   const allTests = [
@@ -739,6 +838,7 @@ async function runSuite() {
     { id: '6c', nombre: 'Test 6C: Zona de 5 bloqueada -> forceReset -> re-particiona -> iniciarTorneo', fn: test6c_zona5_reparticionConForceReset },
     { id: '7', nombre: 'Test 7: Zona de 2 parejas (1 partido en DB)', fn: test7_zona2_destrabeGenera1Partido },
     { id: '8', nombre: 'Test 8: Inicio real directo sin pre-check (3 partidos, no agendados, regenerar reemplaza)', fn: test8_inicioRealDirectoZonaManual },
+    { id: '9', nombre: 'Test 9: Aislamiento planesCache (Fix A) e idempotencia', fn: test9_planesCacheAislamientoEIdempotencia },
   ];
 
   const testsToRun = specificTest

@@ -1105,7 +1105,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
         torneoId,
         expiresAt: existingSession.expiresAt,
         fingerprint,
-        categoriasPlan: existingSession.categoriasPlan,
+        categoriasPlan: structuredClone(existingSession.categoriasPlan),
         omitidos,
         esEmergencia: true,
       });
@@ -1130,7 +1130,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
         torneoId,
         expiresAt: existingSession.expiresAt,
         fingerprint,
-        categoriasPlan: existingSession.categoriasPlan,
+        categoriasPlan: structuredClone(existingSession.categoriasPlan),
         omitidos,
       });
 
@@ -1266,7 +1266,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
             torneoId,
             expiresAt: Date.now() + PRECHECK_TTL_MS,
             fingerprint,
-            categoriasPlan,
+            categoriasPlan: structuredClone(categoriasPlan),
             omitidos,
             esEmergencia: true,
           });
@@ -1290,7 +1290,7 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
           torneoId,
           expiresAt: Date.now() + PRECHECK_TTL_MS,
           fingerprint,
-          categoriasPlan,
+          categoriasPlan: structuredClone(categoriasPlan),
           omitidos,
         });
 
