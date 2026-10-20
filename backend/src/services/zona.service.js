@@ -633,6 +633,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
   for (const p of partidos) {
     if (yaAgendadosIds.has(p.id)) continue;
+    if (p.zona?.requiereArmadoManual) continue;
     if (p.zona?.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3) {
       partidosMiniBracketFase2.push(p);
     } else if (p.pareja1Id && p.pareja2Id) {
