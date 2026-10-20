@@ -25,7 +25,9 @@ function shuffleArray(array) {
 /**
  * Función auxiliar para generar partidos de una zona
  */
-async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size, parejasEnEstaZona) {
+async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size, parejasEnEstaZona, { sinHorarioAsignado = false } = {}) {
+  const extraData = sinHorarioAsignado ? { sinHorarioAsignado: true } : {};
+
   if (formato === 'ROUND_ROBIN') {
     if (size === 2) {
       await tx.partido.create({
@@ -35,6 +37,7 @@ async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size,
           pareja1Id: parejasEnEstaZona[0].id,
           pareja2Id: parejasEnEstaZona[1].id,
           posicionEnRonda: 1,
+          ...extraData,
         },
       });
     } else if (size === 3) {
@@ -48,6 +51,7 @@ async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size,
             pareja1Id: parejasEnEstaZona[p1Idx].id,
             pareja2Id: parejasEnEstaZona[p2Idx].id,
             posicionEnRonda: k + 1,
+            ...extraData,
           },
         });
       }
@@ -62,6 +66,7 @@ async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size,
             pareja1Id: parejasEnEstaZona[p1Idx].id,
             pareja2Id: parejasEnEstaZona[p2Idx].id,
             posicionEnRonda: k + 1,
+            ...extraData,
           },
         });
       }
@@ -74,6 +79,7 @@ async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size,
         pareja1Id: parejasEnEstaZona[0].id,
         pareja2Id: parejasEnEstaZona[1].id,
         posicionEnRonda: 1,
+        ...extraData,
       },
     });
     await tx.partido.create({
@@ -83,6 +89,7 @@ async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size,
         pareja1Id: parejasEnEstaZona[2].id,
         pareja2Id: parejasEnEstaZona[3].id,
         posicionEnRonda: 2,
+        ...extraData,
       },
     });
     await tx.partido.create({
@@ -92,6 +99,7 @@ async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size,
         posicionEnRonda: 3,
         origenPareja1: 'Ganador Partido 1',
         origenPareja2: 'Ganador Partido 2',
+        ...extraData,
       },
     });
     await tx.partido.create({
@@ -101,6 +109,7 @@ async function generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size,
         posicionEnRonda: 4,
         origenPareja1: 'Perdedor Partido 1',
         origenPareja2: 'Perdedor Partido 2',
+        ...extraData,
       },
     });
   }
@@ -363,12 +372,16 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
       const nombreZona = `Zona ${letras[letraIndex] || letraIndex}`;
       letraIndex++;
 
+      const size = sinGrupo.length;
+      const formato = size === 4 ? 'MINI_BRACKET' : 'ROUND_ROBIN';
+      const clasifican = size === 4 ? 3 : 2;
+
       const zona = await tx.zona.create({
         data: {
           categoriaId,
           nombre: nombreZona,
-          clasifican: 2,
-          formato: 'ROUND_ROBIN',
+          clasifican,
+          formato,
           requiereArmadoManual: true,
         },
       });
@@ -383,6 +396,8 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
           },
         });
       }
+
+      await generarPartidosZonaHelper(tx, categoriaId, zona.id, formato, size, parejasSinGrupo, { sinHorarioAsignado: true });
 
       resumenZonasManual.push({
         nombre: nombreZona,
@@ -1822,7 +1837,9 @@ async function regenerarPartidosZona(tx, categoriaId, zonaId) {
   }
 
   const parejasEnEstaZona = zonaParejas.map((zp) => zp.pareja);
-  await generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size, parejasEnEstaZona);
+  await generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size, parejasEnEstaZona, {
+    sinHorarioAsignado: Boolean(requiereArmadoManual),
+  });
 }
 
 /**
