@@ -1384,6 +1384,8 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
                 posicionEnRonda: pData.posicionEnRonda,
                 pareja1Id: pData.pareja1Id,
                 pareja2Id: pData.pareja2Id,
+                origenPareja1: pData.origenPareja1 || null,
+                origenPareja2: pData.origenPareja2 || null,
                 fechaHora: pData.fechaHora ? new Date(pData.fechaHora) : null,
                 canchaNumero: pData.canchaNumero,
                 sinHorarioAsignado: pData.sinHorarioAsignado,
