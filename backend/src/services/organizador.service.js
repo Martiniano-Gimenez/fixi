@@ -547,17 +547,21 @@ function evaluarAsignacionesIncrementales({
 
         // Verificar si todas las parejas comparten al menos un slot entre cada par
         let todaviaIncompatible = false;
-        for (let i = 0; i < rawZonaParejas.length; i++) {
-          for (let j = i + 1; j < rawZonaParejas.length; j++) {
-            const s1 = rawZonaParejas[i].slotIds;
-            const s2 = rawZonaParejas[j].slotIds;
-            const shared = s1.filter((slot) => s2.includes(slot));
-            if (shared.length === 0) {
-              todaviaIncompatible = true;
-              break;
+        if (rawZonaParejas.length <= 1 || rawZonaParejas.length >= 5) {
+          todaviaIncompatible = true;
+        } else {
+          for (let i = 0; i < rawZonaParejas.length; i++) {
+            for (let j = i + 1; j < rawZonaParejas.length; j++) {
+              const s1 = rawZonaParejas[i].slotIds;
+              const s2 = rawZonaParejas[j].slotIds;
+              const shared = s1.filter((slot) => s2.includes(slot));
+              if (shared.length === 0) {
+                todaviaIncompatible = true;
+                break;
+              }
             }
+            if (todaviaIncompatible) break;
           }
-          if (todaviaIncompatible) break;
         }
 
         // Si ya son compatibles, marcar zona como resuelta y procesar sus partidos normalmente
@@ -660,88 +664,93 @@ function evaluarAsignacionesIncrementales({
               }
             }
           }
-          continue; // Zona resuelta, no reportar como conflicto
-        }
-
-        // La zona sigue siendo incompatible — reportar como ZONA_MANUAL_INCOMPLETA
-        totalZonasManuales++;
-        if (!conflictosMap.has(cId)) {
-          conflictosMap.set(cId, {
-            categoriaId: cId,
-            nombreCategoria: cPlan.nombre,
-            partidosSinHorario: [],
-          });
-        }
-
-        const parejasNombres = rawZonaParejas.map((p) => p.nombre).join(' | ');
-
-        const parejasManuales = rawZonaParejas.map((p) => {
-          const mySlots = p.slotIds;
-          const slotsViables = allSlotIds.filter((sId) => {
-            const info = slotsEvaluadosMap.get(sId);
-            if (!info || info.canchasLibres <= 0) return false;
-            if (p.id && info.parejasOcupadas.includes(p.id)) return false;
-            return true;
-          });
-
-          const slotsQueDestraban = slotsViables.filter((sId) => {
-            const simulated = rawZonaParejas.map((item) => {
-              if (item.id === p.id) {
-                return Array.from(new Set([...item.slotIds, sId]));
-              }
-              return item.slotIds;
+        } else {
+          // La zona sigue siendo incompatible — reportar como ZONA_MANUAL_INCOMPLETA
+          totalZonasManuales++;
+          if (!conflictosMap.has(cId)) {
+            conflictosMap.set(cId, {
+              categoriaId: cId,
+              nombreCategoria: cPlan.nombre,
+              partidosSinHorario: [],
             });
-            for (let i = 0; i < simulated.length; i++) {
-              for (let j = i + 1; j < simulated.length; j++) {
-                const s1 = simulated[i];
-                const s2 = simulated[j];
-                const shared = s1.filter((slot) => s2.includes(slot));
-                if (shared.length === 0) return false;
+          }
+
+          const parejasNombres = rawZonaParejas.map((p) => p.nombre).join(' | ');
+
+          const parejasManuales = rawZonaParejas.map((p) => {
+            const mySlots = p.slotIds;
+            const slotsViables = allSlotIds.filter((sId) => {
+              const info = slotsEvaluadosMap.get(sId);
+              if (!info || info.canchasLibres <= 0) return false;
+              if (p.id && info.parejasOcupadas.includes(p.id)) return false;
+              return true;
+            });
+
+            const slotsQueDestraban = slotsViables.filter((sId) => {
+              const simulated = rawZonaParejas.map((item) => {
+                if (item.id === p.id) {
+                  return Array.from(new Set([...item.slotIds, sId]));
+                }
+                return item.slotIds;
+              });
+              for (let i = 0; i < simulated.length; i++) {
+                for (let j = i + 1; j < simulated.length; j++) {
+                  const s1 = simulated[i];
+                  const s2 = simulated[j];
+                  const shared = s1.filter((slot) => s2.includes(slot));
+                  if (shared.length === 0) return false;
+                }
               }
-            }
-            return true;
+              return true;
+            });
+
+            return {
+              id: p.id,
+              nombre: p.nombre,
+              slotsCount: mySlots.length,
+              slotIds: mySlots,
+              slotsViables,
+              slotsQueDestraban,
+            };
           });
 
-          return {
-            id: p.id,
-            nombre: p.nombre,
-            slotsCount: mySlots.length,
-            slotIds: mySlots,
-            slotsViables,
-            slotsQueDestraban,
-          };
-        });
-
-        const crucesIncompatibles = [];
-        for (let i = 0; i < rawZonaParejas.length; i++) {
-          for (let j = i + 1; j < rawZonaParejas.length; j++) {
-            const p1 = rawZonaParejas[i];
-            const p2 = rawZonaParejas[j];
-            const shared = p1.slotIds.filter((slot) => p2.slotIds.includes(slot));
-            if (shared.length === 0) {
-              crucesIncompatibles.push({
-                p1: p1.nombre,
-                p2: p2.nombre,
-                p1Id: p1.id,
-                p2Id: p2.id,
-              });
+          const crucesIncompatibles = [];
+          for (let i = 0; i < rawZonaParejas.length; i++) {
+            for (let j = i + 1; j < rawZonaParejas.length; j++) {
+              const p1 = rawZonaParejas[i];
+              const p2 = rawZonaParejas[j];
+              const shared = p1.slotIds.filter((slot) => p2.slotIds.includes(slot));
+              if (shared.length === 0) {
+                crucesIncompatibles.push({
+                  p1: p1.nombre,
+                  p2: p2.nombre,
+                  p1Id: p1.id,
+                  p2Id: p2.id,
+                });
+              }
             }
           }
-        }
 
-        conflictosMap.get(cId).partidosSinHorario.push({
-          partidoId: z.id || z.nombre,
-          zonaId: z.id || z.nombre,
-          zona: z.nombre,
-          categoriaId: cId,
-          motivo: 'ZONA_MANUAL_INCOMPLETA',
-          pareja1: 'Incompatibilidad de grupo',
-          pareja2: parejasNombres,
-          parejasManuales,
-          crucesIncompatibles,
-          aparicionesMaximas: 999,
-        });
-        continue;
+          conflictosMap.get(cId).partidosSinHorario.push({
+            partidoId: z.id || z.nombre,
+            zonaId: z.id || z.nombre,
+            zona: z.nombre,
+            categoriaId: cId,
+            motivo: 'ZONA_MANUAL_INCOMPLETA',
+            pareja1: rawZonaParejas.length <= 1
+              ? 'Zona con 1 sola pareja (incompleta)'
+              : (rawZonaParejas.length >= 5
+                ? `Zona con ${rawZonaParejas.length} parejas (máximo 4)`
+                : 'Incompatibilidad de grupo'),
+            pareja2: parejasNombres,
+            parejasManuales,
+            crucesIncompatibles,
+            aparicionesMaximas: 999,
+            tamanoZona: rawZonaParejas.length,
+            parejaIds: rawZonaParejas.map((p) => p.id),
+          });
+          continue;
+        }
       }
 
       for (const p of z.partidos) {
