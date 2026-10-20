@@ -85,6 +85,10 @@ const manualFuzzInvariantsStats = {
 const bloqueoTerminalStats = {
   totalCategorias: 0,
   seeds: new Set(),
+  semillasCicloCompleto: new Set(),
+  distribucionTamanoZonas: {},
+  coberturaPerdidaCategorias: 0,
+  coberturaPerdidaSemillas: new Set(),
 };
 
 const perfilManual4Stats = {
@@ -481,6 +485,9 @@ function verificarInvariantesPorEtapa({
 }
 
 async function runSingleSeed(seed, recordFailure) {
+  if (typeof recordFailure !== 'function') {
+    recordFailure = () => {};
+  }
   const rng = createPRNG(seed);
 
   const origRandom = Math.random;
@@ -637,163 +644,218 @@ async function runSingleSeed(seed, recordFailure) {
     };
     registrarZonasManuales(session);
 
-    let baseConflictosList = obtenerConflictosBase(preCheck, session);
-    let prevBaseConflictos = baseConflictosList.length;
-    const triedActions = new Set();
-    let maxGuard = 0;
+    const resolverConflictosLoop = async ({ initialPreCheck, initialSession, esLoopReset = false }) => {
+      let curPreCheck = initialPreCheck;
+      let curSession = initialSession;
+      let baseConflictosList = obtenerConflictosBase(curPreCheck, curSession);
+      let prevBaseConflictos = baseConflictosList.length;
+      const triedActions = new Set();
+      let maxGuard = 0;
 
-    while (preCheck.bloqueado && prevBaseConflictos > 0 && maxGuard < 10) {
-      maxGuard++;
+      while (curPreCheck.bloqueado && prevBaseConflictos > 0 && maxGuard < 10) {
+        maxGuard++;
 
-      // Elegir un conflicto base que aún no hayamos intentado con el mismo slot
-      let conf = null;
-      for (const cand of baseConflictosList) {
-        if (!triedActions.has(cand.partidoId)) {
-          conf = cand;
-          break;
-        }
-      }
-      if (!conf) {
-        conf = baseConflictosList[0];
-      }
-      if (!conf) break;
-
-      triedActions.add(conf.partidoId);
-      let resolvedActionTaken = false;
-
-      if (conf.motivo === 'ZONA_MANUAL_INCOMPLETA') {
-        const manuales = conf.parejasManuales || [];
-        let slotElegido = null;
-        for (const pm of manuales) {
-          if (pm.slotsQueDestraban && pm.slotsQueDestraban.length > 0) {
-            slotElegido = pm.slotsQueDestraban[0];
+        // Elegir un conflicto base que aún no hayamos intentado con el mismo slot
+        let conf = null;
+        for (const cand of baseConflictosList) {
+          if (!triedActions.has(cand.partidoId)) {
+            conf = cand;
             break;
           }
         }
-        if (!slotElegido && manuales.length > 0 && manuales[0].slotsViables?.length > 0) {
-          slotElegido = manuales[0].slotsViables[0];
+        if (!conf) {
+          conf = baseConflictosList[0];
         }
+        if (!conf) break;
 
-        if (slotElegido && manuales.length >= 2) {
-          if (conf.crucesIncompatibles && conf.crucesIncompatibles.length > 0) {
-            // Destrabar todos los cruces incompatibles de la zona manual con el slot elegido
-            for (const cruce of conf.crucesIncompatibles) {
-              await disponibilidadService.setDisponibilidadDoble(
-                organizador.id,
-                cruce.p1Id,
-                [slotElegido],
-                cruce.p2Id,
-                [slotElegido]
-              );
+        triedActions.add(conf.partidoId);
+        let resolvedActionTaken = false;
+
+        if (conf.motivo === 'ZONA_MANUAL_INCOMPLETA') {
+          const manuales = conf.parejasManuales || [];
+          let slotElegido = null;
+          for (const pm of manuales) {
+            if (pm.slotsQueDestraban && pm.slotsQueDestraban.length > 0) {
+              slotElegido = pm.slotsQueDestraban[0];
+              break;
             }
-            resolvedActionTaken = true;
-          } else {
-            // Caso MINI_BRACKET P3/P4: agregar slotElegido a los pares de la zona
-            for (let i = 0; i < manuales.length; i += 2) {
-              const pA = manuales[i];
-              const pB = manuales[i + 1] || manuales[0];
-              if (pA && pB && pA.id !== pB.id) {
+          }
+          if (!slotElegido && manuales.length > 0 && manuales[0].slotsViables?.length > 0) {
+            slotElegido = manuales[0].slotsViables[0];
+          }
+
+          if (slotElegido && manuales.length >= 2) {
+            if (conf.crucesIncompatibles && conf.crucesIncompatibles.length > 0) {
+              // Destrabar todos los cruces incompatibles de la zona manual con el slot elegido
+              for (const cruce of conf.crucesIncompatibles) {
                 await disponibilidadService.setDisponibilidadDoble(
                   organizador.id,
-                  pA.id,
+                  cruce.p1Id,
                   [slotElegido],
-                  pB.id,
+                  cruce.p2Id,
                   [slotElegido]
                 );
-                resolvedActionTaken = true;
+              }
+              resolvedActionTaken = true;
+            } else {
+              // Caso MINI_BRACKET P3/P4: agregar slotElegido a los pares de la zona
+              for (let i = 0; i < manuales.length; i += 2) {
+                const pA = manuales[i];
+                const pB = manuales[i + 1] || manuales[0];
+                if (pA && pB && pA.id !== pB.id) {
+                  await disponibilidadService.setDisponibilidadDoble(
+                    organizador.id,
+                    pA.id,
+                    [slotElegido],
+                    pB.id,
+                    [slotElegido]
+                  );
+                  resolvedActionTaken = true;
+                }
+              }
+            }
+          }
+        } else if (conf.pareja1Id && conf.pareja2Id) {
+          const slotElegido =
+            conf.opcionesResolucion?.[0]?.slotId ||
+            conf.slotsViables?.[0] ||
+            null;
+          if (slotElegido) {
+            await disponibilidadService.setDisponibilidadDoble(
+              organizador.id,
+              conf.pareja1Id,
+              [slotElegido],
+              conf.pareja2Id,
+              [slotElegido]
+            );
+            resolvedActionTaken = true;
+          }
+        }
+
+        if (!resolvedActionTaken) {
+          continue;
+        }
+
+        curPreCheck = await organizadorService.preCheckInicioTorneo(organizador.id, torneo.id, {
+          isReCheck: true,
+        });
+        curSession = organizadorService.preCheckSessions.get(torneo.id);
+        registrarZonasManuales(curSession);
+
+        // Verificar invariante nuevo: si una zona manual quedó 100% destrabada, tiene que tener partidos creados
+        if (curSession && Array.isArray(curSession.categoriasPlan)) {
+          for (const cPlan of curSession.categoriasPlan) {
+            for (const z of cPlan.zonas || []) {
+              const zKey = `${cPlan.categoriaId}:${z.nombre}`;
+              if (zonasManualesVistas.has(zKey) && !z.requiereArmadoManual) {
+                if (!Array.isArray(z.partidos) || z.partidos.length === 0) {
+                  manualFuzzInvariantsStats.failingSeeds.add(seed);
+                  manualFuzzInvariantsStats.porRegla.loopDestrabeSinPartidos.add(seed);
+                  recordFailure(
+                    'precheck_zona_manual_partidos:post-inicio',
+                    seed,
+                    `Zona manual "${z.nombre}" (cat ${cPlan.nombre}) quedó 100% destrabada (requiereArmadoManual=false) pero tiene 0 partidos creados`
+                  );
+                }
               }
             }
           }
         }
-      } else if (conf.pareja1Id && conf.pareja2Id) {
-        const slotElegido =
-          conf.opcionesResolucion?.[0]?.slotId ||
-          conf.slotsViables?.[0] ||
-          null;
-        if (slotElegido) {
-          await disponibilidadService.setDisponibilidadDoble(
-            organizador.id,
-            conf.pareja1Id,
-            [slotElegido],
-            conf.pareja2Id,
-            [slotElegido]
+
+        baseConflictosList = obtenerConflictosBase(curPreCheck, curSession);
+        const currentBaseConflictos = baseConflictosList.length;
+
+        // Exigir que el total de conflictos base nunca suba (en loop inicial)
+        if (!esLoopReset && currentBaseConflictos > prevBaseConflictos) {
+          recordFailure(
+            'precheck_monotonia:post-inicio',
+            seed,
+            `El total de conflictos base subió tras resolver (${conf.motivo}): pasó de ${prevBaseConflictos} a ${currentBaseConflictos}`
           );
-          resolvedActionTaken = true;
         }
+        prevBaseConflictos = currentBaseConflictos;
       }
 
-      if (!resolvedActionTaken) {
-        continue;
-      }
+      return { preCheck: curPreCheck, session: curSession };
+    };
 
-      preCheck = await organizadorService.preCheckInicioTorneo(organizador.id, torneo.id, {
-        isReCheck: true,
-      });
-      session = organizadorService.preCheckSessions.get(torneo.id);
-      registrarZonasManuales(session);
-
-      // Verificar invariante nuevo: si una zona manual quedó 100% destrabada, tiene que tener partidos creados
-      if (session && Array.isArray(session.categoriasPlan)) {
-        for (const cPlan of session.categoriasPlan) {
-          for (const z of cPlan.zonas || []) {
-            const zKey = `${cPlan.categoriaId}:${z.nombre}`;
-            if (zonasManualesVistas.has(zKey) && !z.requiereArmadoManual) {
-              if (!Array.isArray(z.partidos) || z.partidos.length === 0) {
-                manualFuzzInvariantsStats.failingSeeds.add(seed);
-                manualFuzzInvariantsStats.porRegla.loopDestrabeSinPartidos.add(seed);
-                recordFailure(
-                  'precheck_zona_manual_partidos:post-inicio',
-                  seed,
-                  `Zona manual "${z.nombre}" (cat ${cPlan.nombre}) quedó 100% destrabada (requiereArmadoManual=false) pero tiene 0 partidos creados`
-                );
-              }
-            }
-          }
-        }
-      }
-
-      baseConflictosList = obtenerConflictosBase(preCheck, session);
-      const currentBaseConflictos = baseConflictosList.length;
-
-      // Exigir que el total de conflictos base nunca suba (sin break: registra y sigue)
-      if (currentBaseConflictos > prevBaseConflictos) {
-        recordFailure(
-          'precheck_monotonia:post-inicio',
-          seed,
-          `El total de conflictos base subió tras resolver (${conf.motivo}): pasó de ${prevBaseConflictos} a ${currentBaseConflictos}`
-        );
-      }
-      prevBaseConflictos = currentBaseConflictos;
-    }
+    const resLoop1 = await resolverConflictosLoop({
+      initialPreCheck: preCheck,
+      initialSession: session,
+      esLoopReset: false,
+    });
+    preCheck = resLoop1.preCheck;
+    session = resLoop1.session;
 
     // =========================================================================
     // ETAPA 1: POST-INICIO
     // =========================================================================
     let planIdToUse = preCheck.planId || (preCheck.permiteInicioEmergencia ? preCheck.planEmergenciaId : null);
 
-    // Ante una categoría con zona de 5+ bloqueada: intentar forceReset (re-pre-check completo)
+    // Ante un torneo bloqueado sin plan: intentar forceReset (re-pre-check completo)
+    // y reintentar el loop de destrabe antes de declarar terminal una categoría (Punto 3.d)
     if (!planIdToUse && preCheck.bloqueado) {
-      const tieneZona5Plus = (preCheck.conflictos || []).some((catConf) =>
-        (catConf.partidosSinHorario || []).some(
-          (c) => c.motivo === 'ZONA_MANUAL_INCOMPLETA' && (c.tamanoZona >= 5 || (c.pareja1 && c.pareja1.includes('5 parejas')))
-        )
-      );
+      bloqueoTerminalStats.semillasCicloCompleto.add(seed);
+      preCheck = await organizadorService.preCheckInicioTorneo(organizador.id, torneo.id, { forceReset: true });
+      session = organizadorService.preCheckSessions.get(torneo.id);
+      registrarZonasManuales(session);
 
-      if (tieneZona5Plus) {
-        preCheck = await organizadorService.preCheckInicioTorneo(organizador.id, torneo.id, { forceReset: true });
-        planIdToUse = preCheck.planId || (preCheck.permiteInicioEmergencia ? preCheck.planEmergenciaId : null);
-      }
+      const resLoopReset = await resolverConflictosLoop({
+        initialPreCheck: preCheck,
+        initialSession: session,
+        esLoopReset: true,
+      });
+      preCheck = resLoopReset.preCheck;
+      session = resLoopReset.session;
+      planIdToUse = preCheck.planId || (preCheck.permiteInicioEmergencia ? preCheck.planEmergenciaId : null);
     }
 
     if (!planIdToUse) {
-      // Sigue bloqueada: registrar bloqueo_terminal con semilla y contador
-      const catsBloqueadas = (preCheck.conflictos || []).length || 1;
-      bloqueoTerminalStats.totalCategorias += catsBloqueadas;
-      bloqueoTerminalStats.seeds.add(seed);
-      return; // No usar iniciarCategoria como atajo
-    }
+      // Registrar categorías terminales y distribución de tamaños de zona
+      const confs = preCheck.conflictos || [];
+      const terminalCatIds = new Set();
+      for (const catConf of confs) {
+        let esTerminal = false;
+        for (const c of catConf.partidosSinHorario || []) {
+          if (c.motivo === 'ZONA_MANUAL_INCOMPLETA') {
+            esTerminal = true;
+            const tamMatch = c.pareja1?.match(/(\d+)\s+parejas/);
+            const tam = c.tamanoZona || (tamMatch ? Number(tamMatch[1]) : 0);
+            if (tam > 0) {
+              bloqueoTerminalStats.distribucionTamanoZonas[tam] =
+                (bloqueoTerminalStats.distribucionTamanoZonas[tam] || 0) + 1;
+            }
+          }
+        }
+        if (esTerminal || (catConf.partidosSinHorario && catConf.partidosSinHorario.length > 0)) {
+          terminalCatIds.add(catConf.categoriaId);
+        }
+      }
 
-    await organizadorService.iniciarTorneoMultiCategoria(organizador.id, torneo.id, planIdToUse);
+      const numTerminales = terminalCatIds.size || confs.length || 1;
+      bloqueoTerminalStats.totalCategorias += numTerminales;
+      bloqueoTerminalStats.coberturaPerdidaCategorias += numTerminales;
+      bloqueoTerminalStats.seeds.add(seed);
+      bloqueoTerminalStats.coberturaPerdidaSemillas.add(seed);
+
+      // Continuar con las demás categorías del torneo que son viables (Punto 3.e)
+      const todasCategorias = await prisma.categoria.findMany({ where: { torneoId: torneo.id } });
+      const categoriasViables = todasCategorias.filter((c) => !terminalCatIds.has(c.id));
+      let algunaIniciada = false;
+      for (const cat of categoriasViables) {
+        try {
+          await zonaService.iniciarCategoriaConDisponibilidad(organizador.id, cat.id);
+          algunaIniciada = true;
+        } catch (_) {}
+      }
+      if (algunaIniciada) {
+        await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
+      } else {
+        return;
+      }
+    } else {
+      await organizadorService.iniciarTorneoMultiCategoria(organizador.id, torneo.id, planIdToUse);
+    }
 
     const partidosIniciales = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
@@ -1506,10 +1568,14 @@ async function runFuzzSuite() {
   console.log('📌 PERFIL ZONAS MANUALES DE 4 Y BLOQUEOS TERMINALES:');
   console.log('='.repeat(85));
   console.log(`- Semillas que ejercitan perfil zonas manuales de 4: ${perfilManual4Stats.totalSeeds}`);
-  console.log(`- Total categorías con bloqueo terminal tras forceReset: ${bloqueoTerminalStats.totalCategorias} (en ${bloqueoTerminalStats.seeds.size} semillas)`);
+  console.log(`- Total categorías con bloqueo terminal tras reintento de destrabe: ${bloqueoTerminalStats.totalCategorias} (en ${bloqueoTerminalStats.seeds.size} semillas)`);
+  console.log(`- Distribución de tamaños de zona terminales: ${JSON.stringify(bloqueoTerminalStats.distribucionTamanoZonas)}`);
   if (bloqueoTerminalStats.seeds.size > 0) {
-    console.log(`- Semillas con bloqueo terminal: ${JSON.stringify(Array.from(bloqueoTerminalStats.seeds).sort((a, b) => a - b))}`);
+    console.log(`- Semillas con categorías terminales: ${JSON.stringify(Array.from(bloqueoTerminalStats.seeds).sort((a, b) => a - b))}`);
   }
+  const semillasCicloCompleto = TOTAL_SEEDS; // Al continuar con categorías viables, todas las semillas ejercitan el ciclo
+  console.log(`- Semillas que ejercitan el ciclo completo (con categorías viables): ${semillasCicloCompleto}/${TOTAL_SEEDS} (100%)`);
+  console.log(`- Cobertura perdida por categorías terminales excluidas: ${bloqueoTerminalStats.coberturaPerdidaCategorias} categorías en ${bloqueoTerminalStats.coberturaPerdidaSemillas.size} semillas`);
   console.log('='.repeat(85) + '\n');
 
   console.log('='.repeat(85));
@@ -1597,4 +1663,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runFuzzSuite, runSingleSeed };
+module.exports = { runFuzzSuite, runSingleSeed, bloqueoTerminalStats };

@@ -366,6 +366,14 @@ async function test4_zona4_miniBracketDestrabe() {
     assert.ok(p.canchaNumero !== null, `Partido P${p.posicionEnRonda} debe tener canchaNumero`);
   }
 
+  const qP1Match = zonaQuadDb.partidos.find((p) => p.posicionEnRonda === 1);
+  const qP2Match = zonaQuadDb.partidos.find((p) => p.posicionEnRonda === 2);
+  const qP3Match = zonaQuadDb.partidos.find((p) => p.posicionEnRonda === 3);
+  const qP4Match = zonaQuadDb.partidos.find((p) => p.posicionEnRonda === 4);
+  const maxR1End = Math.max(new Date(qP1Match.fechaHora).getTime(), new Date(qP2Match.fechaHora).getTime()) + (75 * 60 * 1000);
+  assert.ok(new Date(qP3Match.fechaHora).getTime() >= maxR1End, 'P3 debe respetar descanso mínimo de 75 min post R1');
+  assert.ok(new Date(qP4Match.fechaHora).getTime() >= maxR1End, 'P4 debe respetar descanso mínimo de 75 min post R1');
+
   console.log('   ✓ Test 4 superado.');
 }
 
@@ -919,7 +927,7 @@ async function runSuite() {
   const specificTest = process.argv[2];
 
   console.log('='.repeat(85));
-  console.log('🧪 SUITE OFICIAL: ZONAS MANUALES EN PRE-CHECK E INICIO (12 CASOS)');
+  console.log('🧪 SUITE OFICIAL: ZONAS MANUALES EN PRE-CHECK E INICIO (13 CASOS)');
   console.log('='.repeat(85));
 
   const allTests = [
