@@ -30,6 +30,7 @@ const assert = require('node:assert');
 const prisma = require('../src/lib/prisma');
 const partidoService = require('../src/services/partido.service');
 const { parseSlotToDate } = require('../src/services/zona.service');
+const bracketWarnings = require('../src/utils/bracketWarnings');
 
 async function limpiarDb() {
   await prisma.setPartido.deleteMany({});
@@ -637,15 +638,16 @@ async function test9_padre_bye() {
     data: { categoriaId: cat.id, nombre: 'Cuartos de Final', ronda: 8 },
   });
 
-  // Padre 1 en Octavos es un BYE
+  // Padre 1 en Octavos es un BYE pero con fechaHora seteada que dejaría descanso insuficiente (30 min < 75 min) si no fuera BYE
+  const fechaOctavosBye = parseSlotToDate('Domingo-08:30', torneo.fecha);
   await prisma.partido.create({
     data: {
       categoriaId: cat.id,
       faseEliminatoriaId: fase16.id,
       posicionEnRonda: 1,
       esBye: true,
-      fechaHora: null,
-      canchaNumero: null,
+      fechaHora: fechaOctavosBye,
+      canchaNumero: 1,
       sinHorarioAsignado: false,
       estado: 'FINALIZADO',
     },
@@ -661,10 +663,10 @@ async function test9_padre_bye() {
     },
   });
 
-  // Asignar temprano en domingo a las 09:00hs
+  // Asignar temprano en domingo a las 09:00hs en cancha 2 (descanso 30 min < 75 min requeridos si no fuera BYE)
   const res = await partidoService.asignarHorarioManual(org.id, pCuartos.id, {
     slotId: 'Domingo-09:00',
-    canchaNumero: 1,
+    canchaNumero: 2,
   });
 
   const advertencias = extraerAdvertencias(res);
@@ -819,37 +821,21 @@ async function test11b_final_descanso_semis() {
 }
 
 // ---------------------------------------------------------------------------
-// TEST 12: Unit tests del helper puro bracketWarnings
+// TEST 12: Unit tests del helper puro bracketWarnings (casos independientes)
 // ---------------------------------------------------------------------------
-async function test12_unit_tests_helper_puro() {
-  let bracketWarnings = null;
-  try {
-    bracketWarnings = require('../src/utils/bracketWarnings');
-  } catch (err) {
-    // Helper no implementado todavía
-  }
+const baseTs = new Date('2026-10-17T20:00:00.000Z').getTime();
+const duracionMs = 75 * 60 * 1000;
 
-  assert.ok(
-    bracketWarnings,
-    'El helper bracketWarnings debe estar implementado en backend/src/utils/bracketWarnings.js'
-  );
-
-  const {
-    calcularFinDeZonasCategoria,
-    calcularDescansosEliminatoria,
-    REST_CONSTANTS,
-  } = bracketWarnings;
-
-  // 12a. Constantes exportadas
+async function test12a_constantes_exportadas() {
+  const { REST_CONSTANTS } = bracketWarnings;
   assert.strictEqual(REST_CONSTANTS.MIN_REST_R32_OCTAVOS_MS, 75 * 60 * 1000, 'Constante R32->Octavos debe ser 75m');
   assert.strictEqual(REST_CONSTANTS.MIN_REST_OCTAVOS_CUARTOS_MS, 75 * 60 * 1000, 'Constante Octavos->Cuartos debe ser 75m');
   assert.strictEqual(REST_CONSTANTS.MIN_REST_CUARTOS_SEMIS_MS, 75 * 60 * 1000, 'Constante Cuartos->Semis debe ser 75m');
   assert.strictEqual(REST_CONSTANTS.MIN_REST_SEMIS_FINAL_MS, 30 * 60 * 1000, 'Constante Semis->Final debe ser 30m');
+}
 
-  const baseTs = new Date('2026-10-17T20:00:00.000Z').getTime();
-  const duracionMs = 75 * 60 * 1000;
-
-  // 12b. calcularFinDeZonasCategoria con partidos válidos (1 zona)
+async function test12b_fin_zonas_una_zona_valida() {
+  const { calcularFinDeZonasCategoria } = bracketWarnings;
   const partidosNormales = [
     { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
     { zonaId: 'z1', fechaHora: new Date(baseTs + 75 * 60 * 1000), sinHorarioAsignado: false },
@@ -862,8 +848,10 @@ async function test12_unit_tests_helper_puro() {
   });
   assert.strictEqual(finOk?.tienePartidosSinHorario, false, '12b: no debe tener partidos sin horario');
   assert.strictEqual(finOk?.maxZonaEndMs, baseTs + 2 * duracionMs, '12b: maxZonaEndMs debe ser baseTs + 2 * duracionMs');
+}
 
-  // 12c. calcularFinDeZonasCategoria con partido sin horario
+async function test12c_fin_zonas_partido_sin_horario() {
+  const { calcularFinDeZonasCategoria } = bracketWarnings;
   const partidosConPendiente = [
     { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
     { zonaId: 'z1', fechaHora: null, sinHorarioAsignado: true },
@@ -875,8 +863,10 @@ async function test12_unit_tests_helper_puro() {
     duracionMs,
   });
   assert.strictEqual(finPend?.tienePartidosSinHorario, true, '12c: partido sin horario debe marcar tienePartidosSinHorario');
+}
 
-  // 12d. calcularFinDeZonasCategoria con zona sin partidos (0 partidos, 1 zona)
+async function test12d_fin_zonas_zona_vacia() {
+  const { calcularFinDeZonasCategoria } = bracketWarnings;
   const finVacio = calcularFinDeZonasCategoria({
     partidosZona: [],
     totalZonas: 1,
@@ -884,9 +874,11 @@ async function test12_unit_tests_helper_puro() {
     duracionMs,
   });
   assert.strictEqual(finVacio?.tienePartidosSinHorario, true, '12d: zona vacía debe marcar tienePartidosSinHorario');
+}
 
-  // 12e. Categoría con 2 zonas: Zona 1 con partidos agendados y Zona 2 manual sin ningún partido -> fin de zonas indeterminado
-  const finDosZonasIncompleta = calcularFinDeZonasCategoria({
+async function test12e_dos_zonas_incompleta_cruce_antes_fin() {
+  const { calcularFinDeZonasCategoria, calcularDescansosEliminatoria } = bracketWarnings;
+  const finDosZonas = calcularFinDeZonasCategoria({
     partidosZona: [
       { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
     ],
@@ -894,13 +886,105 @@ async function test12_unit_tests_helper_puro() {
     zonasIds: ['z1', 'z2'],
     duracionMs,
   });
-  assert.strictEqual(
-    finDosZonasIncompleta?.tienePartidosSinHorario,
-    true,
-    '12e: Categoría con 2 zonas donde una tiene 0 partidos debe ser indeterminada (tienePartidosSinHorario: true)'
-  );
 
-  // 12f. INICIA_ANTES_FIN_ZONAS: emitido si es anterior y NO emitido en el límite exacto
+  const advAntes = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 8 } },
+    fechaHoraPropuesta: new Date(baseTs + 30 * 60 * 1000), // 30 min (antes del fin de z1 que es baseTs + 75m)
+    padres: [],
+    hijo: null,
+    finZonas: finDosZonas,
+    duracionMs,
+  });
+
+  const codigos = advAntes.advertencias.map((a) => a.codigo);
+  assert.ok(
+    codigos.includes('ZONA_CON_PARTIDOS_PENDIENTES'),
+    '12e: Debe emitir ZONA_CON_PARTIDOS_PENDIENTES'
+  );
+  assert.ok(
+    codigos.includes('INICIA_ANTES_FIN_ZONAS'),
+    '12e: Debe emitir INICIA_ANTES_FIN_ZONAS cuando cruce arranca antes del fin conocido de zonas'
+  );
+}
+
+async function test12f_dos_zonas_incompleta_cruce_despues_fin() {
+  const { calcularFinDeZonasCategoria, calcularDescansosEliminatoria } = bracketWarnings;
+  const finDosZonas = calcularFinDeZonasCategoria({
+    partidosZona: [
+      { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
+    ],
+    totalZonas: 2,
+    zonasIds: ['z1', 'z2'],
+    duracionMs,
+  });
+
+  const advDespues = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 8 } },
+    fechaHoraPropuesta: new Date(baseTs + 120 * 60 * 1000), // posterior al fin conocido (baseTs + 75m)
+    padres: [],
+    hijo: null,
+    finZonas: finDosZonas,
+    duracionMs,
+  });
+
+  const codigos = advDespues.advertencias.map((a) => a.codigo);
+  assert.ok(
+    codigos.includes('ZONA_CON_PARTIDOS_PENDIENTES'),
+    '12f: Debe emitir ZONA_CON_PARTIDOS_PENDIENTES'
+  );
+  assert.strictEqual(
+    codigos.includes('INICIA_ANTES_FIN_ZONAS'),
+    false,
+    '12f: Cruce posterior al fin conocido de zonas NO debe emitir INICIA_ANTES_FIN_ZONAS'
+  );
+}
+
+async function test12g_categoria_sin_zonas() {
+  const { calcularFinDeZonasCategoria, calcularDescansosEliminatoria } = bracketWarnings;
+  const finSinZonas = calcularFinDeZonasCategoria({
+    partidosZona: [],
+    totalZonas: 0,
+    zonasIds: [],
+    duracionMs,
+  });
+
+  assert.strictEqual(finSinZonas?.tienePartidosSinHorario, false, '12g: sin zonas no debe tener partidos pendientes');
+  assert.strictEqual(finSinZonas?.maxZonaEndMs, null, '12g: sin zonas maxZonaEndMs debe ser null');
+
+  const adv = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 16 } },
+    fechaHoraPropuesta: new Date(baseTs),
+    padres: [],
+    hijo: null,
+    finZonas: finSinZonas,
+    duracionMs,
+  });
+
+  const codigos = adv.advertencias.map((a) => a.codigo);
+  assert.strictEqual(
+    codigos.includes('ZONA_CON_PARTIDOS_PENDIENTES'),
+    false,
+    '12g: categoría sin zonas no debe emitir ZONA_CON_PARTIDOS_PENDIENTES'
+  );
+  assert.strictEqual(
+    codigos.includes('INICIA_ANTES_FIN_ZONAS'),
+    false,
+    '12g: categoría sin zonas no debe emitir INICIA_ANTES_FIN_ZONAS'
+  );
+}
+
+async function test12h_inicia_antes_fin_zonas_limite() {
+  const { calcularFinDeZonasCategoria, calcularDescansosEliminatoria } = bracketWarnings;
+  const finOk = calcularFinDeZonasCategoria({
+    partidosZona: [
+      { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
+      { zonaId: 'z1', fechaHora: new Date(baseTs + 75 * 60 * 1000), sinHorarioAsignado: false },
+    ],
+    totalZonas: 1,
+    zonasIds: ['z1'],
+    duracionMs,
+  });
+
   const advAntesFinZonas = calcularDescansosEliminatoria({
     partido: { faseEliminatoria: { ronda: 8 } },
     fechaHoraPropuesta: new Date(finOk.maxZonaEndMs - 15 * 60 * 1000), // 15 min antes del fin
@@ -910,7 +994,7 @@ async function test12_unit_tests_helper_puro() {
   });
   assert.ok(
     advAntesFinZonas.advertencias.some((a) => a.codigo === 'INICIA_ANTES_FIN_ZONAS'),
-    '12f: Debe emitir INICIA_ANTES_FIN_ZONAS si arranca antes del fin de zonas'
+    '12h: Debe emitir INICIA_ANTES_FIN_ZONAS si arranca antes del fin de zonas'
   );
 
   const advLimiteFinZonas = calcularDescansosEliminatoria({
@@ -923,10 +1007,19 @@ async function test12_unit_tests_helper_puro() {
   assert.strictEqual(
     advLimiteFinZonas.advertencias.filter((a) => a.codigo === 'INICIA_ANTES_FIN_ZONAS').length,
     0,
-    '12f: En el límite exacto de fin de zonas NO debe emitir INICIA_ANTES_FIN_ZONAS'
+    '12h: En el límite exacto de fin de zonas NO debe emitir INICIA_ANTES_FIN_ZONAS'
   );
+}
 
-  // 12g. Descanso con el hijo: DESCANSO_INSUFICIENTE_HIJO emitido por debajo del mínimo y NO en el límite
+async function test12i_descanso_hijo_limite() {
+  const { calcularFinDeZonasCategoria, calcularDescansosEliminatoria } = bracketWarnings;
+  const finOk = calcularFinDeZonasCategoria({
+    partidosZona: [{ zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    totalZonas: 1,
+    zonasIds: ['z1'],
+    duracionMs,
+  });
+
   const tCuartos = baseTs + 500 * 60 * 1000;
   const tSemisInsuficiente = tCuartos + duracionMs + 45 * 60 * 1000; // 45 min descanso < 75 min
   const advHijoInsuficiente = calcularDescansosEliminatoria({
@@ -938,7 +1031,7 @@ async function test12_unit_tests_helper_puro() {
   });
   assert.ok(
     advHijoInsuficiente.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_HIJO'),
-    '12g: Debe emitir DESCANSO_INSUFICIENTE_HIJO si descanso con el hijo es menor a 75m'
+    '12i: Debe emitir DESCANSO_INSUFICIENTE_HIJO si descanso con el hijo es menor a 75m'
   );
 
   const tSemisLimite = tCuartos + duracionMs + 75 * 60 * 1000; // 75 min exactos
@@ -952,24 +1045,50 @@ async function test12_unit_tests_helper_puro() {
   assert.strictEqual(
     advHijoLimite.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_HIJO').length,
     0,
-    '12g: En el límite exacto de 75m con el hijo NO debe emitir DESCANSO_INSUFICIENTE_HIJO'
+    '12i: En el límite exacto de 75m con el hijo NO debe emitir DESCANSO_INSUFICIENTE_HIJO'
   );
+}
 
-  // 12h. Padre BYE no genera DESCANSO_INSUFICIENTE_PADRE
+async function test12j_padre_bye_con_horario() {
+  const { calcularFinDeZonasCategoria, calcularDescansosEliminatoria } = bracketWarnings;
+  const finOk = calcularFinDeZonasCategoria({
+    partidosZona: [{ zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    totalZonas: 1,
+    zonasIds: ['z1'],
+    duracionMs,
+  });
+
+  // Padre BYE CON fechaHora seteada que dejaría descanso insuficiente (15m < 75m) si no fuera BYE
   const advPadreBye = calcularDescansosEliminatoria({
     partido: { faseEliminatoria: { ronda: 8 } },
-    fechaHoraPropuesta: new Date(baseTs + 200 * 60 * 1000),
-    padres: [{ faseEliminatoria: { ronda: 16 }, esBye: true, fechaHora: null, sinHorarioAsignado: false }],
+    fechaHoraPropuesta: new Date(baseTs + 90 * 60 * 1000),
+    padres: [
+      {
+        faseEliminatoria: { ronda: 16 },
+        esBye: true,
+        fechaHora: new Date(baseTs),
+        sinHorarioAsignado: false,
+      },
+    ],
     finZonas: finOk,
     duracionMs,
   });
   assert.strictEqual(
     advPadreBye.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE').length,
     0,
-    '12h: Padre BYE no debe generar DESCANSO_INSUFICIENTE_PADRE'
+    '12j: Padre BYE con fechaHora seteada no debe generar DESCANSO_INSUFICIENTE_PADRE'
   );
+}
 
-  // 12i. R32 -> Octavos: 30 min advierte, 75 min exactos no
+async function test12k_r32_octavos_limite() {
+  const { calcularFinDeZonasCategoria, calcularDescansosEliminatoria } = bracketWarnings;
+  const finOk = calcularFinDeZonasCategoria({
+    partidosZona: [{ zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    totalZonas: 1,
+    zonasIds: ['z1'],
+    duracionMs,
+  });
+
   const tR32 = baseTs + 100 * 60 * 1000;
   const tR32Fin = tR32 + duracionMs;
   const tOctavos30m = tR32Fin + 30 * 60 * 1000; // descanso 30 min < 75 min
@@ -982,7 +1101,7 @@ async function test12_unit_tests_helper_puro() {
   });
   assert.ok(
     advR32Octavos30m.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE'),
-    '12i: Octavos a 30m de R32 debe emitir DESCANSO_INSUFICIENTE_PADRE'
+    '12k: Octavos a 30m de R32 debe emitir DESCANSO_INSUFICIENTE_PADRE'
   );
 
   const tOctavos75m = tR32Fin + 75 * 60 * 1000; // descanso 75 min exactos
@@ -996,10 +1115,19 @@ async function test12_unit_tests_helper_puro() {
   assert.strictEqual(
     advR32Octavos75m.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE').length,
     0,
-    '12i: Octavos a 75m exactos de R32 NO debe emitir DESCANSO_INSUFICIENTE_PADRE'
+    '12k: Octavos a 75m exactos de R32 NO debe emitir DESCANSO_INSUFICIENTE_PADRE'
   );
+}
 
-  // 12j. Ronda sin padres ni hijo (primera ronda del cuadro): solo evalúa fin de zonas
+async function test12l_primera_ronda_sin_padres_ni_hijo() {
+  const { calcularFinDeZonasCategoria, calcularDescansosEliminatoria } = bracketWarnings;
+  const finOk = calcularFinDeZonasCategoria({
+    partidosZona: [{ zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    totalZonas: 1,
+    zonasIds: ['z1'],
+    duracionMs,
+  });
+
   const advPrimeraRondaAntesFin = calcularDescansosEliminatoria({
     partido: { faseEliminatoria: { ronda: 32 } },
     fechaHoraPropuesta: new Date(finOk.maxZonaEndMs - 30 * 60 * 1000), // antes del fin de zonas
@@ -1011,7 +1139,7 @@ async function test12_unit_tests_helper_puro() {
   assert.deepStrictEqual(
     advPrimeraRondaAntesFin.advertencias.map((a) => a.codigo),
     ['INICIA_ANTES_FIN_ZONAS'],
-    '12j: Cruce sin padres ni hijo solo debe advertir fin de zonas si arranca antes'
+    '12l: Cruce sin padres ni hijo solo debe advertir fin de zonas si arranca antes'
   );
 
   const advPrimeraRondaOk = calcularDescansosEliminatoria({
@@ -1025,7 +1153,53 @@ async function test12_unit_tests_helper_puro() {
   assert.strictEqual(
     advPrimeraRondaOk.advertencias.length,
     0,
-    '12j: Cruce sin padres ni hijo posterior a fin de zonas no debe emitir ninguna advertencia'
+    '12l: Cruce sin padres ni hijo posterior a fin de zonas no debe emitir ninguna advertencia'
+  );
+}
+
+async function test12m_deteccion_zonas_ids() {
+  const { calcularFinDeZonasCategoria } = bracketWarnings;
+  // totalZonas omitido / 0, pero se pasan zonasIds ['z1', 'z2']
+  const res = calcularFinDeZonasCategoria({
+    partidosZona: [
+      { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
+    ],
+    zonasIds: ['z1', 'z2'],
+    duracionMs,
+  });
+
+  assert.strictEqual(
+    res?.tienePartidosSinHorario,
+    true,
+    '12m: zonasIds con una zona sin partidos debe marcar tienePartidosSinHorario aun con totalZonas omitido'
+  );
+}
+
+async function test12n_semis_final_limite() {
+  const { calcularDescansosEliminatoria } = bracketWarnings;
+  const tSemisFin = baseTs + duracionMs;
+
+  const adv15m = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 2 } },
+    fechaHoraPropuesta: new Date(tSemisFin + 15 * 60 * 1000), // 15 min < 30 min
+    padres: [{ faseEliminatoria: { ronda: 4 }, fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    duracionMs,
+  });
+  assert.ok(
+    adv15m.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE'),
+    '12n: Final a 15m de Semis debe emitir DESCANSO_INSUFICIENTE_PADRE'
+  );
+
+  const adv30m = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 2 } },
+    fechaHoraPropuesta: new Date(tSemisFin + 30 * 60 * 1000), // 30 min exactos (límite scheduler)
+    padres: [{ faseEliminatoria: { ronda: 4 }, fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    duracionMs,
+  });
+  assert.strictEqual(
+    adv30m.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE').length,
+    0,
+    '12n: Final a 30m exactos de Semis NO debe emitir DESCANSO_INSUFICIENTE_PADRE'
   );
 }
 
@@ -1146,7 +1320,20 @@ async function run() {
     { id: '10', nombre: 'Test 10: Zona manual sin partidos en categoría EN_CURSO (5 parejas)', fn: test10_zona_manual_sin_partidos },
     { id: '11a', nombre: 'Test 11a: Final con descanso Semis -> Final menor a 30 min (aviso DESCANSO_INSUFICIENTE_PADRE)', fn: test11a_final_descanso_semis },
     { id: '11b', nombre: 'Test 11b: Final con descanso Semis -> Final de 30 min exactos (sin aviso)', fn: test11b_final_descanso_semis },
-    { id: '12', nombre: 'Test 12: Unit tests del helper puro bracketWarnings', fn: test12_unit_tests_helper_puro },
+    { id: '12a', nombre: 'Test 12a: Helper - Constantes exportadas', fn: test12a_constantes_exportadas },
+    { id: '12b', nombre: 'Test 12b: Helper - Fin de zonas válido (1 zona)', fn: test12b_fin_zonas_una_zona_valida },
+    { id: '12c', nombre: 'Test 12c: Helper - Fin de zonas con partido sin horario', fn: test12c_fin_zonas_partido_sin_horario },
+    { id: '12d', nombre: 'Test 12d: Helper - Fin de zonas con zona vacía (0 partidos, 1 zona)', fn: test12d_fin_zonas_zona_vacia },
+    { id: '12e', nombre: 'Test 12e: Helper - 2 zonas (una agendada, una vacía) cruce antes de fin -> ZONA_CON_PARTIDOS_PENDIENTES e INICIA_ANTES_FIN_ZONAS', fn: test12e_dos_zonas_incompleta_cruce_antes_fin },
+    { id: '12f', nombre: 'Test 12f: Helper - 2 zonas (una agendada, una vacía) cruce después de fin -> solo ZONA_CON_PARTIDOS_PENDIENTES', fn: test12f_dos_zonas_incompleta_cruce_despues_fin },
+    { id: '12g', nombre: 'Test 12g: Helper - Categoría sin zonas (totalZonas = 0, zonasIds = []) -> sin aviso de zona', fn: test12g_categoria_sin_zonas },
+    { id: '12h', nombre: 'Test 12h: Helper - INICIA_ANTES_FIN_ZONAS emitido si es anterior y NO en límite exacto', fn: test12h_inicia_antes_fin_zonas_limite },
+    { id: '12i', nombre: 'Test 12i: Helper - Descanso con hijo: emitido por debajo del mínimo y NO en límite exacto', fn: test12i_descanso_hijo_limite },
+    { id: '12j', nombre: 'Test 12j: Helper - Padre BYE con fechaHora seteada y descanso insuficiente -> sin aviso DESCANSO_INSUFICIENTE_PADRE', fn: test12j_padre_bye_con_horario },
+    { id: '12k', nombre: 'Test 12k: Helper - R32 -> Octavos: 30 min advierte, 75 min exactos no', fn: test12k_r32_octavos_limite },
+    { id: '12l', nombre: 'Test 12l: Helper - Ronda sin padres ni hijo: solo evalúa fin de zonas', fn: test12l_primera_ronda_sin_padres_ni_hijo },
+    { id: '12m', nombre: 'Test 12m: Helper - Detección por zonasIds con totalZonas omitido', fn: test12m_deteccion_zonas_ids },
+    { id: '12n', nombre: 'Test 12n: Helper - Semis -> Final: 15 min advierte, 30 min exactos no', fn: test12n_semis_final_limite },
     { id: '13a', nombre: 'Test 13a: Octavos con padre R32 descanso menor a 75 min (aviso DESCANSO_INSUFICIENTE_PADRE)', fn: test13a_octavos_padre_r32_descanso },
     { id: '13b', nombre: 'Test 13b: Octavos con padre R32 descanso de 75 min exactos (sin aviso)', fn: test13b_octavos_padre_r32_descanso },
   ];
