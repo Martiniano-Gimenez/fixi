@@ -82,14 +82,30 @@ const manualFuzzInvariantsStats = {
   },
 };
 
-const bloqueoTerminalStats = {
+const planesInicioStats = {
   totalCategorias: 0,
-  seeds: new Set(),
-  semillasCicloCompleto: new Set(),
-  distribucionTamanoZonas: {},
-  coberturaPerdidaCategorias: 0,
-  coberturaPerdidaSemillas: new Set(),
-  detalleCategorias: [],
+  iniciadasPlanNormal: 0,
+  iniciadasPlanEmergencia: 0,
+  iniciadasFallbackViables: 0,
+  noIniciadas: 0,
+  porSemilla: [],
+};
+
+const monotoniaSaltosStats = {
+  saltos: [],
+  resumen: {
+    soloZonaDestrabada: 0,
+    aumentoOtrasZonas: 0,
+    totalSaltos: 0,
+  },
+  trazasOtrasZonas: [],
+};
+
+const manualZoneSizesStats = {
+  distribucion: { '2': 0, '3': 0, '4': 0, '5+': 0 },
+  tamaniosExactos: {},
+  semillasPorTamanio: {},
+  trazasSemillasEspeciales: [],
 };
 
 const perfilManual4Stats = {
@@ -254,6 +270,70 @@ function obtenerConflictosBase(preCheck, session) {
     }
   }
   return baseList;
+}
+
+/**
+ * Mapea los conflictos base a sus zonas correspondientes para clasificar incrementos.
+ */
+function mapearConflictosPorZona(conflictosList, session) {
+  const map = new Map();
+  for (const item of conflictosList) {
+    const catId = item.categoriaId;
+    let zKey = null;
+    let tam = item.tamanoZona || 0;
+    if (item.zonaId || item.zona) {
+      zKey = `${catId}:${item.zonaId || item.zona}`;
+    } else if (item.partidoId && session && Array.isArray(session.categoriasPlan)) {
+      for (const cPlan of session.categoriasPlan) {
+        if (cPlan.categoriaId === catId) {
+          for (const z of cPlan.zonas || []) {
+            if ((z.partidos || []).some((p) => p.id === item.partidoId)) {
+              zKey = `${catId}:${z.id || z.nombre}`;
+              tam = z.parejaIds?.length || 0;
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (!zKey) zKey = `${catId}:UNKNOWN`;
+    if (!map.has(zKey)) {
+      map.set(zKey, { count: 0, items: [], motivos: new Set(), tamanoZona: tam });
+    }
+    const entry = map.get(zKey);
+    entry.count++;
+    entry.items.push(item);
+    if (item.motivo) entry.motivos.add(item.motivo);
+    if (!entry.tamanoZona && tam) entry.tamanoZona = tam;
+  }
+  return map;
+}
+
+/**
+ * Captura todos los partidos agendados en una sesión para detectar desplazamientos.
+ */
+function capturarHorariosPartidos(session) {
+  const map = new Map();
+  if (!session || !Array.isArray(session.categoriasPlan)) return map;
+  for (const cPlan of session.categoriasPlan) {
+    for (const z of cPlan.zonas || []) {
+      for (const p of z.partidos || []) {
+        if (p.canchaNumero && p.fechaHora && !p.sinHorarioAsignado) {
+          map.set(p.id, {
+            partidoId: p.id,
+            posicionEnRonda: p.posicionEnRonda,
+            canchaNumero: p.canchaNumero,
+            fechaHora: p.fechaHora,
+            categoriaId: cPlan.categoriaId,
+            categoriaNombre: cPlan.nombre,
+            zonaId: z.id || z.nombre,
+            zonaNombre: z.nombre,
+          });
+        }
+      }
+    }
+  }
+  return map;
 }
 
 /**
@@ -646,6 +726,50 @@ async function runSingleSeed(seed, recordFailure) {
     };
     registrarZonasManuales(session);
 
+    // Medición de tamaños de zona manual justo después del PRIMER preCheck y antes de cualquier destrabe (Punto 2.a)
+    if (session && Array.isArray(session.categoriasPlan)) {
+      for (const cPlan of session.categoriasPlan) {
+        for (const z of cPlan.zonas || []) {
+          if (z.requiereArmadoManual) {
+            const sz = z.parejaIds ? z.parejaIds.length : 0;
+            if (sz > 0) {
+              manualZoneSizesStats.tamaniosExactos[sz] = (manualZoneSizesStats.tamaniosExactos[sz] || 0) + 1;
+              if (!manualZoneSizesStats.semillasPorTamanio[sz]) {
+                manualZoneSizesStats.semillasPorTamanio[sz] = new Set();
+              }
+              manualZoneSizesStats.semillasPorTamanio[sz].add(seed);
+              if (sz === 2) manualZoneSizesStats.distribucion['2']++;
+              else if (sz === 3) manualZoneSizesStats.distribucion['3']++;
+              else if (sz === 4) manualZoneSizesStats.distribucion['4']++;
+              else if (sz >= 5) manualZoneSizesStats.distribucion['5+']++;
+            }
+          }
+        }
+      }
+    }
+
+    if (seed === 382 || seed === 496) {
+      if (session && Array.isArray(session.categoriasPlan)) {
+        let traza = `\n--- TRAZA LITERAL SEMILLA ${seed} (Primer Pre-Check, antes de destrabe) ---\n`;
+        traza += `Club: ${organizador.nombre}, Canchas: ${organizador.cantidadCanchas}\n`;
+        for (const cp of session.categoriasPlan) {
+          const manuales = (cp.zonas || []).filter((z) => z.requiereArmadoManual);
+          traza += `Categoría "${cp.nombre}" (ID ${cp.categoriaId}): ${cp.zonas?.length || 0} zonas totales, ${manuales.length} zonas manuales (sinGrupo)\n`;
+          for (const z of cp.zonas || []) {
+            traza += `  - Zona "${z.nombre}" (formato: ${z.formato}, requiereArmadoManual: ${z.requiereArmadoManual}): ${z.parejaIds?.length || 0} parejas [${(z.parejaIds || []).join(', ')}]\n`;
+            if (z.requiereArmadoManual) {
+              traza += `    >>> Zona manual (sinGrupo) con ${z.parejaIds?.length || 0} parejas.\n`;
+            }
+          }
+        }
+        manualZoneSizesStats.trazasSemillasEspeciales.push(traza);
+      }
+    }
+
+    if (process.env.FAST_PRECHECK_ONLY === '1') {
+      return;
+    }
+
     const resolverConflictosLoop = async ({ initialPreCheck, initialSession, esLoopReset = false }) => {
       let curPreCheck = initialPreCheck;
       let curSession = initialSession;
@@ -673,6 +797,32 @@ async function runSingleSeed(seed, recordFailure) {
 
         triedActions.add(conf.partidoId);
         let resolvedActionTaken = false;
+
+        // Mapear estado antes de la acción para clasificar saltos de monotonía
+        const scheduleBefore = capturarHorariosPartidos(curSession);
+        const mapBefore = mapearConflictosPorZona(baseConflictosList, curSession);
+        const targetCatId = conf.categoriaId;
+        let targetZonaKey = null;
+        if (conf.zonaId || conf.zona) {
+          targetZonaKey = `${targetCatId}:${conf.zonaId || conf.zona}`;
+        } else if (conf.partidoId && curSession && Array.isArray(curSession.categoriasPlan)) {
+          for (const cPlan of curSession.categoriasPlan) {
+            if (cPlan.categoriaId === targetCatId) {
+              for (const z of cPlan.zonas || []) {
+                if ((z.partidos || []).some((p) => p.id === conf.partidoId)) {
+                  targetZonaKey = `${targetCatId}:${z.id || z.nombre}`;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (!targetZonaKey) targetZonaKey = `${targetCatId}:UNKNOWN`;
+        const confZonaBefore = mapBefore.get(targetZonaKey)?.count || 0;
+        let confOtrasBefore = 0;
+        for (const [k, v] of mapBefore.entries()) {
+          if (k !== targetZonaKey) confOtrasBefore += v.count;
+        }
 
         if (conf.motivo === 'ZONA_MANUAL_INCOMPLETA') {
           const manuales = conf.parejasManuales || [];
@@ -769,6 +919,24 @@ async function runSingleSeed(seed, recordFailure) {
         baseConflictosList = obtenerConflictosBase(curPreCheck, curSession);
         const currentBaseConflictos = baseConflictosList.length;
 
+        // Clasificar estado después de la acción
+        const mapAfter = mapearConflictosPorZona(baseConflictosList, curSession);
+        const scheduleAfter = capturarHorariosPartidos(curSession);
+        const confZonaAfter = mapAfter.get(targetZonaKey)?.count || 0;
+        let confOtrasAfter = 0;
+        const motivosOtras = new Set();
+        for (const [k, v] of mapAfter.entries()) {
+          if (k !== targetZonaKey) {
+            confOtrasAfter += v.count;
+            const prevEntry = mapBefore.get(k);
+            if (!prevEntry || v.count > prevEntry.count) {
+              for (const m of v.motivos) motivosOtras.add(m);
+            }
+          }
+        }
+        const deltaZona = confZonaAfter - confZonaBefore;
+        const deltaOtras = confOtrasAfter - confOtrasBefore;
+
         // Exigir que el total de conflictos base nunca suba (sin break: registra y sigue)
         if (currentBaseConflictos > prevBaseConflictos) {
           recordFailure(
@@ -776,6 +944,127 @@ async function runSingleSeed(seed, recordFailure) {
             seed,
             `El total de conflictos base subió tras resolver (${conf.motivo}): pasó de ${prevBaseConflictos} a ${currentBaseConflictos}`
           );
+
+          const tamZona = conf.tamanoZona || (conf.parejasManuales ? conf.parejasManuales.length : 0) || mapAfter.get(targetZonaKey)?.tamanoZona || 4;
+          const motivosZona = Array.from(mapAfter.get(targetZonaKey)?.motivos || []).join(', ') || '-';
+          const motivosOtrasStr = Array.from(motivosOtras).join(', ') || '-';
+          const tipoSalto = deltaOtras > 0 ? 'AUMENTO_OTRAS_ZONAS' : 'SOLO_ZONA_DESTRABADA';
+
+          if ([8, 23, 100, 138, 270].includes(seed)) {
+            console.log(`\n=====================================================================================`);
+            console.log(`📌 TRAZA LITERAL SALTO MONOTONÍA SEMILLA ${seed} (Motivo: ${conf.motivo})`);
+            console.log(`=====================================================================================`);
+            console.log(`- Zona objetivo: ${targetZonaKey} (Tamaño: ${tamZona})`);
+            console.log(`- Conflictos totales: ${prevBaseConflictos} -> ${currentBaseConflictos} (Delta: ${currentBaseConflictos - prevBaseConflictos})`);
+            console.log(`- Partidos de la zona ANTES del destrabe:`);
+            let partidosAntes = [];
+            for (const [pId, info] of scheduleBefore.entries()) {
+              if (`${info.categoriaId}:${info.zonaId}` === targetZonaKey || `${info.categoriaId}:${info.zonaNombre}` === targetZonaKey) {
+                partidosAntes.push(info);
+                console.log(`    * Pos ${info.posicionEnRonda} | ID ${pId} | Cancha ${info.canchaNumero || 'NULL'} | FechaHora ${info.fechaHora ? new Date(info.fechaHora).toISOString() : 'NULL'} | SinHorario: false`);
+              }
+            }
+            if (partidosAntes.length === 0) {
+              console.log(`    (Zona manual sin partidos generados en memoria, requiereArmadoManual=true)`);
+            }
+
+            console.log(`- Partidos de la zona DESPUÉS del destrabe:`);
+            let fechaReferencia = null;
+            if (curSession && curSession.categoriasPlan) {
+              for (const cp of curSession.categoriasPlan) {
+                for (const z of cp.zonas || []) {
+                  const zKey = `${cp.categoriaId}:${z.id || z.nombre}`;
+                  if (zKey === targetZonaKey || `${cp.categoriaId}:${z.nombre}` === targetZonaKey) {
+                    for (const p of z.partidos || []) {
+                      if (p.fechaHora) fechaReferencia = new Date(p.fechaHora);
+                      console.log(`    * Pos ${p.posicionEnRonda} | ID ${p.id} | Cancha ${p.canchaNumero || 'NULL'} | FechaHora ${p.fechaHora ? new Date(p.fechaHora).toISOString() : 'NULL'} | SinHorario: ${p.sinHorarioAsignado}`);
+                    }
+                  }
+                }
+              }
+            }
+
+            const { generarGrillaOrganizador } = require('../src/services/slots.service');
+            const grillaClub = generarGrillaOrganizador(organizador);
+            const diaNombre = fechaReferencia && fechaReferencia.getUTCDay() === 5 ? 'viernes' : 'sabado';
+            const slotsDelDia = grillaClub[diaNombre] || [];
+            console.log(`- Franjas y canchas libres del club para el día (${diaNombre.toUpperCase()}): ${organizador.cantidadCanchas} canchas totales`);
+            const ocupacion = {};
+            for (const [pId, info] of scheduleAfter.entries()) {
+              if (info.fechaHora && info.canchaNumero) {
+                const dt = new Date(info.fechaHora);
+                const diaMatch = dt.getUTCDay() === 5 ? 'viernes' : 'sabado';
+                if (diaMatch === diaNombre) {
+                  const hh = String(dt.getUTCHours()).padStart(2, '0');
+                  const mm = String(dt.getUTCMinutes()).padStart(2, '0');
+                  const sKey = `${diaNombre}_${hh}:${mm}`;
+                  if (!ocupacion[sKey]) ocupacion[sKey] = new Set();
+                  ocupacion[sKey].add(info.canchaNumero);
+                }
+              }
+            }
+
+            for (const s of slotsDelDia) {
+              const ocup = ocupacion[s] || new Set();
+              const libres = [];
+              for (let c = 1; c <= organizador.cantidadCanchas; c++) {
+                if (!ocup.has(c)) libres.push(c);
+              }
+              console.log(`    * Slot ${s}: ${libres.length}/${organizador.cantidadCanchas} canchas libres [${libres.join(', ')}]`);
+            }
+          }
+
+          monotoniaSaltosStats.saltos.push({
+            semilla: seed,
+            motivoAccion: conf.motivo,
+            tamanoZona: tamZona,
+            confZonaAntes: confZonaBefore,
+            confZonaDespues: confZonaAfter,
+            deltaZona,
+            confOtrasAntes: confOtrasBefore,
+            confOtrasDespues: confOtrasAfter,
+            deltaOtras,
+            totalAntes: prevBaseConflictos,
+            totalDespues: currentBaseConflictos,
+            deltaTotal: currentBaseConflictos - prevBaseConflictos,
+            tipoSalto,
+            motivosZona,
+            motivosOtras: motivosOtrasStr,
+          });
+
+          if (deltaOtras > 0) {
+            monotoniaSaltosStats.resumen.aumentoOtrasZonas++;
+            if (monotoniaSaltosStats.trazasOtrasZonas.length < 10) {
+              for (const [pId, infoAfter] of scheduleAfter.entries()) {
+                const zKeyAfter = `${infoAfter.categoriaId}:${infoAfter.zonaId}`;
+                if (zKeyAfter === targetZonaKey && !scheduleBefore.has(pId)) {
+                  for (const [pPrevId, infoPrev] of scheduleBefore.entries()) {
+                    if (
+                      infoPrev.canchaNumero === infoAfter.canchaNumero &&
+                      new Date(infoPrev.fechaHora).getTime() === new Date(infoAfter.fechaHora).getTime()
+                    ) {
+                      const infoPrevNow = scheduleAfter.get(pPrevId);
+                      const nuevaFranja = infoPrevNow ? `${infoPrevNow.canchaNumero} @ ${new Date(infoPrevNow.fechaHora).toISOString()}` : 'SIN HORARIO';
+                      monotoniaSaltosStats.trazasOtrasZonas.push({
+                        seed,
+                        zonaDestrabada: infoAfter.zonaNombre,
+                        canchaOcupada: infoAfter.canchaNumero,
+                        franjaOcupada: new Date(infoAfter.fechaHora).toISOString(),
+                        partidoDestrabado: `P${infoAfter.posicionEnRonda}`,
+                        partidoDesplazadoId: pPrevId,
+                        partidoDesplazadoInfo: `${infoPrev.categoriaNombre} - ${infoPrev.zonaNombre} - P${infoPrev.posicionEnRonda}`,
+                        franjaPerdida: new Date(infoPrev.fechaHora).toISOString(),
+                        estadoNuevoDesplazado: nuevaFranja,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          } else {
+            monotoniaSaltosStats.resumen.soloZonaDestrabada++;
+          }
+          monotoniaSaltosStats.resumen.totalSaltos++;
         }
         prevBaseConflictos = currentBaseConflictos;
 
@@ -809,7 +1098,6 @@ async function runSingleSeed(seed, recordFailure) {
     // Ante un torneo bloqueado sin plan: intentar forceReset (re-pre-check completo)
     // y reintentar el loop de destrabe antes de declarar terminal una categoría (Punto 3.d)
     if (!planIdToUse && preCheck.bloqueado) {
-      bloqueoTerminalStats.semillasCicloCompleto.add(seed);
       preCheck = await organizadorService.preCheckInicioTorneo(organizador.id, torneo.id, { forceReset: true });
       session = organizadorService.preCheckSessions.get(torneo.id);
       registrarZonasManuales(session);
@@ -824,53 +1112,29 @@ async function runSingleSeed(seed, recordFailure) {
       planIdToUse = preCheck.planId || (preCheck.permiteInicioEmergencia ? preCheck.planEmergenciaId : null);
     }
 
-    if (preCheck.bloqueado && !preCheck.planId) {
-      for (const catConf of preCheck.conflictos || []) {
-        const catObj = categorias.find((c) => c.id === catConf.categoriaId);
-        const zSizes = (catObj && catObj.zonas) ? catObj.zonas.map((z) => z.parejaIds?.length || 0).join('/') : '-';
-        const motivos = Array.from(new Set((catConf.partidosSinHorario || []).map((p) => p.motivo))).join(', ') || 'NINGUNO';
-        bloqueoTerminalStats.detalleCategorias.push({
-          semilla: seed,
-          categoria: catObj ? catObj.nombre : catConf.categoriaId.slice(0, 8),
-          tamanosZona: zSizes,
-          motivo: motivos,
-          permiteInicioEmergencia: preCheck.permiteInicioEmergencia,
-          planEmergenciaId: preCheck.planEmergenciaId ? preCheck.planEmergenciaId.slice(0, 8) : 'null',
-          planUsado: planIdToUse ? 'EMERGENCIA' : 'NINGUNO (TERMINAL)',
-        });
-      }
-    }
+    let planTipo = 'NINGUNO';
+    let catNormal = 0;
+    let catEmergencia = 0;
+    let catFallback = 0;
+    let catNoIniciadas = 0;
 
-    if (!planIdToUse) {
-      // Registrar categorías terminales y distribución de tamaños de zona
+    if (planIdToUse) {
+      if (planIdToUse === preCheck.planId) {
+        planTipo = 'NORMAL';
+        catNormal = categorias.length;
+      } else if (planIdToUse === preCheck.planEmergenciaId) {
+        planTipo = 'EMERGENCIA';
+        catEmergencia = categorias.length;
+      }
+      await organizadorService.iniciarTorneoMultiCategoria(organizador.id, torneo.id, planIdToUse);
+    } else {
+      // Categorías viables
+      const todasCategorias = await prisma.categoria.findMany({ where: { torneoId: torneo.id } });
       const confs = preCheck.conflictos || [];
       const terminalCatIds = new Set();
       for (const catConf of confs) {
-        let esTerminal = false;
-        for (const c of catConf.partidosSinHorario || []) {
-          if (c.motivo === 'ZONA_MANUAL_INCOMPLETA') {
-            esTerminal = true;
-            const tamMatch = c.pareja1?.match(/(\d+)\s+parejas/);
-            const tam = c.tamanoZona || (tamMatch ? Number(tamMatch[1]) : 0);
-            if (tam > 0) {
-              bloqueoTerminalStats.distribucionTamanoZonas[tam] =
-                (bloqueoTerminalStats.distribucionTamanoZonas[tam] || 0) + 1;
-            }
-          }
-        }
-        if (esTerminal || (catConf.partidosSinHorario && catConf.partidosSinHorario.length > 0)) {
-          terminalCatIds.add(catConf.categoriaId);
-        }
+        terminalCatIds.add(catConf.categoriaId);
       }
-
-      const numTerminales = terminalCatIds.size || confs.length || 1;
-      bloqueoTerminalStats.totalCategorias += numTerminales;
-      bloqueoTerminalStats.coberturaPerdidaCategorias += numTerminales;
-      bloqueoTerminalStats.seeds.add(seed);
-      bloqueoTerminalStats.coberturaPerdidaSemillas.add(seed);
-
-      // Continuar con las demás categorías del torneo que son viables (Punto 3.e)
-      const todasCategorias = await prisma.categoria.findMany({ where: { torneoId: torneo.id } });
       const categoriasViables = todasCategorias.filter((c) => !terminalCatIds.has(c.id));
       let algunaIniciada = false;
       for (const cat of categoriasViables) {
@@ -880,12 +1144,45 @@ async function runSingleSeed(seed, recordFailure) {
         } catch (_) {}
       }
       if (algunaIniciada) {
+        catFallback = categoriasViables.length;
+        catNoIniciadas = todasCategorias.length - catFallback;
+        planTipo = 'FALLBACK_VIABLES';
         await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
       } else {
+        catNoIniciadas = todasCategorias.length;
+        planTipo = 'NINGUNO_BLOQUEADO';
+        planesInicioStats.totalCategorias += categorias.length;
+        planesInicioStats.noIniciadas += catNoIniciadas;
+        planesInicioStats.porSemilla.push({
+          semilla: seed,
+          totalCategorias: categorias.length,
+          normal: 0,
+          emergencia: 0,
+          fallback: 0,
+          noIniciadas: catNoIniciadas,
+          planTipo,
+        });
         return;
       }
-    } else {
-      await organizadorService.iniciarTorneoMultiCategoria(organizador.id, torneo.id, planIdToUse);
+    }
+
+    planesInicioStats.totalCategorias += categorias.length;
+    planesInicioStats.iniciadasPlanNormal += catNormal;
+    planesInicioStats.iniciadasPlanEmergencia += catEmergencia;
+    planesInicioStats.iniciadasFallbackViables += catFallback;
+    planesInicioStats.noIniciadas += catNoIniciadas;
+    planesInicioStats.porSemilla.push({
+      semilla: seed,
+      totalCategorias: categorias.length,
+      normal: catNormal,
+      emergencia: catEmergencia,
+      fallback: catFallback,
+      noIniciadas: catNoIniciadas,
+      planTipo,
+    });
+
+    if (process.env.STOP_POST_INICIO === '1') {
+      return;
     }
 
     const partidosIniciales = await prisma.partido.findMany({
@@ -1604,20 +1901,57 @@ async function runFuzzSuite() {
   console.log('='.repeat(85) + '\n');
 
   console.log('='.repeat(85));
-  console.log('📌 PERFIL ZONAS MANUALES DE 4 Y BLOQUEOS TERMINALES:');
+  console.log('📌 CATEGORÍAS INICIADAS POR PLAN NORMAL VS PLAN DE EMERGENCIA:');
   console.log('='.repeat(85));
-  console.log(`- Semillas que ejercitan perfil zonas manuales de 4: ${perfilManual4Stats.totalSeeds}`);
-  console.log(`- Total categorías con bloqueo terminal tras reintento de destrabe: ${bloqueoTerminalStats.totalCategorias} (en ${bloqueoTerminalStats.seeds.size} semillas)`);
-  console.log(`- Distribución de tamaños de zona terminales: ${JSON.stringify(bloqueoTerminalStats.distribucionTamanoZonas)}`);
-  if (bloqueoTerminalStats.seeds.size > 0) {
-    console.log(`- Semillas con categorías terminales: ${JSON.stringify(Array.from(bloqueoTerminalStats.seeds).sort((a, b) => a - b))}`);
+  console.log(`- Total categorías evaluadas: ${planesInicioStats.totalCategorias}`);
+  const pctNormal = planesInicioStats.totalCategorias > 0
+    ? ((planesInicioStats.iniciadasPlanNormal / planesInicioStats.totalCategorias) * 100).toFixed(1)
+    : '0';
+  const pctEmergencia = planesInicioStats.totalCategorias > 0
+    ? ((planesInicioStats.iniciadasPlanEmergencia / planesInicioStats.totalCategorias) * 100).toFixed(1)
+    : '0';
+  const pctFallback = planesInicioStats.totalCategorias > 0
+    ? ((planesInicioStats.iniciadasFallbackViables / planesInicioStats.totalCategorias) * 100).toFixed(1)
+    : '0';
+  console.log(`- Categorías iniciadas por Plan Normal: ${planesInicioStats.iniciadasPlanNormal} (${pctNormal}%)`);
+  console.log(`- Categorías iniciadas por Plan Emergencia: ${planesInicioStats.iniciadasPlanEmergencia} (${pctEmergencia}%)`);
+  console.log(`- Categorías viables iniciadas por Fallback: ${planesInicioStats.iniciadasFallbackViables} (${pctFallback}%)`);
+  console.log(`- Categorías terminales no iniciadas: ${planesInicioStats.noIniciadas}`);
+  console.log('='.repeat(85) + '\n');
+
+  console.log('='.repeat(85));
+  console.log('📌 CLASIFICACIÓN DE SALTOS DE MONOTONÍA (PRECHECK_MONOTONIA):');
+  console.log('='.repeat(85));
+  console.log(`- Total saltos detectados: ${monotoniaSaltosStats.resumen.totalSaltos}`);
+  console.log(`- Saltos explicados SOLO por la zona destrabada (deltaOtras <= 0): ${monotoniaSaltosStats.resumen.soloZonaDestrabada}`);
+  console.log(`- Saltos con aumento en OTRAS zonas (deltaOtras > 0): ${monotoniaSaltosStats.resumen.aumentoOtrasZonas}`);
+  if (monotoniaSaltosStats.saltos.length > 0) {
+    console.log('\n- Tabla de saltos por semilla:');
+    console.table(monotoniaSaltosStats.saltos);
   }
-  const semillasCicloCompleto = TOTAL_SEEDS; // Al continuar con categorías viables, todas las semillas ejercitan el ciclo
-  console.log(`- Semillas que ejercitan el ciclo completo (con categorías viables): ${semillasCicloCompleto}/${TOTAL_SEEDS} (100%)`);
-  console.log(`- Cobertura perdida por categorías terminales excluidas: ${bloqueoTerminalStats.coberturaPerdidaCategorias} categorías en ${bloqueoTerminalStats.coberturaPerdidaSemillas.size} semillas`);
-  if (bloqueoTerminalStats.detalleCategorias.length > 0) {
-    console.log(`\n- Detalle de categorías sin plan normal (${bloqueoTerminalStats.detalleCategorias.length} categorías):`);
-    console.table(bloqueoTerminalStats.detalleCategorias);
+  if (monotoniaSaltosStats.trazasOtrasZonas.length > 0) {
+    console.log('\n- Trazas de desplazamiento en otras zonas:');
+    for (const t of monotoniaSaltosStats.trazasOtrasZonas) {
+      console.log(`  [Semilla ${t.seed}] Zona destrabada: ${t.zonaDestrabada} (${t.partidoDestrabado}) ocupó cancha ${t.canchaOcupada} @ ${t.franjaOcupada}`);
+      console.log(`     -> Desplazó a: ${t.partidoDesplazadoInfo} (perdió franja ${t.franjaPerdida}, nuevo estado: ${t.estadoNuevoDesplazado})`);
+    }
+  }
+  console.log('='.repeat(85) + '\n');
+
+  console.log('='.repeat(85));
+  console.log('📌 DISTRIBUCIÓN DE TAMAÑOS DE ZONA MANUAL (sinGrupo):');
+  console.log('='.repeat(85));
+  console.log(`- Distribución por rangos: 2: ${manualZoneSizesStats.distribucion['2']}, 3: ${manualZoneSizesStats.distribucion['3']}, 4: ${manualZoneSizesStats.distribucion['4']}, 5+: ${manualZoneSizesStats.distribucion['5+']}`);
+  console.log(`- Tamaños exactos: ${JSON.stringify(manualZoneSizesStats.tamaniosExactos)}`);
+  for (const [sz, count] of Object.entries(manualZoneSizesStats.tamaniosExactos)) {
+    const sList = Array.from(manualZoneSizesStats.semillasPorTamanio[sz] || []).sort((a, b) => a - b);
+    console.log(`  * Tamaño ${sz} (${count} zonas): semillas ${JSON.stringify(sList)}`);
+  }
+  if (manualZoneSizesStats.trazasSemillasEspeciales.length > 0) {
+    console.log('\n- Trazas literales de formación de zonas de 5 (Semillas 382 y 496):');
+    for (const tr of manualZoneSizesStats.trazasSemillasEspeciales) {
+      console.log(tr);
+    }
   }
   console.log('='.repeat(85) + '\n');
 
@@ -1721,4 +2055,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runFuzzSuite, runSingleSeed, bloqueoTerminalStats };
+module.exports = { runFuzzSuite, runSingleSeed, planesInicioStats, monotoniaSaltosStats, manualZoneSizesStats };
