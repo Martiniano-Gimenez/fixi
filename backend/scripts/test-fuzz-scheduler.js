@@ -89,6 +89,7 @@ const bloqueoTerminalStats = {
   distribucionTamanoZonas: {},
   coberturaPerdidaCategorias: 0,
   coberturaPerdidaSemillas: new Set(),
+  detalleCategorias: [],
 };
 
 const perfilManual4Stats = {
@@ -538,7 +539,8 @@ async function runSingleSeed(seed, recordFailure) {
     });
 
     const grilla = generarGrillaOrganizador(organizador);
-    const esPerfilManual4 = seed % 5 === 0;
+    const activarPerfilManual4 = process.env.FUZZ_PERFIL_MANUAL4 !== '0';
+    const esPerfilManual4 = activarPerfilManual4 && (seed % 5 === 0);
     if (esPerfilManual4) {
       perfilManual4Stats.totalSeeds++;
       perfilManual4Stats.seeds.add(seed);
@@ -647,6 +649,7 @@ async function runSingleSeed(seed, recordFailure) {
     const resolverConflictosLoop = async ({ initialPreCheck, initialSession, esLoopReset = false }) => {
       let curPreCheck = initialPreCheck;
       let curSession = initialSession;
+      let prevConflictosCat = (curPreCheck.conflictos || []).length;
       let baseConflictosList = obtenerConflictosBase(curPreCheck, curSession);
       let prevBaseConflictos = baseConflictosList.length;
       const triedActions = new Set();
@@ -762,11 +765,12 @@ async function runSingleSeed(seed, recordFailure) {
           }
         }
 
+        const currentConflictosCat = (curPreCheck.conflictos || []).length;
         baseConflictosList = obtenerConflictosBase(curPreCheck, curSession);
         const currentBaseConflictos = baseConflictosList.length;
 
-        // Exigir que el total de conflictos base nunca suba (en loop inicial)
-        if (!esLoopReset && currentBaseConflictos > prevBaseConflictos) {
+        // Exigir que el total de conflictos base nunca suba (sin break: registra y sigue)
+        if (currentBaseConflictos > prevBaseConflictos) {
           recordFailure(
             'precheck_monotonia:post-inicio',
             seed,
@@ -774,6 +778,16 @@ async function runSingleSeed(seed, recordFailure) {
           );
         }
         prevBaseConflictos = currentBaseConflictos;
+
+        // Invariante informativo: monotonía a nivel categorías con conflicto (tercera definición)
+        if (!esLoopReset && currentConflictosCat > prevConflictosCat) {
+          recordFailure(
+            'precheck_monotonia_categorias:post-inicio',
+            seed,
+            `El total de categorías en conflicto subió tras resolver (${conf.motivo}): pasó de ${prevConflictosCat} a ${currentConflictosCat}`
+          );
+        }
+        prevConflictosCat = currentConflictosCat;
       }
 
       return { preCheck: curPreCheck, session: curSession };
@@ -808,6 +822,23 @@ async function runSingleSeed(seed, recordFailure) {
       preCheck = resLoopReset.preCheck;
       session = resLoopReset.session;
       planIdToUse = preCheck.planId || (preCheck.permiteInicioEmergencia ? preCheck.planEmergenciaId : null);
+    }
+
+    if (preCheck.bloqueado && !preCheck.planId) {
+      for (const catConf of preCheck.conflictos || []) {
+        const catObj = categorias.find((c) => c.id === catConf.categoriaId);
+        const zSizes = (catObj && catObj.zonas) ? catObj.zonas.map((z) => z.parejaIds?.length || 0).join('/') : '-';
+        const motivos = Array.from(new Set((catConf.partidosSinHorario || []).map((p) => p.motivo))).join(', ') || 'NINGUNO';
+        bloqueoTerminalStats.detalleCategorias.push({
+          semilla: seed,
+          categoria: catObj ? catObj.nombre : catConf.categoriaId.slice(0, 8),
+          tamanosZona: zSizes,
+          motivo: motivos,
+          permiteInicioEmergencia: preCheck.permiteInicioEmergencia,
+          planEmergenciaId: preCheck.planEmergenciaId ? preCheck.planEmergenciaId.slice(0, 8) : 'null',
+          planUsado: planIdToUse ? 'EMERGENCIA' : 'NINGUNO (TERMINAL)',
+        });
+      }
     }
 
     if (!planIdToUse) {
@@ -1434,10 +1465,15 @@ async function runFuzzSuite() {
     'modo_lluvia_domingo:post-reduccion',
     'modo_lluvia_domingo:post-restauracion',
     'precheck_monotonia:post-inicio',
+    'precheck_monotonia_categorias:post-inicio',
     'precheck_zona_manual_partidos:post-inicio',
     'mini_bracket_origen_persistido:post-inicio',
     'excepcion_no_controlada:fuzz',
   ];
+
+  const INFORMATIVE_INVARIANTS = new Set([
+    'precheck_monotonia_categorias:post-inicio',
+  ]);
 
   const stats = {};
   for (const k of INVARIANT_KEYS) {
@@ -1519,10 +1555,11 @@ async function runFuzzSuite() {
 
   const resumenTabla = INVARIANT_KEYS.map((k) => {
     const [invariante, etapa] = k.split(':');
+    const isInfo = INFORMATIVE_INVARIANTS.has(k);
     return {
       invariante,
       etapa,
-      estado: stats[k].semillasAfectadas.size === 0 ? 'PASS' : 'FAIL',
+      estado: stats[k].semillasAfectadas.size === 0 ? 'PASS' : (isInfo ? `INFO (${stats[k].semillasAfectadas.size})` : 'FAIL'),
       semillasConFalla: stats[k].semillasAfectadas.size,
       semillaMinima: stats[k].minSeed ?? '-',
     };
@@ -1535,15 +1572,17 @@ async function runFuzzSuite() {
   console.log('='.repeat(85));
   const desglosePerfilTabla = INVARIANT_KEYS.map((k) => {
     const [invariante, etapa] = k.split(':');
+    const isInfo = INFORMATIVE_INVARIANTS.has(k);
     const stdFallas = perfilStats.standard.fallasPorInvariante[k]?.size || 0;
     const extFallas = perfilStats.sabado_extendido.fallasPorInvariante[k]?.size || 0;
     const totalFallas = stats[k].semillasAfectadas.size;
+    const tag = isInfo ? 'INFO' : 'FAIL';
     return {
       invariante,
       etapa,
-      'Standard (Par)': stdFallas === 0 ? 'PASS (0)' : `FAIL (${stdFallas})`,
-      'SabadoExt (Impar)': extFallas === 0 ? 'PASS (0)' : `FAIL (${extFallas})`,
-      'Total (500)': totalFallas === 0 ? 'PASS (0)' : `FAIL (${totalFallas})`,
+      'Standard (Par)': stdFallas === 0 ? 'PASS (0)' : `${tag} (${stdFallas})`,
+      'SabadoExt (Impar)': extFallas === 0 ? 'PASS (0)' : `${tag} (${extFallas})`,
+      'Total (500)': totalFallas === 0 ? 'PASS (0)' : `${tag} (${totalFallas})`,
     };
   });
   console.table(desglosePerfilTabla);
@@ -1576,6 +1615,10 @@ async function runFuzzSuite() {
   const semillasCicloCompleto = TOTAL_SEEDS; // Al continuar con categorías viables, todas las semillas ejercitan el ciclo
   console.log(`- Semillas que ejercitan el ciclo completo (con categorías viables): ${semillasCicloCompleto}/${TOTAL_SEEDS} (100%)`);
   console.log(`- Cobertura perdida por categorías terminales excluidas: ${bloqueoTerminalStats.coberturaPerdidaCategorias} categorías en ${bloqueoTerminalStats.coberturaPerdidaSemillas.size} semillas`);
+  if (bloqueoTerminalStats.detalleCategorias.length > 0) {
+    console.log(`\n- Detalle de categorías sin plan normal (${bloqueoTerminalStats.detalleCategorias.length} categorías):`);
+    console.table(bloqueoTerminalStats.detalleCategorias);
+  }
   console.log('='.repeat(85) + '\n');
 
   console.log('='.repeat(85));
@@ -1640,13 +1683,28 @@ async function runFuzzSuite() {
   console.log(`  - Partidos R32 no-BYE sin horario: ${r32FuzzStats.sinHorarioR32}`);
   console.log('='.repeat(85) + '\n');
 
+  console.log('='.repeat(85));
+  console.log('📌 LISTA EXACTA DE SEMILLAS POR INVARIANTE (JSON):');
+  console.log('='.repeat(85));
+  for (const k of INVARIANT_KEYS) {
+    const list = Array.from(stats[k].semillasAfectadas).sort((a, b) => a - b);
+    console.log(`[SEMILLAS] ${k} (${list.length}): ${JSON.stringify(list)}`);
+  }
+  console.log('='.repeat(85) + '\n');
+
   let hayFallas = false;
   for (const k of INVARIANT_KEYS) {
     if (stats[k].minSeed !== null) {
-      hayFallas = true;
-      console.error(
-        `❌ [${k}] Semilla mínima: ${stats[k].minSeed} (${stats[k].semillasAfectadas.size}/${TOTAL_SEEDS} semillas) -> ${stats[k].primerDetalle}`
-      );
+      if (INFORMATIVE_INVARIANTS.has(k)) {
+        console.log(
+          `ℹ️  [${k}] (Informativo) Semilla mínima: ${stats[k].minSeed} (${stats[k].semillasAfectadas.size}/${TOTAL_SEEDS} semillas) -> ${stats[k].primerDetalle}`
+        );
+      } else {
+        hayFallas = true;
+        console.error(
+          `❌ [${k}] Semilla mínima: ${stats[k].minSeed} (${stats[k].semillasAfectadas.size}/${TOTAL_SEEDS} semillas) -> ${stats[k].primerDetalle}`
+        );
+      }
     }
   }
 
