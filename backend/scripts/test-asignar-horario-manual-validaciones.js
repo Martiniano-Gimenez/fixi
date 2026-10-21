@@ -868,6 +868,26 @@ async function test12_unit_tests_helper_puro() {
   // 12d. calcularFinDeZonasCategoria con zona sin partidos
   const finVacio = calcularFinDeZonasCategoria([], 1, duracionMs);
   assert.strictEqual(finVacio.tienePartidosSinHorario, true);
+
+  // 12e. calcularDescansosEliminatoria con descanso suficiente (sin avisos)
+  const advOk = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 8 } },
+    fechaHoraPropuesta: new Date(baseTs + 200 * 60 * 1000),
+    padres: [{ faseEliminatoria: { ronda: 16 }, fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.strictEqual(advOk.advertencias.length, 0);
+
+  // 12f. calcularDescansosEliminatoria con descanso insuficiente de padre
+  const advPadre = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 8 } },
+    fechaHoraPropuesta: new Date(baseTs + 80 * 60 * 1000), // descanso 5 min < 75 min
+    padres: [{ faseEliminatoria: { ronda: 16 }, fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.ok(advPadre.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE'));
 }
 
 // ---------------------------------------------------------------------------
