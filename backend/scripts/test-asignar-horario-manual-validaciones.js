@@ -841,53 +841,192 @@ async function test12_unit_tests_helper_puro() {
   } = bracketWarnings;
 
   // 12a. Constantes exportadas
-  assert.strictEqual(REST_CONSTANTS.MIN_REST_R32_OCTAVOS_MS, 75 * 60 * 1000);
-  assert.strictEqual(REST_CONSTANTS.MIN_REST_OCTAVOS_CUARTOS_MS, 75 * 60 * 1000);
-  assert.strictEqual(REST_CONSTANTS.MIN_REST_CUARTOS_SEMIS_MS, 75 * 60 * 1000);
-  assert.strictEqual(REST_CONSTANTS.MIN_REST_SEMIS_FINAL_MS, 30 * 60 * 1000);
+  assert.strictEqual(REST_CONSTANTS.MIN_REST_R32_OCTAVOS_MS, 75 * 60 * 1000, 'Constante R32->Octavos debe ser 75m');
+  assert.strictEqual(REST_CONSTANTS.MIN_REST_OCTAVOS_CUARTOS_MS, 75 * 60 * 1000, 'Constante Octavos->Cuartos debe ser 75m');
+  assert.strictEqual(REST_CONSTANTS.MIN_REST_CUARTOS_SEMIS_MS, 75 * 60 * 1000, 'Constante Cuartos->Semis debe ser 75m');
+  assert.strictEqual(REST_CONSTANTS.MIN_REST_SEMIS_FINAL_MS, 30 * 60 * 1000, 'Constante Semis->Final debe ser 30m');
 
-  // 12b. calcularFinDeZonasCategoria con partidos válidos
   const baseTs = new Date('2026-10-17T20:00:00.000Z').getTime();
   const duracionMs = 75 * 60 * 1000;
+
+  // 12b. calcularFinDeZonasCategoria con partidos válidos (1 zona)
   const partidosNormales = [
-    { fechaHora: new Date(baseTs), sinHorarioAsignado: false },
-    { fechaHora: new Date(baseTs + 75 * 60 * 1000), sinHorarioAsignado: false },
+    { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
+    { zonaId: 'z1', fechaHora: new Date(baseTs + 75 * 60 * 1000), sinHorarioAsignado: false },
   ];
-  const finOk = calcularFinDeZonasCategoria(partidosNormales, 1, duracionMs);
-  assert.strictEqual(finOk.tienePartidosSinHorario, false);
-  assert.strictEqual(finOk.maxZonaEndMs, baseTs + 2 * duracionMs);
+  const finOk = calcularFinDeZonasCategoria({
+    partidosZona: partidosNormales,
+    totalZonas: 1,
+    zonasIds: ['z1'],
+    duracionMs,
+  });
+  assert.strictEqual(finOk?.tienePartidosSinHorario, false, '12b: no debe tener partidos sin horario');
+  assert.strictEqual(finOk?.maxZonaEndMs, baseTs + 2 * duracionMs, '12b: maxZonaEndMs debe ser baseTs + 2 * duracionMs');
 
   // 12c. calcularFinDeZonasCategoria con partido sin horario
   const partidosConPendiente = [
-    { fechaHora: new Date(baseTs), sinHorarioAsignado: false },
-    { fechaHora: null, sinHorarioAsignado: true },
+    { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
+    { zonaId: 'z1', fechaHora: null, sinHorarioAsignado: true },
   ];
-  const finPend = calcularFinDeZonasCategoria(partidosConPendiente, 1, duracionMs);
-  assert.strictEqual(finPend.tienePartidosSinHorario, true);
+  const finPend = calcularFinDeZonasCategoria({
+    partidosZona: partidosConPendiente,
+    totalZonas: 1,
+    zonasIds: ['z1'],
+    duracionMs,
+  });
+  assert.strictEqual(finPend?.tienePartidosSinHorario, true, '12c: partido sin horario debe marcar tienePartidosSinHorario');
 
-  // 12d. calcularFinDeZonasCategoria con zona sin partidos
-  const finVacio = calcularFinDeZonasCategoria([], 1, duracionMs);
-  assert.strictEqual(finVacio.tienePartidosSinHorario, true);
+  // 12d. calcularFinDeZonasCategoria con zona sin partidos (0 partidos, 1 zona)
+  const finVacio = calcularFinDeZonasCategoria({
+    partidosZona: [],
+    totalZonas: 1,
+    zonasIds: ['z1'],
+    duracionMs,
+  });
+  assert.strictEqual(finVacio?.tienePartidosSinHorario, true, '12d: zona vacía debe marcar tienePartidosSinHorario');
 
-  // 12e. calcularDescansosEliminatoria con descanso suficiente (sin avisos)
-  const advOk = calcularDescansosEliminatoria({
+  // 12e. Categoría con 2 zonas: Zona 1 con partidos agendados y Zona 2 manual sin ningún partido -> fin de zonas indeterminado
+  const finDosZonasIncompleta = calcularFinDeZonasCategoria({
+    partidosZona: [
+      { zonaId: 'z1', fechaHora: new Date(baseTs), sinHorarioAsignado: false },
+    ],
+    totalZonas: 2,
+    zonasIds: ['z1', 'z2'],
+    duracionMs,
+  });
+  assert.strictEqual(
+    finDosZonasIncompleta?.tienePartidosSinHorario,
+    true,
+    '12e: Categoría con 2 zonas donde una tiene 0 partidos debe ser indeterminada (tienePartidosSinHorario: true)'
+  );
+
+  // 12f. INICIA_ANTES_FIN_ZONAS: emitido si es anterior y NO emitido en el límite exacto
+  const advAntesFinZonas = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 8 } },
+    fechaHoraPropuesta: new Date(finOk.maxZonaEndMs - 15 * 60 * 1000), // 15 min antes del fin
+    padres: [],
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.ok(
+    advAntesFinZonas.advertencias.some((a) => a.codigo === 'INICIA_ANTES_FIN_ZONAS'),
+    '12f: Debe emitir INICIA_ANTES_FIN_ZONAS si arranca antes del fin de zonas'
+  );
+
+  const advLimiteFinZonas = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 8 } },
+    fechaHoraPropuesta: new Date(finOk.maxZonaEndMs), // Límite exacto de fin de zonas
+    padres: [],
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.strictEqual(
+    advLimiteFinZonas.advertencias.filter((a) => a.codigo === 'INICIA_ANTES_FIN_ZONAS').length,
+    0,
+    '12f: En el límite exacto de fin de zonas NO debe emitir INICIA_ANTES_FIN_ZONAS'
+  );
+
+  // 12g. Descanso con el hijo: DESCANSO_INSUFICIENTE_HIJO emitido por debajo del mínimo y NO en el límite
+  const tCuartos = baseTs + 500 * 60 * 1000;
+  const tSemisInsuficiente = tCuartos + duracionMs + 45 * 60 * 1000; // 45 min descanso < 75 min
+  const advHijoInsuficiente = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 8 } },
+    fechaHoraPropuesta: new Date(tCuartos),
+    hijo: { faseEliminatoria: { ronda: 4 }, fechaHora: new Date(tSemisInsuficiente), sinHorarioAsignado: false },
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.ok(
+    advHijoInsuficiente.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_HIJO'),
+    '12g: Debe emitir DESCANSO_INSUFICIENTE_HIJO si descanso con el hijo es menor a 75m'
+  );
+
+  const tSemisLimite = tCuartos + duracionMs + 75 * 60 * 1000; // 75 min exactos
+  const advHijoLimite = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 8 } },
+    fechaHoraPropuesta: new Date(tCuartos),
+    hijo: { faseEliminatoria: { ronda: 4 }, fechaHora: new Date(tSemisLimite), sinHorarioAsignado: false },
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.strictEqual(
+    advHijoLimite.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_HIJO').length,
+    0,
+    '12g: En el límite exacto de 75m con el hijo NO debe emitir DESCANSO_INSUFICIENTE_HIJO'
+  );
+
+  // 12h. Padre BYE no genera DESCANSO_INSUFICIENTE_PADRE
+  const advPadreBye = calcularDescansosEliminatoria({
     partido: { faseEliminatoria: { ronda: 8 } },
     fechaHoraPropuesta: new Date(baseTs + 200 * 60 * 1000),
-    padres: [{ faseEliminatoria: { ronda: 16 }, fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+    padres: [{ faseEliminatoria: { ronda: 16 }, esBye: true, fechaHora: null, sinHorarioAsignado: false }],
     finZonas: finOk,
     duracionMs,
   });
-  assert.strictEqual(advOk.advertencias.length, 0);
+  assert.strictEqual(
+    advPadreBye.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE').length,
+    0,
+    '12h: Padre BYE no debe generar DESCANSO_INSUFICIENTE_PADRE'
+  );
 
-  // 12f. calcularDescansosEliminatoria con descanso insuficiente de padre
-  const advPadre = calcularDescansosEliminatoria({
-    partido: { faseEliminatoria: { ronda: 8 } },
-    fechaHoraPropuesta: new Date(baseTs + 80 * 60 * 1000), // descanso 5 min < 75 min
-    padres: [{ faseEliminatoria: { ronda: 16 }, fechaHora: new Date(baseTs), sinHorarioAsignado: false }],
+  // 12i. R32 -> Octavos: 30 min advierte, 75 min exactos no
+  const tR32 = baseTs + 100 * 60 * 1000;
+  const tR32Fin = tR32 + duracionMs;
+  const tOctavos30m = tR32Fin + 30 * 60 * 1000; // descanso 30 min < 75 min
+  const advR32Octavos30m = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 16 } },
+    fechaHoraPropuesta: new Date(tOctavos30m),
+    padres: [{ faseEliminatoria: { ronda: 32 }, fechaHora: new Date(tR32), sinHorarioAsignado: false }],
     finZonas: finOk,
     duracionMs,
   });
-  assert.ok(advPadre.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE'));
+  assert.ok(
+    advR32Octavos30m.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE'),
+    '12i: Octavos a 30m de R32 debe emitir DESCANSO_INSUFICIENTE_PADRE'
+  );
+
+  const tOctavos75m = tR32Fin + 75 * 60 * 1000; // descanso 75 min exactos
+  const advR32Octavos75m = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 16 } },
+    fechaHoraPropuesta: new Date(tOctavos75m),
+    padres: [{ faseEliminatoria: { ronda: 32 }, fechaHora: new Date(tR32), sinHorarioAsignado: false }],
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.strictEqual(
+    advR32Octavos75m.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE').length,
+    0,
+    '12i: Octavos a 75m exactos de R32 NO debe emitir DESCANSO_INSUFICIENTE_PADRE'
+  );
+
+  // 12j. Ronda sin padres ni hijo (primera ronda del cuadro): solo evalúa fin de zonas
+  const advPrimeraRondaAntesFin = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 32 } },
+    fechaHoraPropuesta: new Date(finOk.maxZonaEndMs - 30 * 60 * 1000), // antes del fin de zonas
+    padres: [],
+    hijo: null,
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.deepStrictEqual(
+    advPrimeraRondaAntesFin.advertencias.map((a) => a.codigo),
+    ['INICIA_ANTES_FIN_ZONAS'],
+    '12j: Cruce sin padres ni hijo solo debe advertir fin de zonas si arranca antes'
+  );
+
+  const advPrimeraRondaOk = calcularDescansosEliminatoria({
+    partido: { faseEliminatoria: { ronda: 32 } },
+    fechaHoraPropuesta: new Date(finOk.maxZonaEndMs + 30 * 60 * 1000), // posterior al fin de zonas
+    padres: [],
+    hijo: null,
+    finZonas: finOk,
+    duracionMs,
+  });
+  assert.strictEqual(
+    advPrimeraRondaOk.advertencias.length,
+    0,
+    '12j: Cruce sin padres ni hijo posterior a fin de zonas no debe emitir ninguna advertencia'
+  );
 }
 
 // ---------------------------------------------------------------------------
