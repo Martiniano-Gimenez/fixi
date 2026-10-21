@@ -4,9 +4,9 @@
  * test-asignar-horario-manual-validaciones.js
  * Suite oficial de tests para validaciones de fin de zonas y descansos en asignarHorarioManual.
  *
- * Cobertura de 12 casos:
+ * Cobertura de 13 casos:
  * 1. R32 manual antes del fin de zonas -> advertencia INICIA_ANTES_FIN_ZONAS.
- * 2. R32 manual después del fin de zonas -> sin advertencia.
+ * 2. R32 manual después del fin de zonas -> sin advertencias (espera []).
  * 3. Categoría con partido de zona sin horario -> advertencia ZONA_CON_PARTIDOS_PENDIENTES.
  * 4. Cruce eliminatoria con descanso insuficiente respecto del padre (Octavos -> Cuartos, 15 min < 75 min).
  * 5. Cruce eliminatoria con descanso insuficiente respecto del hijo (Cuartos <- Semis, solapa o < 75 min).
@@ -14,9 +14,10 @@
  * 7. No-regresión de validaciones actuales de colisión (cancha ocupada 409 y pareja solapada 409).
  * 8. Trasnoche 00:15 contra fin de zona 23:30 (la trasnoche cae en el día siguiente y es cronológicamente posterior).
  * 9. Cruce cuyo padre es un BYE -> no debe generar advertencia de descanso insuficiente.
- * 10. Zona manual sin partidos en categoría EN_CURSO -> advertencia ZONA_CON_PARTIDOS_PENDIENTES.
+ * 10. Zona manual sin partidos en categoría EN_CURSO (5 parejas sinGrupo) -> advertencia ZONA_CON_PARTIDOS_PENDIENTES.
  * 11. Final con descanso Semis -> Final (30 min): 18:15 advierte (15 min < 30 min); 18:30 no advierte (límite 30 min).
  * 12. Unit tests del helper puro bracketWarnings (calcularFinDeZonasCategoria y calcularDescansosEliminatoria).
+ * 13. Octavos con padre R32 (75 min): 30 min del fin de R32 advierte; 75 min exactos no advierte.
  */
 
 require('./utils/testEnvGuard');
@@ -26,7 +27,6 @@ const assert = require('node:assert');
 const prisma = require('../src/lib/prisma');
 const partidoService = require('../src/services/partido.service');
 const { parseSlotToDate } = require('../src/services/zona.service');
-const { parseFechaLocal } = require('../src/utils/dateUtils');
 
 async function limpiarDb() {
   await prisma.setPartido.deleteMany({});
@@ -79,6 +79,39 @@ async function setupBaseTorneo({ cantidadCanchas = 2 } = {}) {
   });
 
   return { org, torneo, cat };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers para aserciones con mensajes específicos de diagnóstico
+// ---------------------------------------------------------------------------
+function extraerAdvertencias(res) {
+  return Array.isArray(res?.advertencias) ? res.advertencias : [];
+}
+
+function assertTieneAdvertencia(advertencias, codigoEsperado, testNombre) {
+  const codigos = advertencias.map((a) => a.codigo);
+  assert.ok(
+    codigos.includes(codigoEsperado),
+    `[${testNombre}] Esperaba advertencia con código "${codigoEsperado}", pero recibió: [${codigos.join(', ')}]`
+  );
+}
+
+function assertNoTieneAdvertencia(advertencias, codigoNoDeseado, testNombre) {
+  const codigos = advertencias.map((a) => a.codigo);
+  assert.strictEqual(
+    codigos.includes(codigoNoDeseado),
+    false,
+    `[${testNombre}] Esperaba sin advertencia "${codigoNoDeseado}", pero recibió: [${codigos.join(', ')}]`
+  );
+}
+
+function assertSinAdvertencias(advertencias, testNombre) {
+  const codigos = advertencias.map((a) => a.codigo);
+  assert.strictEqual(
+    codigos.length,
+    0,
+    `[${testNombre}] Esperaba sin avisos, pero recibió: [${codigos.join(', ')}]`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -136,11 +169,8 @@ async function test1_r32_antes_fin_zonas() {
 
   assert.ok(res.partido, 'Debe devolver el partido actualizado');
   assert.strictEqual(res.partido.horarioManual, true, 'horarioManual debe ser true');
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.ok(
-    res.advertencias.some((a) => a.codigo === 'INICIA_ANTES_FIN_ZONAS'),
-    'Debe incluir la advertencia INICIA_ANTES_FIN_ZONAS'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'INICIA_ANTES_FIN_ZONAS', 'Test 1');
 }
 
 // ---------------------------------------------------------------------------
@@ -196,12 +226,8 @@ async function test2_r32_despues_fin_zonas() {
   });
 
   assert.ok(res.partido, 'Debe devolver el partido actualizado');
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.strictEqual(
-    res.advertencias.filter((a) => a.codigo === 'INICIA_ANTES_FIN_ZONAS').length,
-    0,
-    'No debe advertir INICIA_ANTES_FIN_ZONAS'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertNoTieneAdvertencia(advertencias, 'INICIA_ANTES_FIN_ZONAS', 'Test 2');
 }
 
 // ---------------------------------------------------------------------------
@@ -255,11 +281,8 @@ async function test3_zona_partido_sin_horario() {
     canchaNumero: 1,
   });
 
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.ok(
-    res.advertencias.some((a) => a.codigo === 'ZONA_CON_PARTIDOS_PENDIENTES'),
-    'Debe advertir ZONA_CON_PARTIDOS_PENDIENTES'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'ZONA_CON_PARTIDOS_PENDIENTES', 'Test 3');
 }
 
 // ---------------------------------------------------------------------------
@@ -306,11 +329,8 @@ async function test4_descanso_insuficiente_padre() {
     canchaNumero: 1,
   });
 
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.ok(
-    res.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE'),
-    'Debe advertir DESCANSO_INSUFICIENTE_PADRE'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 4');
 }
 
 // ---------------------------------------------------------------------------
@@ -357,11 +377,8 @@ async function test5_descanso_insuficiente_hijo() {
     canchaNumero: 2,
   });
 
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.ok(
-    res.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_HIJO'),
-    'Debe advertir DESCANSO_INSUFICIENTE_HIJO'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_HIJO', 'Test 5');
 }
 
 // ---------------------------------------------------------------------------
@@ -411,11 +428,8 @@ async function test6_cruce_parejas_null() {
     canchaNumero: 1,
   });
 
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.ok(
-    res.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE'),
-    'Debe advertir DESCANSO_INSUFICIENTE_PADRE aun cuando las parejas sean null'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 6');
 }
 
 // ---------------------------------------------------------------------------
@@ -545,12 +559,8 @@ async function test8_trasnoche_sabado() {
   });
 
   assert.ok(res.partido, 'Debe asignar el partido');
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.strictEqual(
-    res.advertencias.filter((a) => a.codigo === 'INICIA_ANTES_FIN_ZONAS').length,
-    0,
-    'No debe advertir INICIA_ANTES_FIN_ZONAS porque Sabado-00:15 trasnoche es posterior al fin de zona (23:30)'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertNoTieneAdvertencia(advertencias, 'INICIA_ANTES_FIN_ZONAS', 'Test 8');
 }
 
 // ---------------------------------------------------------------------------
@@ -596,30 +606,41 @@ async function test9_padre_bye() {
     canchaNumero: 1,
   });
 
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.strictEqual(
-    res.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE').length,
-    0,
-    'Padre BYE no debe generar descanso insuficiente'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertNoTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 9');
 }
 
 // ---------------------------------------------------------------------------
-// TEST 10: Zona manual sin partidos en categoría EN_CURSO
+// TEST 10: Zona manual sin partidos en categoría EN_CURSO (5 parejas sinGrupo)
 // ---------------------------------------------------------------------------
 async function test10_zona_manual_sin_partidos() {
   const { org, torneo, cat } = await setupBaseTorneo();
 
-  // Zona manual con 0 partidos creados en DB
-  await prisma.zona.create({
+  // Crear 5 parejas en la categoría (tamaño incompatible que forma sinGrupo de 5 parejas)
+  const pList = [];
+  for (let i = 1; i <= 5; i++) {
+    const p = await prisma.pareja.create({
+      data: { categoriaId: cat.id, jugador1: `J${i}A`, jugador2: `J${i}B`, orden: i },
+    });
+    pList.push(p);
+  }
+
+  // Zona manual con requiereArmadoManual: true y 5 parejas, con 0 partidos creados
+  const zonaManual5 = await prisma.zona.create({
     data: {
       categoriaId: cat.id,
-      nombre: 'Zona Manual Sin Partidos',
+      nombre: 'Zona Manual de 5 Parejas',
       formato: 'ROUND_ROBIN',
       clasifican: 2,
       requiereArmadoManual: true,
     },
   });
+
+  for (const p of pList) {
+    await prisma.zonaPareja.create({
+      data: { zonaId: zonaManual5.id, parejaId: p.id },
+    });
+  }
 
   const fase8 = await prisma.faseEliminatoria.create({
     data: { categoriaId: cat.id, nombre: 'Cuartos de Final', ronda: 8 },
@@ -640,11 +661,8 @@ async function test10_zona_manual_sin_partidos() {
     canchaNumero: 1,
   });
 
-  assert.ok(Array.isArray(res.advertencias), 'Debe devolver un array de advertencias');
-  assert.ok(
-    res.advertencias.some((a) => a.codigo === 'ZONA_CON_PARTIDOS_PENDIENTES'),
-    'Zona manual sin partidos debe generar advertencia ZONA_CON_PARTIDOS_PENDIENTES'
-  );
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'ZONA_CON_PARTIDOS_PENDIENTES', 'Test 10');
 }
 
 // ---------------------------------------------------------------------------
@@ -689,23 +707,16 @@ async function test11_final_descanso_semis() {
     slotId: 'Domingo-18:15',
     canchaNumero: 1,
   });
-  assert.ok(Array.isArray(res11a.advertencias), 'Debe devolver un array de advertencias');
-  assert.ok(
-    res11a.advertencias.some((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE'),
-    'Final a 15 min de semifinal debe advertir DESCANSO_INSUFICIENTE_PADRE'
-  );
+  const advertencias11a = extraerAdvertencias(res11a);
+  assertTieneAdvertencia(advertencias11a, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 11a (15 min < 30 min)');
 
   // Subcaso 11b: Final a las 18:30 (descanso = 30 min = MIN_REST_SEMIS_FINAL_MS exacto)
   const res11b = await partidoService.asignarHorarioManual(org.id, pFinal.id, {
     slotId: 'Domingo-18:30',
     canchaNumero: 1,
   });
-  assert.ok(Array.isArray(res11b.advertencias), 'Debe devolver un array de advertencias');
-  assert.strictEqual(
-    res11b.advertencias.filter((a) => a.codigo === 'DESCANSO_INSUFICIENTE_PADRE').length,
-    0,
-    'Final con descanso exacto de 30 min no debe advertir descanso insuficiente'
-  );
+  const advertencias11b = extraerAdvertencias(res11b);
+  assertNoTieneAdvertencia(advertencias11b, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 11b (30 min exactos)');
 }
 
 // ---------------------------------------------------------------------------
@@ -760,6 +771,60 @@ async function test12_unit_tests_helper_puro() {
 }
 
 // ---------------------------------------------------------------------------
+// TEST 13: Octavos con padre R32 (aplica descanso de 75 min)
+// ---------------------------------------------------------------------------
+async function test13_octavos_padre_r32_descanso() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const fase32 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Dieciseisavos', ronda: 32 },
+  });
+  const fase16 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Octavos de Final', ronda: 16 },
+  });
+
+  // R32 (posicion 1): programado para arrancar Domingo-09:00 -> fin 10:15hs
+  const fechaR32 = parseSlotToDate('Domingo-09:00', torneo.fecha);
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase32.id,
+      posicionEnRonda: 1,
+      fechaHora: fechaR32,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  const pOctavos = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase16.id,
+      posicionEnRonda: 1,
+      sinHorarioAsignado: true,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Subcaso 13a: Octavos a las 10:45hs (descanso = 10:45 - 10:15 = 30 min < 75 min requeridos)
+  const res13a = await partidoService.asignarHorarioManual(org.id, pOctavos.id, {
+    slotId: 'Domingo-10:45',
+    canchaNumero: 1,
+  });
+  const advertencias13a = extraerAdvertencias(res13a);
+  assertTieneAdvertencia(advertencias13a, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 13a (30 min < 75 min)');
+
+  // Subcaso 13b: Octavos a las 11:30hs (descanso = 11:30 - 10:15 = 75 min exactos)
+  const res13b = await partidoService.asignarHorarioManual(org.id, pOctavos.id, {
+    slotId: 'Domingo-11:30',
+    canchaNumero: 1,
+  });
+  const advertencias13b = extraerAdvertencias(res13b);
+  assertNoTieneAdvertencia(advertencias13b, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 13b (75 min exactos)');
+}
+
+// ---------------------------------------------------------------------------
 // RUNNER CENTRAL DE LA SUITE
 // ---------------------------------------------------------------------------
 async function run() {
@@ -767,7 +832,7 @@ async function run() {
   resetTestDb();
 
   console.log('='.repeat(85));
-  console.log('🧪 SUITE OFICIAL: VALIDACIONES EN ASIGNAR HORARIO MANUAL (12 CASOS)');
+  console.log('🧪 SUITE OFICIAL: VALIDACIONES EN ASIGNAR HORARIO MANUAL (13 CASOS)');
   console.log('='.repeat(85));
 
   const allTests = [
@@ -780,9 +845,10 @@ async function run() {
     { id: '7', nombre: 'Test 7: No-regresión de validaciones actuales de colisión (cancha y parejas 409)', fn: test7_no_regresion_colisiones },
     { id: '8', nombre: 'Test 8: Trasnoche 00:15 contra fin de zona 23:30 (cronología trasnoche)', fn: test8_trasnoche_sabado },
     { id: '9', nombre: 'Test 9: Padre BYE no restringe descanso', fn: test9_padre_bye },
-    { id: '10', nombre: 'Test 10: Zona manual sin partidos en categoría EN_CURSO', fn: test10_zona_manual_sin_partidos },
+    { id: '10', nombre: 'Test 10: Zona manual sin partidos en categoría EN_CURSO (5 parejas)', fn: test10_zona_manual_sin_partidos },
     { id: '11', nombre: 'Test 11: Final con descanso Semis -> Final (30 min) y límite', fn: test11_final_descanso_semis },
     { id: '12', nombre: 'Test 12: Unit tests del helper puro bracketWarnings', fn: test12_unit_tests_helper_puro },
+    { id: '13', nombre: 'Test 13: Octavos con padre R32 (aplica descanso 75 min: 30m advierte, 75m no)', fn: test13_octavos_padre_r32_descanso },
   ];
 
   const resultados = [];
