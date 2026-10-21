@@ -4,7 +4,7 @@
  * test-asignar-horario-manual-validaciones.js
  * Suite oficial de tests para validaciones de fin de zonas y descansos en asignarHorarioManual.
  *
- * Cobertura de 13 casos:
+ * Cobertura de 16 casos independientes:
  * 1. R32 manual antes del fin de zonas -> advertencia INICIA_ANTES_FIN_ZONAS.
  * 2. R32 manual después del fin de zonas -> sin advertencias (espera []).
  * 3. Categoría con partido de zona sin horario -> advertencia ZONA_CON_PARTIDOS_PENDIENTES.
@@ -12,12 +12,15 @@
  * 5. Cruce eliminatoria con descanso insuficiente respecto del hijo (Cuartos <- Semis, solapa o < 75 min).
  * 6. Cruce eliminatoria con parejas null en cuadro (valida relación estructural del árbol).
  * 7. No-regresión de validaciones actuales de colisión (cancha ocupada 409 y pareja solapada 409).
- * 8. Trasnoche 00:15 contra fin de zona 23:30 (la trasnoche cae en el día siguiente y es cronológicamente posterior).
+ * 8a. Trasnoche 00:15 posterior a fin de zona 23:30 (la trasnoche cae en el día siguiente y es cronológicamente posterior -> sin aviso).
+ * 8b. Trasnoche 00:15 anterior a fin de zona 00:45 (madrugada del domingo 00:15 < 00:45 -> aviso INICIA_ANTES_FIN_ZONAS).
  * 9. Cruce cuyo padre es un BYE -> no debe generar advertencia de descanso insuficiente.
  * 10. Zona manual sin partidos en categoría EN_CURSO (5 parejas sinGrupo) -> advertencia ZONA_CON_PARTIDOS_PENDIENTES.
- * 11. Final con descanso Semis -> Final (30 min): 18:15 advierte (15 min < 30 min); 18:30 no advierte (límite 30 min).
- * 12. Unit tests del helper puro bracketWarnings (calcularFinDeZonasCategoria y calcularDescansosEliminatoria).
- * 13. Octavos con padre R32 (75 min): 30 min del fin de R32 advierte; 75 min exactos no advierte.
+ * 11a. Final con descanso Semis -> Final menor a 30 min (15 min < 30 min) -> aviso DESCANSO_INSUFICIENTE_PADRE.
+ * 11b. Final con descanso Semis -> Final de 30 min exactos (límite scheduler) -> sin aviso.
+ * 12. Unit tests del helper puro bracketWarnings (calcularFinDeZonasCategoria y constantes de descanso).
+ * 13a. Octavos con padre R32 y descanso menor a 75 min (30 min < 75 min) -> aviso DESCANSO_INSUFICIENTE_PADRE.
+ * 13b. Octavos con padre R32 y descanso de 75 min exactos (límite 75 min) -> sin aviso.
  */
 
 require('./utils/testEnvGuard');
@@ -506,9 +509,9 @@ async function test7_no_regresion_colisiones() {
 }
 
 // ---------------------------------------------------------------------------
-// TEST 8: Trasnoche 00:15 contra fin de zona 23:30
+// TEST 8a: Trasnoche 00:15 posterior a fin de zona 23:30 (sin aviso)
 // ---------------------------------------------------------------------------
-async function test8_trasnoche_sabado() {
+async function test8a_trasnoche_sabado() {
   const { org, torneo, cat } = await setupBaseTorneo();
 
   const zona = await prisma.zona.create({
@@ -560,7 +563,65 @@ async function test8_trasnoche_sabado() {
 
   assert.ok(res.partido, 'Debe asignar el partido');
   const advertencias = extraerAdvertencias(res);
-  assertNoTieneAdvertencia(advertencias, 'INICIA_ANTES_FIN_ZONAS', 'Test 8');
+  assertNoTieneAdvertencia(advertencias, 'INICIA_ANTES_FIN_ZONAS', 'Test 8a');
+}
+
+// ---------------------------------------------------------------------------
+// TEST 8b: Trasnoche 00:15 anterior a fin de zona 00:45 (aviso INICIA_ANTES_FIN_ZONAS)
+// ---------------------------------------------------------------------------
+async function test8b_trasnoche_sabado_positivo() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const zona = await prisma.zona.create({
+    data: {
+      categoriaId: cat.id,
+      nombre: 'Zona A',
+      formato: 'ROUND_ROBIN',
+      clasifican: 2,
+    },
+  });
+
+  // Partido de zona arranca Sabado-23:30 -> termina a las 00:45hs de la madrugada del domingo
+  const pZonaFecha = parseSlotToDate('Sabado-23:30', torneo.fecha);
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      posicionEnRonda: 1,
+      fechaHora: pZonaFecha,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  const fase32 = await prisma.faseEliminatoria.create({
+    data: {
+      categoriaId: cat.id,
+      nombre: 'Dieciseisavos',
+      ronda: 32,
+    },
+  });
+
+  const pR32 = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase32.id,
+      posicionEnRonda: 1,
+      sinHorarioAsignado: true,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Asignar en slot de trasnoche Sabado-00:15 (madrugada del domingo a las 00:15 < fin de zona a las 00:45)
+  const res = await partidoService.asignarHorarioManual(org.id, pR32.id, {
+    slotId: 'Sabado-00:15',
+    canchaNumero: 2,
+  });
+
+  assert.ok(res.partido, 'Debe asignar el partido');
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'INICIA_ANTES_FIN_ZONAS', 'Test 8b');
 }
 
 // ---------------------------------------------------------------------------
@@ -666,9 +727,9 @@ async function test10_zona_manual_sin_partidos() {
 }
 
 // ---------------------------------------------------------------------------
-// TEST 11: Final con descanso Semis -> Final (30 min) y límite
+// TEST 11a: Final con descanso Semis -> Final menor a 30 min (aviso DESCANSO_INSUFICIENTE_PADRE)
 // ---------------------------------------------------------------------------
-async function test11_final_descanso_semis() {
+async function test11a_final_descanso_semis() {
   const { org, torneo, cat } = await setupBaseTorneo();
 
   const fase4 = await prisma.faseEliminatoria.create({
@@ -702,21 +763,59 @@ async function test11_final_descanso_semis() {
     },
   });
 
-  // Subcaso 11a: Final a las 18:15 (descanso = 15 min < 30 min mínimo de Semis->Final)
-  const res11a = await partidoService.asignarHorarioManual(org.id, pFinal.id, {
+  // Final a las 18:15 (descanso = 15 min < 30 min mínimo de Semis->Final)
+  const res = await partidoService.asignarHorarioManual(org.id, pFinal.id, {
     slotId: 'Domingo-18:15',
     canchaNumero: 1,
   });
-  const advertencias11a = extraerAdvertencias(res11a);
-  assertTieneAdvertencia(advertencias11a, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 11a (15 min < 30 min)');
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 11a');
+}
 
-  // Subcaso 11b: Final a las 18:30 (descanso = 30 min = MIN_REST_SEMIS_FINAL_MS exacto)
-  const res11b = await partidoService.asignarHorarioManual(org.id, pFinal.id, {
+// ---------------------------------------------------------------------------
+// TEST 11b: Final con descanso Semis -> Final de 30 min exactos (sin aviso)
+// ---------------------------------------------------------------------------
+async function test11b_final_descanso_semis() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const fase4 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Semifinal', ronda: 4 },
+  });
+  const fase2 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Final', ronda: 2 },
+  });
+
+  // Semifinal (posicion 1): arranca 16:45 -> fin 18:00hs
+  const fechaSemis = parseSlotToDate('Domingo-16:45', torneo.fecha);
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase4.id,
+      posicionEnRonda: 1,
+      fechaHora: fechaSemis,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  const pFinal = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase2.id,
+      posicionEnRonda: 1,
+      sinHorarioAsignado: true,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Final a las 18:30 (descanso = 30 min = MIN_REST_SEMIS_FINAL_MS exacto)
+  const res = await partidoService.asignarHorarioManual(org.id, pFinal.id, {
     slotId: 'Domingo-18:30',
     canchaNumero: 1,
   });
-  const advertencias11b = extraerAdvertencias(res11b);
-  assertNoTieneAdvertencia(advertencias11b, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 11b (30 min exactos)');
+  const advertencias = extraerAdvertencias(res);
+  assertNoTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 11b');
 }
 
 // ---------------------------------------------------------------------------
@@ -727,7 +826,7 @@ async function test12_unit_tests_helper_puro() {
   try {
     bracketWarnings = require('../src/utils/bracketWarnings');
   } catch (err) {
-    // Helper no implementado todavía en commit 1
+    // Helper no implementado todavía
   }
 
   assert.ok(
@@ -742,6 +841,7 @@ async function test12_unit_tests_helper_puro() {
   } = bracketWarnings;
 
   // 12a. Constantes exportadas
+  assert.strictEqual(REST_CONSTANTS.MIN_REST_R32_OCTAVOS_MS, 75 * 60 * 1000);
   assert.strictEqual(REST_CONSTANTS.MIN_REST_OCTAVOS_CUARTOS_MS, 75 * 60 * 1000);
   assert.strictEqual(REST_CONSTANTS.MIN_REST_CUARTOS_SEMIS_MS, 75 * 60 * 1000);
   assert.strictEqual(REST_CONSTANTS.MIN_REST_SEMIS_FINAL_MS, 30 * 60 * 1000);
@@ -771,9 +871,9 @@ async function test12_unit_tests_helper_puro() {
 }
 
 // ---------------------------------------------------------------------------
-// TEST 13: Octavos con padre R32 (aplica descanso de 75 min)
+// TEST 13a: Octavos con padre R32 descanso menor a 75 min (aviso DESCANSO_INSUFICIENTE_PADRE)
 // ---------------------------------------------------------------------------
-async function test13_octavos_padre_r32_descanso() {
+async function test13a_octavos_padre_r32_descanso() {
   const { org, torneo, cat } = await setupBaseTorneo();
 
   const fase32 = await prisma.faseEliminatoria.create({
@@ -807,21 +907,59 @@ async function test13_octavos_padre_r32_descanso() {
     },
   });
 
-  // Subcaso 13a: Octavos a las 10:45hs (descanso = 10:45 - 10:15 = 30 min < 75 min requeridos)
-  const res13a = await partidoService.asignarHorarioManual(org.id, pOctavos.id, {
+  // Octavos a las 10:45hs (descanso = 10:45 - 10:15 = 30 min < 75 min requeridos)
+  const res = await partidoService.asignarHorarioManual(org.id, pOctavos.id, {
     slotId: 'Domingo-10:45',
     canchaNumero: 1,
   });
-  const advertencias13a = extraerAdvertencias(res13a);
-  assertTieneAdvertencia(advertencias13a, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 13a (30 min < 75 min)');
+  const advertencias = extraerAdvertencias(res);
+  assertTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 13a');
+}
 
-  // Subcaso 13b: Octavos a las 11:30hs (descanso = 11:30 - 10:15 = 75 min exactos)
-  const res13b = await partidoService.asignarHorarioManual(org.id, pOctavos.id, {
+// ---------------------------------------------------------------------------
+// TEST 13b: Octavos con padre R32 descanso de 75 min exactos (sin aviso)
+// ---------------------------------------------------------------------------
+async function test13b_octavos_padre_r32_descanso() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const fase32 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Dieciseisavos', ronda: 32 },
+  });
+  const fase16 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Octavos de Final', ronda: 16 },
+  });
+
+  // R32 (posicion 1): programado para arrancar Domingo-09:00 -> fin 10:15hs
+  const fechaR32 = parseSlotToDate('Domingo-09:00', torneo.fecha);
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase32.id,
+      posicionEnRonda: 1,
+      fechaHora: fechaR32,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  const pOctavos = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase16.id,
+      posicionEnRonda: 1,
+      sinHorarioAsignado: true,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Octavos a las 11:30hs (descanso = 11:30 - 10:15 = 75 min exactos)
+  const res = await partidoService.asignarHorarioManual(org.id, pOctavos.id, {
     slotId: 'Domingo-11:30',
     canchaNumero: 1,
   });
-  const advertencias13b = extraerAdvertencias(res13b);
-  assertNoTieneAdvertencia(advertencias13b, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 13b (75 min exactos)');
+  const advertencias = extraerAdvertencias(res);
+  assertNoTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_PADRE', 'Test 13b');
 }
 
 // ---------------------------------------------------------------------------
@@ -832,7 +970,7 @@ async function run() {
   resetTestDb();
 
   console.log('='.repeat(85));
-  console.log('🧪 SUITE OFICIAL: VALIDACIONES EN ASIGNAR HORARIO MANUAL (13 CASOS)');
+  console.log('🧪 SUITE OFICIAL: VALIDACIONES EN ASIGNAR HORARIO MANUAL (16 CASOS)');
   console.log('='.repeat(85));
 
   const allTests = [
@@ -843,12 +981,15 @@ async function run() {
     { id: '5', nombre: 'Test 5: Descanso insuficiente respecto de hijo (Cuartos <- Semis)', fn: test5_descanso_insuficiente_hijo },
     { id: '6', nombre: 'Test 6: Cruce con parejas null en cuadro (estructura de árbol)', fn: test6_cruce_parejas_null },
     { id: '7', nombre: 'Test 7: No-regresión de validaciones actuales de colisión (cancha y parejas 409)', fn: test7_no_regresion_colisiones },
-    { id: '8', nombre: 'Test 8: Trasnoche 00:15 contra fin de zona 23:30 (cronología trasnoche)', fn: test8_trasnoche_sabado },
+    { id: '8a', nombre: 'Test 8a: Trasnoche 00:15 posterior a fin de zona 23:30 (sin aviso)', fn: test8a_trasnoche_sabado },
+    { id: '8b', nombre: 'Test 8b: Trasnoche 00:15 anterior a fin de zona 00:45 (aviso INICIA_ANTES_FIN_ZONAS)', fn: test8b_trasnoche_sabado_positivo },
     { id: '9', nombre: 'Test 9: Padre BYE no restringe descanso', fn: test9_padre_bye },
     { id: '10', nombre: 'Test 10: Zona manual sin partidos en categoría EN_CURSO (5 parejas)', fn: test10_zona_manual_sin_partidos },
-    { id: '11', nombre: 'Test 11: Final con descanso Semis -> Final (30 min) y límite', fn: test11_final_descanso_semis },
+    { id: '11a', nombre: 'Test 11a: Final con descanso Semis -> Final menor a 30 min (aviso DESCANSO_INSUFICIENTE_PADRE)', fn: test11a_final_descanso_semis },
+    { id: '11b', nombre: 'Test 11b: Final con descanso Semis -> Final de 30 min exactos (sin aviso)', fn: test11b_final_descanso_semis },
     { id: '12', nombre: 'Test 12: Unit tests del helper puro bracketWarnings', fn: test12_unit_tests_helper_puro },
-    { id: '13', nombre: 'Test 13: Octavos con padre R32 (aplica descanso 75 min: 30m advierte, 75m no)', fn: test13_octavos_padre_r32_descanso },
+    { id: '13a', nombre: 'Test 13a: Octavos con padre R32 descanso menor a 75 min (aviso DESCANSO_INSUFICIENTE_PADRE)', fn: test13a_octavos_padre_r32_descanso },
+    { id: '13b', nombre: 'Test 13b: Octavos con padre R32 descanso de 75 min exactos (sin aviso)', fn: test13b_octavos_padre_r32_descanso },
   ];
 
   const resultados = [];
