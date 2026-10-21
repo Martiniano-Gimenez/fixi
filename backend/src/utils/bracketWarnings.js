@@ -40,19 +40,56 @@ function obtenerDescansoMinimoRequeridoMs(rondaPadre, rondaHijo) {
 /**
  * Calcula el fin de zonas de una categoría a partir de sus partidos de zona.
  * Determina si hay partidos sin horario o zonas manuales sin partidos.
+ * Firma única: recibe un único objeto de opciones.
  *
- * @param {Array<object>} partidosZona - Lista de partidos de zona de la categoría
- * @param {number} totalZonas - Cantidad de zonas creadas en la categoría
- * @param {number} duracionMs - Duración de cada partido en ms (por defecto DURACION_MS)
+ * @param {object} [options={}]
+ * @param {Array<object>} [options.partidosZona=[]] - Lista de partidos de zona de la categoría
+ * @param {number} [options.totalZonas=0] - Cantidad de zonas creadas en la categoría
+ * @param {Array<string>} [options.zonasIds=[]] - IDs de todas las zonas de la categoría
+ * @param {number} [options.duracionMs=DURACION_MS] - Duración de cada partido en ms
  * @returns {{ maxZonaEndMs: number|null, tienePartidosSinHorario: boolean }}
  */
-function calcularFinDeZonasCategoria(partidosZona = [], totalZonas = 0, duracionMs = DURACION_MS) {
-  // Si totalZonas > 0 y no hay ningún partido de zona en la categoría, está indeterminado
-  if (totalZonas > 0 && (!partidosZona || partidosZona.length === 0)) {
+function calcularFinDeZonasCategoria({
+  partidosZona = [],
+  totalZonas = 0,
+  zonasIds = [],
+  duracionMs = DURACION_MS,
+} = {}) {
+  const effectiveTotalZonas = Math.max(
+    totalZonas || 0,
+    Array.isArray(zonasIds) ? zonasIds.length : 0
+  );
+
+  // Si hay zonas creadas pero la lista de partidos está vacía
+  if (effectiveTotalZonas > 0 && (!partidosZona || partidosZona.length === 0)) {
     return {
       maxZonaEndMs: null,
       tienePartidosSinHorario: true,
     };
+  }
+
+  // Si se proporcionan zonasIds o totalZonas, verificar si alguna zona no tiene ningún partido registrado
+  if (Array.isArray(zonasIds) && zonasIds.length > 0) {
+    const zonasConPartidos = new Set(
+      (partidosZona || []).filter((p) => p && p.zonaId).map((p) => p.zonaId)
+    );
+    const algunaZonaSinPartidos = zonasIds.some((id) => !zonasConPartidos.has(id));
+    if (algunaZonaSinPartidos) {
+      return {
+        maxZonaEndMs: null,
+        tienePartidosSinHorario: true,
+      };
+    }
+  } else if (effectiveTotalZonas > 0) {
+    const zonasConPartidos = new Set(
+      (partidosZona || []).filter((p) => p && p.zonaId).map((p) => p.zonaId)
+    );
+    if (zonasConPartidos.size < effectiveTotalZonas) {
+      return {
+        maxZonaEndMs: null,
+        tienePartidosSinHorario: true,
+      };
+    }
   }
 
   let tienePartidosSinHorario = false;
@@ -60,7 +97,7 @@ function calcularFinDeZonasCategoria(partidosZona = [], totalZonas = 0, duracion
 
   if (Array.isArray(partidosZona)) {
     for (const p of partidosZona) {
-      if (p.sinHorarioAsignado || !p.fechaHora) {
+      if (!p || p.sinHorarioAsignado || !p.fechaHora) {
         tienePartidosSinHorario = true;
       } else {
         const fecha = p.fechaHora instanceof Date ? p.fechaHora : new Date(p.fechaHora);
@@ -81,31 +118,25 @@ function calcularFinDeZonasCategoria(partidosZona = [], totalZonas = 0, duracion
 
 /**
  * Calcula las advertencias no bloqueantes para la asignación de un cruce eliminatorio.
+ * Firma única: recibe un único objeto de opciones.
  *
- * @param {object} params
- * @param {object} params.partido - El partido de eliminatoria que se desea agendar
- * @param {Date|string|number} params.fechaHoraPropuesta - Horario de inicio propuesto
- * @param {Array<object>} [params.padres=[]] - Partidos padres del cruce
- * @param {object|null} [params.hijo=null] - Partido hijo del cruce en la siguiente fase
- * @param {object|null} [params.finZonas=null] - Resultado de calcularFinDeZonasCategoria
- * @param {number} [params.duracionMs=DURACION_MS] - Duración del partido en ms
+ * @param {object} [options={}]
+ * @param {object} options.partido - El partido de eliminatoria que se desea agendar
+ * @param {Date|string|number} options.fechaHoraPropuesta - Horario de inicio propuesto
+ * @param {Array<object>} [options.padres=[]] - Partidos padres del cruce
+ * @param {object|null} [options.hijo=null] - Partido hijo del cruce en la siguiente fase
+ * @param {object|null} [options.finZonas=null] - Resultado de calcularFinDeZonasCategoria
+ * @param {number} [options.duracionMs=DURACION_MS] - Duración del partido en ms
  * @returns {{ advertencias: Array<{ codigo: string, mensaje: string, descansoDisponibleMin?: number, descansoRequeridoMin?: number }> }}
  */
-function calcularDescansosEliminatoria(params, ...rest) {
-  let partido, fechaHoraPropuesta, padres, hijo, finZonas, duracionMs;
-  if (params && typeof params === 'object' && ('partido' in params || 'fechaHoraPropuesta' in params)) {
-    ({
-      partido,
-      fechaHoraPropuesta,
-      padres = [],
-      hijo = null,
-      finZonas = null,
-      duracionMs = DURACION_MS,
-    } = params);
-  } else {
-    [partido, fechaHoraPropuesta, padres = [], hijo = null, finZonas = null, duracionMs = DURACION_MS] = [params, ...rest];
-  }
-
+function calcularDescansosEliminatoria({
+  partido,
+  fechaHoraPropuesta,
+  padres = [],
+  hijo = null,
+  finZonas = null,
+  duracionMs = DURACION_MS,
+} = {}) {
   const advertencias = [];
   if (!partido || !fechaHoraPropuesta) {
     return { advertencias };
