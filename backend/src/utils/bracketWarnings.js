@@ -60,12 +60,13 @@ function calcularFinDeZonasCategoria({
     Array.isArray(zonasIds) ? zonasIds.length : 0
   );
 
+  let tienePartidosSinHorario = false;
+  let zonasIncompletas = false;
+
   // Si hay zonas creadas pero la lista de partidos está vacía
   if (effectiveTotalZonas > 0 && (!partidosZona || partidosZona.length === 0)) {
-    return {
-      maxZonaEndMs: null,
-      tienePartidosSinHorario: true,
-    };
+    tienePartidosSinHorario = true;
+    zonasIncompletas = true;
   }
 
   // Si se proporcionan zonasIds o totalZonas, verificar si alguna zona no tiene ningún partido registrado
@@ -75,24 +76,19 @@ function calcularFinDeZonasCategoria({
     );
     const algunaZonaSinPartidos = zonasIds.some((id) => !zonasConPartidos.has(id));
     if (algunaZonaSinPartidos) {
-      return {
-        maxZonaEndMs: null,
-        tienePartidosSinHorario: true,
-      };
+      tienePartidosSinHorario = true;
+      zonasIncompletas = true;
     }
   } else if (effectiveTotalZonas > 0) {
     const zonasConPartidos = new Set(
       (partidosZona || []).filter((p) => p && p.zonaId).map((p) => p.zonaId)
     );
     if (zonasConPartidos.size < effectiveTotalZonas) {
-      return {
-        maxZonaEndMs: null,
-        tienePartidosSinHorario: true,
-      };
+      tienePartidosSinHorario = true;
+      zonasIncompletas = true;
     }
   }
 
-  let tienePartidosSinHorario = false;
   let maxZonaEndMs = null;
 
   if (Array.isArray(partidosZona)) {
@@ -113,6 +109,7 @@ function calcularFinDeZonasCategoria({
   return {
     maxZonaEndMs,
     tienePartidosSinHorario,
+    zonasIncompletas,
   };
 }
 
@@ -148,7 +145,7 @@ function calcularDescansosEliminatoria({
   const rondaActual = partido.faseEliminatoria?.ronda || partido.ronda || null;
 
   // 1. ZONA_CON_PARTIDOS_PENDIENTES
-  if (finZonas && finZonas.tienePartidosSinHorario) {
+  if (finZonas && (finZonas.tienePartidosSinHorario || finZonas.zonasIncompletas)) {
     advertencias.push({
       codigo: 'ZONA_CON_PARTIDOS_PENDIENTES',
       mensaje: 'La categoría tiene partidos de zona pendientes o zonas manuales sin partidos creados.',
