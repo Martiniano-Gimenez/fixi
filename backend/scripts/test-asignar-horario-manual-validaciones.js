@@ -338,9 +338,9 @@ async function test4_descanso_insuficiente_padre() {
 }
 
 // ---------------------------------------------------------------------------
-// TEST 5: Descanso insuficiente respecto de hijo (Cuartos <- Semis)
+// TEST 5a: Descanso insuficiente respecto de hijo (Cuartos <- Semis)
 // ---------------------------------------------------------------------------
-async function test5_descanso_insuficiente_hijo() {
+async function test5a_descanso_insuficiente_hijo() {
   const { org, torneo, cat } = await setupBaseTorneo();
 
   const fase8 = await prisma.faseEliminatoria.create({
@@ -382,7 +382,55 @@ async function test5_descanso_insuficiente_hijo() {
   });
 
   const advertencias = extraerAdvertencias(res);
-  assertTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_HIJO', 'Test 5');
+  assertTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_HIJO', 'Test 5a');
+}
+
+// ---------------------------------------------------------------------------
+// TEST 5b: Límite exacto con el hijo (Cuartos con Semis a 75 min exactos -> sin aviso)
+// ---------------------------------------------------------------------------
+async function test5b_descanso_hijo_limite_exacto() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const fase8 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Cuartos de Final', ronda: 8 },
+  });
+  const fase4 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Semifinal', ronda: 4 },
+  });
+
+  // Hijo en Semis (posicion 1): arranca a las 16:00hs del domingo
+  const fechaSemis = parseSlotToDate('Domingo-16:00', torneo.fecha);
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase4.id,
+      posicionEnRonda: 1,
+      fechaHora: fechaSemis,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Padre en Cuartos (posicion 1)
+  const pCuartos = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase8.id,
+      posicionEnRonda: 1,
+      sinHorarioAsignado: true,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Asignar Cuartos a las 13:30hs (termina 14:45hs -> descanso = 75 min exactos hasta las 16:00hs)
+  const res = await partidoService.asignarHorarioManual(org.id, pCuartos.id, {
+    slotId: 'Domingo-13:30',
+    canchaNumero: 2,
+  });
+
+  const advertencias = extraerAdvertencias(res);
+  assertNoTieneAdvertencia(advertencias, 'DESCANSO_INSUFICIENTE_HIJO', 'Test 5b');
 }
 
 // ---------------------------------------------------------------------------
@@ -1311,7 +1359,8 @@ async function run() {
     { id: '2', nombre: 'Test 2: R32 manual después de fin de zonas (sin aviso)', fn: test2_r32_despues_fin_zonas },
     { id: '3', nombre: 'Test 3: Zona con partido sin horario (aviso ZONA_CON_PARTIDOS_PENDIENTES)', fn: test3_zona_partido_sin_horario },
     { id: '4', nombre: 'Test 4: Descanso insuficiente respecto de padre (Octavos -> Cuartos)', fn: test4_descanso_insuficiente_padre },
-    { id: '5', nombre: 'Test 5: Descanso insuficiente respecto de hijo (Cuartos <- Semis)', fn: test5_descanso_insuficiente_hijo },
+    { id: '5a', nombre: 'Test 5a: Descanso insuficiente respecto de hijo (Cuartos <- Semis)', fn: test5a_descanso_insuficiente_hijo },
+    { id: '5b', nombre: 'Test 5b: Límite exacto con el hijo (Cuartos con Semis a 75 min exactos: sin aviso)', fn: test5b_descanso_hijo_limite_exacto },
     { id: '6', nombre: 'Test 6: Cruce con parejas null en cuadro (estructura de árbol)', fn: test6_cruce_parejas_null },
     { id: '7', nombre: 'Test 7: No-regresión de validaciones actuales de colisión (cancha y parejas 409)', fn: test7_no_regresion_colisiones },
     { id: '8a', nombre: 'Test 8a: Trasnoche 00:15 posterior a fin de zona 23:30 (sin aviso)', fn: test8a_trasnoche_sabado },
