@@ -6,6 +6,7 @@ const {
   calcularFinDeZonasCategoria,
   calcularDescansosEliminatoria,
 } = require('../utils/bracketWarnings');
+const { DURACION_PARTIDO_MIN } = require('./slots.service');
 
 async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
   const partido = await prisma.partido.findUnique({
@@ -783,7 +784,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
       partidosZona,
       totalZonas,
       zonasIds,
-      duracionMs: 75 * 60 * 1000,
+      duracionMs: DURACION_PARTIDO_MIN * 60 * 1000,
     });
 
     const rondaActual = partido.faseEliminatoria?.ronda || null;
@@ -826,7 +827,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
       padres,
       hijo,
       finZonas,
-      duracionMs: 75 * 60 * 1000,
+      duracionMs: DURACION_PARTIDO_MIN * 60 * 1000,
     });
 
     advertencias = resultadoAdvertencias.advertencias;
