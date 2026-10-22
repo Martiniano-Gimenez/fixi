@@ -29,6 +29,8 @@ const { resetTestDb } = require('./reset-test-db');
 const assert = require('node:assert');
 const prisma = require('../src/lib/prisma');
 const partidoService = require('../src/services/partido.service');
+const faseEliminatoriaService = require('../src/services/faseEliminatoria.service');
+const publicController = require('../src/controllers/public.controller');
 const { parseSlotToDate } = require('../src/services/zona.service');
 const bracketWarnings = require('../src/utils/bracketWarnings');
 
@@ -1344,6 +1346,264 @@ async function test13b_octavos_padre_r32_descanso() {
 }
 
 // ---------------------------------------------------------------------------
+// TEST 12o: Helper - resolverPadresEHijoEliminatoria e indexarPartidosEliminatoria
+// ---------------------------------------------------------------------------
+async function test12o_helper_resolver_padres_e_hijo() {
+  const { resolverPadresEHijoEliminatoria, indexarPartidosEliminatoria } = bracketWarnings;
+  assert.strictEqual(typeof resolverPadresEHijoEliminatoria, 'function', '12o: resolverPadresEHijoEliminatoria debe ser función');
+  assert.strictEqual(typeof indexarPartidosEliminatoria, 'function', '12o: indexarPartidosEliminatoria debe ser función');
+
+  const pOctavos1 = { id: 'o1', faseEliminatoria: { ronda: 16 }, posicionEnRonda: 1 };
+  const pOctavos2 = { id: 'o2', faseEliminatoria: { ronda: 16 }, posicionEnRonda: 2 };
+  const pCuartos1 = { id: 'c1', faseEliminatoria: { ronda: 8 }, posicionEnRonda: 1 };
+  const pSemis1 = { id: 's1', faseEliminatoria: { ronda: 4 }, posicionEnRonda: 1 };
+
+  const map = indexarPartidosEliminatoria([pOctavos1, pOctavos2, pCuartos1, pSemis1]);
+  const resCuartos = resolverPadresEHijoEliminatoria({ partido: pCuartos1, eliminatoriasMap: map });
+
+  assert.strictEqual(resCuartos.padres.length, 2, 'Cuartos 1 debe tener 2 padres');
+  assert.strictEqual(resCuartos.padres[0].id, 'o1');
+  assert.strictEqual(resCuartos.padres[1].id, 'o2');
+  assert.strictEqual(resCuartos.hijo?.id, 's1', 'Cuartos 1 debe tener de hijo a Semis 1');
+}
+
+// ---------------------------------------------------------------------------
+// TEST 14: getFasesEliminatorias devuelve advertencias en cruces con horarioManual: true
+// ---------------------------------------------------------------------------
+async function test14_getFasesEliminatorias_advertencias_coinciden() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const fase8 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Cuartos de Final', ronda: 8 },
+  });
+  const fase4 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Semifinal', ronda: 4 },
+  });
+
+  const fechaSemis = parseSlotToDate('Domingo-16:00', torneo.fecha);
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase4.id,
+      posicionEnRonda: 1,
+      fechaHora: fechaSemis,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+      horarioManual: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  const pCuartos = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase8.id,
+      posicionEnRonda: 1,
+      sinHorarioAsignado: true,
+      horarioManual: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Asignar Cuartos a las 15:00hs (solapa con Semis a las 16:00hs -> genera advertencia)
+  const resAsignar = await partidoService.asignarHorarioManual(org.id, pCuartos.id, {
+    slotId: 'Domingo-15:00',
+    canchaNumero: 2,
+  });
+  const advertenciasAsignar = extraerAdvertencias(resAsignar);
+  assertTieneAdvertencia(advertenciasAsignar, 'DESCANSO_INSUFICIENTE_HIJO', 'Test 14 asignar');
+
+  // Leer mediante getFasesEliminatorias
+  const fases = await faseEliminatoriaService.getFasesEliminatorias(org.id, cat.id);
+  const faseCuartos = fases.find((f) => f.id === fase8.id);
+  const partidoCuartosLeido = faseCuartos?.partidos?.find((p) => p.id === pCuartos.id);
+
+  assert.ok(partidoCuartosLeido, 'Test 14: Debe existir Cuartos en fases');
+  assert.strictEqual(partidoCuartosLeido.horarioManual, true, 'Test 14: Debe tener horarioManual: true');
+  assert.ok(Array.isArray(partidoCuartosLeido.advertencias), 'Test 14: Debe devolver array advertencias');
+  assert.deepStrictEqual(partidoCuartosLeido.advertencias, advertenciasAsignar, 'Test 14: Las advertencias leídas deben coincidir exactamente con las de asignarHorarioManual');
+}
+
+// ---------------------------------------------------------------------------
+// TEST 15: getFasesEliminatorias sin advertencias en cruces sin horarioManual
+// ---------------------------------------------------------------------------
+async function test15_getFasesEliminatorias_sin_horarioManual_sin_advertencias() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const fase8 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Cuartos de Final', ronda: 8 },
+  });
+  const fase4 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Semifinal', ronda: 4 },
+  });
+
+  // Ambos con horarios que solapan, pero horarioManual: false
+  const fechaSemis = parseSlotToDate('Domingo-16:00', torneo.fecha);
+  const fechaCuartos = parseSlotToDate('Domingo-15:00', torneo.fecha);
+
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase4.id,
+      posicionEnRonda: 1,
+      fechaHora: fechaSemis,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+      horarioManual: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase8.id,
+      posicionEnRonda: 1,
+      fechaHora: fechaCuartos,
+      canchaNumero: 2,
+      sinHorarioAsignado: false,
+      horarioManual: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  const fases = await faseEliminatoriaService.getFasesEliminatorias(org.id, cat.id);
+  for (const fase of fases) {
+    for (const p of fase.partidos) {
+      assert.ok(!p.advertencias || p.advertencias.length === 0, `Test 15: Partido ${p.id} sin horarioManual no debe tener advertencias`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TEST 16: Endpoint público GET /api/public/:slug NO expone advertencias ni horarioManual
+// ---------------------------------------------------------------------------
+async function test16_endpoint_publico_no_expone_advertencias() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const fase8 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Cuartos de Final', ronda: 8 },
+  });
+
+  const pCuartos = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase8.id,
+      posicionEnRonda: 1,
+      sinHorarioAsignado: true,
+      horarioManual: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // Asignar manualmente
+  await partidoService.asignarHorarioManual(org.id, pCuartos.id, {
+    slotId: 'Domingo-15:00',
+    canchaNumero: 2,
+  });
+
+  let responseData = null;
+  const mockReq = { params: { slug: torneo.slug } };
+  const mockRes = {
+    status: (code) => ({
+      json: (data) => { responseData = data; },
+    }),
+    json: (data) => { responseData = data; },
+  };
+
+  await publicController.getTorneoPublico(mockReq, mockRes, (err) => {
+    if (err) throw err;
+  });
+
+  assert.ok(responseData?.torneo, 'Test 16: Debe retornar payload del torneo');
+  assert.ok(Array.isArray(responseData?.categorias), 'Test 16: Debe retornar array categorias');
+  for (const c of responseData.categorias) {
+    if (Array.isArray(c.zonas)) {
+      for (const z of c.zonas) {
+        if (Array.isArray(z.partidos)) {
+          for (const p of z.partidos) {
+            assert.strictEqual(p.advertencias, undefined, 'Test 16: Partido de zona público no debe tener advertencias');
+            assert.strictEqual(p.horarioManual, undefined, 'Test 16: Partido de zona público no debe exponer horarioManual');
+          }
+        }
+      }
+    }
+    if (Array.isArray(c.eliminatoria)) {
+      for (const fase of c.eliminatoria) {
+        if (Array.isArray(fase.partidos)) {
+          for (const p of fase.partidos) {
+            assert.strictEqual(p.advertencias, undefined, 'Test 16: Partido de eliminatoria público no debe tener advertencias');
+            assert.strictEqual(p.horarioManual, undefined, 'Test 16: Partido de eliminatoria público no debe exponer horarioManual');
+          }
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TEST 17: Reprogramar partido y volver a leer getFasesEliminatorias actualiza advertencias
+// ---------------------------------------------------------------------------
+async function test17_reprogramar_partido_actualiza_advertencias() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  const fase8 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Cuartos de Final', ronda: 8 },
+  });
+  const fase4 = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Semifinal', ronda: 4 },
+  });
+
+  const fechaSemis = parseSlotToDate('Domingo-16:00', torneo.fecha);
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase4.id,
+      posicionEnRonda: 1,
+      fechaHora: fechaSemis,
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+      horarioManual: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  const pCuartos = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase8.id,
+      posicionEnRonda: 1,
+      sinHorarioAsignado: true,
+      horarioManual: false,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  // 1. Asignar con conflicto (15:00 -> solapa con Semis a las 16:00)
+  await partidoService.asignarHorarioManual(org.id, pCuartos.id, {
+    slotId: 'Domingo-15:00',
+    canchaNumero: 2,
+  });
+
+  const fases1 = await faseEliminatoriaService.getFasesEliminatorias(org.id, cat.id);
+  const p1 = fases1.find((f) => f.id === fase8.id)?.partidos?.find((p) => p.id === pCuartos.id);
+  assert.ok(p1 && Array.isArray(p1.advertencias), 'Test 17: p1 debe tener array de advertencias');
+  assertTieneAdvertencia(p1.advertencias, 'DESCANSO_INSUFICIENTE_HIJO', 'Test 17 pre-reprogramar');
+
+  // 2. Reprogramar a las 13:30 (descanso = 75 min exactos -> conflicto resuelto)
+  await partidoService.asignarHorarioManual(org.id, pCuartos.id, {
+    slotId: 'Domingo-13:30',
+    canchaNumero: 2,
+  });
+
+  const fases2 = await faseEliminatoriaService.getFasesEliminatorias(org.id, cat.id);
+  const p2 = fases2.find((f) => f.id === fase8.id)?.partidos?.find((p) => p.id === pCuartos.id);
+  assert.ok(p2 && Array.isArray(p2.advertencias), 'Test 17: p2 debe tener array de advertencias');
+  assertNoTieneAdvertencia(p2.advertencias, 'DESCANSO_INSUFICIENTE_HIJO', 'Test 17 post-reprogramar');
+  assert.strictEqual(p2.advertencias.length, 0, 'Test 17: p2 no debe tener advertencias');
+}
+
+// ---------------------------------------------------------------------------
 // RUNNER CENTRAL DE LA SUITE
 // ---------------------------------------------------------------------------
 async function run() {
@@ -1383,8 +1643,13 @@ async function run() {
     { id: '12l', nombre: 'Test 12l: Helper - Ronda sin padres ni hijo: solo evalúa fin de zonas', fn: test12l_primera_ronda_sin_padres_ni_hijo },
     { id: '12m', nombre: 'Test 12m: Helper - Detección por zonasIds con totalZonas omitido', fn: test12m_deteccion_zonas_ids },
     { id: '12n', nombre: 'Test 12n: Helper - Semis -> Final: 15 min advierte, 30 min exactos no', fn: test12n_semis_final_limite },
+    { id: '12o', nombre: 'Test 12o: Helper - resolverPadresEHijoEliminatoria e indexarPartidosEliminatoria', fn: test12o_helper_resolver_padres_e_hijo },
     { id: '13a', nombre: 'Test 13a: Octavos con padre R32 descanso menor a 75 min (aviso DESCANSO_INSUFICIENTE_PADRE)', fn: test13a_octavos_padre_r32_descanso },
     { id: '13b', nombre: 'Test 13b: Octavos con padre R32 descanso de 75 min exactos (sin aviso)', fn: test13b_octavos_padre_r32_descanso },
+    { id: '14', nombre: 'Test 14: getFasesEliminatorias devuelve advertencias en cruces con horarioManual: true', fn: test14_getFasesEliminatorias_advertencias_coinciden },
+    { id: '15', nombre: 'Test 15: getFasesEliminatorias sin advertencias en cruces sin horarioManual', fn: test15_getFasesEliminatorias_sin_horarioManual_sin_advertencias },
+    { id: '16', nombre: 'Test 16: Endpoint público GET /api/public/:slug NO expone advertencias ni horarioManual', fn: test16_endpoint_publico_no_expone_advertencias },
+    { id: '17', nombre: 'Test 17: Reprogramar partido y volver a leer getFasesEliminatorias actualiza advertencias', fn: test17_reprogramar_partido_actualiza_advertencias },
   ];
 
   const resultados = [];
