@@ -2,6 +2,10 @@ const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 const { parseSlotToDate } = require('./zona.service');
 const { requireTorneoFecha } = require('../utils/dateUtils');
+const {
+  calcularFinDeZonasCategoria,
+  calcularDescansosEliminatoria,
+} = require('../utils/bracketWarnings');
 
 async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
   const partido = await prisma.partido.findUnique({
@@ -752,6 +756,82 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
     }
   }
 
+  // Calcular advertencias no bloqueantes ANTES de escribir a la base de datos
+  let advertencias = [];
+  if (partido.faseEliminatoriaId) {
+    const zonasCategoria = await prisma.zona.findMany({
+      where: { categoriaId: partido.categoriaId },
+      select: { id: true },
+    });
+    const zonasIds = zonasCategoria.map((z) => z.id);
+    const totalZonas = zonasCategoria.length;
+
+    const partidosZona = await prisma.partido.findMany({
+      where: {
+        categoriaId: partido.categoriaId,
+        zonaId: { not: null },
+      },
+      select: {
+        id: true,
+        zonaId: true,
+        fechaHora: true,
+        sinHorarioAsignado: true,
+      },
+    });
+
+    const finZonas = calcularFinDeZonasCategoria({
+      partidosZona,
+      totalZonas,
+      zonasIds,
+      duracionMs: 75 * 60 * 1000,
+    });
+
+    const rondaActual = partido.faseEliminatoria?.ronda || null;
+    const posicionActual = partido.posicionEnRonda || 1;
+
+    let padres = [];
+    if (rondaActual) {
+      const rondaPadre = rondaActual * 2;
+      padres = await prisma.partido.findMany({
+        where: {
+          categoriaId: partido.categoriaId,
+          id: { not: partidoId },
+          faseEliminatoria: { ronda: rondaPadre },
+          posicionEnRonda: { in: [posicionActual * 2 - 1, posicionActual * 2] },
+        },
+        include: {
+          faseEliminatoria: true,
+        },
+      });
+    }
+
+    let hijo = null;
+    if (rondaActual && rondaActual > 2) {
+      hijo = await prisma.partido.findFirst({
+        where: {
+          categoriaId: partido.categoriaId,
+          id: { not: partidoId },
+          faseEliminatoria: { ronda: rondaActual / 2 },
+          posicionEnRonda: Math.ceil(posicionActual / 2),
+        },
+        include: {
+          faseEliminatoria: true,
+        },
+      });
+    }
+
+    const resultadoAdvertencias = calcularDescansosEliminatoria({
+      partido,
+      fechaHoraPropuesta: targetDate,
+      padres,
+      hijo,
+      finZonas,
+      duracionMs: 75 * 60 * 1000,
+    });
+
+    advertencias = resultadoAdvertencias.advertencias;
+  }
+
   const updated = await prisma.partido.update({
     where: { id: partidoId },
     data: {
@@ -771,6 +851,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
   return {
     message: 'Horario y cancha asignados correctamente.',
     partido: updated,
+    advertencias,
   };
 }
 
