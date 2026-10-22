@@ -1,5 +1,12 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
+const { DURACION_PARTIDO_MIN } = require('./slots.service');
+const {
+  calcularFinDeZonasCategoria,
+  calcularDescansosEliminatoria,
+  indexarPartidosEliminatoria,
+  resolverPadresEHijoEliminatoria,
+} = require('../utils/bracketWarnings');
 
 function ordenarZonaParejas(zonaParejas, formato) {
   if (!Array.isArray(zonaParejas)) return [];
@@ -542,6 +549,62 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
         }
       } else if (!p.pareja2 && !p.displayPareja2) {
         p.displayOrigenPareja2 = `Ganador ${nombrePrevia} #${posPrev2}`;
+      }
+    }
+  }
+
+  // 3. Calcular advertencias no bloqueantes en lote para cruces con horario manual
+  const hayPartidosManualesConHorario = fases.some((f) =>
+    f.partidos?.some((p) => p.horarioManual && p.fechaHora)
+  );
+
+  if (hayPartidosManualesConHorario) {
+    const zonasCategoria = await prisma.zona.findMany({
+      where: { categoriaId },
+      select: {
+        id: true,
+        partidos: {
+          select: {
+            id: true,
+            zonaId: true,
+            fechaHora: true,
+            sinHorarioAsignado: true,
+          },
+        },
+      },
+    });
+
+    const zonasIds = zonasCategoria.map((z) => z.id);
+    const totalZonas = zonasCategoria.length;
+    const partidosZona = zonasCategoria.flatMap((z) => z.partidos || []);
+
+    const finZonas = calcularFinDeZonasCategoria({
+      partidosZona,
+      totalZonas,
+      zonasIds,
+      duracionMs: DURACION_PARTIDO_MIN * 60 * 1000,
+    });
+
+    const todosPartidosEliminatoria = fases.flatMap((f) => f.partidos || []);
+    const eliminatoriasMap = indexarPartidosEliminatoria(todosPartidosEliminatoria);
+
+    for (const p of todosPartidosEliminatoria) {
+      if (p.horarioManual && p.fechaHora) {
+        const { padres, hijo } = resolverPadresEHijoEliminatoria({
+          partido: p,
+          eliminatoriasMap,
+        });
+
+        const resultado = calcularDescansosEliminatoria({
+          partido: p,
+          fechaHoraPropuesta: p.fechaHora,
+          padres,
+          hijo,
+          finZonas,
+          duracionMs: DURACION_PARTIDO_MIN * 60 * 1000,
+        });
+
+        p.advertencias = resultado.advertencias;
       }
     }
   }

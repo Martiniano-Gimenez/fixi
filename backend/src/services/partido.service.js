@@ -5,6 +5,8 @@ const { requireTorneoFecha } = require('../utils/dateUtils');
 const {
   calcularFinDeZonasCategoria,
   calcularDescansosEliminatoria,
+  indexarPartidosEliminatoria,
+  resolverPadresEHijoEliminatoria,
 } = require('../utils/bracketWarnings');
 const { DURACION_PARTIDO_MIN } = require('./slots.service');
 
@@ -787,39 +789,18 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
       duracionMs: DURACION_PARTIDO_MIN * 60 * 1000,
     });
 
-    const rondaActual = partido.faseEliminatoria?.ronda || null;
-    const posicionActual = partido.posicionEnRonda || 1;
+    const partidosEliminatoria = await prisma.partido.findMany({
+      where: {
+        categoriaId: partido.categoriaId,
+        faseEliminatoriaId: { not: null },
+      },
+      include: {
+        faseEliminatoria: true,
+      },
+    });
 
-    let padres = [];
-    if (rondaActual) {
-      const rondaPadre = rondaActual * 2;
-      padres = await prisma.partido.findMany({
-        where: {
-          categoriaId: partido.categoriaId,
-          id: { not: partidoId },
-          faseEliminatoria: { ronda: rondaPadre },
-          posicionEnRonda: { in: [posicionActual * 2 - 1, posicionActual * 2] },
-        },
-        include: {
-          faseEliminatoria: true,
-        },
-      });
-    }
-
-    let hijo = null;
-    if (rondaActual && rondaActual > 2) {
-      hijo = await prisma.partido.findFirst({
-        where: {
-          categoriaId: partido.categoriaId,
-          id: { not: partidoId },
-          faseEliminatoria: { ronda: rondaActual / 2 },
-          posicionEnRonda: Math.ceil(posicionActual / 2),
-        },
-        include: {
-          faseEliminatoria: true,
-        },
-      });
-    }
+    const eliminatoriasMap = indexarPartidosEliminatoria(partidosEliminatoria);
+    const { padres, hijo } = resolverPadresEHijoEliminatoria({ partido, eliminatoriasMap });
 
     const resultadoAdvertencias = calcularDescansosEliminatoria({
       partido,

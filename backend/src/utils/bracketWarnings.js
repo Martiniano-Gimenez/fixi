@@ -210,9 +210,77 @@ function calcularDescansosEliminatoria({
   return { advertencias };
 }
 
+/**
+ * Indexa una lista de partidos eliminatorios en un Map con clave `${ronda}_${posicionEnRonda}`.
+ * @param {Array<Object>} partidos
+ * @returns {Map<string, Object>}
+ */
+function indexarPartidosEliminatoria(partidos) {
+  const map = new Map();
+  if (Array.isArray(partidos)) {
+    for (const p of partidos) {
+      if (!p) continue;
+      const ronda = p.faseEliminatoria?.ronda || p.ronda;
+      const pos = p.posicionEnRonda;
+      if (ronda && pos) {
+        map.set(`${ronda}_${pos}`, p);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Dado un partido y un mapa indexado de partidos eliminatorios (por ronda y posición),
+ * resuelve y devuelve sus partidos padres e hijo en el árbol eliminatorio.
+ * Excluye al propio partido (por id).
+ *
+ * @param {Object} params
+ * @param {Object} params.partido
+ * @param {Map<string, Object>} params.eliminatoriasMap
+ * @returns {{ padres: Array<Object>, hijo: Object|null }}
+ */
+function resolverPadresEHijoEliminatoria({ partido, eliminatoriasMap }) {
+  const partidoId = partido?.id;
+  const rondaActual = partido?.faseEliminatoria?.ronda || partido?.ronda || null;
+  const posicionActual = partido?.posicionEnRonda || 1;
+
+  const padres = [];
+  let hijo = null;
+
+  if (rondaActual && eliminatoriasMap instanceof Map) {
+    const rondaPadre = rondaActual * 2;
+    const posPadre1 = posicionActual * 2 - 1;
+    const posPadre2 = posicionActual * 2;
+
+    const padre1 = eliminatoriasMap.get(`${rondaPadre}_${posPadre1}`);
+    if (padre1 && padre1.id !== partidoId) {
+      padres.push(padre1);
+    }
+    const padre2 = eliminatoriasMap.get(`${rondaPadre}_${posPadre2}`);
+    if (padre2 && padre2.id !== partidoId) {
+      padres.push(padre2);
+    }
+
+    if (rondaActual > 2) {
+      const rondaHijo = rondaActual / 2;
+      const posHijo = Math.ceil(posicionActual / 2);
+      const candHijo = eliminatoriasMap.get(`${rondaHijo}_${posHijo}`);
+      if (candHijo && candHijo.id !== partidoId) {
+        hijo = candHijo;
+      }
+    }
+  }
+
+  return { padres, hijo };
+}
+
 module.exports = {
   REST_CONSTANTS,
   obtenerDescansoMinimoRequeridoMs,
   calcularFinDeZonasCategoria,
   calcularDescansosEliminatoria,
+  indexarPartidosEliminatoria,
+  resolverPadresEHijoEliminatoria,
 };
+
