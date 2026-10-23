@@ -1603,6 +1603,91 @@ async function test17_reprogramar_partido_actualiza_advertencias() {
   assert.strictEqual(p2.advertencias.length, 0, 'Test 17: p2 no debe tener advertencias');
 }
 
+// TEST 18: getFasesEliminatorias no calcula ni devuelve advertencias en cruces FINALIZADO o EN_CURSO
+async function test18_getFasesEliminatorias_ignora_finalizados_y_en_curso() {
+  const { org, torneo, cat } = await setupBaseTorneo();
+
+  // Zona con partido a las 18:00
+  const zona = await prisma.zona.create({
+    data: { categoriaId: cat.id, nombre: 'Zona A' },
+  });
+  await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      zonaId: zona.id,
+      fechaHora: parseSlotToDate('Domingo-18:00', torneo.fecha),
+      canchaNumero: 1,
+      sinHorarioAsignado: false,
+    },
+  });
+
+  // Fase eliminatoria con partidos manuales con conflicto (14:00 < fin de zonas 19:15)
+  const fase = await prisma.faseEliminatoria.create({
+    data: { categoriaId: cat.id, nombre: 'Octavos', ronda: 16 },
+  });
+
+  const pFinalizado = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase.id,
+      posicionEnRonda: 1,
+      fechaHora: parseSlotToDate('Domingo-14:00', torneo.fecha),
+      horarioManual: true,
+      estado: 'FINALIZADO',
+    },
+  });
+
+  const pEnCurso = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase.id,
+      posicionEnRonda: 2,
+      fechaHora: parseSlotToDate('Domingo-14:00', torneo.fecha),
+      horarioManual: true,
+      estado: 'EN_CURSO',
+    },
+  });
+
+  const pPendiente = await prisma.partido.create({
+    data: {
+      categoriaId: cat.id,
+      faseEliminatoriaId: fase.id,
+      posicionEnRonda: 3,
+      fechaHora: parseSlotToDate('Domingo-14:00', torneo.fecha),
+      horarioManual: true,
+      estado: 'PENDIENTE',
+    },
+  });
+
+  const fases = await faseEliminatoriaService.getFasesEliminatorias(org.id, cat.id);
+  const partidos = fases.find((f) => f.id === fase.id)?.partidos || [];
+
+  const resFin = partidos.find((p) => p.id === pFinalizado.id);
+  const resCur = partidos.find((p) => p.id === pEnCurso.id);
+  const resPen = partidos.find((p) => p.id === pPendiente.id);
+
+  assert.ok(resFin, 'Partido finalizado debe existir en la respuesta');
+  assert.strictEqual(
+    resFin.advertencias,
+    undefined,
+    'Partido FINALIZADO no debe tener advertencias'
+  );
+
+  assert.ok(resCur, 'Partido en curso debe existir en la respuesta');
+  assert.strictEqual(
+    resCur.advertencias,
+    undefined,
+    'Partido EN_CURSO no debe tener advertencias'
+  );
+
+  assert.ok(resPen, 'Partido pendiente debe existir en la respuesta');
+  assert.ok(
+    Array.isArray(resPen.advertencias) && resPen.advertencias.length > 0,
+    'Partido PENDIENTE con conflicto debe tener advertencias'
+  );
+  assertTieneAdvertencia(resPen.advertencias, 'INICIA_ANTES_FIN_ZONAS', 'Test 18 pendiente');
+}
+
 // ---------------------------------------------------------------------------
 // RUNNER CENTRAL DE LA SUITE
 // ---------------------------------------------------------------------------
@@ -1650,6 +1735,7 @@ async function run() {
     { id: '15', nombre: 'Test 15: getFasesEliminatorias sin advertencias en cruces sin horarioManual', fn: test15_getFasesEliminatorias_sin_horarioManual_sin_advertencias },
     { id: '16', nombre: 'Test 16: Endpoint público GET /api/public/:slug NO expone advertencias ni horarioManual', fn: test16_endpoint_publico_no_expone_advertencias },
     { id: '17', nombre: 'Test 17: Reprogramar partido y volver a leer getFasesEliminatorias actualiza advertencias', fn: test17_reprogramar_partido_actualiza_advertencias },
+    { id: '18', nombre: 'Test 18: getFasesEliminatorias no calcula ni devuelve advertencias en cruces FINALIZADO o EN_CURSO', fn: test18_getFasesEliminatorias_ignora_finalizados_y_en_curso },
   ];
 
   const resultados = [];
