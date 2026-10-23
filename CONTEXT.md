@@ -480,6 +480,7 @@ organizadores que hoy llevan todo en papel.
     - Al hacer clic (con `e.stopPropagation()`), abre `AdvertenciasHorarioModal.jsx` listando cada advertencia de forma legible y accesible sin dependencia de eventos `:hover` (óptimo para pantallas táctiles).
     - En `AsignarHorarioModal.jsx`, si el backend responde con advertencias tras la asignación, el modal no se cierra automáticamente: despliega las advertencias con un botón "Entendido" que invoca `onAssigned(res)` y `onClose()` solo cuando el organizador lo pulsa.
     - Blindaje responsive: `flexWrap: 'wrap'` y contención visual que aseguran cero desbordes horizontales en celulares estrechos ($\le 320\text{px}$).
+    - Auditoría de Linter Frontend (`oxlint`): Ejecutado desde `frontend/` con `.oxlintrc.json` (93 reglas) y contrastado contra la versión de `main`: 0 errores y 0 warnings nuevos introducidos.
 
 ## Casos conocidos y tickets pendientes de resolución
 - **Ticket Zonas Manuales (`fix/zona-manual-sin-partidos`):**

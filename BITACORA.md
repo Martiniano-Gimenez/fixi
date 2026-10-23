@@ -2252,7 +2252,7 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 - **Qué decidí y por qué:**
   - En `faseEliminatoria.service.js`, integré `evaluarAdvertenciasEnLote`: se leen los partidos de zona de la categoría en una única consulta, se calcula el fin de zonas consolidado, y se indexan los partidos eliminatorios en un mapa `${ronda}_${posicionEnRonda}` para resolver el árbol completo en memoria (0 consultas N+1).
   - Filtrado estricto por estado: `esPartidoManualEvaluable = p.horarioManual && p.estado !== 'FINALIZADO' && p.estado !== 'EN_CURSO'`. Para cruces `FINALIZADO` o `EN_CURSO`, se devuelve `advertencias: []`.
-  - Se blindó este comportamiento con tests independientes específicos (Test 18a para `FINALIZADO` y Test 18b para `EN_CURSO`), validando mediante mutación y ejecución en rojo que la omisión de estos filtros rompe inequívocamente las aserciones.
+  - Se blindó este comportamiento con tests independientes específicos (Test 18a para `FINALIZADO` y Test 18b para `EN_CURSO`), validando mediante prueba de mutación (removiendo temporalmente la condición de estado) que la suite cae en rojo de forma inmediata y certera ante regresiones.
 - **Resultado final:** Consulta masiva ultrarrápida del cuadro eliminatorio con advertencias calculadas en memoria y supresión de alertas en cruces concluidos o en juego.
 
 ### 3. Alcance y Límites Actuales de `asignarHorarioManual`
@@ -2271,16 +2271,17 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
   - En `AsignarHorarioModal.jsx`: Si `res.advertencias` contiene elementos, el modal permanece abierto mostrando el listado de advertencias y un botón de cierre "Entendido" que invoca `onAssigned(res)` y `onClose()`.
   - En `EliminatoriaView.jsx`: Si `partido.horarioManual === true` y `partido.advertencias?.length > 0`, se muestra el badge interactivo `<button type="button" className="badge badge-warning">Revisar horario</button>`.
   - Creación de `AdvertenciasHorarioModal.jsx`: Al hacer clic o tap (con `e.stopPropagation()`), se abre un modal accesible centrado en pantalla, eliminando la dependencia de tooltips `:hover` (inoperantes en interfaces touch).
-  - Blindaje responsive: Se aplicó `flexWrap: 'wrap'` y contención de ancho en la cabecera de la tarjeta del bracket, garantizando legibilidad y cero scroll horizontal en 320px. Se verificó paridad de linter en `oxlint` (0 warnings nuevos).
-- **Resultado final:** Flujo claro, accesible y no invasivo para la revisión de advertencias horarias tanto en modal de asignación como en el cuadro de playoffs.
+  - Blindaje responsive: Se aplicó `flexWrap: 'wrap'` y contención de ancho en la cabecera de la tarjeta del bracket, garantizando legibilidad y cero scroll horizontal en 320px.
+  - Auditoría de calidad de código con `oxlint`: Se ejecutó `oxlint` (`.oxlintrc.json`, 93 reglas) desde `frontend/` comparando la versión previa de `main` (`e24e453:frontend/src/components/AsignarHorarioModal.jsx`) y la versión modificada de la rama. Ambas arrojaron exactamente el mismo warning preexistente (`react-hooks(exhaustive-deps)` sobre `cargarCanchasDisponibles`), certificando 0 errores y 0 warnings nuevos introducidos.
+- **Resultado final:** Flujo claro, accesible y no invasivo para la revisión de advertencias horarias tanto en modal de asignación como en el cuadro de playoffs, con paridad limpia de linter.
 
 ### 5. Auditoría de Determinismo del Fuzzing y Corrección de Baseline
 - **Problema o necesidad que motivó el trabajo:** Auditar el impacto de los cambios sobre el motor de fuzzing determinista (`test-fuzz-scheduler.js`, 500 semillas) y contrastar contra la línea base de invariantes.
 - **Qué decidí y por qué:**
-  - Se constató que la invariante `precheck_monotonia:post-inicio` varía entre corridas completas (121/120/122 semillas fallidas), de causa no determinada.
-  - Al aislar `precheck_monotonia:post-inicio`, el baseline estable de invariantes contiene **exactamente 26 líneas `[SEMILLAS]`**, donde únicamente `eliminatorias_descanso_y_post_zonas:post-reduccion` tiene semillas (18: 17,29,53,61,109,136,147,171,187,209,234,327,342,343,368,377,479,497) y las otras 25 invariantes registran 0 fallas (`[]`).
+  - Se constató que la invariante `precheck_monotonia:post-inicio` varía entre corridas completas (121/120/122 semillas fallidas), catalogándose con rigor como de **causa no determinada** al no disponerse de demostración reproducible aislada.
+  - Al aislar `precheck_monotonia:post-inicio`, el baseline estable de invariantes contiene **exactamente 26 líneas `[SEMILLAS]`**, donde únicamente `eliminatorias_descanso_y_post_zonas:post-reduccion` tiene semillas (18: 17,29,53,61,109,136,147,171,187,209,234,327,342,343,368,377,479,497) y las otras 25 invariantes registran 0 fallas (`[]`), eliminando menciones erróneas a 24 fallas de post-reducción, 2 de post-inicio o a las semillas 270 y 386.
   - El diff de fallas estables contra el baseline arrojó identidad total (`Compare-Object` vacío y hashes SHA256 coincidentes).
-- **Resultado final:** Coexistencia pacífica verificada, determinismo del núcleo de invariantes del scheduler y línea base formalmente calibrada a 26 líneas.
+- **Resultado final:** Coexistencia pacífica verificada, determinismo del núcleo de invariantes del scheduler y línea base formalmente calibrada a 26 líneas (18 semillas en post-reducción).
 
 ---
 
