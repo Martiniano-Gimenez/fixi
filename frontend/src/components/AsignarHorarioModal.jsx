@@ -14,6 +14,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   const [error, setError] = useState('');
   const [showAlternativas, setShowAlternativas] = useState(false);
   const [showTodosViables, setShowTodosViables] = useState(false);
+  const [advertenciasAsignacion, setAdvertenciasAsignacion] = useState(null);
 
   const [expandedSlotId, setExpandedSlotId] = useState(null);
 
@@ -25,6 +26,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       setShowAlternativas(false);
       setShowTodosViables(false);
       setExpandedSlotId(null);
+      setAdvertenciasAsignacion(null);
     }
   }, [isOpen, torneoId, partido]);
 
@@ -256,6 +258,15 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     );
   };
 
+  const handleCerrarModal = () => {
+    if (advertenciasAsignacion) {
+      if (onAssigned) onAssigned(advertenciasAsignacion.res);
+      onClose();
+    } else {
+      onClose();
+    }
+  };
+
   const handleAsignar = async (opt) => {
     if (!opt || guardandoSlotId) return;
     setGuardandoSlotId(opt.slotId);
@@ -270,12 +281,16 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     }
 
     try {
-      await api.put(`/partidos/${partido.id}/asignar-horario-manual`, {
+      const res = await api.put(`/partidos/${partido.id}/asignar-horario-manual`, {
         slotId: opt.slotId,
         canchaNumero: cancha,
       });
-      if (onAssigned) onAssigned();
-      onClose();
+      if (res?.advertencias && res.advertencias.length > 0) {
+        setAdvertenciasAsignacion({ advertencias: res.advertencias, res });
+      } else {
+        if (onAssigned) onAssigned(res);
+        onClose();
+      }
     } catch (err) {
       setError(err.message || 'Error al asignar horario y cancha.');
     } finally {
@@ -409,7 +424,14 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   };
 
   return (
-    <div className="modal-overlay">
+    <div
+      className="modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !guardandoSlotId) {
+          handleCerrarModal();
+        }
+      }}
+    >
       <div className="modal-content" style={{ maxWidth: '640px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.5rem' }}>
@@ -421,7 +443,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
               {partido.categoria?.nombre} · {contextoNombre}
             </span>
           </div>
-          <button type="button" className="btn-link-action" onClick={onClose} style={{ color: 'var(--color-text-secondary)', padding: '0.25rem' }}>
+          <button type="button" className="btn-link-action" onClick={handleCerrarModal} style={{ color: 'var(--color-text-secondary)', padding: '0.25rem' }}>
             <X size={18} />
           </button>
         </div>
@@ -525,7 +547,33 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         )}
 
         {/* Contenido principal */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
+        {advertenciasAsignacion ? (
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem 0' }}>
+            <div
+              style={{
+                padding: '1rem',
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: 'var(--radius-md)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <AlertTriangle size={18} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
+                <strong style={{ color: 'var(--color-warning)', fontSize: 'var(--font-size-sm)' }}>
+                  Horario asignado con advertencias
+                </strong>
+              </div>
+              <ul style={{ margin: '0.5rem 0 0 0', paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {advertenciasAsignacion.advertencias.map((adv, idx) => (
+                  <li key={idx} style={{ color: 'var(--color-text)', fontSize: 'var(--font-size-xs)', lineHeight: 1.4 }}>
+                    {adv.mensaje}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : (
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
           {loadingCanchas ? (
             <div className="loading" style={{ padding: '2rem' }}>
               <Loader2 size={18} className="spin" /> Consultando canchas y disponibilidad en tiempo real...
@@ -693,13 +741,20 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
               </div>
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid var(--color-border)', marginTop: '0.4rem' }}>
-          <button type="button" className="btn-secondary" onClick={onClose} disabled={Boolean(guardandoSlotId)}>
-            Cerrar
-          </button>
+          {advertenciasAsignacion ? (
+            <button type="button" className="btn-primary" onClick={handleCerrarModal}>
+              Entendido
+            </button>
+          ) : (
+            <button type="button" className="btn-secondary" onClick={handleCerrarModal} disabled={Boolean(guardandoSlotId)}>
+              Cerrar
+            </button>
+          )}
         </div>
       </div>
     </div>

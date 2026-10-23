@@ -5,6 +5,7 @@ import ResultadoModal from '../../components/ResultadoModal';
 import EditBracketMatchModal from '../../components/EditBracketMatchModal';
 import ConfirmModal from '../../components/ConfirmModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
+import AdvertenciasHorarioModal from '../../components/AdvertenciasHorarioModal';
 import BracketLines from '../../components/BracketLines';
 import { ChevronLeft, GitBranch, Settings, Clock, AlertTriangle } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
@@ -32,6 +33,7 @@ export default function EliminatoriaView() {
   const [error, setError] = useState(null);
   const [partidoModal, setPartidoModal] = useState(null);
   const [partidoReprogramar, setPartidoReprogramar] = useState(null);
+  const [advertenciasModal, setAdvertenciasModal] = useState(null);
   const [editBracketModal, setEditBracketModal] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: null });
   const [activeRoundId, setActiveRoundId] = useState(null);
@@ -269,11 +271,29 @@ export default function EliminatoriaView() {
 
             {!isBye && (
               partido.fechaHora ? (
-                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                     <Clock size={11} style={{ color: 'var(--color-primary)' }} />
                     {formatDiaHorario(partido.fechaHora)}
                   </div>
+                  {partido.horarioManual === true && Array.isArray(partido.advertencias) && partido.advertencias.length > 0 && (
+                    <button
+                      type="button"
+                      className="badge badge-warning"
+                      style={{
+                        cursor: 'pointer',
+                        border: 'none',
+                        maxWidth: '100%',
+                        whiteSpace: 'nowrap',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAdvertenciasModal(partido.advertencias);
+                      }}
+                    >
+                      Revisar horario
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -569,6 +589,14 @@ export default function EliminatoriaView() {
             setPartidoReprogramar(null);
             cargarDatos();
           }}
+        />
+      )}
+
+      {advertenciasModal && (
+        <AdvertenciasHorarioModal
+          isOpen={!!advertenciasModal}
+          advertencias={advertenciasModal}
+          onClose={() => setAdvertenciasModal(null)}
         />
       )}
 
