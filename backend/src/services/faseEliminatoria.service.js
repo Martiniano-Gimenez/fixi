@@ -553,9 +553,12 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
     }
   }
 
-  // 3. Calcular advertencias no bloqueantes en lote para cruces con horario manual
+  // 3. Calcular advertencias no bloqueantes en lote para cruces con horario manual no finalizados ni en curso
+  const esPartidoManualEvaluable = (p) =>
+    Boolean(p.horarioManual && p.fechaHora && p.estado !== 'FINALIZADO' && p.estado !== 'EN_CURSO');
+
   const hayPartidosManualesConHorario = fases.some((f) =>
-    f.partidos?.some((p) => p.horarioManual && p.fechaHora)
+    f.partidos?.some(esPartidoManualEvaluable)
   );
 
   if (hayPartidosManualesConHorario) {
@@ -589,7 +592,7 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
     const eliminatoriasMap = indexarPartidosEliminatoria(todosPartidosEliminatoria);
 
     for (const p of todosPartidosEliminatoria) {
-      if (p.horarioManual && p.fechaHora) {
+      if (esPartidoManualEvaluable(p)) {
         const { padres, hijo } = resolverPadresEHijoEliminatoria({
           partido: p,
           eliminatoriasMap,
