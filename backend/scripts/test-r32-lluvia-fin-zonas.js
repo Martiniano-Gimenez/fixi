@@ -138,7 +138,9 @@ async function crearEscenario(nombre, { zonas, r32 = [], octavos = [] }) {
     }
     const cruces = size === 2 ? [[0, 1]] : [[0, 1], [0, 2], [1, 2]];
     for (let mi = 0; mi < cruces.length; mi++) {
+      // [null, null] = partido de zona que ya estaba sin horario (ej. pendiente del inicio de emergencia)
       const [k, cancha] = spec[mi];
+      const sinHorarioPrevio = k === null;
       await prisma.partido.create({
         data: {
           categoriaId: cat.id,
@@ -146,9 +148,9 @@ async function crearEscenario(nombre, { zonas, r32 = [], octavos = [] }) {
           posicionEnRonda: mi + 1,
           pareja1Id: parejas[cruces[mi][0]].id,
           pareja2Id: parejas[cruces[mi][1]].id,
-          fechaHora: turno(k),
-          canchaNumero: cancha,
-          sinHorarioAsignado: false,
+          fechaHora: sinHorarioPrevio ? null : turno(k),
+          canchaNumero: sinHorarioPrevio ? null : cancha,
+          sinHorarioAsignado: sinHorarioPrevio,
         },
       });
     }
@@ -393,6 +395,37 @@ async function testC_zonasNoEntranR32SinHorario() {
 }
 
 /**
+ * (c2) Regla B con lugar libre: un partido de zona de la categoría ya estaba sin horario
+ * (pendiente del inicio de emergencia, fuera del mapa del día) y la cancha tiene lugar para el R32.
+ * El fin de zonas es indeterminado: el R32 automático queda sinHorarioAsignado y en partidosSinSlot.
+ */
+async function testC2_reglaBConLugarLibre() {
+  const esc = await crearEscenario('test-c2', {
+    zonas: [...ZONAS_12, [[null, null]]],
+    r32: [{ pos: 1, fechaHora: sab(20, 45), cancha: 1 }],
+  });
+
+  await reducir(esc);
+  const partidos = await cargarPartidos(esc);
+  verificarSinSolapamientos(partidos, 'post-reduccion');
+
+  const { sinHorario, maxEndMs } = finDeZonas(partidos);
+  assert(sinHorario.length === 1, `[post-reduccion] Precondición: debía quedar exactamente 1 partido de zona sin horario; quedaron ${sinHorario.length}`);
+  assert(
+    maxEndMs + DURACION_MS <= BASE_SABADO_MS + 30 * 60 * 60 * 1000,
+    `[post-reduccion] Precondición: debía quedar lugar para el R32 antes de las 06:00 (fin de zonas ${iso(maxEndMs)})`
+  );
+
+  const r32 = partidos.find((p) => p.id === esc.r32[0].id);
+  assertSinHorario(r32, 'post-reduccion');
+  const sinSlot = await leerPartidosSinSlot(esc);
+  assert(
+    Object.prototype.hasOwnProperty.call(sinSlot, r32.id),
+    `[post-reduccion] R32 ${r32.id} no figura en partidosSinSlot`
+  );
+}
+
+/**
  * (d) Todas las zonas entran pero el R32 automático no entra antes de dayLimitMs:
  * queda sinHorarioAsignado, sin conservar su horario original (cancha activa e inactiva).
  */
@@ -628,6 +661,7 @@ const TESTS = [
   ['a', 'R32 automático en cancha activa, zonas entran', testA_r32AutoCanchaActivaZonasEntran],
   ['b', 'R32 automático en cancha inactiva, zonas entran', testB_r32AutoCanchaInactivaZonasEntran],
   ['c', 'Zonas no entran: R32 automáticos sin horario y en partidosSinSlot', testC_zonasNoEntranR32SinHorario],
+  ['c2', 'Regla B con lugar libre: zona con partido sin horario previo', testC2_reglaBConLugarLibre],
   ['d', 'R32 automático no entra antes de dayLimitMs', testD_r32NoEntraAntesDeDayLimit],
   ['e', 'R32 manual en cancha activa no se mueve y avisa', testE_r32ManualCanchaActivaNoSeMueve],
   ['e2', 'R32 manual con parejas en cancha activa no se mueve y avisa', testE2_r32ManualConParejasCanchaActivaNoSeMueve],
