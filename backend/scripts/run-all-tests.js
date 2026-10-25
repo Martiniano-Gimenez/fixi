@@ -58,6 +58,7 @@ const TEST_SUITES = [
   'test-r32-lluvia-fin-zonas.js',
   'test-horario-club-cierre.js',
   'test-precheck-monotonia.js',
+  'test-determinismo-consultas.js',
 ];
 
 /**
