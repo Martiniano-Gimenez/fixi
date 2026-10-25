@@ -44,6 +44,10 @@ const CANCHAS_LLUVIA = 1;
 
 const BASE_SABADO_MS = zonaService.proximaFechaPorDia('Sabado', parseFechaLocal(FECHA_TORNEO)).getTime();
 
+// Inicio de la ventana nocturna de R32 para el club de prueba (sábado 09:00 a 24:00):
+// max(09:00, min(20:45, 24:00 - 150 min)) = 20:45. Valor fijo como oráculo independiente del código.
+const SAB_NOCHE_MS = BASE_SABADO_MS + (20 * 60 + 45) * 60 * 1000;
+
 /** Hora del sábado (hh >= 24 es trasnoche del domingo). */
 function sab(hh, mm = 0) {
   return new Date(BASE_SABADO_MS + (hh * 60 + mm) * 60 * 1000);
@@ -157,12 +161,27 @@ async function crearEscenario(nombre, { zonas, r32 = [], octavos = [] }) {
     });
     const creados = [];
     for (const c of cruces) {
+      // Parejas propias del cruce (fuera de las zonas) cuando el escenario pide el cruce ya definido
+      let pareja1Id = null;
+      let pareja2Id = null;
+      if (c.conParejas) {
+        const pa = await prisma.pareja.create({
+          data: { categoriaId: cat.id, jugador1: `R${ronda}-${c.pos}-1a`, jugador2: `R${ronda}-${c.pos}-1b`, orden: orden++ },
+        });
+        const pb = await prisma.pareja.create({
+          data: { categoriaId: cat.id, jugador1: `R${ronda}-${c.pos}-2a`, jugador2: `R${ronda}-${c.pos}-2b`, orden: orden++ },
+        });
+        pareja1Id = pa.id;
+        pareja2Id = pb.id;
+      }
       creados.push(
         await prisma.partido.create({
           data: {
             categoriaId: cat.id,
             faseEliminatoriaId: fase.id,
             posicionEnRonda: c.pos,
+            pareja1Id,
+            pareja2Id,
             origenPareja1: `1° Zona ${letras[(c.pos - 1) % zonas.length]}`,
             origenPareja2: c.esBye ? null : `2° Zona ${letras[c.pos % zonas.length]}`,
             fechaHora: c.esBye ? null : c.fechaHora || null,
@@ -255,6 +274,16 @@ function assertR32NoAntesDeFinZonas(partidos, etapa) {
   }
 }
 
+function assertR32NoAntesDeSabNoche(partidos, etapa) {
+  const r32 = partidos.filter((p) => p.faseEliminatoria?.ronda === 32 && conHorario(p));
+  for (const p of r32) {
+    assert(
+      new Date(p.fechaHora).getTime() >= SAB_NOCHE_MS,
+      `[${etapa}] R32 ${p.id} (pos ${p.posicionEnRonda}) inicia ${iso(p.fechaHora)}, antes de la ventana nocturna ${iso(SAB_NOCHE_MS)}`
+    );
+  }
+}
+
 function assertSinHorario(p, etapa) {
   assert(
     p.sinHorarioAsignado === true && p.fechaHora === null && p.canchaNumero === null,
@@ -307,6 +336,7 @@ async function testA_r32AutoCanchaActivaZonasEntran() {
   assert(conHorario(r32), `[post-reduccion] R32 automático debía tener horario; sinHorarioAsignado=${r32.sinHorarioAsignado}, fechaHora=${iso(r32.fechaHora)}`);
   assert(r32.canchaNumero <= CANCHAS_LLUVIA, `[post-reduccion] R32 en cancha inactiva ${r32.canchaNumero}`);
   assertR32NoAntesDeFinZonas(partidos, 'post-reduccion');
+  assertR32NoAntesDeSabNoche(partidos, 'post-reduccion');
 }
 
 /**
@@ -426,6 +456,38 @@ async function testE_r32ManualCanchaActivaNoSeMueve() {
 }
 
 /**
+ * (e2) R32 manual CON las dos parejas definidas en cancha ACTIVA: no se mueve,
+ * horarioManual sigue true y getFasesEliminatorias devuelve INICIA_ANTES_FIN_ZONAS.
+ */
+async function testE2_r32ManualConParejasCanchaActivaNoSeMueve() {
+  const horaManual = sab(20, 45);
+  const esc = await crearEscenario('test-e2', {
+    zonas: ZONAS_12,
+    r32: [{ pos: 1, fechaHora: horaManual, cancha: 1, manual: true, conParejas: true }],
+  });
+  assert(esc.r32[0].pareja1Id && esc.r32[0].pareja2Id, 'Precondición: el R32 debía tener las dos parejas definidas');
+
+  await reducir(esc);
+  const partidos = await cargarPartidos(esc);
+  verificarSinSolapamientos(partidos, 'post-reduccion');
+
+  const r32 = partidos.find((p) => p.id === esc.r32[0].id);
+  assert(
+    r32.fechaHora && new Date(r32.fechaHora).getTime() === horaManual.getTime() && r32.canchaNumero === 1 && !r32.sinHorarioAsignado,
+    `[post-reduccion] R32 manual con parejas se movió: esperado ${iso(horaManual)} C1, recibido ${iso(r32.fechaHora)} C${r32.canchaNumero} sinHorario=${r32.sinHorarioAsignado}`
+  );
+  assert(r32.horarioManual === true, `[post-reduccion] R32 manual perdió horarioManual (=${r32.horarioManual})`);
+
+  const fases = await getFasesEliminatorias(esc.org.id, esc.cat.id);
+  const r32Fase = fases.flatMap((f) => f.partidos).find((p) => p.id === r32.id);
+  const codigos = (r32Fase.advertencias || []).map((a) => a.codigo);
+  assert(
+    codigos.includes('INICIA_ANTES_FIN_ZONAS'),
+    `[post-reduccion] getFasesEliminatorias no devolvió INICIA_ANTES_FIN_ZONAS para el R32 manual con parejas (advertencias: ${JSON.stringify(codigos)})`
+  );
+}
+
+/**
  * (f) R32 manual en cancha INACTIVA: se reubica en cancha activa y horarioManual sigue true.
  */
 async function testF_r32ManualCanchaInactivaSeReubica() {
@@ -465,6 +527,7 @@ async function testG_cicloReduccionRestauracion() {
   const postReduccion = await cargarPartidos(esc);
   verificarSinSolapamientos(postReduccion, 'post-reduccion');
   assertR32NoAntesDeFinZonas(postReduccion, 'post-reduccion');
+  assertR32NoAntesDeSabNoche(postReduccion, 'post-reduccion');
 
   const r32SinHorario = postReduccion.filter((p) => p.faseEliminatoria?.ronda === 32 && !p.esBye && !conHorario(p));
   assert(
@@ -476,6 +539,7 @@ async function testG_cicloReduccionRestauracion() {
   const postRestauracion = await cargarPartidos(esc);
   verificarSinSolapamientos(postRestauracion, 'post-restauracion');
   assertR32NoAntesDeFinZonas(postRestauracion, 'post-restauracion');
+  assertR32NoAntesDeSabNoche(postRestauracion, 'post-restauracion');
 
   const { sinHorario } = finDeZonas(postRestauracion);
   assert(sinHorario.length === 0, `[post-restauracion] Precondición: con 4 canchas todas las zonas debían entrar; quedaron ${sinHorario.length} sin horario`);
@@ -537,6 +601,7 @@ const TESTS = [
   ['c', 'Zonas no entran: R32 automáticos sin horario y en partidosSinSlot', testC_zonasNoEntranR32SinHorario],
   ['d', 'R32 automático no entra antes de dayLimitMs', testD_r32NoEntraAntesDeDayLimit],
   ['e', 'R32 manual en cancha activa no se mueve y avisa', testE_r32ManualCanchaActivaNoSeMueve],
+  ['e2', 'R32 manual con parejas en cancha activa no se mueve y avisa', testE2_r32ManualConParejasCanchaActivaNoSeMueve],
   ['f', 'R32 manual en cancha inactiva se reubica', testF_r32ManualCanchaInactivaSeReubica],
   ['g', 'Ciclo reducción → restauración', testG_cicloReduccionRestauracion],
   ['h', 'Octavo con padre R32 sin horario', testH_octavosConPadreR32SinHorario],
