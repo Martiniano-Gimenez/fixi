@@ -32,6 +32,7 @@ import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEdi
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { estadoLabel } from '../../utils/estadoLabels';
+import { armarAvisoDestrabe } from '../../utils/precheckDestrabe';
 import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
 
 function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
@@ -358,6 +359,7 @@ export default function TorneoDetail() {
   const [undoAction, setUndoAction] = useState(null);
   const [confirmarResorteoModalOpen, setConfirmarResorteoModalOpen] = useState(false);
   const [avisoSesionReiniciada, setAvisoSesionReiniciada] = useState(false);
+  const [avisoDestrabe, setAvisoDestrabe] = useState(null);
 
   const categoriasConflictosOrdenadas = useMemo(() => {
     if (!conflictosBloqueo || conflictosBloqueo.length === 0) return [];
@@ -554,6 +556,13 @@ export default function TorneoDetail() {
       if (res.bloqueado) {
         const conflictos = res.conflictos || [];
         const total = conflictos.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0);
+        // En un re-check, explicar si destrabar una zona manual dejó partidos sin cancha
+        // (el contador cuenta partidos y puede subir).
+        setAvisoDestrabe(
+          isReCheckBool && !forceResetBool && !res.sesionReiniciada
+            ? armarAvisoDestrabe(conflictosBloqueo, conflictos)
+            : null
+        );
         setConflictosBloqueo(conflictos);
         setPermiteInicioEmergencia(Boolean(res.permiteInicioEmergencia));
         setPlanEmergenciaId(res.planEmergenciaId || null);
@@ -577,6 +586,7 @@ export default function TorneoDetail() {
           return new Set();
         });
       } else {
+        setAvisoDestrabe(null);
         setPlanId(res.planId);
         setPlanEmergenciaId(null);
         setExpandedCategoriasConflictos(new Set());
@@ -1460,6 +1470,34 @@ export default function TorneoDetail() {
                   <span>
                     El servidor se reinició o la sesión expiró. Se recalculó la vista previa con los horarios guardados.
                   </span>
+                </div>
+              )}
+
+              {avisoDestrabe && (
+                <div
+                  role="status"
+                  style={{
+                    padding: '0.6rem 0.85rem',
+                    marginBottom: '0.75rem',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(234, 179, 8, 0.1)',
+                    border: '1px solid rgba(234, 179, 8, 0.3)',
+                    color: 'var(--color-text)',
+                    fontSize: 'var(--font-size-xs)',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '0.5rem',
+                    minWidth: 0,
+                  }}
+                >
+                  <Info size={16} style={{ flexShrink: 0, color: '#eab308', marginTop: '1px' }} />
+                  <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                    {avisoDestrabe.lineas.map((linea) => (
+                      <p key={linea} style={{ margin: 0 }}>
+                        {linea}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               )}
 

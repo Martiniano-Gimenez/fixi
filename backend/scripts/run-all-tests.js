@@ -57,6 +57,7 @@ const TEST_SUITES = [
   'test-zona-manual-sin-partidos.js',
   'test-r32-lluvia-fin-zonas.js',
   'test-horario-club-cierre.js',
+  'test-precheck-monotonia.js',
 ];
 
 /**

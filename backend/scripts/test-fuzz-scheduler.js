@@ -3,6 +3,7 @@
 const { ensureTestDb } = require('./utils/testEnvGuard');
 const { resetTestDb } = require('./reset-test-db');
 const { startTestServer } = require('./utils/testServer');
+const { obtenerConflictosBase, clasificarPasoMonotonia } = require('./utils/monotoniaPrecheck');
 const prisma = require('../src/lib/prisma');
 const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
@@ -264,41 +265,6 @@ function generarSlotsDisponibilidadPareja(rng, grilla) {
     selected.add(rng.pick(allSlots));
   }
   return Array.from(selected);
-}
-
-/**
- * Cuenta solo los conflictos base en pre-check, excluyendo P3/P4 derivados de MINI_BRACKET
- * mientras P1 o P2 de esa misma zona no tengan horario asignado.
- */
-function obtenerConflictosBase(preCheck, session) {
-  const derivedMatchIds = new Set();
-  if (session && Array.isArray(session.categoriasPlan)) {
-    for (const cPlan of session.categoriasPlan) {
-      for (const z of cPlan.zonas || []) {
-        if (z.formato !== 'MINI_BRACKET') continue;
-        const p1 = (z.partidos || []).find((p) => p.posicionEnRonda === 1);
-        const p2 = (z.partidos || []).find((p) => p.posicionEnRonda === 2);
-        const p1SinHorario = !p1 || !p1.fechaHora || p1.sinHorarioAsignado;
-        const p2SinHorario = !p2 || !p2.fechaHora || p2.sinHorarioAsignado;
-        if (p1SinHorario || p2SinHorario) {
-          for (const p of z.partidos || []) {
-            if (p.posicionEnRonda >= 3 && p.id) {
-              derivedMatchIds.add(p.id);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const baseList = [];
-  for (const catConf of preCheck.conflictos || []) {
-    for (const item of catConf.partidosSinHorario || []) {
-      if (derivedMatchIds.has(item.partidoId)) continue;
-      baseList.push(item);
-    }
-  }
-  return baseList;
 }
 
 /**
@@ -864,6 +830,7 @@ async function runSingleSeed(seed, recordFailure) {
 
         triedActions.add(conf.partidoId);
         let resolvedActionTaken = false;
+        const baseAntesPaso = baseConflictosList;
 
         // Mapear estado antes de la acción para clasificar saltos de monotonía
         const scheduleBefore = capturarHorariosPartidos(curSession);
@@ -1004,14 +971,23 @@ async function runSingleSeed(seed, recordFailure) {
         const deltaZona = confZonaAfter - confZonaBefore;
         const deltaOtras = confOtrasAfter - confOtrasBefore;
 
-        // Exigir que el total de conflictos base nunca suba (sin break: registra y sigue)
-        if (currentBaseConflictos > prevBaseConflictos) {
+        // Regla R2 (utils/monotoniaPrecheck.js): ninguna otra zona ni categoría sube (zona por zona) y,
+        // si la zona resuelta sube, sus ítems nuevos son partidos sin horario. Sin break: registra y sigue.
+        const paso = clasificarPasoMonotonia({
+          antes: baseAntesPaso,
+          despues: baseConflictosList,
+          zonaObjetivo: targetZonaKey,
+        });
+        if (!paso.ok) {
           recordFailure(
             'precheck_monotonia:post-inicio',
             seed,
-            `El total de conflictos base subió tras resolver (${conf.motivo}): pasó de ${prevBaseConflictos} a ${currentBaseConflictos}`
+            `Paso de resolución (${conf.motivo}) no explicado [${paso.violaciones.join(', ')}]: zonas=${JSON.stringify(paso.zonasQueSuben)} categorias=${JSON.stringify(paso.categoriasQueSuben)} items=${JSON.stringify(paso.itemsNoExplicados)}`
           );
+        }
 
+        // Informativo: saltos del total de conflictos base (se clasifican, no fallan)
+        if (currentBaseConflictos > prevBaseConflictos) {
           const tamZona = conf.tamanoZona || (conf.parejasManuales ? conf.parejasManuales.length : 0) || mapAfter.get(targetZonaKey)?.tamanoZona || 4;
           const motivosZona = Array.from(mapAfter.get(targetZonaKey)?.motivos || []).join(', ') || '-';
           const motivosOtrasStr = Array.from(motivosOtras).join(', ') || '-';
