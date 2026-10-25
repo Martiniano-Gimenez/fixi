@@ -1279,7 +1279,8 @@ async function reproRestauracionSinDiaKeyMultiDia(registrarResultado) {
 
   // Club con 2 canchas:
   // Viernes 22:00 a 01:45 (dayLimitMs = Sábado 01:45) -> 3 slots por cancha (22:00, 23:15, 00:30)
-  // Sábado 01:45 a 05:30 (dayLimitMs = Domingo 05:30) -> 3 slots por cancha (01:45, 03:00, 04:15)
+  // Sábado 01:45 a 05:30 (dayLimitMs = Domingo 06:00; el cierre del club 05:30 no limita en Modo Lluvia)
+  // -> 3 slots por cancha (01:45, 03:00, 04:15); el siguiente (05:30) terminaría 06:45 > 06:00
   const org = await prisma.organizador.create({
     data: {
       nombre: 'Club MultiDia Sin DiaKey',
