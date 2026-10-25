@@ -266,6 +266,95 @@ async function testA7_vistaPublicaSinMarca() {
   }
 }
 
+// ============================================================================
+// Bloque B: tope de la jornada de lluvia del viernes = min(06:00, apertura del sábado)
+// ============================================================================
+
+function cargarDateUtils() {
+  return require('../src/utils/dateUtils');
+}
+
+/**
+ * (B1) dayLimitMs del viernes lógico con apertura del sábado a las 10:00: el tope es el sábado 06:00
+ * (antes era la apertura del sábado, 10:00).
+ */
+async function testB1_topeViernesSeisAm() {
+  const { getDiaCalendarioConTrasnoche } = cargarDateUtils();
+  const club = { ...CLUB_BASE, sabadoInicio: '10:00' };
+  const info = getDiaCalendarioConTrasnoche(vie(20, 0), club);
+  assert(
+    info.dayLimitMs === vie(24 + 6, 0).getTime(),
+    `dayLimitMs del viernes debía ser sábado 06:00 (${iso(vie(30, 0))}), fue ${iso(info.dayLimitMs)}`
+  );
+}
+
+/**
+ * (B2) Si el sábado abre antes de las 06:00 (04:15), el viernes termina a la apertura del sábado
+ * para no invadir el día lógico del sábado.
+ */
+async function testB2_topeViernesAperturaTemprana() {
+  const { getDiaCalendarioConTrasnoche } = cargarDateUtils();
+  const club = { ...CLUB_BASE, sabadoInicio: '04:15' };
+  const info = getDiaCalendarioConTrasnoche(vie(22, 0), club);
+  assert(
+    info.dayLimitMs === vie(24 + 4, 15).getTime(),
+    `dayLimitMs del viernes con apertura del sábado 04:15 debía ser sábado 04:15, fue ${iso(info.dayLimitMs)}`
+  );
+}
+
+/**
+ * (B3) El sábado sigue terminando el domingo 06:00 y la constante compartida existe con ese valor.
+ */
+async function testB3_sabadoYConstante() {
+  const dateUtils = cargarDateUtils();
+  const info = dateUtils.getDiaCalendarioConTrasnoche(sab(20, 0), CLUB_BASE);
+  assert(info.dayLimitMs === sab(24 + 6, 0).getTime(), `dayLimitMs del sábado debía ser domingo 06:00, fue ${iso(info.dayLimitMs)}`);
+  assert(
+    dateUtils.HORA_FIN_JORNADA_LLUVIA_MIN === 6 * 60,
+    `HORA_FIN_JORNADA_LLUVIA_MIN debía exportarse con valor 360, es ${dateUtils.HORA_FIN_JORNADA_LLUVIA_MIN}`
+  );
+}
+
+/**
+ * (B4) Integración: lluvia el viernes (cierre 23:30, el sábado abre 10:00), 12 partidos y 1 cancha.
+ * Entran 9 (18:00 a 04:00, fin 05:15); los otros 3 quedan sin horario, en partidosSinSlot y en la
+ * bandeja de pendientes. Ninguno se mueve a otro día ni termina después del sábado 06:00.
+ */
+async function testB4_viernesNoPasaDeLasSeis() {
+  const club = { ...CLUB_BASE, sabadoInicio: '10:00' };
+  const t = (k) => vie(18, 75 * k);
+  const zonas = [];
+  for (let c = 1; c <= 4; c++) zonas.push([[t(0), c], [t(1), c], [t(2), c]]);
+  const esc = await crearEscenario('test-b4', { club, canchas: 4, zonas });
+
+  await organizadorService.reprogramarPorReduccionCanchas(esc.org.id, esc.torneo.id, 1, null, '2026-09-04');
+
+  const partidos = await prisma.partido.findMany({ where: { categoriaId: esc.cat.id } });
+  const limiteMs = vie(30, 0).getTime();
+  const agendados = partidos.filter((p) => p.fechaHora && !p.sinHorarioAsignado);
+  const sinHorario = partidos.filter((p) => !p.fechaHora || p.sinHorarioAsignado);
+  for (const p of agendados) {
+    const finMs = new Date(p.fechaHora).getTime() + DURACION_MS;
+    assert(finMs <= limiteMs, `Partido del viernes termina ${iso(finMs)}, después del sábado 06:00`);
+    assert(new Date(p.fechaHora).getTime() >= vie(18, 0).getTime(), `Partido movido antes del viernes 18:00: ${iso(p.fechaHora)}`);
+  }
+  assert(
+    agendados.length === 9 && sinHorario.length === 3,
+    `Esperados 9 agendados y 3 sin horario; quedaron ${agendados.length} y ${sinHorario.length}`
+  );
+
+  const ov = await prisma.overrideCanchasDia.findUnique({
+    where: { torneoId_diaKey: { torneoId: esc.torneo.id, diaKey: '2026-09-04' } },
+  });
+  const mapa = typeof ov?.partidosSinSlot === 'string' ? JSON.parse(ov.partidosSinSlot) : ov?.partidosSinSlot || {};
+  const bandeja = await organizadorService.getPartidosSinHorarioTorneo(esc.org.id, esc.torneo.id);
+  const idsBandeja = new Set(bandeja.map((p) => p.id));
+  for (const p of sinHorario) {
+    assert(Object.prototype.hasOwnProperty.call(mapa, p.id), `Partido sin horario ${p.id} no figura en partidosSinSlot`);
+    assert(idsBandeja.has(p.id), `Partido sin horario ${p.id} no aparece en la bandeja de pendientes`);
+  }
+}
+
 const TESTS = [
   ['A1', 'Helper: sábado con cierre de trasnoche', testA1_helperSabadoTrasnoche],
   ['A2', 'Helper: viernes lógico en la madrugada del sábado', testA2_helperViernesLogico],
@@ -274,6 +363,10 @@ const TESTS = [
   ['A5', 'Helper coherente con la ventana nocturna de R32', testA5_coherenciaVentanaSabadoNoche],
   ['A6', 'getEstadoEnVivo marca los minutos después del cierre', testA6_marcaEnEstadoEnVivo],
   ['A7', 'La vista pública no expone la marca', testA7_vistaPublicaSinMarca],
+  ['B1', 'Tope del viernes de lluvia en el sábado 06:00', testB1_topeViernesSeisAm],
+  ['B2', 'Tope del viernes en la apertura del sábado si es anterior a las 06:00', testB2_topeViernesAperturaTemprana],
+  ['B3', 'Sábado hasta el domingo 06:00 y constante compartida', testB3_sabadoYConstante],
+  ['B4', 'Lluvia del viernes: lo que no entra antes de las 06:00 va a la bandeja', testB4_viernesNoPasaDeLasSeis],
 ];
 
 async function run() {
