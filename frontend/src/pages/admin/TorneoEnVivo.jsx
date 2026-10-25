@@ -21,6 +21,7 @@ import {
   GitBranch,
   Calendar,
   Layers,
+  Moon,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -354,6 +355,14 @@ export default function TorneoEnVivo() {
       return info?.key === activeTabDay;
     });
   }, [data?.partidosFinalizados, esModoTodo, activeTabDay, horariosClub]);
+
+  // Partidos por jugar que terminan después del cierre del club (Modo Lluvia).
+  // La marca la calcula el backend en getEstadoEnVivo (solo admin; nunca en la vista pública).
+  const fueraDeHorarioFiltrados = useMemo(
+    () => [...partidosEnCursoFiltrados, ...proximosFiltrados].filter((p) => (p.minutosDespuesDelCierre || 0) > 0),
+    [partidosEnCursoFiltrados, proximosFiltrados]
+  );
+  const cierreClubContextual = esViernes ? horariosClub?.viernesFin : esSabado ? horariosClub?.sabadoFin : null;
 
   // Resumen estadístico contextual
   const resumenContextual = useMemo(() => {
@@ -875,6 +884,26 @@ export default function TorneoEnVivo() {
                 {isTabBajoOverride
                   ? 'Partidos de esta jornada reprogramados sobre las canchas disponibles.'
                   : 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'}
+              </p>
+            )}
+            {fueraDeHorarioFiltrados.length > 0 && (
+              <p
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.35rem',
+                  fontSize: 'var(--font-size-xs)',
+                  color: 'var(--color-warning)',
+                  margin: '0.35rem 0 0',
+                  fontWeight: 600,
+                }}
+              >
+                <Moon size={13} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                <span>
+                  {fueraDeHorarioFiltrados.length}{' '}
+                  {fueraDeHorarioFiltrados.length === 1 ? 'partido termina' : 'partidos terminan'} después del cierre del club
+                  {cierreClubContextual ? ` (${cierreClubContextual})` : ''}
+                </span>
               </p>
             )}
           </div>
@@ -1806,6 +1835,28 @@ export default function TorneoEnVivo() {
                       <div style={{ fontSize: 'var(--font-size-xs)', color: '#60a5fa', fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {formatDiaHorario(p.fechaHora)}
                       </div>
+                      {(p.minutosDespuesDelCierre || 0) > 0 && (
+                        <div
+                          title="Agendado después del cierre del club por Modo Lluvia"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            marginTop: '0.2rem',
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 600,
+                            padding: '0.1rem 0.4rem',
+                            borderRadius: '999px',
+                            whiteSpace: 'nowrap',
+                            color: 'var(--color-warning)',
+                            background: 'rgba(245, 158, 11, 0.12)',
+                            border: '1px solid rgba(245, 158, 11, 0.35)',
+                          }}
+                        >
+                          <Moon size={11} />
+                          +{p.minutosDespuesDelCierre} min tras cierre
+                        </div>
+                      )}
                     </div>
                   </div>
 
