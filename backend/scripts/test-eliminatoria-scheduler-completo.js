@@ -61,6 +61,7 @@ async function test() {
         categoriaId: catA.id,
         jugador1: `A_J1_${i}`,
         jugador2: `A_J2_${i}`,
+        orden: i,
       },
     });
     await prisma.pareja.create({
@@ -68,6 +69,7 @@ async function test() {
         categoriaId: catB.id,
         jugador1: `B_J1_${i}`,
         jugador2: `B_J2_${i}`,
+        orden: i,
       },
     });
   }

@@ -447,12 +447,14 @@ async function run() {
   try {
     await testA_reproZonaBYZonaH_reducirViernes();
   } catch (err) {
+    console.error('Error en Test (a):', err);
     fallas++;
   }
 
   try {
     await testB_reducirYRestaurarMantieneSabadoIdentico();
   } catch (err) {
+    console.error('Error en Test (b):', err);
     fallas++;
   }
 

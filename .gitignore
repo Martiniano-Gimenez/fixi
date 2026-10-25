@@ -18,6 +18,7 @@ node_modules/
 backend/prisma/dev.backup.*.db
 backend/prisma/test.db
 backend/prisma/test.template.db
+backend/prisma/test.template.guards
 backend/prisma/test.db-wal
 backend/prisma/test.db-shm
 backend/prisma/test.template.db-wal

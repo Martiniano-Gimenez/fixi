@@ -130,7 +130,8 @@ async function iniciarCategoria(organizadorId, categoriaId, externalTx = null) {
     throw error;
   }
 
-  const parejas = await db.pareja.findMany({ where: { categoriaId } });
+  // Orden explícito (sesión 81): es la entrada de shuffleArray; sin orderBy salía en orden de inserción
+  const parejas = await db.pareja.findMany({ where: { categoriaId }, orderBy: [{ orden: 'asc' }, { id: 'asc' }] });
   const numParejas = parejas.length;
 
   if (numParejas < 2) {
@@ -301,9 +302,12 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
     throw error;
   }
 
+  // Orden explícito (sesión 81): define los índices de la matriz de compatibilidad y los empates de
+  // armarGruposPorCompatibilidad. slotsSeleccionados por slotId es lo que ya devolvía el índice (sin efecto).
   const parejas = await db.pareja.findMany({
     where: { categoriaId },
-    include: { slotsSeleccionados: true },
+    orderBy: [{ orden: 'asc' }, { id: 'asc' }],
+    include: { slotsSeleccionados: { orderBy: { slotId: 'asc' } } },
   });
 
   const numParejas = parejas.length;
@@ -621,12 +625,15 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   }
 
   // 3. Cargar partidos pendientes de zonas de las categorías especificadas (opcionalmente filtrado por zonaId)
+  // Orden explícito (sesión 81): el greedy de las pasadas 0-2 y la fase 2 recorren los partidos en este orden.
+  // Sin orderBy salían en orden de inserción. El id solo desempata si hubiera zonas con el mismo nombre.
   const partidos = await db.partido.findMany({
     where: {
       categoriaId: { in: categoriaIds },
       zonaId: options.zonaId ? options.zonaId : { not: null },
       estado: 'PENDIENTE',
     },
+    orderBy: [{ categoria: { nombre: 'asc' } }, { zona: { nombre: 'asc' } }, { posicionEnRonda: 'asc' }, { id: 'asc' }],
     include: {
       categoria: { include: { torneo: true } },
       zona: {
@@ -1176,7 +1183,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     },
     include: {
       categoria: { select: { id: true, nombre: true } },
-      zona: { select: { id: true, formato: true } },
+      zona: { select: { id: true, formato: true, nombre: true } },
       faseEliminatoria: { select: { ronda: true } },
       pareja1: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true } },
       pareja2: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true } },
@@ -1467,6 +1474,15 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     }
     if ((a.posicionEnRonda || 0) !== (b.posicionEnRonda || 0)) {
       return (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
+    }
+    // Desempate natural (sesión 81): el id es un UUID v4 distinto en cada corrida, así que no sirve como
+    // criterio. Categoría, después zona (por nombre) o ronda de eliminatoria; el id queda como último recurso.
+    const catComp = (a.categoria?.nombre || '').localeCompare(b.categoria?.nombre || '');
+    if (catComp !== 0) return catComp;
+    const zonaComp = (a.zona?.nombre || '').localeCompare(b.zona?.nombre || '');
+    if (zonaComp !== 0) return zonaComp;
+    if ((a.faseEliminatoria?.ronda || 0) !== (b.faseEliminatoria?.ronda || 0)) {
+      return (b.faseEliminatoria?.ronda || 0) - (a.faseEliminatoria?.ronda || 0);
     }
     return a.id.localeCompare(b.id);
   });
@@ -1889,8 +1905,11 @@ function evaluarCompatibilidadZona(parejasConSlots) {
  * - Crea los nuevos partidos mediante generarPartidosZonaHelper.
  */
 async function regenerarPartidosZona(tx, categoriaId, zonaId) {
+  // Orden explícito (sesión 81): define los cruces (P1 = [0] vs [1], P2 = [2] vs [3] en mini-bracket).
+  // Sin orderBy SQLite las devolvía por el índice (zonaId, parejaId), en orden de UUID.
   const zonaParejas = await tx.zonaPareja.findMany({
     where: { zonaId },
+    orderBy: [{ pareja: { orden: 'asc' } }, { parejaId: 'asc' }],
     include: {
       pareja: {
         include: { slotsSeleccionados: true },
@@ -2325,14 +2344,14 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
       throw error;
     }
 
-    // Crear la nueva Pareja en la categoría
-    const totalParejasCat = await tx.pareja.count({ where: { categoriaId } });
+    // Crear la nueva Pareja en la categoría con orden max(orden) + 1 (count + 1 repetía un orden si había huecos)
+    const { _max: maxOrdenCat } = await tx.pareja.aggregate({ where: { categoriaId }, _max: { orden: true } });
     const nuevaPareja = await tx.pareja.create({
       data: {
         categoriaId,
         jugador1: j1,
         jugador2: j2,
-        orden: totalParejasCat + 1,
+        orden: (maxOrdenCat.orden ?? 0) + 1,
       },
     });
 

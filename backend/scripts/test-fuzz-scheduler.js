@@ -12,6 +12,8 @@ const partidoService = require('../src/services/partido.service');
 const { generarEliminatoria } = require('../src/services/faseEliminatoria.service');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
+const fs = require('fs');
+const { hashEstadoTorneo, hashPlanPrecheck } = require('./utils/estadoCanonico');
 const {
   generarGrillaOrganizador,
   horaAMinutos,
@@ -28,6 +30,16 @@ const TOTAL_SEEDS = Number(process.env.FUZZ_SEEDS || 500);
 const END_SEED = START_SEED + TOTAL_SEEDS - 1;
 
 const FUZZ_METRICAS = process.env.FUZZ_METRICAS === '1';
+// Si está definida, cada semilla escribe "<semilla> <etapa> <sha256>" por etapa (estado canónico sin UUID,
+// ver utils/estadoCanonico.js). Sirve para comparar corridas: misma semilla, mismos hashes.
+const FUZZ_HASH_OUT = process.env.FUZZ_HASH_OUT || null;
+
+async function registrarHashEtapa(seed, etapa, { torneoId = null, categoriasPlan = null } = {}) {
+  if (!FUZZ_HASH_OUT) return;
+  const hash = categoriasPlan ? await hashPlanPrecheck(prisma, categoriasPlan) : await hashEstadoTorneo(prisma, torneoId);
+  fs.appendFileSync(FUZZ_HASH_OUT, `${seed} ${etapa} ${hash}
+`);
+}
 
 const r32FuzzStats = {
   totalR32NoBye: 0,
@@ -600,7 +612,8 @@ function verificarInvariantesPorEtapa({
 
 async function runSingleSeed(seed, recordFailure) {
   if (typeof recordFailure !== 'function') {
-    recordFailure = () => {};
+    // Sin recordFailure las fallas de invariantes se perdían en silencio
+    throw new Error('runSingleSeed requiere una función recordFailure');
   }
   const rng = createPRNG(seed);
 
@@ -745,6 +758,8 @@ async function runSingleSeed(seed, recordFailure) {
     // =========================================================================
     let preCheck = await organizadorService.preCheckInicioTorneo(organizador.id, torneo.id);
     let session = organizadorService.preCheckSessions.get(torneo.id);
+    let pasoPrecheck = 0;
+    await registrarHashEtapa(seed, `precheck-${pasoPrecheck++}`, { categoriasPlan: session?.categoriasPlan || [] });
 
     const zonasManualesVistas = new Set();
     const registrarZonasManuales = (sess) => {
@@ -928,6 +943,7 @@ async function runSingleSeed(seed, recordFailure) {
         });
         curSession = organizadorService.preCheckSessions.get(torneo.id);
         registrarZonasManuales(curSession);
+        await registrarHashEtapa(seed, `precheck-${pasoPrecheck++}`, { categoriasPlan: curSession?.categoriasPlan || [] });
 
         // Verificar invariante nuevo: si una zona manual quedó 100% destrabada, tiene que tener partidos creados
         if (curSession && Array.isArray(curSession.categoriasPlan)) {
@@ -1144,6 +1160,7 @@ async function runSingleSeed(seed, recordFailure) {
       preCheck = await organizadorService.preCheckInicioTorneo(organizador.id, torneo.id, { forceReset: true });
       session = organizadorService.preCheckSessions.get(torneo.id);
       registrarZonasManuales(session);
+      await registrarHashEtapa(seed, `precheck-${pasoPrecheck++}`, { categoriasPlan: session?.categoriasPlan || [] });
 
       const resLoopReset = await resolverConflictosLoop({
         initialPreCheck: preCheck,
@@ -1228,6 +1245,7 @@ async function runSingleSeed(seed, recordFailure) {
       return;
     }
 
+    await registrarHashEtapa(seed, 'post-inicio', { torneoId: torneo.id });
     const partidosIniciales = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
       include: { faseEliminatoria: true },
@@ -1460,8 +1478,11 @@ async function runSingleSeed(seed, recordFailure) {
     const targetDiaKey = rng.next() < 0.5 ? friKey : satKey;
     const canchasReducidas = rng.int(1, cantidadCanchas - 1);
 
+    // Orden explícito (sesión 81): candidatosEstado[0] y [1] deciden qué partido se finaliza y cuál queda
+    // en curso; sin orderBy salían en orden de inserción. (fechaHora, cancha) es único entre agendados.
     const partidosTrasManual = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
+      orderBy: [{ fechaHora: 'asc' }, { canchaNumero: 'asc' }, { categoria: { nombre: 'asc' } }, { posicionEnRonda: 'asc' }],
       include: { faseEliminatoria: true },
     });
 
@@ -1485,6 +1506,7 @@ async function runSingleSeed(seed, recordFailure) {
       });
     }
 
+    await registrarHashEtapa(seed, 'pre-reduccion', { torneoId: torneo.id });
     const partidosAntesLluvia = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
       include: { faseEliminatoria: true },
@@ -1524,6 +1546,7 @@ async function runSingleSeed(seed, recordFailure) {
       }
     }
 
+    await registrarHashEtapa(seed, 'post-reduccion', { torneoId: torneo.id });
     const partidosPostReduccion = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
       include: { faseEliminatoria: true },
@@ -1618,6 +1641,7 @@ async function runSingleSeed(seed, recordFailure) {
       targetDiaKey
     );
 
+    await registrarHashEtapa(seed, 'post-restauracion', { torneoId: torneo.id });
     const partidosPostRestauracion = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
       include: { faseEliminatoria: true },
@@ -1691,6 +1715,7 @@ async function runSingleSeed(seed, recordFailure) {
     const baseSunday = zonaService.proximaFechaPorDia('Domingo', refFecha);
     const domKey = getDiaCalendarioConTrasnoche(parseFechaLocal(baseSunday), horariosClubObj).key;
 
+    await registrarHashEtapa(seed, 'pre-reduccion-dom', { torneoId: torneo.id });
     const partidosAntesLluviaDom = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
       include: { faseEliminatoria: true },
@@ -1722,6 +1747,7 @@ async function runSingleSeed(seed, recordFailure) {
       domKey
     );
 
+    await registrarHashEtapa(seed, 'post-reduccion-dom', { torneoId: torneo.id });
     const partidosPostReduccionDom = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
       include: { faseEliminatoria: true },
@@ -1759,6 +1785,7 @@ async function runSingleSeed(seed, recordFailure) {
       domKey
     );
 
+    await registrarHashEtapa(seed, 'post-restauracion-dom', { torneoId: torneo.id });
     const partidosPostRestauracionDom = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
       include: { faseEliminatoria: true },
@@ -1794,6 +1821,7 @@ async function runSingleSeed(seed, recordFailure) {
 
 async function runFuzzSuite() {
   await ensureTestDb();
+  if (FUZZ_HASH_OUT) fs.writeFileSync(FUZZ_HASH_OUT, '');
   resetTestDb();
   const { server, baseUrl } = await startTestServer();
 
@@ -1845,7 +1873,11 @@ async function runFuzzSuite() {
 
   function recordFailure(invariantKey, seed, detail) {
     const entry = stats[invariantKey];
-    if (!entry) return;
+    if (!entry) {
+      // Una clave fuera de INVARIANT_KEYS se descartaba sin aviso y la falla no llegaba al exit code.
+      // Al lanzar, runSingleSeed la registra como excepcion_no_controlada:fuzz.
+      throw new Error(`recordFailure: invariante desconocida "${invariantKey}" (agregala a INVARIANT_KEYS)`);
+    }
     entry.fallasCount++;
     if (!entry.semillasAfectadas.has(seed)) {
       entry.semillasAfectadas.add(seed);

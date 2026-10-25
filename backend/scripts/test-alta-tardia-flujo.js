@@ -263,6 +263,16 @@ async function testAltaTardiaFlujo() {
     const parejaConSlots = resConSlots.pareja;
     console.log(`✓ Pareja agregada con slots: "${parejaConSlots.jugador1} / ${parejaConSlots.jugador2}" (ID: ${parejaConSlots.id})`);
 
+    // El orden de la pareja tardía es max(orden) + 1: la categoría tiene 1, 2, 4 y 5 (hueco en 3)
+    const ordenesCat = (await prisma.pareja.findMany({ where: { categoriaId: cat.id } })).map((p) => p.orden);
+    if (parejaConSlots.orden !== 6) {
+      throw new Error(`La pareja tardía debía recibir orden 6 (max + 1), recibió ${parejaConSlots.orden}. Órdenes: ${JSON.stringify(ordenesCat)}`);
+    }
+    if (new Set(ordenesCat).size !== ordenesCat.length) {
+      throw new Error(`Orden repetido en la categoría: ${JSON.stringify(ordenesCat)}`);
+    }
+    console.log(`✓ Orden de la pareja tardía: ${parejaConSlots.orden} (órdenes de la categoría ${JSON.stringify(ordenesCat.sort((a, b) => a - b))})`);
+
     // Verificar que los slots existen en SlotPareja
     const dbSlots = await prisma.slotPareja.findMany({
       where: { parejaId: parejaConSlots.id },

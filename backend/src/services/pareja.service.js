@@ -18,15 +18,15 @@ async function createPareja(organizadorId, categoriaId, data) {
     throw error;
   }
 
-  // Asignar el orden (seed) basado en la cantidad actual
-  const parejasCount = await prisma.pareja.count({ where: { categoriaId } });
+  // Asignar el orden (seed) como max(orden) + 1: con count + 1 un hueco repetía un orden existente
+  const { _max } = await prisma.pareja.aggregate({ where: { categoriaId }, _max: { orden: true } });
 
   return await prisma.pareja.create({
     data: {
       categoriaId,
       jugador1: data.jugador1.trim(),
       jugador2: data.jugador2.trim(),
-      orden: parejasCount + 1,
+      orden: (_max.orden ?? 0) + 1,
     },
   });
 }
@@ -103,10 +103,16 @@ async function updatePareja(organizadorId, parejaId, data) {
     throw error;
   }
 
+  // El orden lo asigna el sistema (alta: max + 1, baja: renumeración) y debe ser único en la categoría
+  if (data.orden !== undefined) {
+    const error = new Error('El orden de la pareja no se puede modificar.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const updateData = {};
   if (data.jugador1) updateData.jugador1 = data.jugador1.trim();
   if (data.jugador2) updateData.jugador2 = data.jugador2.trim();
-  if (data.orden !== undefined) updateData.orden = data.orden;
 
   return await prisma.pareja.update({
     where: { id: pareja.id },

@@ -54,10 +54,10 @@ async function main() {
     },
   });
 
-  const pA = await prisma.pareja.create({ data: { categoriaId: catMB.id, jugador1: 'A1', jugador2: 'A2' } });
-  const pB = await prisma.pareja.create({ data: { categoriaId: catMB.id, jugador1: 'B1', jugador2: 'B2' } });
-  const pC = await prisma.pareja.create({ data: { categoriaId: catMB.id, jugador1: 'C1', jugador2: 'C2' } });
-  const pD = await prisma.pareja.create({ data: { categoriaId: catMB.id, jugador1: 'D1', jugador2: 'D2' } });
+  const pA = await prisma.pareja.create({ data: { categoriaId: catMB.id, orden: 1, jugador1: 'A1', jugador2: 'A2' } });
+  const pB = await prisma.pareja.create({ data: { categoriaId: catMB.id, orden: 2, jugador1: 'B1', jugador2: 'B2' } });
+  const pC = await prisma.pareja.create({ data: { categoriaId: catMB.id, orden: 3, jugador1: 'C1', jugador2: 'C2' } });
+  const pD = await prisma.pareja.create({ data: { categoriaId: catMB.id, orden: 4, jugador1: 'D1', jugador2: 'D2' } });
 
   const zonaMB = await prisma.zona.create({
     data: {
@@ -195,7 +195,7 @@ async function main() {
   });
 
   const pRes = await prisma.pareja.create({
-    data: { categoriaId: cat2.id, jugador1: 'R1', jugador2: 'R2', resolucionManual: true },
+    data: { categoriaId: cat2.id, orden: 1, jugador1: 'R1', jugador2: 'R2', resolucionManual: true },
   });
 
   await reiniciarTorneo(organizador.id, torneo2.id);
@@ -229,8 +229,8 @@ async function main() {
     data: { torneoId: torneo3.id, nombre: 'Cat 3', estado: 'BORRADOR' },
   });
 
-  const p3_1 = await prisma.pareja.create({ data: { categoriaId: cat3.id, jugador1: 'X1', jugador2: 'X2' } });
-  const p3_2 = await prisma.pareja.create({ data: { categoriaId: cat3.id, jugador1: 'X3', jugador2: 'X4' } });
+  const p3_1 = await prisma.pareja.create({ data: { categoriaId: cat3.id, orden: 1, jugador1: 'X1', jugador2: 'X2' } });
+  const p3_2 = await prisma.pareja.create({ data: { categoriaId: cat3.id, orden: 2, jugador1: 'X3', jugador2: 'X4' } });
   await prisma.slotPareja.create({ data: { parejaId: p3_1.id, slotId: 'Viernes-18:00' } });
   await prisma.slotPareja.create({ data: { parejaId: p3_2.id, slotId: 'Viernes-18:00' } });
 
@@ -242,7 +242,7 @@ async function main() {
   }
 
   // Agregamos una 3ra pareja en DB
-  const p3_3 = await prisma.pareja.create({ data: { categoriaId: cat3.id, jugador1: 'X5', jugador2: 'X6' } });
+  const p3_3 = await prisma.pareja.create({ data: { categoriaId: cat3.id, orden: 3, jugador1: 'X5', jugador2: 'X6' } });
   await prisma.slotPareja.create({ data: { parejaId: p3_3.id, slotId: 'Viernes-18:00' } });
 
   // 2do pre-check sin forceReset -> debe detectar mismatch de hash y regenerar
@@ -273,10 +273,10 @@ async function main() {
   const catA = await prisma.categoria.create({ data: { torneoId: torneo4.id, nombre: 'Cat A', estado: 'EN_CURSO' } });
   const catB = await prisma.categoria.create({ data: { torneoId: torneo4.id, nombre: 'Cat B', estado: 'EN_CURSO' } });
 
-  const pA1 = await prisma.pareja.create({ data: { categoriaId: catA.id, jugador1: 'A1', jugador2: 'A2' } });
-  const pA2 = await prisma.pareja.create({ data: { categoriaId: catA.id, jugador1: 'A3', jugador2: 'A4' } });
-  const pB1 = await prisma.pareja.create({ data: { categoriaId: catB.id, jugador1: 'B1', jugador2: 'B2' } });
-  const pB2 = await prisma.pareja.create({ data: { categoriaId: catB.id, jugador1: 'B3', jugador2: 'B4' } });
+  const pA1 = await prisma.pareja.create({ data: { categoriaId: catA.id, orden: 1, jugador1: 'A1', jugador2: 'A2' } });
+  const pA2 = await prisma.pareja.create({ data: { categoriaId: catA.id, orden: 2, jugador1: 'A3', jugador2: 'A4' } });
+  const pB1 = await prisma.pareja.create({ data: { categoriaId: catB.id, orden: 1, jugador1: 'B1', jugador2: 'B2' } });
+  const pB2 = await prisma.pareja.create({ data: { categoriaId: catB.id, orden: 2, jugador1: 'B3', jugador2: 'B4' } });
 
   const faseA = await prisma.faseEliminatoria.create({ data: { categoriaId: catA.id, nombre: 'Final', ronda: 2 } });
   const faseB = await prisma.faseEliminatoria.create({ data: { categoriaId: catB.id, nombre: 'Final', ronda: 2 } });
@@ -340,10 +340,10 @@ async function main() {
   const cat5 = await prisma.categoria.create({ data: { torneoId: torneo5.id, nombre: 'Cat 5', estado: 'EN_CURSO' } });
   const zona5 = await prisma.zona.create({ data: { categoriaId: cat5.id, nombre: 'Zona 5', formato: 'ROUND_ROBIN' } });
 
-  const p5_1 = await prisma.pareja.create({ data: { categoriaId: cat5.id, jugador1: 'P1', jugador2: 'P2' } });
-  const p5_2 = await prisma.pareja.create({ data: { categoriaId: cat5.id, jugador1: 'P3', jugador2: 'P4' } });
-  const p5_3 = await prisma.pareja.create({ data: { categoriaId: cat5.id, jugador1: 'P5', jugador2: 'P6' } });
-  const p5_4 = await prisma.pareja.create({ data: { categoriaId: cat5.id, jugador1: 'P7', jugador2: 'P8' } });
+  const p5_1 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 1, jugador1: 'P1', jugador2: 'P2' } });
+  const p5_2 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 2, jugador1: 'P3', jugador2: 'P4' } });
+  const p5_3 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 3, jugador1: 'P5', jugador2: 'P6' } });
+  const p5_4 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 4, jugador1: 'P7', jugador2: 'P8' } });
 
   // Partido con horario fijado a las 10:00 AM
   const pConHorario = await prisma.partido.create({
@@ -375,8 +375,8 @@ async function main() {
   });
 
   // Partido de zona sin horario NO registrado en partidosSinSlot (debe quedar intacto)
-  const p5_5 = await prisma.pareja.create({ data: { categoriaId: cat5.id, jugador1: 'P9', jugador2: 'P10' } });
-  const p5_6 = await prisma.pareja.create({ data: { categoriaId: cat5.id, jugador1: 'P11', jugador2: 'P12' } });
+  const p5_5 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 5, jugador1: 'P9', jugador2: 'P10' } });
+  const p5_6 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 6, jugador1: 'P11', jugador2: 'P12' } });
   const pSinHorarioFueraMapa = await prisma.partido.create({
     data: {
       categoriaId: cat5.id,

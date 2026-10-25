@@ -38,6 +38,8 @@ async function main() {
     partidosMBIds: [],
   };
 
+  let exitCode = 0;
+
   try {
     // 1. Crear Organizador A y B
     const orgA = await prisma.organizador.create({
@@ -380,7 +382,76 @@ async function main() {
     }
     console.log('  ✅ Multitenant verificado: Organizador B recibió HTTP 403 Forbidden correctamente.');
 
+    // ─── CASO 5: Alta de pareja con huecos en el orden (max + 1, no count + 1) ────
+    console.log('\n▶ CASO 5: Alta de pareja en BORRADOR con un hueco en el orden (1, 3)...');
+    await prisma.pareja.update({ where: { id: pB2.id }, data: { orden: 3 } });
+    const resAlta = await fetch(`${BASE_URL}/categorias/${catBorrador.id}/parejas`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jugador1: 'Hueco A', jugador2: 'Hueco B' }),
+    });
+    if (resAlta.status !== 201) {
+      throw new Error(`Esperado HTTP 201 en alta de pareja, recibido ${resAlta.status}`);
+    }
+    const parejaAlta = await resAlta.json();
+    if (parejaAlta.orden !== 4) {
+      throw new Error(`La pareja nueva debía recibir orden 4 (max + 1), recibió ${parejaAlta.orden}`);
+    }
+    const ordenesBorrador = (await prisma.pareja.findMany({ where: { categoriaId: catBorrador.id } })).map((p) => p.orden);
+    if (new Set(ordenesBorrador).size !== ordenesBorrador.length) {
+      throw new Error(`Orden repetido en la categoría: ${JSON.stringify(ordenesBorrador)}`);
+    }
+    console.log(`  ✅ Alta con hueco: orden ${parejaAlta.orden}, órdenes de la categoría ${JSON.stringify(ordenesBorrador.sort((a, b) => a - b))}.`);
+
+    // ─── CASO 6: PATCH /parejas/:id no acepta orden (lo asigna el sistema) ────
+    console.log('\n▶ CASO 6: PATCH de pareja con orden debe rechazarse...');
+    const resPatchOrden = await fetch(`${BASE_URL}/parejas/${pB1.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jugador1: 'No Cambia', orden: 3 }),
+    });
+    if (resPatchOrden.status !== 400) {
+      throw new Error(`Esperado HTTP 400 al enviar orden en PATCH, recibido ${resPatchOrden.status}`);
+    }
+    const pB1Post = await prisma.pareja.findUnique({ where: { id: pB1.id } });
+    if (pB1Post.orden !== 1 || pB1Post.jugador1 === 'No Cambia') {
+      throw new Error(`El PATCH rechazado modificó la pareja: orden ${pB1Post.orden}, jugador1 "${pB1Post.jugador1}"`);
+    }
+    const resPatchNombre = await fetch(`${BASE_URL}/parejas/${pB1.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jugador1: 'Nuevo Nombre' }),
+    });
+    const parejaRenombrada = await resPatchNombre.json();
+    if (resPatchNombre.status !== 200 || parejaRenombrada.jugador1 !== 'Nuevo Nombre' || parejaRenombrada.orden !== 1) {
+      throw new Error(`PATCH de nombre: esperado 200 con jugador1 "Nuevo Nombre" y orden 1, recibido ${resPatchNombre.status} ${JSON.stringify(parejaRenombrada)}`);
+    }
+    console.log('  ✅ PATCH con orden rechazado con 400 sin cambios; PATCH de nombre sigue funcionando.');
+
+    // ─── CASO 7: Guarda de test.db (trigger de orden único por categoría) ────
+    console.log('\n▶ CASO 7: test.db rechaza una pareja con orden repetido en la categoría...');
+    const cantidadAntes = await prisma.pareja.count({ where: { categoriaId: catBorrador.id } });
+    let rechazada = false;
+    try {
+      await prisma.pareja.create({
+        data: { categoriaId: catBorrador.id, jugador1: 'Dup A', jugador2: 'Dup B', orden: 1 },
+      });
+    } catch (err) {
+      // Prisma informa el RAISE(ABORT) del trigger como P2003 (SQLITE_CONSTRAINT)
+      rechazada = true;
+      console.log(`  ✓ Insert rechazado por la guarda (${err.code || err.name})`);
+    }
+    const cantidadDespues = await prisma.pareja.count({ where: { categoriaId: catBorrador.id } });
+    if (!rechazada || cantidadDespues !== cantidadAntes) {
+      throw new Error(`La guarda de orden único no está activa en test.db (parejas ${cantidadAntes} -> ${cantidadDespues}). Regenerá la plantilla.`);
+    }
+    console.log('  ✅ Guarda de orden único activa en test.db.');
+
     console.log('\n🎉 TODOS LOS CASOS DE REGRESIÓN PASARON EXITOSAMENTE!');
+  } catch (err) {
+    // Sin este catch, el process.exit(0) del finally tapaba cualquier falla de la suite
+    console.error('\n❌ ERROR EN EL TEST:', err.message);
+    exitCode = 1;
   } finally {
     console.log('\n🧹 Limpiando datos de prueba...');
     try {
@@ -423,7 +494,7 @@ async function main() {
       await new Promise((resolve) => serverInstance.close(resolve));
     }
     await prisma.$disconnect();
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 

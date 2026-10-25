@@ -65,10 +65,10 @@ async function testAutoAsignacionEliminatoria() {
     },
   });
 
-  const pA1 = await prisma.pareja.create({ data: { categoriaId: categoria.id, jugador1: 'A1_1', jugador2: 'A1_2' } });
-  const pA2 = await prisma.pareja.create({ data: { categoriaId: categoria.id, jugador1: 'A2_1', jugador2: 'A2_2' } });
-  const pB1 = await prisma.pareja.create({ data: { categoriaId: categoria.id, jugador1: 'B1_1', jugador2: 'B1_2' } });
-  const pB2 = await prisma.pareja.create({ data: { categoriaId: categoria.id, jugador1: 'B2_1', jugador2: 'B2_2' } });
+  const pA1 = await prisma.pareja.create({ data: { categoriaId: categoria.id, orden: 1, jugador1: 'A1_1', jugador2: 'A1_2' } });
+  const pA2 = await prisma.pareja.create({ data: { categoriaId: categoria.id, orden: 2, jugador1: 'A2_1', jugador2: 'A2_2' } });
+  const pB1 = await prisma.pareja.create({ data: { categoriaId: categoria.id, orden: 3, jugador1: 'B1_1', jugador2: 'B1_2' } });
+  const pB2 = await prisma.pareja.create({ data: { categoriaId: categoria.id, orden: 4, jugador1: 'B2_1', jugador2: 'B2_2' } });
 
   await prisma.zonaPareja.createMany({
     data: [
