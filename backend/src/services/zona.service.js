@@ -1896,8 +1896,11 @@ function evaluarCompatibilidadZona(parejasConSlots) {
  * - Crea los nuevos partidos mediante generarPartidosZonaHelper.
  */
 async function regenerarPartidosZona(tx, categoriaId, zonaId) {
+  // Orden explícito (sesión 81): define los cruces (P1 = [0] vs [1], P2 = [2] vs [3] en mini-bracket).
+  // Sin orderBy SQLite las devolvía por el índice (zonaId, parejaId), en orden de UUID.
   const zonaParejas = await tx.zonaPareja.findMany({
     where: { zonaId },
+    orderBy: [{ pareja: { orden: 'asc' } }, { parejaId: 'asc' }],
     include: {
       pareja: {
         include: { slotsSeleccionados: true },
