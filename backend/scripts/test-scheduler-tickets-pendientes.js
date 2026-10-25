@@ -5,9 +5,9 @@
  * Reproductores mínimos determinísticos correspondientes a tickets pendientes de resolución:
  * 1. Zona manual (`precheck_zona_manual_partidos:post-inicio`)
  * 2. Monotonía de pre-check (`precheck_monotonia:post-inicio`)
- * 3. Lluvia empuja zonas más allá de R32 ya fijado (`eliminatorias_descanso_y_post_zonas:post-reduccion`)
  *
- * (Los casos 4, 5, a, b, c, d y Equivalencia pasaron a verde y fueron promovidos a test-eliminatoria-inmutabilidad-manual.js)
+ * (Los casos 4, 5, a, b, c, d y Equivalencia pasaron a verde y fueron promovidos a test-eliminatoria-inmutabilidad-manual.js;
+ *  el caso 3 de lluvia que empujaba zonas más allá de un R32 quedó cubierto por test-r32-lluvia-fin-zonas.js)
  *
  * Mantenido fuera de run-all-tests.js hasta la implementación de sus respectivos tickets.
  */
@@ -16,16 +16,10 @@ const { ensureTestDb } = require('./utils/testEnvGuard');
 const { resetTestDb } = require('./reset-test-db');
 const prisma = require('../src/lib/prisma');
 const organizadorService = require('../src/services/organizador.service');
-const zonaService = require('../src/services/zona.service');
 const disponibilidadService = require('../src/services/disponibilidad.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const partidoService = require('../src/services/partido.service');
-const { generarEliminatoria } = require('../src/services/faseEliminatoria.service');
-const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
 const { parseFechaLocal } = require('../src/utils/dateUtils');
-const { DURACION_PARTIDO_MIN } = require('../src/services/slots.service');
-
-const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 
 async function limpiarDb() {
   organizadorService.preCheckSessions.clear();
@@ -215,102 +209,6 @@ async function reproPrecheckMonotonia(registrarResultado) {
   }
 }
 
-/**
- * CASO 3: Reproductor mínimo de `eliminatorias_descanso_y_post_zonas:post-reduccion`
- * Escenario:
- * - 4 canchas, 1 categoría de 25 parejas (tiene R32).
- * - En post-inicio, con 4 canchas, las zonas se juegan el sábado a la tarde y terminan a las 19:00 / 20:15.
- * - R32 se agenda normalmente el sábado a las 20:45 en Cancha 1.
- * - Al reducir canchas a 1 en Sábado por lluvia, los partidos de zona de la tarde se compactan en fila india
- *   y terminan después de las 20:45 (ej. a las 22:30 o posterior).
- * - R32 (ya fijado a las 20:45) queda iniciando ANTES de que terminen las zonas de su categoría.
- * - En post-restauración, las canchas vuelven a 4 y las zonas vuelven a terminar antes de las 20:45.
- */
-async function reproLluviaEmpujaZonasMasAllaR32(registrarResultado) {
-  await limpiarDb();
-
-  const org = await prisma.organizador.create({
-    data: {
-      nombre: 'Club Repro Lluvia R32',
-      email: 'repro-lluvia-r32@padel.test',
-      passwordHash: 'hash',
-      cantidadCanchas: 4,
-      viernesInicio: '18:00',
-      viernesFin: '23:00',
-      sabadoInicio: '09:00',
-      sabadoFin: '24:00',
-      domingoInicio: '09:00',
-      domingoFin: '22:00',
-    },
-  });
-
-  const torneo = await prisma.torneo.create({
-    data: {
-      nombre: 'Torneo Repro Lluvia R32',
-      slug: 'torneo-repro-lluvia-r32',
-      fecha: parseFechaLocal('2026-09-04'),
-      estado: 'BORRADOR',
-      organizadorId: org.id,
-    },
-  });
-
-  const cat = await prisma.categoria.create({
-    data: { torneoId: torneo.id, nombre: '6ta', estado: 'BORRADOR' },
-  });
-
-  // 25 parejas con slots suficientes en Sábado de 09:00 a 17:45 (zonas terminan a las 17:45 con 4 canchas)
-  const slotsSabado = [
-    'Sabado-09:00', 'Sabado-10:15', 'Sabado-11:30', 'Sabado-12:45',
-    'Sabado-14:00', 'Sabado-15:15', 'Sabado-16:30', 'Sabado-17:45'
-  ];
-  for (let i = 1; i <= 25; i++) {
-    const p = await prisma.pareja.create({
-      data: { categoriaId: cat.id, jugador1: `J1_${i}`, jugador2: `J2_${i}`, orden: i },
-    });
-    for (const s of slotsSabado) {
-      await prisma.slotPareja.create({ data: { parejaId: p.id, slotId: s } });
-    }
-  }
-
-  await zonaService.iniciarCategoria(org.id, cat.id);
-  await zonaService.asignarHorariosAutomatico(org.id, [cat.id]);
-  await prisma.torneo.update({ where: { id: torneo.id }, data: { estado: 'EN_CURSO' } });
-  await generarEliminatoria(org.id, cat.id);
-  await programarHorariosEliminatorias(org.id, torneo.id);
-
-  const checkEtapa = async (etapa) => {
-    const partidos = await prisma.partido.findMany({
-      where: { categoriaId: cat.id },
-      include: { faseEliminatoria: true },
-    });
-    const maxZonaEnd = Math.max(
-      ...partidos
-        .filter((p) => p.zonaId && p.fechaHora && !p.sinHorarioAsignado)
-        .map((p) => new Date(p.fechaHora).getTime() + DURACION_MS)
-    );
-    const elimAntes = partidos.find(
-      (p) =>
-        p.faseEliminatoriaId &&
-        p.fechaHora &&
-        !p.sinHorarioAsignado &&
-        !p.esBye &&
-        new Date(p.fechaHora).getTime() < maxZonaEnd
-    );
-    registrarResultado(
-      `eliminatorias_descanso_y_post_zonas:${etapa}`,
-      !elimAntes,
-      elimAntes
-        ? `Ronda ${elimAntes.faseEliminatoria.ronda} empieza en ${new Date(elimAntes.fechaHora).toISOString()} antes del fin de zonas (${new Date(maxZonaEnd).toISOString()})`
-        : 'OK'
-    );
-  };
-
-  await checkEtapa('post-inicio');
-  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-05');
-  await checkEtapa('post-reduccion');
-  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-05');
-}
-
 async function runPendingTickets() {
   await ensureTestDb();
   resetTestDb();
@@ -333,7 +231,6 @@ async function runPendingTickets() {
   try {
     await reproPrecheckZonaManualPartidos(registrarResultado);
     await reproPrecheckMonotonia(registrarResultado);
-    await reproLluviaEmpujaZonasMasAllaR32(registrarResultado);
   } finally {
     await limpiarDb();
     await prisma.$disconnect();

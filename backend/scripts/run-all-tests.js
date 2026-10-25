@@ -55,6 +55,7 @@ const TEST_SUITES = [
   'test-zona-horaria.js',
   'test-zona-horaria-frontend-parity.js',
   'test-zona-manual-sin-partidos.js',
+  'test-r32-lluvia-fin-zonas.js',
 ];
 
 /**
