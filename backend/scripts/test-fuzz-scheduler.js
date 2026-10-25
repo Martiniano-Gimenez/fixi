@@ -36,6 +36,35 @@ const r32FuzzStats = {
   seedsConSinHorarioR32: new Set(),
 };
 
+// Métrica informativa (no es invariante): partidos que la reducción por lluvia deja sin horario
+// (pasan a la bandeja de pendientes), por perfil del generador y día reducido.
+const bandejaStats = {};
+function registrarBandeja(perfil, dia, seed, cantidad) {
+  const k = `perfil=${perfil} dia=${dia}`;
+  if (!bandejaStats[k]) bandejaStats[k] = { semillasReducidas: 0, semillasConBandeja: 0, partidos: 0 };
+  bandejaStats[k].semillasReducidas++;
+  if (cantidad > 0) bandejaStats[k].semillasConBandeja++;
+  bandejaStats[k].partidos += cantidad;
+}
+
+/**
+ * Mapa partidoId → minutosDespuesDelCierre tal como lo expone getEstadoEnVivo (admin).
+ */
+async function mapaMinutosEnVivo(organizadorId, torneoId) {
+  const estado = await organizadorService.getEstadoEnVivo(organizadorId, torneoId);
+  const mapa = new Map();
+  const listas = [
+    estado.partidosEnCurso,
+    estado.proximosPartidos,
+    estado.partidosEnCanchaFantasma,
+    estado.partidosFinalizados,
+  ];
+  for (const lista of listas) {
+    for (const p of lista || []) mapa.set(p.id, p.minutosDespuesDelCierre);
+  }
+  return mapa;
+}
+
 const perfilStats = {
   standard: {
     nombre: 'Standard / Estrés Original (Semillas Pares)',
@@ -354,6 +383,8 @@ function verificarInvariantesPorEtapa({
   partidosSinSlotMap = {},
   overrideDiaKey = null,
   partidosManualesSet = new Set(),
+  diaLluviaKey = null,
+  minutosEnVivoPorPartido = null,
 }) {
   const ventanasClub = getVentanasClub(organizador, refFecha);
 
@@ -447,6 +478,42 @@ function verificarInvariantesPorEtapa({
         seed,
         `Partido ${p.id} (${d.toISOString()} -> ${new Date(endMs).toISOString()}) cae fuera del horario permitido`
       );
+    }
+  }
+
+  // 3b. Partidos después del cierre del club en Modo Lluvia (decisión de producto: extensión intencional).
+  // - Solo pueden quedar después del cierre partidos de la jornada de lluvia.
+  // - getEstadoEnVivo debe marcar exactamente los minutos después del cierre (0 si termina antes).
+  // El cierre se calcula con la ventana propia del fuzz (getVentanasClub), independiente del helper.
+  if (diaLluviaKey) {
+    for (const p of agendados) {
+      const info = getDiaCalendarioConTrasnoche(p.fechaHora, organizador);
+      if (!info) continue;
+      const dow = info.logicalDate.getDay();
+      const cierreMs = dow === 5 ? ventanasClub.viernes.endMs : dow === 6 ? ventanasClub.sabado.endMs : null;
+      if (cierreMs === null) continue;
+      const finMs = new Date(p.fechaHora).getTime() + DURACION_MS;
+      const esperado = finMs > cierreMs ? Math.ceil((finMs - cierreMs) / 60000) : 0;
+
+      if (esperado > 0 && info.key !== diaLluviaKey) {
+        recordFailure(
+          `fuera_cierre_otra_jornada:${etapa}`,
+          seed,
+          `Partido ${p.id} de ${info.key} (sin lluvia) termina ${esperado} min después del cierre del club`
+        );
+      }
+
+      if (minutosEnVivoPorPartido) {
+        const marcado = minutosEnVivoPorPartido.get(p.id);
+        const coincide = marcado === undefined ? esperado === 0 : marcado === esperado;
+        if (!coincide) {
+          recordFailure(
+            `fuera_cierre_marcado:${etapa}`,
+            seed,
+            `Partido ${p.id} termina ${esperado} min después del cierre y En Vivo marca ${marcado}`
+          );
+        }
+      }
     }
   }
 
@@ -1486,6 +1553,16 @@ async function runSingleSeed(seed, recordFailure) {
       include: { faseEliminatoria: true },
     });
 
+    // Métrica informativa: partidos que tenían horario y la reducción dejó sin horario (pasan a la bandeja)
+    const aBandeja = partidosPostReduccion.filter((p) => {
+      const orig = antesMap.get(p.id);
+      return (
+        orig && orig.fechaHora && !orig.sinHorarioAsignado &&
+        p.estado !== 'FINALIZADO' && p.sinHorarioAsignado && !p.fechaHora
+      );
+    }).length;
+    registrarBandeja(perfilGenerador, targetDiaKey === friKey ? 'viernes' : 'sabado', seed, aBandeja);
+
     for (const p of partidosPostReduccion) {
       const orig = antesMap.get(p.id);
       if (!orig) continue;
@@ -1550,6 +1627,8 @@ async function runSingleSeed(seed, recordFailure) {
       partidosSinSlotMap,
       overrideDiaKey: targetDiaKey,
       partidosManualesSet,
+      diaLluviaKey: targetDiaKey,
+      minutosEnVivoPorPartido: await mapaMinutosEnVivo(organizador.id, torneo.id),
     });
 
     // =========================================================================
@@ -1626,6 +1705,8 @@ async function runSingleSeed(seed, recordFailure) {
       etapa: 'post-restauracion',
       allowDayLimitMs: true,
       partidosManualesSet,
+      diaLluviaKey: targetDiaKey,
+      minutosEnVivoPorPartido: await mapaMinutosEnVivo(organizador.id, torneo.id),
     });
 
     // =========================================================================
@@ -1766,6 +1847,10 @@ async function runFuzzSuite() {
     'precheck_zona_manual_partidos:post-inicio',
     'mini_bracket_origen_persistido:post-inicio',
     'excepcion_no_controlada:fuzz',
+    'fuera_cierre_otra_jornada:post-reduccion',
+    'fuera_cierre_otra_jornada:post-restauracion',
+    'fuera_cierre_marcado:post-reduccion',
+    'fuera_cierre_marcado:post-restauracion',
   ];
 
   const INFORMATIVE_INVARIANTS = new Set([
@@ -2023,6 +2108,13 @@ async function runFuzzSuite() {
   for (const k of INVARIANT_KEYS) {
     const list = Array.from(stats[k].semillasAfectadas).sort((a, b) => a - b);
     console.log(`[SEMILLAS] ${k} (${list.length}): ${JSON.stringify(list)}`);
+  }
+  console.log('='.repeat(85) + '\n');
+
+  console.log('📥 PARTIDOS QUE LA REDUCCIÓN DEJA SIN HORARIO (BANDEJA), POR PERFIL Y DÍA:');
+  for (const k of Object.keys(bandejaStats).sort()) {
+    const b = bandejaStats[k];
+    console.log(`[BANDEJA] ${k} semillasReducidas=${b.semillasReducidas} semillasConBandeja=${b.semillasConBandeja} partidos=${b.partidos}`);
   }
   console.log('='.repeat(85) + '\n');
 
