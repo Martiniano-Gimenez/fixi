@@ -595,6 +595,35 @@ async function testH_octavosConPadreR32SinHorario() {
   assert(descanso.length === 0, `[post-reduccion] El octavo generó advertencias de descanso: ${JSON.stringify(descanso)}`);
 }
 
+/**
+ * (i) R32 automático reubicado conserva su cancha original si sigue activa y está libre en el
+ * horario elegido (evita cambios de cancha silenciosos). Reducción a 3 canchas y restauración a 4:
+ * el R32 de las 22:00 en cancha 3 queda a las 22:00 en cancha 3 en ambas etapas.
+ */
+async function testI_r32ConservaCanchaOriginal() {
+  const horaR32 = sab(22, 0);
+  const esc = await crearEscenario('test-i', {
+    zonas: ZONAS_12,
+    r32: [{ pos: 1, fechaHora: horaR32, cancha: 3 }],
+  });
+
+  const verificar = async (etapa) => {
+    const partidos = await cargarPartidos(esc);
+    verificarSinSolapamientos(partidos, etapa);
+    assertR32NoAntesDeFinZonas(partidos, etapa);
+    const r32 = partidos.find((p) => p.id === esc.r32[0].id);
+    assert(
+      conHorario(r32) && new Date(r32.fechaHora).getTime() === horaR32.getTime() && r32.canchaNumero === 3,
+      `[${etapa}] R32 debía quedar ${iso(horaR32)} C3; quedó ${iso(r32.fechaHora)} C${r32.canchaNumero} sinHorario=${r32.sinHorarioAsignado}`
+    );
+  };
+
+  await organizadorService.reprogramarPorReduccionCanchas(esc.org.id, esc.torneo.id, 3, null, DIA_SABADO);
+  await verificar('post-reduccion');
+  await restaurar(esc);
+  await verificar('post-restauracion');
+}
+
 const TESTS = [
   ['a', 'R32 automático en cancha activa, zonas entran', testA_r32AutoCanchaActivaZonasEntran],
   ['b', 'R32 automático en cancha inactiva, zonas entran', testB_r32AutoCanchaInactivaZonasEntran],
@@ -605,6 +634,7 @@ const TESTS = [
   ['f', 'R32 manual en cancha inactiva se reubica', testF_r32ManualCanchaInactivaSeReubica],
   ['g', 'Ciclo reducción → restauración', testG_cicloReduccionRestauracion],
   ['h', 'Octavo con padre R32 sin horario', testH_octavosConPadreR32SinHorario],
+  ['i', 'R32 automático reubicado conserva su cancha original si está libre', testI_r32ConservaCanchaOriginal],
 ];
 
 async function run() {
