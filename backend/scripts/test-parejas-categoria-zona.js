@@ -403,6 +403,31 @@ async function main() {
     }
     console.log(`  ✅ Alta con hueco: orden ${parejaAlta.orden}, órdenes de la categoría ${JSON.stringify(ordenesBorrador.sort((a, b) => a - b))}.`);
 
+    // ─── CASO 6: PATCH /parejas/:id no acepta orden (lo asigna el sistema) ────
+    console.log('\n▶ CASO 6: PATCH de pareja con orden debe rechazarse...');
+    const resPatchOrden = await fetch(`${BASE_URL}/parejas/${pB1.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jugador1: 'No Cambia', orden: 3 }),
+    });
+    if (resPatchOrden.status !== 400) {
+      throw new Error(`Esperado HTTP 400 al enviar orden en PATCH, recibido ${resPatchOrden.status}`);
+    }
+    const pB1Post = await prisma.pareja.findUnique({ where: { id: pB1.id } });
+    if (pB1Post.orden !== 1 || pB1Post.jugador1 === 'No Cambia') {
+      throw new Error(`El PATCH rechazado modificó la pareja: orden ${pB1Post.orden}, jugador1 "${pB1Post.jugador1}"`);
+    }
+    const resPatchNombre = await fetch(`${BASE_URL}/parejas/${pB1.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jugador1: 'Nuevo Nombre' }),
+    });
+    const parejaRenombrada = await resPatchNombre.json();
+    if (resPatchNombre.status !== 200 || parejaRenombrada.jugador1 !== 'Nuevo Nombre' || parejaRenombrada.orden !== 1) {
+      throw new Error(`PATCH de nombre: esperado 200 con jugador1 "Nuevo Nombre" y orden 1, recibido ${resPatchNombre.status} ${JSON.stringify(parejaRenombrada)}`);
+    }
+    console.log('  ✅ PATCH con orden rechazado con 400 sin cambios; PATCH de nombre sigue funcionando.');
+
     console.log('\n🎉 TODOS LOS CASOS DE REGRESIÓN PASARON EXITOSAMENTE!');
   } catch (err) {
     // Sin este catch, el process.exit(0) del finally tapaba cualquier falla de la suite

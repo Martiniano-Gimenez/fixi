@@ -103,10 +103,16 @@ async function updatePareja(organizadorId, parejaId, data) {
     throw error;
   }
 
+  // El orden lo asigna el sistema (alta: max + 1, baja: renumeración) y debe ser único en la categoría
+  if (data.orden !== undefined) {
+    const error = new Error('El orden de la pareja no se puede modificar.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const updateData = {};
   if (data.jugador1) updateData.jugador1 = data.jugador1.trim();
   if (data.jugador2) updateData.jugador2 = data.jugador2.trim();
-  if (data.orden !== undefined) updateData.orden = data.orden;
 
   return await prisma.pareja.update({
     where: { id: pareja.id },
