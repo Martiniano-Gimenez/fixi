@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const { horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
 const { proximaFechaPorDia } = require('./zona.service');
 const { requireTorneoFecha } = require('../utils/dateUtils');
+const { calcularVentanaSabadoNoche } = require('../utils/ventanaSabadoNoche');
 const canchasOverridesService = require('./canchasOverrides.service');
 
 function getCanchasEfectivas(torneo, organizador, overrideNum = null, diaKey = null) {
@@ -115,12 +116,7 @@ async function programarHorariosEliminatorias(
   const domDayEndMs = baseSunday.getTime() + domEffectiveFinMin * 60 * 1000;
 
   // Ventana para Dieciseisavos (Sábado noche: preferente 20:45 o cierre de zonas)
-  const sabInicioMin = horaAMinutos(organizador.sabadoInicio || '08:00');
-  const sabFinMin = horaAMinutos(organizador.sabadoFin || '23:00');
-  let sabEffectiveFinMin = sabFinMin <= sabInicioMin ? sabFinMin + 24 * 60 : sabFinMin;
-  const sabNightStartMin = Math.max(sabInicioMin, Math.min(20 * 60 + 45, sabEffectiveFinMin - 150));
-  const sabNightStartMs = baseSaturday.getTime() + sabNightStartMin * 60 * 1000;
-  const sabNightEndMs = baseSaturday.getTime() + sabEffectiveFinMin * 60 * 1000;
+  const { sabNightStartMs, sabNightEndMs } = calcularVentanaSabadoNoche(organizador, baseSaturday.getTime());
 
   const cantidadCanchas = Math.max(1, getCanchasEfectivas(torneo, organizador, canchasOverride));
   const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
