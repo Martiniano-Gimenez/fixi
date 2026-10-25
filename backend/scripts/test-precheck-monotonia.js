@@ -288,20 +288,20 @@ async function m3() {
 
 async function m4() {
   const { clasificarPasoMonotonia } = cargarHelper();
-  // La zona objetivo baja 1 y otra zona de la misma categoría sube 1: el total no cambia, pero falla.
+  // Se resuelve z1; z2 sube 1 y z3 baja 1: la suma de las otras zonas no cambia (y el total baja),
+  // pero z2 empeoró y tiene que fallar.
   const antes = [
     item('c1', 'z1', 'p1', 'SIN_CANCHA_DISPONIBLE'),
-    item('c1', 'z1', 'p2', 'SIN_CANCHA_DISPONIBLE'),
     item('c1', 'z2', 'p3', 'SIN_CANCHA_DISPONIBLE'),
+    item('c1', 'z3', 'p5', 'SIN_CANCHA_DISPONIBLE'),
   ];
   const despues = [
-    item('c1', 'z1', 'p2', 'SIN_CANCHA_DISPONIBLE'),
     item('c1', 'z2', 'p3', 'SIN_CANCHA_DISPONIBLE'),
     item('c1', 'z2', 'p4', 'SIN_CANCHA_DISPONIBLE'),
   ];
   const paso = clasificarPasoMonotonia({ antes, despues, zonaObjetivo: 'c1:z1' });
-  assert(paso.deltaTotal === 0, `deltaTotal esperado 0, fue ${paso.deltaTotal}`);
-  assert(paso.ok === false, 'tiene que fallar: otra zona subió aunque el total no cambió');
+  assert(paso.deltaTotal === -1, `deltaTotal esperado -1, fue ${paso.deltaTotal}`);
+  assert(paso.ok === false, 'tiene que fallar: otra zona subió aunque la suma de las otras zonas no cambió');
   assert(paso.violaciones.includes('OTRA_ZONA_SUBE'), `violaciones: ${JSON.stringify(paso.violaciones)}`);
   assert(
     paso.zonasQueSuben.length === 1 && paso.zonasQueSuben[0].zona === 'c1:z2' && paso.zonasQueSuben[0].antes === 1 && paso.zonasQueSuben[0].despues === 2,
@@ -397,7 +397,7 @@ const TESTS = [
   ['m1', 'zona de 3 destrabada: 1 ZONA_MANUAL -> 2 SIN_CANCHA_DISPONIBLE, salto explicado', m1],
   ['m2', 'zona de 4 destrabada: 1 ZONA_MANUAL -> P3/P4 PARTIDO_SIN_HORARIO, salto explicado', m2],
   ['m3', 'mini-bracket: resolver P2 hace contar P3/P4, salto explicado (UI 3 -> 2)', m3],
-  ['m4', 'otra zona sube aunque el total no cambie: falla (zona por zona, no la suma)', m4],
+  ['m4', 'otra zona sube aunque la suma de las otras zonas no cambie: falla (zona por zona)', m4],
   ['m5', 'otra categoría sube: falla', m5],
   ['m6', 'ítem nuevo en la zona objetivo que no es un partido sin horario: falla', m6],
   ['m7', 'UI: aviso al destrabar una zona (sube y no sube el contador)', m7],
