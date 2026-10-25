@@ -1292,6 +1292,9 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     partidosSinSlotMotivos.set(pId, motivo);
   }
 
+  // Partidos que una lluvia anterior del mismo día dejó sin horario (mapa del día ya saneado)
+  const enMapaDiaAlInicio = new Set(partidosSinSlotMotivos.keys());
+
   // Guard en escritura: solo registrar en partidosSinSlotMotivos partidos cuya jornada original (por fechaHora previa) coincide con overrideDiaKey
   function registrarPartidoSinSlot(partidoId, motivo) {
     const fechaPrevia = fechaHoraPreviaPorPartido.get(partidoId);
@@ -1512,16 +1515,22 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     return { maxEndMs, r1SinHorario };
   }
 
-  // Regla B (misma que programarHorariosEliminatorias): si algún partido de zona de la categoría
-  // no tiene horario (estado efectivo tras compactar), el fin de zonas es indeterminado.
+  // Regla B en lluvia: el fin de zonas de la categoría es indeterminado si algún partido de zona
+  // PENDIENTE quedó sin horario por lluvia, es decir (estado efectivo tras compactar):
+  //   (a) tenía horario al empezar esta corrida y la compactación se lo sacó, o
+  //   (b) está en el mapa partidosSinSlot del día (lo desplazó una lluvia anterior del mismo día).
+  // Los que ya estaban sin horario fuera del mapa (ej. pendientes del inicio de emergencia) no cuentan:
+  // en ese caso el R32 se reubica con piso = max(ventana nocturna, fin de zonas conocido, horario original).
   // Se evalúa al llegar a los R32 (tier 2), cuando las zonas (tiers 0 y 1) ya se procesaron.
-  function categoriaTieneZonaSinHorario(categoriaId) {
+  function categoriaTieneZonaSinHorarioPorLluvia(categoriaId) {
     return todosLosPartidos.some((m) => {
-      if (!m.zonaId || m.categoriaId !== categoriaId) return false;
+      if (!m.zonaId || m.categoriaId !== categoriaId || m.estado !== 'PENDIENTE') return false;
       const u = updatesMap.get(m.id);
       const effFechaHora = u !== undefined ? u.fechaHora : m.fechaHora;
       const effSinHorario = u !== undefined ? u.sinHorarioAsignado : m.sinHorarioAsignado;
-      return !effFechaHora || effSinHorario;
+      if (effFechaHora && !effSinHorario) return false;
+      const teniaHorarioAlInicio = Boolean(m.fechaHora && !m.sinHorarioAsignado);
+      return teniaHorarioAlInicio || enMapaDiaAlInicio.has(m.id);
     });
   }
 
@@ -1537,8 +1546,8 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
 
   // 4. Asignación Global Earliest-Fit para cada partido
   for (const partido of partidosAAsignar) {
-    if (esR32Automatico(partido) && categoriaTieneZonaSinHorario(partido.categoriaId)) {
-      desasignarR32Automatico(partido, 'Sin horario porque la categoría tiene partidos de zona sin horario asignado');
+    if (esR32Automatico(partido) && categoriaTieneZonaSinHorarioPorLluvia(partido.categoriaId)) {
+      desasignarR32Automatico(partido, 'Sin horario porque la lluvia dejó partidos de zona de la categoría sin horario');
       continue;
     }
 
