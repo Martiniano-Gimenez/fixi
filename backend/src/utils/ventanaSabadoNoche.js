@@ -1,6 +1,7 @@
 'use strict';
 
 const { horaAMinutos } = require('../services/slots.service');
+const { calcularFinJornadaMs } = require('./horarioClub');
 
 /**
  * Ventana de los dieciseisavos (R32) del sábado a la noche.
@@ -14,13 +15,16 @@ const { horaAMinutos } = require('../services/slots.service');
  * @returns {{ sabNightStartMs: number, sabNightEndMs: number }}
  */
 function calcularVentanaSabadoNoche(organizador, baseSaturdayMs) {
-  const sabInicioMin = horaAMinutos(organizador.sabadoInicio || '08:00');
-  const sabFinMin = horaAMinutos(organizador.sabadoFin || '23:00');
-  const sabEffectiveFinMin = sabFinMin <= sabInicioMin ? sabFinMin + 24 * 60 : sabFinMin;
+  const sabInicioStr = organizador.sabadoInicio || '08:00';
+  const sabFinStr = organizador.sabadoFin || '23:00';
+  const sabInicioMin = horaAMinutos(sabInicioStr);
+  // Cierre del sábado con la misma fuente que la marca "después del cierre" (horarioClub.js)
+  const sabNightEndMs = calcularFinJornadaMs(baseSaturdayMs, sabInicioStr, sabFinStr);
+  const sabEffectiveFinMin = (sabNightEndMs - baseSaturdayMs) / (60 * 1000);
   const sabNightStartMin = Math.max(sabInicioMin, Math.min(20 * 60 + 45, sabEffectiveFinMin - 150));
   return {
     sabNightStartMs: baseSaturdayMs + sabNightStartMin * 60 * 1000,
-    sabNightEndMs: baseSaturdayMs + sabEffectiveFinMin * 60 * 1000,
+    sabNightEndMs,
   };
 }
 

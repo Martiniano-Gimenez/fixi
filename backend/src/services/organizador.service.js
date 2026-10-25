@@ -9,6 +9,7 @@ const {
   ordenarSlotsCronologicamente,
 } = require('./slots.service');
 const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal } = require('../utils/dateUtils');
+const { minutosDespuesDelCierre } = require('../utils/horarioClub');
 const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -1980,6 +1981,8 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       sinHorarioAsignado: p.sinHorarioAsignado,
       estado: p.estado,
       sets: p.sets || [],
+      // Minutos que el partido termina después del cierre del club (Modo Lluvia). Solo admin, nunca en la vista pública.
+      minutosDespuesDelCierre: p.fechaHora ? minutosDespuesDelCierre(p.fechaHora, organizador) : 0,
     };
 
     if (p.estado === 'FINALIZADO') {

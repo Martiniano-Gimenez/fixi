@@ -785,6 +785,41 @@ async function testI_r32ConservaCanchaOriginal() {
   await verificar('post-restauracion');
 }
 
+/**
+ * (j) Restauración: un R32 automático que la lluvia dejó después del cierre del club (sábado 24:00)
+ * vuelve dentro de la ventana nocturna y del horario del club si entra. Al restaurar, su horario
+ * actual no es piso: el piso es max(ventana nocturna, fin de zonas de su categoría).
+ */
+async function testJ_r32VuelveDentroDelHorarioAlRestaurar() {
+  const esc = await crearEscenario('test-j', {
+    zonas: ZONAS_12,
+    r32: [{ pos: 1, fechaHora: sab(20, 45), cancha: 1 }],
+  });
+  const cierreMs = BASE_SABADO_MS + 24 * 60 * 60 * 1000; // sábado 24:00
+
+  await reducir(esc);
+  let partidos = await cargarPartidos(esc);
+  let r32 = partidos.find((p) => p.id === esc.r32[0].id);
+  assert(
+    conHorario(r32) && new Date(r32.fechaHora).getTime() + DURACION_MS > cierreMs,
+    `[post-reduccion] Precondición: el R32 debía quedar después del cierre del club (quedó ${iso(r32.fechaHora)}, sinHorario=${r32.sinHorarioAsignado})`
+  );
+
+  await restaurar(esc);
+  partidos = await cargarPartidos(esc);
+  verificarSinSolapamientos(partidos, 'post-restauracion');
+  assertR32NoAntesDeFinZonas(partidos, 'post-restauracion');
+  assertR32NoAntesDeSabNoche(partidos, 'post-restauracion');
+
+  r32 = partidos.find((p) => p.id === esc.r32[0].id);
+  assert(conHorario(r32), `[post-restauracion] R32 quedó sin horario (fechaHora=${iso(r32.fechaHora)})`);
+  const finMs = new Date(r32.fechaHora).getTime() + DURACION_MS;
+  assert(
+    finMs <= cierreMs,
+    `[post-restauracion] R32 debía volver dentro del horario del club (cierre ${iso(cierreMs)}); inicia ${iso(r32.fechaHora)} y termina ${iso(finMs)}`
+  );
+}
+
 const TESTS = [
   ['a', 'R32 automático en cancha activa, zonas entran', testA_r32AutoCanchaActivaZonasEntran],
   ['b', 'R32 automático en cancha inactiva, zonas entran', testB_r32AutoCanchaInactivaZonasEntran],
@@ -799,6 +834,7 @@ const TESTS = [
   ['g', 'Ciclo reducción → restauración', testG_cicloReduccionRestauracion],
   ['h', 'Octavo con padre R32 sin horario', testH_octavosConPadreR32SinHorario],
   ['i', 'R32 automático reubicado conserva su cancha original si está libre', testI_r32ConservaCanchaOriginal],
+  ['j', 'Al restaurar, el R32 fuera de horario vuelve dentro del horario del club', testJ_r32VuelveDentroDelHorarioAlRestaurar],
 ];
 
 async function run() {
