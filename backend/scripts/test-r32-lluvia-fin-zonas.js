@@ -122,11 +122,22 @@ async function crearEscenario(nombre, { zonas, r32 = [], octavos = [] }) {
 
   const letras = 'ABCDEFGHIJ';
   let orden = 1;
+  const partidosZonaCreados = [];
   for (let zi = 0; zi < zonas.length; zi++) {
-    const spec = zonas[zi];
-    const size = spec.length === 1 ? 2 : 3;
+    // Round robin: array de [k, cancha] (1 partido → 2 parejas, 3 partidos → 3 parejas).
+    // Mini-bracket: { formato: 'MINI_BRACKET', partidos: [P1, P2, P3, P4] } con 4 parejas;
+    // P3 y P4 se crean sin parejas definidas (ganadores/perdedores de Ronda 1).
+    const raw = zonas[zi];
+    const esMiniBracket = !Array.isArray(raw) && raw.formato === 'MINI_BRACKET';
+    const spec = esMiniBracket ? raw.partidos : raw;
+    const size = esMiniBracket ? 4 : spec.length === 1 ? 2 : 3;
     const zona = await prisma.zona.create({
-      data: { categoriaId: cat.id, nombre: `Zona ${letras[zi]}`, clasifican: size === 2 ? 1 : 2, formato: 'ROUND_ROBIN' },
+      data: {
+        categoriaId: cat.id,
+        nombre: `Zona ${letras[zi]}`,
+        clasifican: size === 2 ? 1 : 2,
+        formato: esMiniBracket ? 'MINI_BRACKET' : 'ROUND_ROBIN',
+      },
     });
     const parejas = [];
     for (let i = 0; i < size; i++) {
@@ -136,24 +147,30 @@ async function crearEscenario(nombre, { zonas, r32 = [], octavos = [] }) {
         })
       );
     }
-    const cruces = size === 2 ? [[0, 1]] : [[0, 1], [0, 2], [1, 2]];
+    const cruces = esMiniBracket
+      ? [[0, 1], [2, 3], null, null]
+      : size === 2 ? [[0, 1]] : [[0, 1], [0, 2], [1, 2]];
+    const creadosZona = [];
     for (let mi = 0; mi < cruces.length; mi++) {
       // [null, null] = partido de zona que ya estaba sin horario (ej. pendiente del inicio de emergencia)
       const [k, cancha] = spec[mi];
       const sinHorarioPrevio = k === null;
-      await prisma.partido.create({
-        data: {
-          categoriaId: cat.id,
-          zonaId: zona.id,
-          posicionEnRonda: mi + 1,
-          pareja1Id: parejas[cruces[mi][0]].id,
-          pareja2Id: parejas[cruces[mi][1]].id,
-          fechaHora: sinHorarioPrevio ? null : turno(k),
-          canchaNumero: sinHorarioPrevio ? null : cancha,
-          sinHorarioAsignado: sinHorarioPrevio,
-        },
-      });
+      creadosZona.push(
+        await prisma.partido.create({
+          data: {
+            categoriaId: cat.id,
+            zonaId: zona.id,
+            posicionEnRonda: mi + 1,
+            pareja1Id: cruces[mi] ? parejas[cruces[mi][0]].id : null,
+            pareja2Id: cruces[mi] ? parejas[cruces[mi][1]].id : null,
+            fechaHora: sinHorarioPrevio ? null : turno(k),
+            canchaNumero: sinHorarioPrevio ? null : cancha,
+            sinHorarioAsignado: sinHorarioPrevio,
+          },
+        })
+      );
     }
+    partidosZonaCreados.push(creadosZona);
   }
 
   const crearFase = async (nombreFase, ronda, cruces) => {
@@ -201,7 +218,7 @@ async function crearEscenario(nombre, { zonas, r32 = [], octavos = [] }) {
   const r32Creados = await crearFase('Dieciseisavos de Final', 32, r32);
   const octavosCreados = await crearFase('Octavos de Final', 16, octavos);
 
-  return { org, torneo, cat, r32: r32Creados, octavos: octavosCreados };
+  return { org, torneo, cat, zonas: partidosZonaCreados, r32: r32Creados, octavos: octavosCreados };
 }
 
 async function reducir(esc) {
@@ -394,35 +411,146 @@ async function testC_zonasNoEntranR32SinHorario() {
   }
 }
 
+const LIMITE_SABADO_MS = BASE_SABADO_MS + 30 * 60 * 60 * 1000; // domingo 06:00 (dayLimitMs del sábado)
+
+function enMapa(sinSlot, id) {
+  return Object.prototype.hasOwnProperty.call(sinSlot, id);
+}
+
+function assertHayLugarParaR32(partidos, etapa) {
+  const { maxEndMs } = finDeZonas(partidos);
+  const pisoMs = Math.max(SAB_NOCHE_MS, maxEndMs || 0);
+  assert(
+    pisoMs + DURACION_MS <= LIMITE_SABADO_MS,
+    `[${etapa}] Precondición: debía quedar lugar para el R32 antes de las 06:00 (fin de zonas conocido ${iso(maxEndMs)})`
+  );
+}
+
+// Mini-bracket con P1 sin horario previo (pendiente de emergencia) y P2/P3/P4 con horario
+// (P3/P4 fijados a mano antes de jugarse la Ronda 1). En lluvia, P3/P4 pierden el horario por
+// ronda1SinHorario sin buscar turno, aunque haya canchas libres.
+const MB_P1_PENDIENTE = { formato: 'MINI_BRACKET', partidos: [[null, null], [3, 1], [4, 1], [4, 2]] };
+
 /**
- * (c2) Regla B con lugar libre: un partido de zona de la categoría ya estaba sin horario
- * (pendiente del inicio de emergencia, fuera del mapa del día) y la cancha tiene lugar para el R32.
- * El fin de zonas es indeterminado: el R32 automático queda sinHorarioAsignado y en partidosSinSlot.
+ * (c2) Un partido de zona que YA estaba sin horario antes de la corrida (pendiente del inicio de
+ * emergencia, fuera del mapa del día) NO dispara la Regla B: con lugar libre, el R32 automático
+ * queda con horario, después del fin de zonas conocido y de la ventana nocturna.
  */
-async function testC2_reglaBConLugarLibre() {
+async function testC2_pendienteEmergenciaNoDisparaReglaB() {
   const esc = await crearEscenario('test-c2', {
     zonas: [...ZONAS_12, [[null, null]]],
     r32: [{ pos: 1, fechaHora: sab(20, 45), cancha: 1 }],
   });
+  const emergencia = esc.zonas[4][0];
 
   await reducir(esc);
   const partidos = await cargarPartidos(esc);
   verificarSinSolapamientos(partidos, 'post-reduccion');
 
-  const { sinHorario, maxEndMs } = finDeZonas(partidos);
-  assert(sinHorario.length === 1, `[post-reduccion] Precondición: debía quedar exactamente 1 partido de zona sin horario; quedaron ${sinHorario.length}`);
+  const sinSlot = await leerPartidosSinSlot(esc);
+  const pEm = partidos.find((p) => p.id === emergencia.id);
+  assert(!conHorario(pEm) && !enMapa(sinSlot, pEm.id), '[post-reduccion] Precondición: el pendiente de emergencia debía seguir sin horario y fuera del mapa');
+  assertHayLugarParaR32(partidos, 'post-reduccion');
+
+  const r32 = partidos.find((p) => p.id === esc.r32[0].id);
   assert(
-    maxEndMs + DURACION_MS <= BASE_SABADO_MS + 30 * 60 * 60 * 1000,
-    `[post-reduccion] Precondición: debía quedar lugar para el R32 antes de las 06:00 (fin de zonas ${iso(maxEndMs)})`
+    conHorario(r32),
+    `[post-reduccion] R32 automático debía quedar CON horario (el pendiente de emergencia no dispara la Regla B); quedó sinHorarioAsignado=${r32.sinHorarioAsignado}, fechaHora=${iso(r32.fechaHora)}`
   );
+  assert(r32.canchaNumero <= CANCHAS_LLUVIA, `[post-reduccion] R32 en cancha inactiva ${r32.canchaNumero}`);
+  assertR32NoAntesDeFinZonas(partidos, 'post-reduccion');
+  assertR32NoAntesDeSabNoche(partidos, 'post-reduccion');
+}
+
+/**
+ * (c3) Un partido de zona que TENÍA horario queda sin horario por esta corrida y aun así hay lugar
+ * para el R32: el R32 automático queda sinHorarioAsignado y en partidosSinSlot.
+ * Escenario: P3/P4 de un mini-bracket pierden el horario porque P1 ya estaba sin horario
+ * (por dayLimitMs o conflicto de pareja no se puede armar con lugar libre: ver BITACORA sesión 78).
+ */
+async function testC3_zonaDesasignadaEnCorridaDisparaReglaB() {
+  const esc = await crearEscenario('test-c3', {
+    zonas: [...ZONAS_12, MB_P1_PENDIENTE],
+    r32: [{ pos: 1, fechaHora: sab(20, 45), cancha: 1 }],
+  });
+  const [p1, , p3, p4] = esc.zonas[4];
+
+  await reducir(esc);
+  const partidos = await cargarPartidos(esc);
+  verificarSinSolapamientos(partidos, 'post-reduccion');
+
+  const sinSlot = await leerPartidosSinSlot(esc);
+  assert(!conHorario(partidos.find((p) => p.id === p1.id)), '[post-reduccion] Precondición: P1 debía seguir sin horario');
+  for (const z of [p3, p4]) {
+    const pz = partidos.find((p) => p.id === z.id);
+    assert(
+      !conHorario(pz) && enMapa(sinSlot, z.id),
+      `[post-reduccion] Precondición: P${z.posicionEnRonda} tenía horario y debía quedar sin horario y en el mapa (sinHorario=${pz.sinHorarioAsignado}, fechaHora=${iso(pz.fechaHora)})`
+    );
+  }
+  assertHayLugarParaR32(partidos, 'post-reduccion');
 
   const r32 = partidos.find((p) => p.id === esc.r32[0].id);
   assertSinHorario(r32, 'post-reduccion');
-  const sinSlot = await leerPartidosSinSlot(esc);
+  assert(enMapa(sinSlot, r32.id), `[post-reduccion] R32 ${r32.id} no figura en partidosSinSlot`);
+}
+
+/**
+ * (c4) Dos corridas de lluvia el mismo día y restauración:
+ * - 1ª reducción (a 2 canchas): P3/P4 pierden horario → el R32 automático queda sin horario.
+ * - 2ª reducción (a 1 cancha): P3/P4 siguen sin entrar; ya no tenían horario al empezar la corrida,
+ *   pero están en el mapa del día (los desplazó la lluvia) → el R32 sigue sin horario aunque haya lugar.
+ * - El organizador le asigna horario a P1 y se restauran las canchas: P3/P4 vuelven a entrar y el R32
+ *   se recupera después del fin de zonas incluyendo a P3/P4 y de la ventana nocturna.
+ */
+async function testC4_dosCorridasYRestauracion() {
+  const esc = await crearEscenario('test-c4', {
+    zonas: [...ZONAS_12, MB_P1_PENDIENTE],
+    r32: [{ pos: 1, fechaHora: sab(20, 45), cancha: 1 }],
+  });
+  const [p1, , p3, p4] = esc.zonas[4];
+  const r32Id = esc.r32[0].id;
+
+  // 1ª corrida
+  await organizadorService.reprogramarPorReduccionCanchas(esc.org.id, esc.torneo.id, 2, null, DIA_SABADO);
+  let partidos = await cargarPartidos(esc);
+  let sinSlot = await leerPartidosSinSlot(esc);
+  verificarSinSolapamientos(partidos, 'post-reduccion-1');
+  assertSinHorario(partidos.find((p) => p.id === r32Id), 'post-reduccion-1');
+  assert(enMapa(sinSlot, r32Id), '[post-reduccion-1] R32 no figura en partidosSinSlot');
+
+  // 2ª corrida
+  await reducir(esc);
+  partidos = await cargarPartidos(esc);
+  sinSlot = await leerPartidosSinSlot(esc);
+  verificarSinSolapamientos(partidos, 'post-reduccion-2');
+  for (const z of [p3, p4]) {
+    const pz = partidos.find((p) => p.id === z.id);
+    assert(!conHorario(pz) && enMapa(sinSlot, z.id), `[post-reduccion-2] Precondición: P${z.posicionEnRonda} debía seguir sin horario y en el mapa`);
+  }
+  assertHayLugarParaR32(partidos, 'post-reduccion-2');
+  assertSinHorario(partidos.find((p) => p.id === r32Id), 'post-reduccion-2');
+  assert(enMapa(sinSlot, r32Id), '[post-reduccion-2] R32 no figura en partidosSinSlot');
+
+  // El organizador le asigna horario a P1 (estado intermedio: la restauración recompacta la jornada)
+  await prisma.partido.update({
+    where: { id: p1.id },
+    data: { fechaHora: turno(0), canchaNumero: 2, sinHorarioAsignado: false },
+  });
+
+  // Restauración
+  await restaurar(esc);
+  partidos = await cargarPartidos(esc);
+  verificarSinSolapamientos(partidos, 'post-restauracion');
+  const { sinHorario } = finDeZonas(partidos);
+  assert(sinHorario.length === 0, `[post-restauracion] Precondición: con P1 agendado todas las zonas debían entrar; quedaron ${sinHorario.length} sin horario`);
+  const r32 = partidos.find((p) => p.id === r32Id);
   assert(
-    Object.prototype.hasOwnProperty.call(sinSlot, r32.id),
-    `[post-reduccion] R32 ${r32.id} no figura en partidosSinSlot`
+    conHorario(r32),
+    `[post-restauracion] R32 no se recuperó (sinHorarioAsignado=${r32.sinHorarioAsignado}, fechaHora=${iso(r32.fechaHora)})`
   );
+  assertR32NoAntesDeFinZonas(partidos, 'post-restauracion');
+  assertR32NoAntesDeSabNoche(partidos, 'post-restauracion');
 }
 
 /**
@@ -661,7 +789,9 @@ const TESTS = [
   ['a', 'R32 automático en cancha activa, zonas entran', testA_r32AutoCanchaActivaZonasEntran],
   ['b', 'R32 automático en cancha inactiva, zonas entran', testB_r32AutoCanchaInactivaZonasEntran],
   ['c', 'Zonas no entran: R32 automáticos sin horario y en partidosSinSlot', testC_zonasNoEntranR32SinHorario],
-  ['c2', 'Regla B con lugar libre: zona con partido sin horario previo', testC2_reglaBConLugarLibre],
+  ['c2', 'Pendiente de emergencia previo no dispara la Regla B', testC2_pendienteEmergenciaNoDisparaReglaB],
+  ['c3', 'Zona desasignada en esta corrida dispara la Regla B con lugar libre', testC3_zonaDesasignadaEnCorridaDisparaReglaB],
+  ['c4', 'Dos corridas el mismo día y restauración', testC4_dosCorridasYRestauracion],
   ['d', 'R32 automático no entra antes de dayLimitMs', testD_r32NoEntraAntesDeDayLimit],
   ['e', 'R32 manual en cancha activa no se mueve y avisa', testE_r32ManualCanchaActivaNoSeMueve],
   ['e2', 'R32 manual con parejas en cancha activa no se mueve y avisa', testE2_r32ManualConParejasCanchaActivaNoSeMueve],
