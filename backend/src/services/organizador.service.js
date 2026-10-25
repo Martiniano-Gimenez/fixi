@@ -986,6 +986,9 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
     include: {
       categorias: {
         where: { estado: 'BORRADOR' },
+        // Orden explícito (sesión 81): define en qué orden se inician las categorías y, como validos.sort
+        // es estable, el desempate entre categorías con el mismo scoreFlexibilidad.
+        orderBy: [{ nombre: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
         include: {
           parejas: {
             include: {
@@ -1179,11 +1182,19 @@ async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = fals
       const categoriasPlan = [];
 
       for (const v of validos) {
+        // Orden explícito (sesión 81). zonaParejas por pareja.orden: sin orderBy SQLite las devolvía por el
+        // índice (zonaId, parejaId), en orden de UUID, distinto en cada corrida. Zonas por nombre y partidos
+        // por posición: hoy coinciden con el orden de creación (sin efecto observable), quedan explícitos.
         const zonasTx = await tx.zona.findMany({
           where: { categoriaId: v.categoria.id },
+          orderBy: { nombre: 'asc' },
           include: {
-            zonaParejas: { select: { parejaId: true } },
+            zonaParejas: {
+              select: { parejaId: true },
+              orderBy: [{ pareja: { orden: 'asc' } }, { parejaId: 'asc' }],
+            },
             partidos: {
+              orderBy: { posicionEnRonda: 'asc' },
               select: {
                 id: true,
                 posicionEnRonda: true,

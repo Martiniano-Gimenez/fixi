@@ -130,7 +130,8 @@ async function iniciarCategoria(organizadorId, categoriaId, externalTx = null) {
     throw error;
   }
 
-  const parejas = await db.pareja.findMany({ where: { categoriaId } });
+  // Orden explícito (sesión 81): es la entrada de shuffleArray; sin orderBy salía en orden de inserción
+  const parejas = await db.pareja.findMany({ where: { categoriaId }, orderBy: [{ orden: 'asc' }, { id: 'asc' }] });
   const numParejas = parejas.length;
 
   if (numParejas < 2) {
@@ -301,9 +302,12 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
     throw error;
   }
 
+  // Orden explícito (sesión 81): define los índices de la matriz de compatibilidad y los empates de
+  // armarGruposPorCompatibilidad. slotsSeleccionados por slotId es lo que ya devolvía el índice (sin efecto).
   const parejas = await db.pareja.findMany({
     where: { categoriaId },
-    include: { slotsSeleccionados: true },
+    orderBy: [{ orden: 'asc' }, { id: 'asc' }],
+    include: { slotsSeleccionados: { orderBy: { slotId: 'asc' } } },
   });
 
   const numParejas = parejas.length;
@@ -621,12 +625,15 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   }
 
   // 3. Cargar partidos pendientes de zonas de las categorías especificadas (opcionalmente filtrado por zonaId)
+  // Orden explícito (sesión 81): el greedy de las pasadas 0-2 y la fase 2 recorren los partidos en este orden.
+  // Sin orderBy salían en orden de inserción. El id solo desempata si hubiera zonas con el mismo nombre.
   const partidos = await db.partido.findMany({
     where: {
       categoriaId: { in: categoriaIds },
       zonaId: options.zonaId ? options.zonaId : { not: null },
       estado: 'PENDIENTE',
     },
+    orderBy: [{ categoria: { nombre: 'asc' } }, { zona: { nombre: 'asc' } }, { posicionEnRonda: 'asc' }, { id: 'asc' }],
     include: {
       categoria: { include: { torneo: true } },
       zona: {
