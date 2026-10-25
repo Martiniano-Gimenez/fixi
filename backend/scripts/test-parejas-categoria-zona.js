@@ -38,6 +38,8 @@ async function main() {
     partidosMBIds: [],
   };
 
+  let exitCode = 0;
+
   try {
     // 1. Crear Organizador A y B
     const orgA = await prisma.organizador.create({
@@ -381,6 +383,10 @@ async function main() {
     console.log('  ✅ Multitenant verificado: Organizador B recibió HTTP 403 Forbidden correctamente.');
 
     console.log('\n🎉 TODOS LOS CASOS DE REGRESIÓN PASARON EXITOSAMENTE!');
+  } catch (err) {
+    // Sin este catch, el process.exit(0) del finally tapaba cualquier falla de la suite
+    console.error('\n❌ ERROR EN EL TEST:', err.message);
+    exitCode = 1;
   } finally {
     console.log('\n🧹 Limpiando datos de prueba...');
     try {
@@ -423,7 +429,7 @@ async function main() {
       await new Promise((resolve) => serverInstance.close(resolve));
     }
     await prisma.$disconnect();
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 

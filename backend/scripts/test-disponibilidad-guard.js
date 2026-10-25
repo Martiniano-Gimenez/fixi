@@ -113,6 +113,8 @@ async function main() {
   const tokenA = jwt.sign({ id: orgA.id, email: orgA.email }, JWT_SECRET, { expiresIn: '1h' });
   const tokenB = jwt.sign({ id: orgB.id, email: orgB.email }, JWT_SECRET, { expiresIn: '1h' });
 
+  let exitCode = 0;
+
   try {
     // ─── FASE 1: BORRADOR (Edición Permitida) ─────────────────────────
     console.log('--- FASE 1: BORRADOR (Operaciones deben ser exitosas 200 OK) ---');
@@ -280,6 +282,10 @@ async function main() {
     console.log('✓ 3.5 HTTP PUT Organizador B en FINALIZADO -> 403 Forbidden preservado');
 
     console.log('\n🎉 ¡TODAS LAS VALIDACIONES DE REGRESIÓN DE DISPONIBILIDAD PASARON EXITOSAMENTE!');
+  } catch (err) {
+    // Sin este catch, el process.exit(0) del finally tapaba cualquier falla de la suite
+    console.error('❌ Error en test-disponibilidad-guard:', err);
+    exitCode = 1;
   } finally {
     // Limpieza de datos de prueba
     await prisma.slotPareja.deleteMany({ where: { parejaId: { in: [parejaA1.id, parejaA2.id, parejaB1.id] } } });
@@ -291,7 +297,7 @@ async function main() {
       await new Promise((resolve) => serverInstance.close(resolve));
     }
     await prisma.$disconnect();
-    process.exit(0);
+    process.exit(exitCode);
   }
 }
 
