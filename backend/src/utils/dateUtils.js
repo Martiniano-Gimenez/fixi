@@ -56,6 +56,16 @@ function requireTorneoFecha(torneo) {
 }
 
 /**
+ * Fin de la jornada lógica en Modo Lluvia: 06:00 del día siguiente (sábado y domingo; el viernes termina
+ * antes si el sábado abre antes de esa hora).
+ * Decisión de producto: es INTENCIONAL que supere el cierre configurado del club (viernesFin/sabadoFin),
+ * para que ningún partido quede sin jugar. Los partidos agendados después del cierre se marcan en
+ * Día de Torneo (horarioClub.js). Lo que no entra antes de este límite queda sin horario, en
+ * partidosSinSlot y en la bandeja de pendientes; nunca se mueve a otro día.
+ */
+const HORA_FIN_JORNADA_LLUVIA_MIN = 6 * 60;
+
+/**
  * Determina el dia calendario logico de una fecha considerando la trasnoche
  * y los horarios configurados del club.
  * Tambien devuelve el limite (timestamp) donde termina ese dia logico.
@@ -96,18 +106,15 @@ function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
   }
 
   const isLogicalViernes = logicalDate.getDay() === 5;
-  
-  // Calcular limite del dia
-  let dayLimitDate = new Date(logicalDate);
-  if (isLogicalViernes) {
-    // Viernes logico termina el Sabado a `sabInicio`
-    dayLimitDate.setDate(dayLimitDate.getDate() + 1);
-    dayLimitDate.setHours(isNaN(sh) ? 6 : sh, isNaN(sm) ? 0 : sm, 0, 0);
-  } else {
-    // Cualquier otro dia logico termina al dia siguiente a las 06:00
-    dayLimitDate.setDate(dayLimitDate.getDate() + 1);
-    dayLimitDate.setHours(6, 0, 0, 0);
-  }
+
+  // Calcular limite del dia (Modo Lluvia): HORA_FIN_JORNADA_LLUVIA_MIN del día siguiente.
+  // El viernes termina antes si el sábado abre antes de esa hora, para no invadir el día lógico del sábado.
+  const finJornadaMin = isLogicalViernes
+    ? Math.min(sabInicioMin, HORA_FIN_JORNADA_LLUVIA_MIN)
+    : HORA_FIN_JORNADA_LLUVIA_MIN;
+  const dayLimitDate = new Date(logicalDate);
+  dayLimitDate.setDate(dayLimitDate.getDate() + 1);
+  dayLimitDate.setHours(Math.floor(finJornadaMin / 60), finJornadaMin % 60, 0, 0);
 
   const yyyy = logicalDate.getFullYear();
   const mm = String(logicalDate.getMonth() + 1).padStart(2, '0');
@@ -125,4 +132,5 @@ module.exports = {
   parseFechaLocal,
   requireTorneoFecha,
   getDiaCalendarioConTrasnoche,
+  HORA_FIN_JORNADA_LLUVIA_MIN,
 };
