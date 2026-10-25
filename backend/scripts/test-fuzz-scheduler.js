@@ -600,7 +600,8 @@ function verificarInvariantesPorEtapa({
 
 async function runSingleSeed(seed, recordFailure) {
   if (typeof recordFailure !== 'function') {
-    recordFailure = () => {};
+    // Sin recordFailure las fallas de invariantes se perdían en silencio
+    throw new Error('runSingleSeed requiere una función recordFailure');
   }
   const rng = createPRNG(seed);
 
@@ -1845,7 +1846,11 @@ async function runFuzzSuite() {
 
   function recordFailure(invariantKey, seed, detail) {
     const entry = stats[invariantKey];
-    if (!entry) return;
+    if (!entry) {
+      // Una clave fuera de INVARIANT_KEYS se descartaba sin aviso y la falla no llegaba al exit code.
+      // Al lanzar, runSingleSeed la registra como excepcion_no_controlada:fuzz.
+      throw new Error(`recordFailure: invariante desconocida "${invariantKey}" (agregala a INVARIANT_KEYS)`);
+    }
     entry.fallasCount++;
     if (!entry.semillasAfectadas.has(seed)) {
       entry.semillasAfectadas.add(seed);

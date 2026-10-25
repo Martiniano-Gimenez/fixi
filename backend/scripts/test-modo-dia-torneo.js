@@ -215,19 +215,29 @@ async function testModoDiaTorneo() {
   }
 
   // 10. Test Validaciones: Override 0 y Override > 6
+  // El error esperado se captura en una variable y se verifica afuera del try: antes el throw de
+  // "FALLÓ EL TEST" quedaba atrapado por el propio catch y la suite pasaba aunque no hubiera validación.
+  let errorCero = null;
   try {
     await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 0);
-    throw new Error('FALLÓ EL TEST: Debería haber fallado con 0 canchas');
   } catch (err) {
-    console.log(`✅ Validación 0 canchas verificada: "${err.message}"`);
+    errorCero = err;
   }
+  if (!errorCero || errorCero.statusCode !== 400 || !errorCero.message.includes('mayor o igual a 1')) {
+    throw new Error(`FALLÓ EL TEST: con 0 canchas se esperaba 400 "mayor o igual a 1", se obtuvo: ${errorCero ? `${errorCero.statusCode} "${errorCero.message}"` : 'sin error'}`);
+  }
+  console.log(`✅ Validación 0 canchas verificada: "${errorCero.message}"`);
 
+  let errorExceso = null;
   try {
     await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 8);
-    throw new Error('FALLÓ EL TEST: Debería haber fallado con 8 canchas (> 6)');
   } catch (err) {
-    console.log(`✅ Validación superación de canchas del club verificada: "${err.message}"`);
+    errorExceso = err;
   }
+  if (!errorExceso || errorExceso.statusCode !== 400 || !errorExceso.message.includes('no puede superar el total del club')) {
+    throw new Error(`FALLÓ EL TEST: con 8 canchas se esperaba 400 "no puede superar el total del club", se obtuvo: ${errorExceso ? `${errorExceso.statusCode} "${errorExceso.message}"` : 'sin error'}`);
+  }
+  console.log(`✅ Validación superación de canchas del club verificada: "${errorExceso.message}"`);
 
   // 11. Test Restaurar canchas (null)
   console.log('☀️ Probando restauración de todas las canchas...');
