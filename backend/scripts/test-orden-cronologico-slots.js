@@ -163,7 +163,7 @@ async function testOrdenCronologicoSlots() {
         categoriaId: cat.id,
         jugador1: 'C1',
         jugador2: 'C2',
-        orden: 1,
+        orden: 3,
         slotsSeleccionados: {
           create: [{ slotId: 'Sabado-00:30' }],
         },
@@ -175,7 +175,7 @@ async function testOrdenCronologicoSlots() {
         categoriaId: cat.id,
         jugador1: 'D1',
         jugador2: 'D2',
-        orden: 2,
+        orden: 4,
         slotsSeleccionados: {
           create: [{ slotId: 'Sabado-00:30' }, { slotId: 'Viernes-18:00' }],
         },

@@ -81,10 +81,10 @@ async function runTest() {
   });
 
   // Parejas Cat 1
-  const p1_cat1 = await prisma.pareja.create({ data: { categoriaId: cat1.id, jugador1: 'J1', jugador2: 'J2' } });
-  const p2_cat1 = await prisma.pareja.create({ data: { categoriaId: cat1.id, jugador1: 'J3', jugador2: 'J4' } });
-  const p3_cat1 = await prisma.pareja.create({ data: { categoriaId: cat1.id, jugador1: 'J5', jugador2: 'J6' } });
-  const p4_cat1 = await prisma.pareja.create({ data: { categoriaId: cat1.id, jugador1: 'J7', jugador2: 'J8' } });
+  const p1_cat1 = await prisma.pareja.create({ data: { categoriaId: cat1.id, orden: 1, jugador1: 'J1', jugador2: 'J2' } });
+  const p2_cat1 = await prisma.pareja.create({ data: { categoriaId: cat1.id, orden: 2, jugador1: 'J3', jugador2: 'J4' } });
+  const p3_cat1 = await prisma.pareja.create({ data: { categoriaId: cat1.id, orden: 3, jugador1: 'J5', jugador2: 'J6' } });
+  const p4_cat1 = await prisma.pareja.create({ data: { categoriaId: cat1.id, orden: 4, jugador1: 'J7', jugador2: 'J8' } });
 
   const faseCat1 = await prisma.faseEliminatoria.create({
     data: {
@@ -134,10 +134,10 @@ async function runTest() {
     },
   });
 
-  const p1_cat2 = await prisma.pareja.create({ data: { categoriaId: cat2.id, jugador1: 'A1', jugador2: 'A2' } });
-  const p2_cat2 = await prisma.pareja.create({ data: { categoriaId: cat2.id, jugador1: 'A3', jugador2: 'A4' } });
-  const p3_cat2 = await prisma.pareja.create({ data: { categoriaId: cat2.id, jugador1: 'A5', jugador2: 'A6' } });
-  const p4_cat2 = await prisma.pareja.create({ data: { categoriaId: cat2.id, jugador1: 'A7', jugador2: 'A8' } });
+  const p1_cat2 = await prisma.pareja.create({ data: { categoriaId: cat2.id, orden: 1, jugador1: 'A1', jugador2: 'A2' } });
+  const p2_cat2 = await prisma.pareja.create({ data: { categoriaId: cat2.id, orden: 2, jugador1: 'A3', jugador2: 'A4' } });
+  const p3_cat2 = await prisma.pareja.create({ data: { categoriaId: cat2.id, orden: 3, jugador1: 'A5', jugador2: 'A6' } });
+  const p4_cat2 = await prisma.pareja.create({ data: { categoriaId: cat2.id, orden: 4, jugador1: 'A7', jugador2: 'A8' } });
 
   const faseCat2 = await prisma.faseEliminatoria.create({
     data: {
@@ -244,7 +244,7 @@ async function runTest() {
     },
   });
   const parejaBorrador = await prisma.pareja.create({
-    data: { categoriaId: catBorrador.id, jugador1: 'Test 1', jugador2: 'Test 2' },
+    data: { categoriaId: catBorrador.id, orden: 1, jugador1: 'Test 1', jugador2: 'Test 2' },
   });
 
   let rechazoDomingo = false;
