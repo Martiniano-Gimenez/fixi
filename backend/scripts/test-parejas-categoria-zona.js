@@ -382,6 +382,27 @@ async function main() {
     }
     console.log('  ✅ Multitenant verificado: Organizador B recibió HTTP 403 Forbidden correctamente.');
 
+    // ─── CASO 5: Alta de pareja con huecos en el orden (max + 1, no count + 1) ────
+    console.log('\n▶ CASO 5: Alta de pareja en BORRADOR con un hueco en el orden (1, 3)...');
+    await prisma.pareja.update({ where: { id: pB2.id }, data: { orden: 3 } });
+    const resAlta = await fetch(`${BASE_URL}/categorias/${catBorrador.id}/parejas`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tokenA}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jugador1: 'Hueco A', jugador2: 'Hueco B' }),
+    });
+    if (resAlta.status !== 201) {
+      throw new Error(`Esperado HTTP 201 en alta de pareja, recibido ${resAlta.status}`);
+    }
+    const parejaAlta = await resAlta.json();
+    if (parejaAlta.orden !== 4) {
+      throw new Error(`La pareja nueva debía recibir orden 4 (max + 1), recibió ${parejaAlta.orden}`);
+    }
+    const ordenesBorrador = (await prisma.pareja.findMany({ where: { categoriaId: catBorrador.id } })).map((p) => p.orden);
+    if (new Set(ordenesBorrador).size !== ordenesBorrador.length) {
+      throw new Error(`Orden repetido en la categoría: ${JSON.stringify(ordenesBorrador)}`);
+    }
+    console.log(`  ✅ Alta con hueco: orden ${parejaAlta.orden}, órdenes de la categoría ${JSON.stringify(ordenesBorrador.sort((a, b) => a - b))}.`);
+
     console.log('\n🎉 TODOS LOS CASOS DE REGRESIÓN PASARON EXITOSAMENTE!');
   } catch (err) {
     // Sin este catch, el process.exit(0) del finally tapaba cualquier falla de la suite

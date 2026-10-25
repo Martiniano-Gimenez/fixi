@@ -18,15 +18,15 @@ async function createPareja(organizadorId, categoriaId, data) {
     throw error;
   }
 
-  // Asignar el orden (seed) basado en la cantidad actual
-  const parejasCount = await prisma.pareja.count({ where: { categoriaId } });
+  // Asignar el orden (seed) como max(orden) + 1: con count + 1 un hueco repetía un orden existente
+  const { _max } = await prisma.pareja.aggregate({ where: { categoriaId }, _max: { orden: true } });
 
   return await prisma.pareja.create({
     data: {
       categoriaId,
       jugador1: data.jugador1.trim(),
       jugador2: data.jugador2.trim(),
-      orden: parejasCount + 1,
+      orden: (_max.orden ?? 0) + 1,
     },
   });
 }

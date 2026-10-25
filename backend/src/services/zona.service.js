@@ -2325,14 +2325,14 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
       throw error;
     }
 
-    // Crear la nueva Pareja en la categoría
-    const totalParejasCat = await tx.pareja.count({ where: { categoriaId } });
+    // Crear la nueva Pareja en la categoría con orden max(orden) + 1 (count + 1 repetía un orden si había huecos)
+    const { _max: maxOrdenCat } = await tx.pareja.aggregate({ where: { categoriaId }, _max: { orden: true } });
     const nuevaPareja = await tx.pareja.create({
       data: {
         categoriaId,
         jugador1: j1,
         jugador2: j2,
-        orden: totalParejasCat + 1,
+        orden: (maxOrdenCat.orden ?? 0) + 1,
       },
     });
 
