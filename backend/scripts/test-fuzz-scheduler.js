@@ -1478,8 +1478,11 @@ async function runSingleSeed(seed, recordFailure) {
     const targetDiaKey = rng.next() < 0.5 ? friKey : satKey;
     const canchasReducidas = rng.int(1, cantidadCanchas - 1);
 
+    // Orden explícito (sesión 81): candidatosEstado[0] y [1] deciden qué partido se finaliza y cuál queda
+    // en curso; sin orderBy salían en orden de inserción. (fechaHora, cancha) es único entre agendados.
     const partidosTrasManual = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
+      orderBy: [{ fechaHora: 'asc' }, { canchaNumero: 'asc' }, { categoria: { nombre: 'asc' } }, { posicionEnRonda: 'asc' }],
       include: { faseEliminatoria: true },
     });
 
