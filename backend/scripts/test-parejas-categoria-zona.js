@@ -428,6 +428,25 @@ async function main() {
     }
     console.log('  ✅ PATCH con orden rechazado con 400 sin cambios; PATCH de nombre sigue funcionando.');
 
+    // ─── CASO 7: Guarda de test.db (trigger de orden único por categoría) ────
+    console.log('\n▶ CASO 7: test.db rechaza una pareja con orden repetido en la categoría...');
+    const cantidadAntes = await prisma.pareja.count({ where: { categoriaId: catBorrador.id } });
+    let rechazada = false;
+    try {
+      await prisma.pareja.create({
+        data: { categoriaId: catBorrador.id, jugador1: 'Dup A', jugador2: 'Dup B', orden: 1 },
+      });
+    } catch (err) {
+      // Prisma informa el RAISE(ABORT) del trigger como P2003 (SQLITE_CONSTRAINT)
+      rechazada = true;
+      console.log(`  ✓ Insert rechazado por la guarda (${err.code || err.name})`);
+    }
+    const cantidadDespues = await prisma.pareja.count({ where: { categoriaId: catBorrador.id } });
+    if (!rechazada || cantidadDespues !== cantidadAntes) {
+      throw new Error(`La guarda de orden único no está activa en test.db (parejas ${cantidadAntes} -> ${cantidadDespues}). Regenerá la plantilla.`);
+    }
+    console.log('  ✅ Guarda de orden único activa en test.db.');
+
     console.log('\n🎉 TODOS LOS CASOS DE REGRESIÓN PASARON EXITOSAMENTE!');
   } catch (err) {
     // Sin este catch, el process.exit(0) del finally tapaba cualquier falla de la suite

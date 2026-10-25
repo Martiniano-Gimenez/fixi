@@ -4,9 +4,25 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
+const crypto = require('crypto');
+
 const PRISMA_DIR = path.resolve(__dirname, '../prisma');
 const TEMPLATE_DB = path.join(PRISMA_DIR, 'test.template.db');
 const TARGET_DB = path.join(PRISMA_DIR, 'test.db');
+
+// Guardas de test (triggers) que se agregan a la plantilla después de las migraciones.
+// El marcador guarda el SHA256 del SQL aplicado: si falta o no coincide, se regenera la plantilla.
+const GUARDS_SQL = path.join(__dirname, 'utils', 'test-db-guards.sql');
+const GUARDS_MARKER = path.join(PRISMA_DIR, 'test.template.guards');
+
+function hashGuards() {
+  return crypto.createHash('sha256').update(fs.readFileSync(GUARDS_SQL)).digest('hex');
+}
+
+function plantillaTieneGuardasVigentes() {
+  if (!fs.existsSync(GUARDS_MARKER)) return false;
+  return fs.readFileSync(GUARDS_MARKER, 'utf8').trim() === hashGuards();
+}
 
 /**
  * Regenera test.template.db ejecutando 'prisma migrate deploy'
@@ -38,7 +54,18 @@ function regenerarPlantilla() {
     throw new Error(`[reset-test-db] ERROR: No se generó ${tempDb} tras prisma migrate deploy.`);
   }
 
+  console.log('⚙️ [reset-test-db] Aplicando guardas de test (scripts/utils/test-db-guards.sql)...');
+  execSync(`npx prisma db execute --file "${GUARDS_SQL}" --schema="${schemaPath}"`, {
+    cwd: path.resolve(__dirname, '..'),
+    env: {
+      ...process.env,
+      DATABASE_URL: `file:./${tempDbName}`,
+    },
+    stdio: 'inherit',
+  });
+
   fs.copyFileSync(tempDb, TEMPLATE_DB);
+  fs.writeFileSync(GUARDS_MARKER, hashGuards());
 
   for (const f of tempFiles) {
     if (fs.existsSync(f)) {
@@ -59,7 +86,7 @@ function resetTestDb(options = {}) {
     throw new Error(`[reset-test-db] SEGURIDAD: La ruta destino no coincide con prisma/test.db: ${normalizedTarget}`);
   }
 
-  if (!fs.existsSync(TEMPLATE_DB) || forceRebuild) {
+  if (!fs.existsSync(TEMPLATE_DB) || forceRebuild || !plantillaTieneGuardasVigentes()) {
     regenerarPlantilla();
   }
 

@@ -27,6 +27,7 @@
    - Antes de cada suite, `scripts/reset-test-db.js` restablece `test.db` como copia limpia de `test.template.db`.
    - **Regeneración de la plantilla**:
      - Si `test.template.db` no existe, `reset-test-db.js` la regenera automáticamente ejecutando `prisma migrate deploy` sobre una base SQLite temporal y copiándola luego atómicamente a `test.template.db`.
+     - Después de las migraciones aplica las guardas de `scripts/utils/test-db-guards.sql` (por ejemplo, el trigger que rechaza parejas con `orden` repetido en la categoría). Si cambia ese archivo, la plantilla se regenera sola: el marcador `prisma/test.template.guards` guarda el SHA256 del SQL aplicado.
      - Si se modificó el esquema (`schema.prisma`) y se crearon nuevas migraciones, podés regenerar la plantilla ejecutando:
        ```bash
        npm run test:db:reset -- --rebuild-template
