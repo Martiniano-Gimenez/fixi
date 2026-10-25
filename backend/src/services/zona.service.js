@@ -1183,7 +1183,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     },
     include: {
       categoria: { select: { id: true, nombre: true } },
-      zona: { select: { id: true, formato: true } },
+      zona: { select: { id: true, formato: true, nombre: true } },
       faseEliminatoria: { select: { ronda: true } },
       pareja1: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true } },
       pareja2: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true } },
@@ -1474,6 +1474,15 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     }
     if ((a.posicionEnRonda || 0) !== (b.posicionEnRonda || 0)) {
       return (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
+    }
+    // Desempate natural (sesión 81): el id es un UUID v4 distinto en cada corrida, así que no sirve como
+    // criterio. Categoría, después zona (por nombre) o ronda de eliminatoria; el id queda como último recurso.
+    const catComp = (a.categoria?.nombre || '').localeCompare(b.categoria?.nombre || '');
+    if (catComp !== 0) return catComp;
+    const zonaComp = (a.zona?.nombre || '').localeCompare(b.zona?.nombre || '');
+    if (zonaComp !== 0) return zonaComp;
+    if ((a.faseEliminatoria?.ronda || 0) !== (b.faseEliminatoria?.ronda || 0)) {
+      return (b.faseEliminatoria?.ronda || 0) - (a.faseEliminatoria?.ronda || 0);
     }
     return a.id.localeCompare(b.id);
   });
