@@ -20,6 +20,7 @@
  * d7: helper utils/estadoCanonico.js: mismo estado con otros UUID da el mismo hash; otra cancha, otro hash.
  * d8: el sorteo (iniciarCategoria, sin disponibilidad) con Math.random fijo da las mismas zonas
  *     con las parejas insertadas en otro orden.
+ * d9: asignarHorariosAutomatico reparte en orden (categoría, zona, posición), no de inserción.
  */
 
 const { ensureTestDb } = require('./utils/testEnvGuard');
@@ -370,6 +371,52 @@ async function d8() {
   assert(dif === null, `El sorteo cambia con otro orden de inserción de las parejas (${dif})`);
 }
 
+/**
+ * d9: asignarHorariosAutomatico recorre los partidos en orden natural (categoría, zona, posición),
+ * no en orden de inserción. Una cancha y un solo turno común (sábado 09:00): con los partidos de
+ * "Cat B" insertados primero, el turno igual tiene que ser de "Cat A".
+ */
+async function d9() {
+  const { org, torneo } = await crearTorneo('d9', { cantidadCanchas: 1, estado: 'EN_CURSO' });
+  const slots = slotsSabado('09:00', '10:15');
+  const partidoPorCategoria = {};
+  const categoriaIds = [];
+  for (const [catNombre, prefijo] of [
+    ['Cat B', 'b9'],
+    ['Cat A', 'a9'],
+  ]) {
+    const spec = [1, 2].map((orden) => ({ orden, id: uid(prefijo, orden), slots }));
+    const { cat, parejas } = await crearCategoria(torneo, catNombre, spec, { estado: 'EN_CURSO' });
+    const zona = await prisma.zona.create({ data: { categoriaId: cat.id, nombre: 'Zona A', formato: 'ROUND_ROBIN', clasifican: 2 } });
+    for (const p of parejas) {
+      await prisma.zonaPareja.create({ data: { zonaId: zona.id, parejaId: p.id } });
+    }
+    const partido = await prisma.partido.create({
+      data: {
+        categoriaId: cat.id,
+        zonaId: zona.id,
+        posicionEnRonda: 1,
+        pareja1Id: parejas[0].id,
+        pareja2Id: parejas[1].id,
+        estado: 'PENDIENTE',
+        sinHorarioAsignado: true,
+      },
+    });
+    partidoPorCategoria[catNombre] = partido.id;
+    categoriaIds.push(cat.id);
+  }
+
+  await zonaService.asignarHorariosAutomatico(org.id, categoriaIds);
+
+  const pA = await prisma.partido.findUnique({ where: { id: partidoPorCategoria['Cat A'] } });
+  const pB = await prisma.partido.findUnique({ where: { id: partidoPorCategoria['Cat B'] } });
+  const hora = (p) => (p.fechaHora && !p.sinHorarioAsignado ? new Date(p.fechaHora).toISOString() : 'sin horario');
+  assert(
+    hora(pA) === '2026-09-05T12:00:00.000Z' && hora(pB) === 'sin horario',
+    `El único turno (sábado 09:00) debía ser de Cat A: Cat A ${hora(pA)}, Cat B ${hora(pB)}`
+  );
+}
+
 const TESTS = [
   ['d1', 'pre-check: parejaIds de cada zona en orden de pareja.orden', d1],
   ['d2', 'regenerarPartidosZona: P1/P2 del mini-bracket según pareja.orden', d2],
@@ -378,6 +425,7 @@ const TESTS = [
   ['d5', 'modo lluvia: desempate natural (categoría), no por UUID', d5],
   ['d7', 'estadoCanonico: hash independiente de UUID y orden de inserción', d7],
   ['d8', 'sorteo con Math.random fijo: mismas zonas con otro orden de inserción', d8],
+  ['d9', 'asignarHorariosAutomatico: partidos en orden natural, no de inserción', d9],
 ];
 
 async function run() {
