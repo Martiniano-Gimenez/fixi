@@ -12,6 +12,7 @@ const {
 const { parseFechaLocal, requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
 const canchasOverridesService = require('./canchasOverrides.service');
 const { calcularVentanaSabadoNoche } = require('../utils/ventanaSabadoNoche');
+const { minutosDespuesDelCierre } = require('../utils/horarioClub');
 
 // Fisher-Yates shuffle
 function shuffleArray(array) {
@@ -1152,6 +1153,8 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   const canchasClub = organizador.cantidadCanchas || 1;
   const cantidadCanchas = Math.max(1, overrideCanchas || canchasClub);
   const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
+  // Corrida con todas las canchas del club (restauración de la jornada)
+  const esRestauracionTotal = cantidadCanchas >= canchasClub;
 
   const refFecha = requireTorneoFecha(torneo);
   const baseFriday = proximaFechaPorDia('Viernes', refFecha);
@@ -1577,7 +1580,15 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     } else if (partido.faseEliminatoriaId) {
       const catZoneFloorMs = maxEndPorCategoriaZona.get(partido.categoriaId) || 0;
       minSearchMs = Math.max(minSearchMs, catZoneFloorMs);
-      if (origStartMs) {
+      // Restauración (todas las canchas): un R32 automático que la lluvia dejó después del cierre del club
+      // no usa su horario actual como piso, para poder volver dentro del horario. Si ya está dentro del
+      // horario, conserva su horario actual como piso (no se adelantan horarios anunciados).
+      const vuelveDentroDelHorario =
+        esRestauracionTotal &&
+        esR32Automatico(partido) &&
+        origStartMs !== null &&
+        minutosDespuesDelCierre(partido.fechaHora, organizador) > 0;
+      if (origStartMs && !vuelveDentroDelHorario) {
         minSearchMs = Math.max(minSearchMs, origStartMs);
       }
       // R32: piso = max(ventana nocturna, fin de zonas de la categoría, horario original si lo tenía)
