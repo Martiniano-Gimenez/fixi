@@ -128,9 +128,24 @@ function getDiaCalendarioConTrasnoche(fechaHora, horariosClub = null) {
   };
 }
 
+/**
+ * Claves YYYY-MM-DD de las tres jornadas del torneo: viernes (fecha del torneo), sábado y domingo.
+ * refFecha es torneo.fecha parseada con parseFechaLocal (mediodía local), sin depender de new Date().
+ */
+function clavesJornadasTorneo(refFecha) {
+  return [0, 1, 2].map((offset) => {
+    const d = new Date(refFecha);
+    d.setDate(d.getDate() + offset);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  });
+}
+
 module.exports = {
   parseFechaLocal,
   requireTorneoFecha,
   getDiaCalendarioConTrasnoche,
+  clavesJornadasTorneo,
   HORA_FIN_JORNADA_LLUVIA_MIN,
 };

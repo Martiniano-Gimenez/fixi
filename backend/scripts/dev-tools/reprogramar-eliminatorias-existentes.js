@@ -2,6 +2,7 @@
 
 const prisma = require('../../src/lib/prisma');
 const { programarHorariosEliminatorias } = require('../../src/services/eliminatoriaScheduler.service');
+const canchasOverridesService = require('../../src/services/canchasOverrides.service');
 const { requireConfirmarDev, crearBackupDevDb } = require('./devUtils');
 
 async function main() {
@@ -56,6 +57,8 @@ async function main() {
     return;
   }
 
+  // El scheduler lee las canchas de cada jornada de la caché de overrides (como el servidor al arrancar)
+  await canchasOverridesService.loadFromDb();
   const res = await programarHorariosEliminatorias(torneo.organizadorId, torneo.id);
   console.log('Resultado programación:', res);
 

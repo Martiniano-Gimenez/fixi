@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 const { parseSlotToDate } = require('./zona.service');
-const { requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
+const { requireTorneoFecha, getDiaCalendarioConTrasnoche, clavesJornadasTorneo } = require('../utils/dateUtils');
 const canchasOverridesService = require('./canchasOverrides.service');
 const {
   calcularFinDeZonasCategoria,
@@ -692,20 +692,6 @@ function errorAsignacion(mensaje) {
   const error = new Error(mensaje);
   error.statusCode = 400;
   return error;
-}
-
-/**
- * Claves YYYY-MM-DD de las tres jornadas del torneo: viernes (fecha del torneo), sábado y domingo.
- * refFecha es torneo.fecha parseada con parseFechaLocal (mediodía local), sin depender de new Date().
- */
-function clavesJornadasTorneo(refFecha) {
-  return [0, 1, 2].map((offset) => {
-    const d = new Date(refFecha);
-    d.setDate(d.getDate() + offset);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${d.getFullYear()}-${mm}-${dd}`;
-  });
 }
 
 /**
