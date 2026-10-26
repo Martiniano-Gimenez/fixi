@@ -208,8 +208,6 @@ export default function TorneoEnVivo() {
   const horariosClub = data?.torneo?.horariosClub || null;
   const torneo = data?.torneo || null;
   const canchasClub = data?.canchasClub || 1;
-  const canchasActivas = data?.canchasActivas || canchasClub;
-  const isLluviaActive = torneo?.canchasDisponiblesOverride !== null && torneo?.canchasDisponiblesOverride !== undefined;
 
   // Derivar jornadas disponibles (Viernes, Sábado, Domingo garantizados a partir de torneo.fecha + partidos)
   const jornadasDisponibles = useMemo(() => {
@@ -380,24 +378,34 @@ export default function TorneoEnVivo() {
     };
   }, [esModoTodo, data, partidosEnCursoFiltrados, proximosFiltrados, finalizadosFiltrados, esSabado, horariosClub, activeTabDay]);
 
-  // Datos contextuales del día activo en el modelo independiente por jornada
+  // Modelo independiente por jornada: las canchas de cada día salen solo de canchasPorDia
   const diaInfoContextual = (activeTabDay && data?.canchasPorDia?.[activeTabDay]) || null;
-  const anyDayHasLluvia = Object.values(data?.canchasPorDia || {}).some((d) => d && d.canchas < canchasClub) || isLluviaActive;
 
-  // Determinar si la solapa actualmente visible está bajo modo lluvia
-  // Derivamos de la cantidad real de canchas vs total del club (no del flag isLluvia que puede quedar stale)
-  const isTabBajoOverride = diaInfoContextual
-    ? (diaInfoContextual.canchas < canchasClub)
-    : (isLluviaActive && (!torneo?.overrideDiaKey || esModoTodo || activeTabDay === torneo?.overrideDiaKey));
+  // Jornadas con lluvia (menos canchas que el club), en orden cronológico, para el resumen de la pestaña "TODO"
+  const diasConLluvia = Object.entries(data?.canchasPorDia || {})
+    .filter(([, d]) => d && d.canchas < canchasClub)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, d]) => ({
+      key,
+      canchas: d.canchas,
+      nombre: jornadasDisponibles.find((j) => j.key === key)?.diaNombre || key,
+    }));
+  const anyDayHasLluvia = diasConLluvia.length > 0;
 
-  // Canchas activas contextuales a la solapa de día seleccionada
-  const canchasActivasContextuales = diaInfoContextual
-    ? diaInfoContextual.canchas
-    : (isTabBajoOverride ? canchasActivas : canchasClub);
+  // La solapa visible está bajo modo lluvia si su jornada tiene menos canchas que el club
+  const isTabBajoOverride = diaInfoContextual ? diaInfoContextual.canchas < canchasClub : false;
+
+  // Canchas activas de la solapa de día seleccionada
+  const canchasActivasContextuales = diaInfoContextual ? diaInfoContextual.canchas : canchasClub;
 
   const diaLluviaNombre = activeJornadaInfo?.diaNombre
-    || (diaInfoContextual?.activoDesde ? formatDiaNombre(diaInfoContextual.activoDesde) : null)
-    || (torneo?.overrideActivoDesde ? formatDiaNombre(torneo.overrideActivoDesde) : null);
+    || (diaInfoContextual?.activoDesde ? formatDiaNombre(diaInfoContextual.activoDesde) : null);
+
+  // Canchas activas de la jornada de un partido (para el aviso de cancha fantasma)
+  const canchasDeLaJornadaDe = (fechaHora) => {
+    const key = fechaHora ? getDiaCalendarioConTrasnoche(fechaHora, horariosClub)?.key : null;
+    return key ? data?.canchasPorDia?.[key]?.canchas ?? canchasClub : canchasClub;
+  };
 
   const prevTabDayRef = useRef(activeTabDay);
 
@@ -461,8 +469,6 @@ export default function TorneoEnVivo() {
       const tsCambio = primerCambio?.despues?.fechaHora || primerCambio?.antes?.fechaHora;
       if (tsCambio) {
         feedbackDiaKey = getDiaCalendarioConTrasnoche(tsCambio, horariosClub)?.key || null;
-      } else {
-        feedbackDiaKey = torneo.overrideDiaKey || null;
       }
     }
   }
@@ -475,6 +481,28 @@ export default function TorneoEnVivo() {
       feedbackDiaNombre = jornadasDisponibles.find((d) => d.key === feedbackDiaKey)?.label || null;
     }
   }
+
+  // Aviso de partidos que terminan después del cierre del club (en la tarjeta de canchas)
+  const avisoFueraDeHorario = fueraDeHorarioFiltrados.length > 0 ? (
+    <p
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '0.35rem',
+        fontSize: 'var(--font-size-xs)',
+        color: 'var(--color-warning)',
+        margin: '0.35rem 0 0',
+        fontWeight: 600,
+      }}
+    >
+      <Moon size={13} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+      <span>
+        {fueraDeHorarioFiltrados.length}{' '}
+        {fueraDeHorarioFiltrados.length === 1 ? 'partido termina' : 'partidos terminan'} después del cierre del club
+        {cierreClubContextual ? ` (${cierreClubContextual})` : ''}
+      </span>
+    </p>
+  ) : null;
 
   // La tarjeta de feedback solo es visible si coincide con el tab de la jornada afectada
   const isFeedbackVisible = Boolean(
@@ -801,6 +829,41 @@ export default function TorneoEnVivo() {
       )}
 
       {/* ─── 2. Barra de Control de Canchas ───────────────────────── */}
+      {/* En "TODO" no se reduce ni se restaura: solo un resumen de las jornadas con lluvia */}
+      {esModoTodo ? (
+        (anyDayHasLluvia || avisoFueraDeHorario) && (
+          <div
+            className="canchas-control-card"
+            style={{
+              border: anyDayHasLluvia ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid var(--color-border)',
+            }}
+          >
+            {anyDayHasLluvia && (
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem 0.75rem' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: 600,
+                    color: '#60a5fa',
+                  }}
+                >
+                  <CloudRain size={14} />
+                  Modo Lluvia
+                </span>
+                {diasConLluvia.map((d) => (
+                  <span key={d.key} style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                    {d.nombre}: {d.canchas} de {canchasClub} canchas
+                  </span>
+                ))}
+              </div>
+            )}
+            {avisoFueraDeHorario}
+          </div>
+        )
+      ) : (
       <div
         className="canchas-control-card"
         style={{
@@ -886,26 +949,7 @@ export default function TorneoEnVivo() {
                   : 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'}
               </p>
             )}
-            {fueraDeHorarioFiltrados.length > 0 && (
-              <p
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '0.35rem',
-                  fontSize: 'var(--font-size-xs)',
-                  color: 'var(--color-warning)',
-                  margin: '0.35rem 0 0',
-                  fontWeight: 600,
-                }}
-              >
-                <Moon size={13} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
-                <span>
-                  {fueraDeHorarioFiltrados.length}{' '}
-                  {fueraDeHorarioFiltrados.length === 1 ? 'partido termina' : 'partidos terminan'} después del cierre del club
-                  {cierreClubContextual ? ` (${cierreClubContextual})` : ''}
-                </span>
-              </p>
-            )}
+            {avisoFueraDeHorario}
           </div>
 
           {/* Selector y Acciones */}
@@ -1023,6 +1067,7 @@ export default function TorneoEnVivo() {
           </div>
         </div>
       </div>
+      )}
 
       {/* ─── 3. Banner de Feedback Post-Reprogramación ──────────────── */}
       {isFeedbackVisible && (
@@ -1204,7 +1249,7 @@ export default function TorneoEnVivo() {
           </div>
 
           <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
-            Estos partidos tenían asignada una cancha que ahora está inhabilitada (Cancha &gt; {canchasActivas}) y no pudieron ser reprogramados automáticamente. Revisá su asignación en cada categoría.
+            Estos partidos tenían asignada una cancha que ahora está inhabilitada por la lluvia de su jornada y no pudieron ser reprogramados automáticamente. Revisá su asignación en cada categoría.
           </p>
 
           {fantasmaExpanded && (
@@ -1229,6 +1274,9 @@ export default function TorneoEnVivo() {
                     </div>
                     <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
                       {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''} • Asignado a: Cancha {p.canchaNumero} ({formatDiaHorario(p.fechaHora)})
+                      <span style={{ display: 'block', marginTop: '0.2rem' }}>
+                        Inhabilitadas ese día: Cancha &gt; {canchasDeLaJornadaDe(p.fechaHora)}
+                      </span>
                       {p.motivo && (
                         <span style={{ display: 'block', color: '#f59e0b', marginTop: '0.2rem', fontWeight: 500 }}>
                           Motivo: {p.motivo}

@@ -1,22 +1,9 @@
 const prisma = require('../lib/prisma');
 const { horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
 const { proximaFechaPorDia } = require('./zona.service');
-const { requireTorneoFecha } = require('../utils/dateUtils');
+const { requireTorneoFecha, clavesJornadasTorneo } = require('../utils/dateUtils');
 const { calcularVentanaSabadoNoche } = require('../utils/ventanaSabadoNoche');
 const canchasOverridesService = require('./canchasOverrides.service');
-
-function getCanchasEfectivas(torneo, organizador, overrideNum = null, diaKey = null) {
-  if (overrideNum !== null && overrideNum !== undefined) {
-    return Number(overrideNum);
-  }
-  if (diaKey && torneo?.id) {
-    const diaOverride = canchasOverridesService.getCanchasDia(torneo.id, diaKey, organizador.cantidadCanchas || 1);
-    if (diaOverride && diaOverride.canchas) {
-      return Number(diaOverride.canchas);
-    }
-  }
-  return torneo.canchasDisponiblesOverride ?? organizador.cantidadCanchas ?? 1;
-}
 
 function esRondaDieciseisavos(ronda) {
   return Number(ronda) >= 32;
@@ -118,7 +105,20 @@ async function programarHorariosEliminatorias(
   // Ventana para Dieciseisavos (Sábado noche: preferente 20:45 o cierre de zonas)
   const { sabNightStartMs, sabNightEndMs } = calcularVentanaSabadoNoche(organizador, baseSaturday.getTime());
 
-  const cantidadCanchas = Math.max(1, getCanchasEfectivas(torneo, organizador, canchasOverride));
+  // Canchas por jornada, del override de esa jornada (OverrideCanchasDia, leído de la caché) o todas las
+  // del club: el sábado para los dieciseisavos y el domingo para octavos en adelante. Un canchasOverride
+  // explícito (Modo Lluvia del domingo) reemplaza solo el domingo.
+  const canchasClub = organizador.cantidadCanchas || 1;
+  const [, claveSabado, claveDomingo] = clavesJornadasTorneo(refFecha);
+  const canchasSabado = Math.max(1, canchasOverridesService.getCanchasDia(torneo.id, claveSabado, canchasClub).canchas);
+  const canchasDomingo = Math.max(
+    1,
+    canchasOverride !== null && canchasOverride !== undefined
+      ? Number(canchasOverride)
+      : canchasOverridesService.getCanchasDia(torneo.id, claveDomingo, canchasClub).canchas
+  );
+  // Canchas de la jornada a la que pertenece un horario ya asignado (domingo o, si no, sábado)
+  const canchasDeLaJornada = (startMs) => (startMs >= domDayStartMs && startMs < domDayEndMs ? canchasDomingo : canchasSabado);
   const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
   const STEP_MS = 15 * 60 * 1000;
 
@@ -189,8 +189,10 @@ async function programarHorariosEliminatorias(
   // 3. Inicializar timelines por cancha y ocupación de parejas
   const sundayCourtTimelines = new Map();
   const saturdayCourtTimelines = new Map();
-  for (let c = 1; c <= cantidadCanchas; c++) {
+  for (let c = 1; c <= canchasDomingo; c++) {
     sundayCourtTimelines.set(c, []);
+  }
+  for (let c = 1; c <= canchasSabado; c++) {
     saturdayCourtTimelines.set(c, []);
   }
 
@@ -201,7 +203,7 @@ async function programarHorariosEliminatorias(
     const pEnd = pStart + DURACION_MS;
     const c = p.canchaNumero;
 
-    if (c && c <= cantidadCanchas) {
+    if (c && c <= canchasDeLaJornada(pStart)) {
       if (pStart >= domDayStartMs && pStart < domDayEndMs) {
         sundayCourtTimelines.get(c).push({ startMs: pStart, endMs: pEnd });
       } else {
@@ -267,7 +269,7 @@ async function programarHorariosEliminatorias(
             Boolean(p.fechaHora) &&
             Boolean(p.canchaNumero) &&
             !p.sinHorarioAsignado &&
-            p.canchaNumero <= cantidadCanchas;
+            p.canchaNumero <= canchasDeLaJornada(new Date(p.fechaHora).getTime());
 
           const esR32Fijo =
             soloDomingo &&
@@ -286,7 +288,7 @@ async function programarHorariosEliminatorias(
               canchaNumero: p.canchaNumero,
               isBye: false,
             });
-            if (p.canchaNumero && p.canchaNumero <= cantidadCanchas) {
+            if (p.canchaNumero && p.canchaNumero <= canchasDeLaJornada(pStart)) {
               if (pStart >= domDayStartMs && pStart < domDayEndMs) {
                 sundayCourtTimelines.get(p.canchaNumero).push({ startMs: pStart, endMs: pEnd });
               } else {
@@ -322,7 +324,7 @@ async function programarHorariosEliminatorias(
           Boolean(p.fechaHora) &&
           Boolean(p.canchaNumero) &&
           !p.sinHorarioAsignado &&
-          p.canchaNumero <= cantidadCanchas;
+          p.canchaNumero <= canchasSabado;
         return !esManualActivo;
       });
 
@@ -369,7 +371,7 @@ async function programarHorariosEliminatorias(
               canchaNumero: partido.canchaNumero,
               isBye: false,
             });
-            if (partido.canchaNumero && partido.canchaNumero <= cantidadCanchas) {
+            if (partido.canchaNumero && partido.canchaNumero <= canchasSabado) {
               saturdayCourtTimelines.get(partido.canchaNumero).push({ startMs: pStart, endMs: pEnd });
             }
             if (partido.pareja1Id) {
@@ -408,7 +410,7 @@ async function programarHorariosEliminatorias(
         let asignado = false;
         for (let T = searchStartMs; T + DURACION_MS <= sabNightEndMs; T += STEP_MS) {
           const tEnd = T + DURACION_MS;
-          for (let c = 1; c <= cantidadCanchas; c++) {
+          for (let c = 1; c <= canchasSabado; c++) {
             if (
               isCourtFree(saturdayCourtTimelines, c, T, tEnd) &&
               isPairFree(partido.pareja1Id, T, tEnd) &&
@@ -487,7 +489,7 @@ async function programarHorariosEliminatorias(
           Boolean(p.fechaHora) &&
           Boolean(p.canchaNumero) &&
           !p.sinHorarioAsignado &&
-          p.canchaNumero <= cantidadCanchas;
+          p.canchaNumero <= canchasDomingo;
         return !esManualActivo;
       });
 
@@ -579,7 +581,7 @@ async function programarHorariosEliminatorias(
         for (let T = alignedStartMs; T + DURACION_MS <= maxEndAllowedMs && remainingMatches.length > 0; T += DURACION_MS) {
           const tEnd = T + DURACION_MS;
           const freeCourts = [];
-          for (let c = 1; c <= cantidadCanchas; c++) {
+          for (let c = 1; c <= canchasDomingo; c++) {
             if (isCourtFreeWithBatch(c, T, tEnd)) {
               freeCourts.push(c);
             }
@@ -588,7 +590,7 @@ async function programarHorariosEliminatorias(
           if (freeCourts.length === 0) continue;
 
           // Si se exige bloque completo, no fraccionar cruces si no entran todos (o un turno completo de canchas)
-          const needed = Math.min(remainingMatches.length, cantidadCanchas);
+          const needed = Math.min(remainingMatches.length, canchasDomingo);
           if (requireFullBlock && freeCourts.length < needed) {
             continue;
           }
@@ -693,7 +695,7 @@ async function programarHorariosEliminatorias(
 
           for (let T = alignedPStart; T + DURACION_MS <= maxEndAllowedMs; T += DURACION_MS) {
             const tEnd = T + DURACION_MS;
-            for (let c = 1; c <= cantidadCanchas; c++) {
+            for (let c = 1; c <= canchasDomingo; c++) {
               if (
                 isCourtFree(sundayCourtTimelines, c, T, tEnd) &&
                 isPairFree(p.pareja1Id, T, tEnd) &&
@@ -781,7 +783,7 @@ async function programarHorariosEliminatorias(
       for (const slotTime of slotsRonda) {
         const partidosEnSlot = partidosRonda.filter((p) => p.startMs === slotTime);
 
-        for (let c = 1; c <= cantidadCanchas; c++) {
+        for (let c = 1; c <= canchasDomingo; c++) {
           if (!isCourtFree(sundayCourtTimelines, c, slotTime, slotTime + DURACION_MS)) continue;
 
           // Cancha c libre en slotTime.
@@ -989,7 +991,7 @@ async function programarHorariosEliminatorias(
     partidosAgendados: updates.filter((u) => Boolean(u.fechaHora && !u.sinHorarioAsignado)).length,
     partidosSinHorario: updates.filter((u) => u.sinHorarioAsignado).length,
     total: updates.length,
-    canchasUtilizadas: cantidadCanchas,
+    canchasUtilizadas: canchasDomingo,
     cambios,
   };
 }
@@ -1000,6 +1002,5 @@ const asignarHorariosRondaUno = programarHorariosEliminatorias;
 module.exports = {
   programarHorariosEliminatorias,
   asignarHorariosRondaUno,
-  getCanchasEfectivas,
   esRondaDieciseisavos,
 };

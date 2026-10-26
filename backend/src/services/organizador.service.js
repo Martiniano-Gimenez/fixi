@@ -8,7 +8,7 @@ const {
   DURACION_PARTIDO_MIN,
   ordenarSlotsCronologicamente,
 } = require('./slots.service');
-const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal } = require('../utils/dateUtils');
+const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal, clavesJornadasTorneo } = require('../utils/dateUtils');
 const { minutosDespuesDelCierre } = require('../utils/horarioClub');
 const {
   iniciarCategoria,
@@ -40,19 +40,6 @@ setInterval(() => {
     if (v.expiresAt < now) preCheckSessions.delete(k);
   }
 }, 60_000);
-
-function getCanchasEfectivas(torneo, organizador, diaKey = null) {
-  if (diaKey && torneo?.id) {
-    const diaOverride = canchasOverridesService.getCanchasDia(torneo.id, diaKey, organizador?.cantidadCanchas || 1);
-    if (diaOverride && diaOverride.canchas) {
-      return Math.min(Number(diaOverride.canchas), organizador?.cantidadCanchas || 1);
-    }
-  }
-  if (torneo && torneo.canchasDisponiblesOverride != null) {
-    return Math.min(torneo.canchasDisponiblesOverride, organizador?.cantidadCanchas || 1);
-  }
-  return organizador?.cantidadCanchas || 1;
-}
 
 function buildFingerprint(organizador, categoriasConParejas) {
   const clubPart = [
@@ -1544,7 +1531,7 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
 
   const organizador = await getOrganizador(organizadorId);
   const grilla = generarGrillaOrganizador(organizador);
-  const cantCanchas = getCanchasEfectivas(torneo, organizador);
+  const canchasClub = organizador.cantidadCanchas || 1;
   const refFecha = requireTorneoFecha(torneo);
 
   // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
@@ -1585,6 +1572,13 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
 
     const slotStartMs = slotDate.getTime();
     const slotEndMs = slotStartMs + 75 * 60 * 1000;
+
+    // Canchas de la jornada lógica del turno: las del override por lluvia si existe, si no todas las del club
+    const diaKeySlot = getDiaCalendarioConTrasnoche(slotDate, organizador)?.key;
+    const cantCanchas = Math.min(
+      canchasOverridesService.getCanchasDia(torneoId, diaKeySlot, canchasClub).canchas,
+      canchasClub
+    );
 
     let canchasOcupadasCount = 0;
     const parejasJugandoEnSlot = new Set();
@@ -1805,7 +1799,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
 
   const organizador = await getOrganizador(organizadorId);
   const canchasClub = organizador.cantidadCanchas || 1;
-  const canchasActivas = getCanchasEfectivas(torneo, organizador);
 
   const partidos = await prisma.partido.findMany({
     where: {
@@ -1834,7 +1827,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
 
   const DURACION_MS = (organizador.duracionPartidoMin || 75) * 60 * 1000;
 
-  // Calcular día lógico del override para limitar canchas fantasma y proveerlo al frontend
+  // Horarios del club para calcular el día lógico de cada partido (canchas fantasma y canchasPorDia)
   const horariosClubObj = {
     viernesInicio: organizador.viernesInicio,
     viernesFin: organizador.viernesFin,
@@ -1843,10 +1836,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     domingoInicio: organizador.domingoInicio,
     domingoFin: organizador.domingoFin,
   };
-  const overrideDiaInfo = (torneo.overrideActivoDesde)
-    ? getDiaCalendarioConTrasnoche(torneo.overrideActivoDesde, horariosClubObj)
-    : null;
-  const overrideDiaKey = overrideDiaInfo?.key || null;
 
   // Categorías con métricas de zonas y fases eliminatorias
   const categoriasTorneo = await prisma.categoria.findMany({
@@ -1971,8 +1960,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   let pendientesConHorarioCount = 0;
   let pendientesSinHorarioCount = 0;
 
-  const canchaOcupadaPorPartido = new Map();
-
   for (const p of partidos) {
     if (esPartidoByeEnVivo(p)) {
       continue;
@@ -2021,9 +2008,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         horaEstimadaFin,
       };
       partidosEnCursoList.push(enCursoObj);
-      if (p.canchaNumero) {
-        canchaOcupadaPorPartido.set(p.canchaNumero, enCursoObj);
-      }
     } else if (p.estado === 'PENDIENTE') {
       if (p.sinHorarioAsignado || (!p.faseEliminatoriaId && !p.fechaHora)) {
         pendientesSinHorarioCount++;
@@ -2046,7 +2030,12 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
             diaPartidoOverride.partidosSinSlot[p.id]
           ) {
             motivo = diaPartidoOverride.partidosSinSlot[p.id];
-          } else if (p.fechaHora && torneo.overrideActivoDesde && new Date(p.fechaHora).getTime() < new Date(torneo.overrideActivoDesde).getTime()) {
+          } else if (
+            p.fechaHora &&
+            diaPartidoOverride?.activoDesde &&
+            new Date(p.fechaHora).getTime() < new Date(diaPartidoOverride.activoDesde).getTime()
+          ) {
+            // Se compara con la activación de la lluvia de la jornada del partido, no con la última aplicada
             motivo = 'Horario anterior a la activación del modo lluvia';
           } else if (!p.pareja1Id || !p.pareja2Id) {
             motivo = 'Parejas aún no definidas (clasificados de zona)';
@@ -2112,25 +2101,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     }
   }
 
-  // Grilla de canchas
-  const canchas = [];
-  for (let c = 1; c <= canchasClub; c++) {
-    if (c > canchasActivas) {
-      canchas.push({
-        numero: c,
-        estado: 'INHABILITADA',
-        partidoActual: null,
-      });
-    } else {
-      const partidoEnCancha = canchaOcupadaPorPartido.get(c) || null;
-      canchas.push({
-        numero: c,
-        estado: partidoEnCancha ? 'EN_CURSO' : 'LIBRE',
-        partidoActual: partidoEnCancha,
-      });
-    }
-  }
-
   return {
     torneo: {
       id: torneo.id,
@@ -2138,9 +2108,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       fecha: torneo.fecha,
       estado: torneo.estado,
       slug: torneo.slug,
-      canchasDisponiblesOverride: torneo.canchasDisponiblesOverride,
-      overrideActivoDesde: torneo.overrideActivoDesde,
-      overrideDiaKey,
       canchasClub,
       horariosClub: {
         viernesInicio: organizador.viernesInicio,
@@ -2151,10 +2118,9 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         domingoFin: organizador.domingoFin,
       },
     },
-    canchasActivas,
     canchasClub,
+    // Canchas de cada jornada (OverrideCanchasDia): la única fuente de las canchas activas por día
     canchasPorDia,
-    canchas,
     partidosEnCurso: partidosEnCursoList,
     partidosEnCanchaFantasma: partidosEnCanchaFantasmaList,
     proximosPartidos: proximosPartidosList,
@@ -2205,7 +2171,6 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
 
   const organizador = await getOrganizador(organizadorId);
   const canchasClub = organizador.cantidadCanchas || 1;
-  const canchasEfectivasActuales = getCanchasEfectivas(torneo, organizador);
 
   const overrideNum = (nuevoCanchasOverride === null || nuevoCanchasOverride === undefined)
     ? canchasClub
@@ -2223,32 +2188,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     throw error;
   }
 
-  // CRÍTICO: Capturar overrideActivoDesde en variable local ANTES de cualquier mutación o transacción.
-  // En reducción:
-  // - Si se pasa mockTimestamp (en tests automatizados), se utiliza mockTimestamp.
-  // - Si se pasa diaKey (string 'YYYY-MM-DD' desde el frontend/tab activo), se utiliza parseFechaLocal(diaKey).
-  // - De lo contrario, se usa torneo.fecha o new Date().
-  // En restauración:
-  // - Si se pasa diaKey, se restaura específicamente esa jornada lógica.
-  // - Si no se pasa diaKey, se recupera el día de lluvia original (overrideActivoDesdeOriginal || timestampOverride).
-  const overrideActivoDesdeOriginal = torneo.overrideActivoDesde;
-  
-  let timestampOverride;
-  if (mockTimestamp) {
-    timestampOverride = new Date(mockTimestamp);
-  } else if (diaKey) {
-    timestampOverride = parseFechaLocal(diaKey);
-  } else if (torneo.fecha) {
-    timestampOverride = parseFechaLocal(torneo.fecha);
-  } else {
-    timestampOverride = new Date();
-  }
-
   const esRestauracion = overrideNum === canchasClub;
-
-  const diaOverrideTs = diaKey
-    ? parseFechaLocal(diaKey)
-    : (esRestauracion ? (overrideActivoDesdeOriginal || timestampOverride) : timestampOverride);
 
   const horariosClubObj = {
     viernesInicio: organizador.viernesInicio,
@@ -2259,11 +2199,43 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     domingoFin: organizador.domingoFin,
   };
 
-  const diaAnteriorKey = overrideActivoDesdeOriginal
-    ? getDiaCalendarioConTrasnoche(overrideActivoDesdeOriginal, horariosClubObj)?.key
-    : null;
-  const diaNuevoKey = getDiaCalendarioConTrasnoche(timestampOverride, horariosClubObj)?.key;
-  const esMismoDia = Boolean(diaAnteriorKey && diaNuevoKey && diaAnteriorKey === diaNuevoKey);
+  // Jornada de la operación: diaKey si viene; si no, la jornada lógica de mockTimestamp (solo tests).
+  // Tiene que ser una de las tres jornadas del torneo. Sin ninguna de las dos, una reducción se rechaza y
+  // una restauración restaura todas las jornadas. Todo se valida antes de cualquier escritura en la base
+  // o en la caché.
+  let diaKeyJornada = null;
+  if (diaKey !== null && diaKey !== undefined) {
+    diaKeyJornada = diaKey;
+  } else if (mockTimestamp) {
+    diaKeyJornada = getDiaCalendarioConTrasnoche(mockTimestamp, horariosClubObj)?.key || '';
+  }
+  if (diaKeyJornada !== null) {
+    const clavesTorneo = clavesJornadasTorneo(requireTorneoFecha(torneo));
+    if (typeof diaKeyJornada !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(diaKeyJornada) || !clavesTorneo.includes(diaKeyJornada)) {
+      const error = new Error('Jornada inválida.');
+      error.statusCode = 400;
+      throw error;
+    }
+  } else if (!esRestauracion) {
+    const error = new Error('Indicá la jornada.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Momento de activación que se guarda en el override: mockTimestamp en tests; si no, el mediodía de la jornada.
+  let timestampOverride;
+  if (mockTimestamp) {
+    timestampOverride = new Date(mockTimestamp);
+  } else if (diaKeyJornada) {
+    timestampOverride = parseFechaLocal(diaKeyJornada);
+  } else if (torneo.fecha) {
+    timestampOverride = parseFechaLocal(torneo.fecha);
+  } else {
+    timestampOverride = new Date();
+  }
+
+  // Día lógico de la operación. Restaurar todo (sin jornada) no tiene un día propio: recorre cada override.
+  const diaOverrideTs = diaKey ? parseFechaLocal(diaKey) : (diaKeyJornada ? timestampOverride : null);
 
   const overrideDiaInfo = getDiaCalendarioConTrasnoche(diaOverrideTs, horariosClubObj);
   const overrideDiaKey = overrideDiaInfo?.key || null;
@@ -2275,14 +2247,14 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
 
   const canchasActualesDia = overrideDiaKey
     ? canchasOverridesService.getCanchasDia(torneoId, overrideDiaKey, canchasClub).canchas
-    : canchasEfectivasActuales;
+    : canchasClub;
 
   const allOverridesMap = canchasOverridesService.getOverridesTorneo(torneoId);
   const hasActiveOverrides = allOverridesMap && Object.keys(allOverridesMap).length > 0;
 
   // 2. Si no hay cambio en la cantidad de canchas activas para esta jornada específica, no hacer nada.
-  // En restauración sin diaKey, solo retornar temprano si ya NO quedan overrides activos en el torneo.
-  if (esRestauracion && !diaKey) {
+  // En restauración sin jornada, solo retornar temprano si ya NO quedan overrides activos en el torneo.
+  if (esRestauracion && !diaKeyJornada) {
     if (!hasActiveOverrides && overrideNum === canchasClub) {
       return {
         message: `El torneo ya cuenta con todas las canchas (${canchasClub}) activas.`,
@@ -2291,11 +2263,12 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         reprogramacion: { ejecutada: false },
       };
     }
-  } else if (overrideNum === canchasActualesDia && (!diaKey || esMismoDia)) {
+  } else if (overrideNum === canchasActualesDia) {
+    // La jornada ya tiene esa cantidad de canchas: no se reprograma (sin mirar cuál fue la última lluvia)
     return {
       message: `La cantidad de canchas activas para ${diaNombre || 'la jornada'} ya es ${overrideNum}.`,
       canchasActivas: overrideNum,
-      overrideActivoDesde: torneo.overrideActivoDesde,
+      overrideActivoDesde: overrideDiaKey ? canchasOverridesService.getCanchasDia(torneoId, overrideDiaKey, canchasClub).activoDesde : null,
       reprogramacion: { ejecutada: false },
     };
   }
@@ -2342,8 +2315,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   const { res: mcfRes, pendingMutations } = await prisma.$transaction(async (tx) => {
     let res;
 
-    if (esRestauracion && !diaKey) {
-      // Restauración global multi-día sin diaKey:
+    if (esRestauracion && !diaKeyJornada) {
+      // Restauración global multi-día sin jornada:
       // Consultar todos los overrides activos del torneo en DB ordenados cronológicamente
       const activeOverrides = await tx.overrideCanchasDia.findMany({
         where: { torneoId },
@@ -2445,10 +2418,10 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     // NOTA: La caché en memoria NO se muta dentro de la transacción.
     const mutations = [];
     if (esRestauracion) {
-      if (diaKey) {
-        const m1 = await canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey || diaKey, tx);
+      if (diaKeyJornada) {
+        const m1 = await canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey || diaKeyJornada, tx);
         if (m1) mutations.push(m1);
-        if (overrideDiaKey && overrideDiaKey !== diaKey) {
+        if (overrideDiaKey && overrideDiaKey !== diaKeyJornada) {
           const m2 = await canchasOverridesService.removeOverrideDia(torneoId, overrideDiaKey, tx);
           if (m2) mutations.push(m2);
         }
@@ -2501,7 +2474,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   }
 
   const message = esRestauracion
-    ? `Todas las canchas (${canchasClub}) fueron restauradas para ${diaNombre || 'la jornada'}. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`
+    ? `Todas las canchas (${canchasClub}) fueron restauradas para ${diaNombre || (diaKeyJornada ? 'la jornada' : 'todas las jornadas')}. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`
     : `Canchas reducidas a ${overrideNum} para ${diaNombre || 'la jornada'}. Se reprogramaron ${mcfRes.partidosReprogramados} partidos.`;
 
   return {

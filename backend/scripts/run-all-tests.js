@@ -60,6 +60,7 @@ const TEST_SUITES = [
   'test-horario-club-cierre.js',
   'test-precheck-monotonia.js',
   'test-determinismo-consultas.js',
+  'test-campo-legacy-canchas.js',
 ];
 
 /**

@@ -404,9 +404,9 @@ async function testC_guardEnEscritura_bloqueaIdsDeOtraJornada() {
     mapaCorrupto
   );
 
-  // Ejecutar reducción del viernes a 4 canchas
+  // Ejecutar una reducción del viernes que de verdad reprograme (de 4 a 3 canchas)
   console.log('Ejecutando reducción de viernes con mapa previo corrupto...');
-  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-04');
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 3, null, '2026-09-04');
 
   // Verificar que el guard de saneamiento y el guard en escritura eliminaron el ID de sábado
   const ovViernes = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6);

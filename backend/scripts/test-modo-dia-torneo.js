@@ -8,9 +8,30 @@ const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
 const torneoService = require('../src/services/torneo.service');
 const partidoService = require('../src/services/partido.service');
-const { parseFechaLocal, getDiaCalendarioConTrasnoche } = require('../src/utils/dateUtils');
+const { parseFechaLocal, getDiaCalendarioConTrasnoche, clavesJornadasTorneo } = require('../src/utils/dateUtils');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const assert = require('assert');
+
+/**
+ * Verifica canchasPorDia de getEstadoEnVivo jornada por jornada. `esperado` es { diaKey: canchas } o
+ * { diaKey: { canchas, activoDesde } }; sin activoDesde, una jornada con todas las canchas del club
+ * tiene que estar sin lluvia.
+ */
+function assertCanchasPorDia(estadoEnVivo, esperado, canchasClub, mensaje) {
+  for (const [diaKey, valor] of Object.entries(esperado)) {
+    const { canchas, activoDesde } = typeof valor === 'number' ? { canchas: valor } : valor;
+    const real = estadoEnVivo.canchasPorDia?.[diaKey];
+    assert.strictEqual(real?.canchas, canchas, `${mensaje}: canchasPorDia[${diaKey}].canchas esperado ${canchas}, recibido ${real?.canchas}`);
+    if (canchas === canchasClub) {
+      assert.strictEqual(real.isLluvia, false, `${mensaje}: canchasPorDia[${diaKey}] tiene todas las canchas pero figura con lluvia`);
+    } else {
+      assert.ok(canchas < canchasClub && real.isLluvia === true, `${mensaje}: canchasPorDia[${diaKey}] tiene menos canchas que el club y no figura con lluvia`);
+    }
+    if (activoDesde) {
+      assert.strictEqual(new Date(real.activoDesde).getTime(), activoDesde.getTime(), `${mensaje}: canchasPorDia[${diaKey}].activoDesde esperado ${activoDesde.toISOString()}, recibido ${real.activoDesde}`);
+    }
+  }
+}
 
 async function testModoDiaTorneo() {
   await ensureTestDb();
@@ -107,10 +128,11 @@ async function testModoDiaTorneo() {
 
   // 6. Test GET /en-vivo inicial
   let estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
-  console.log(`✅ Estado inicial en vivo: ${estadoEnVivo.canchasActivas} canchas activas de ${estadoEnVivo.canchasClub} total`);
-  if (estadoEnVivo.canchasActivas !== 6 || estadoEnVivo.canchas.length !== 6) {
-    throw new Error(`Error: se esperaban 6 canchas activas, se obtuvieron ${estadoEnVivo.canchasActivas}`);
-  }
+  // Jornadas del torneo: viernes, sábado y domingo
+  const [kVie, kSab, kDom] = clavesJornadasTorneo(parseFechaLocal(fechaTorneo));
+  assert.strictEqual(estadoEnVivo.canchasClub, 6, `Error: se esperaban 6 canchas del club, se obtuvieron ${estadoEnVivo.canchasClub}`);
+  assertCanchasPorDia(estadoEnVivo, { [kVie]: 6, [kSab]: 6, [kDom]: 6 }, 6, 'Estado inicial en vivo');
+  console.log(`✅ Estado inicial en vivo: 6 canchas en viernes, sábado y domingo (${estadoEnVivo.canchasClub} del club)`);
 
   // 7. Simular que un partido en Cancha 1 está EN_CURSO y otro en Cancha 2 está FINALIZADO
   const partidosCat4ta = await prisma.partido.findMany({
@@ -145,9 +167,10 @@ async function testModoDiaTorneo() {
 
   // Verificar estado post-reducción
   estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
-  if (estadoEnVivo.canchasActivas !== 4) {
-    throw new Error(`Error: se esperaban 4 canchas activas, se obtuvo ${estadoEnVivo.canchasActivas}`);
-  }
+  // La reducción afecta solo la jornada del partido en juego; las otras dos siguen con 6
+  const diaReduccion = getDiaCalendarioConTrasnoche(pEnCurso.fechaHora, organizador).key;
+  const esperadoReduccion = { [kVie]: 6, [kSab]: 6, [kDom]: 6, [diaReduccion]: { canchas: 4, activoDesde: new Date(pEnCurso.fechaHora) } };
+  assertCanchasPorDia(estadoEnVivo, esperadoReduccion, 6, 'Post-reducción a 4');
 
   // Verificar que ninguna cancha activa > 4 tiene partidos pendientes
   const partidosPendientesPost = await prisma.partido.findMany({
@@ -435,12 +458,15 @@ async function testModoDiaTorneo() {
   assert.ok(!fantasmaIds.includes(pSabado1.id), 'FALLÓ TEST A: Partido de sábado en cancha 5 marcado falsamente como cancha fantasma');
   assert.ok(!fantasmaIds.includes(pSabado2.id), 'FALLÓ TEST A: Partido de sábado en cancha 6 marcado falsamente como cancha fantasma');
 
-  // 5. getEstadoEnVivo debe exponer overrideDiaKey correspondiente al viernes lógico
+  // 5. getEstadoEnVivo: la lluvia está en el viernes lógico (4 canchas, activa desde dViernesLluvia);
+  // sábado y domingo siguen con las 6 y sin lluvia
   const diaViernesEsperado = getDiaCalendarioConTrasnoche(dViernesLluvia, horariosClubTest).key;
-  assert.strictEqual(
-    estadoEnVivoPostA.torneo.overrideDiaKey,
-    diaViernesEsperado,
-    'FALLÓ TEST A: overrideDiaKey en getEstadoEnVivo no coincide con el día del override'
+  assert.strictEqual(diaViernesEsperado, kVie, 'FALLÓ TEST A: el día lógico de la lluvia no es el viernes del torneo');
+  assertCanchasPorDia(
+    estadoEnVivoPostA,
+    { [kVie]: { canchas: 4, activoDesde: dViernesLluvia }, [kSab]: 6, [kDom]: 6 },
+    6,
+    'FALLÓ TEST A'
   );
   console.log('✅ TEST A PASÓ: Partidos del Sábado 100% inalterados, canchas 5 y 6 protegidas y canchas fantasma filtradas correctamente.');
 
@@ -492,12 +518,10 @@ async function testModoDiaTorneo() {
     'FALLÓ TEST B: La restauración modificó la cancha del partido 2 de sábado'
   );
 
-  // Verificar que el estado del torneo post restauración tiene overrideDiaKey en null
+  // Verificar que post restauración ninguna jornada quedó con lluvia: las tres con 6 canchas y sin lluvia
   const estadoEnVivoPostB = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
-  assert.strictEqual(estadoEnVivoPostB.torneo.canchasDisponiblesOverride, null);
-  assert.strictEqual(estadoEnVivoPostB.torneo.overrideActivoDesde, null);
-  assert.strictEqual(estadoEnVivoPostB.torneo.overrideDiaKey, null);
-  console.log('✅ TEST B PASÓ: Restauración simétrica respetó el sábado, evaluó todos los partidos del viernes y reseteó overrideDiaKey limpiamente.');
+  assertCanchasPorDia(estadoEnVivoPostB, { [kVie]: 6, [kSab]: 6, [kDom]: 6 }, 6, 'FALLÓ TEST B');
+  console.log('✅ TEST B PASÓ: Restauración simétrica respetó el sábado, evaluó todos los partidos del viernes y dejó las tres jornadas sin lluvia.');
 
   // =======================================================================
   // 15. Test C: Determinismo de partido sin fechaHora con el contrato nuevo:
@@ -763,13 +787,20 @@ async function testModoDiaTorneo() {
     `FALLÓ TEST D: overrideActivoDesde en DB retuvo el timestamp viejo del viernes en vez de actualizar al sábado (${torneoPostSabado.overrideActivoDesde.toISOString()} vs ${dSabadoLluviaD.toISOString()})`
   );
 
-  // 3. En getEstadoEnVivo, overrideDiaKey DEBE ser "sabado"
+  // 3. En getEstadoEnVivo, el sábado tiene su propia lluvia (4 canchas, activa desde dSabadoLluviaD), el
+  // viernes conserva la suya (nunca se restauró: 4 canchas, activa desde dViernesLluviaD) y el domingo tiene las 6
   const estadoEnVivoSabado = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
   const diaSabadoEsperado = getDiaCalendarioConTrasnoche(dSabadoLluviaD, horariosClubTest).key;
-  assert.strictEqual(
-    estadoEnVivoSabado.torneo.overrideDiaKey,
-    diaSabadoEsperado,
-    `FALLÓ TEST D: overrideDiaKey en getEstadoEnVivo es ${estadoEnVivoSabado.torneo.overrideDiaKey}, se esperaba ${diaSabadoEsperado}`
+  assert.strictEqual(diaSabadoEsperado, kSab, `FALLÓ TEST D: el día lógico de la lluvia es ${diaSabadoEsperado}, se esperaba el sábado ${kSab}`);
+  assertCanchasPorDia(
+    estadoEnVivoSabado,
+    {
+      [kVie]: { canchas: 4, activoDesde: dViernesLluviaD },
+      [kSab]: { canchas: 4, activoDesde: dSabadoLluviaD },
+      [kDom]: 6,
+    },
+    6,
+    'FALLÓ TEST D'
   );
 
   // 4. Los partidos del sábado que estaban en canchas 5 y 6 DEBEN haber sido reprogramados a canchas <= 4

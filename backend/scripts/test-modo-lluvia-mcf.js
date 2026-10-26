@@ -120,7 +120,7 @@ async function testComparacionMCF() {
 
     // 1. Ejecutar reducción a 4 canchas con la lógica actual
     console.log('\n🌧️ Ejecutando reducción a 4 canchas...');
-    const resReduccion = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4);
+    const resReduccion = await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 4, null, fechaTorneo);
     console.log(`Resultado: ${resReduccion.message}`);
 
     const partidosPostReduccion = await prisma.partido.findMany({
