@@ -1,7 +1,8 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 const { parseSlotToDate } = require('./zona.service');
-const { requireTorneoFecha } = require('../utils/dateUtils');
+const { requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
+const canchasOverridesService = require('./canchasOverrides.service');
 const {
   calcularFinDeZonasCategoria,
   calcularDescansosEliminatoria,
@@ -685,9 +686,42 @@ async function getPartidosByCategoria(organizadorId, categoriaId, filters = {}) 
   });
 }
 
+const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+function errorAsignacion(mensaje) {
+  const error = new Error(mensaje);
+  error.statusCode = 400;
+  return error;
+}
+
+/**
+ * Días lógicos (0 = domingo ... 6 = sábado) en que se puede jugar un partido según su tipo.
+ * Devuelve null si no hay restricción (partido sin zona ni fase eliminatoria).
+ */
+function diasPermitidosPartido(partido) {
+  if (partido.zonaId) {
+    return { dias: [5, 6], mensaje: 'Los partidos de zona se juegan viernes o sábado.' };
+  }
+  if (partido.faseEliminatoriaId && partido.faseEliminatoria) {
+    if (partido.faseEliminatoria.ronda >= 32) {
+      return { dias: [6], mensaje: 'Los dieciseisavos se juegan el sábado.' };
+    }
+    return { dias: [0], mensaje: 'Las eliminatorias desde octavos se juegan el domingo.' };
+  }
+  return null;
+}
+
 async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
   const { slotId, canchaNumero, fechaHora } = data;
+
+  // Solo se asigna o reprograma un partido PENDIENTE
+  if (partido.estado === 'EN_CURSO') {
+    throw errorAsignacion('No se puede cambiar el horario de un partido en juego.');
+  }
+  if (partido.estado === 'FINALIZADO') {
+    throw errorAsignacion('No se puede cambiar el horario de un partido finalizado.');
+  }
 
   const torneo = await prisma.torneo.findUnique({
     where: { id: partido.categoria.torneoId },
@@ -716,6 +750,21 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
     const error = new Error(`El número de cancha debe ser entre 1 y ${organizador.cantidadCanchas || 1}.`);
     error.statusCode = 400;
     throw error;
+  }
+
+  // Jornada lógica del turno (la madrugada cuenta para el día anterior), con la misma regla que
+  // reprogramarPorReduccionCanchas. Da el día para validar el tipo de partido y el diaKey de la lluvia.
+  const jornada = getDiaCalendarioConTrasnoche(targetDate, organizador);
+  const diaLogico = jornada.logicalDate.getDay();
+
+  const reglaDia = diasPermitidosPartido(partido);
+  if (reglaDia && !reglaDia.dias.includes(diaLogico)) {
+    throw errorAsignacion(reglaDia.mensaje);
+  }
+
+  const canchasJornada = canchasOverridesService.getCanchasDia(torneo.id, jornada.key, organizador.cantidadCanchas || 1);
+  if (canchaNum > canchasJornada.canchas) {
+    throw errorAsignacion(`La cancha ${canchaNum} está cerrada por lluvia el ${NOMBRES_DIA[diaLogico]}. Elegí otra cancha.`);
   }
 
   const targetStartMs = targetDate.getTime();
