@@ -1544,7 +1544,7 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
 
   const organizador = await getOrganizador(organizadorId);
   const grilla = generarGrillaOrganizador(organizador);
-  const cantCanchas = getCanchasEfectivas(torneo, organizador);
+  const canchasClub = organizador.cantidadCanchas || 1;
   const refFecha = requireTorneoFecha(torneo);
 
   // Buscar todos los partidos con fechaHora y canchaNumero asignados en este torneo
@@ -1585,6 +1585,13 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
 
     const slotStartMs = slotDate.getTime();
     const slotEndMs = slotStartMs + 75 * 60 * 1000;
+
+    // Canchas de la jornada lógica del turno: las del override por lluvia si existe, si no todas las del club
+    const diaKeySlot = getDiaCalendarioConTrasnoche(slotDate, organizador)?.key;
+    const cantCanchas = Math.min(
+      canchasOverridesService.getCanchasDia(torneoId, diaKeySlot, canchasClub).canchas,
+      canchasClub
+    );
 
     let canchasOcupadasCount = 0;
     const parejasJugandoEnSlot = new Set();
