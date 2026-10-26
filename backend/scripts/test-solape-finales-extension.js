@@ -23,8 +23,9 @@
  * S4  Lluvia del sábado a 1 cancha y finales de otras categorías en la extensión del domingo en las canchas 1 y
  *     2: al programar A, la de la cancha 2 (mayor a las del sábado) cuenta como ocupación del domingo.
  * S5  Control: una final de otra categoría que empieza justo en domDayEndMs se clasifica como domingo.
- * S6  Una final manual en la extensión es ocupación fija del domingo en la reprogramación por lluvia del
- *     domingo (todas las categorías en una corrida).
+ * S6  Una final manual en la extensión (13:45, cancha 1) es ocupación fija del domingo en la reprogramación
+ *     por lluvia del domingo a 3 canchas (todas las categorías en una corrida): la final de B, que también
+ *     queda a las 13:45, no usa la cancha 1.
  */
 
 require('./utils/testEnvGuard');
@@ -253,16 +254,16 @@ async function s6_final_manual_en_extension_lluvia_domingo() {
   await programarHorariosEliminatorias(ctx.org.id, ctx.torneo.id);
   const finalA = await finalDe(A);
   if (iso(finalA.fechaHora) !== iso(fecha(DOM, '12:30')) || finalA.canchaNumero !== 1) throw new Error(`La final de A no quedó en la extensión en la cancha 1: ${iso(finalA.fechaHora)}@${finalA.canchaNumero}`);
-  await partidoService.asignarHorarioManual(ctx.org.id, finalA.id, { slotId: 'Domingo-12:30', canchaNumero: 1 });
+  await partidoService.asignarHorarioManual(ctx.org.id, finalA.id, { slotId: 'Domingo-13:45', canchaNumero: 1 });
   // Lluvia del domingo: reprograma todas las categorías juntas (soloDomingo) con la final de A como fija
   await postHttp(ctx, `/torneos/${ctx.torneo.id}/canchas-override`, { canchasDisponiblesOverride: 3, diaKey: DOM });
   const problemas = [];
   const s = solapes(await eliminatorias(ctx));
   if (s.length > 0) problemas.push(`${s.length} solapes: ${s.join(' | ')}`);
   const finalA2 = await finalDe(A);
-  if (iso(finalA2.fechaHora) !== iso(fecha(DOM, '12:30')) || finalA2.canchaNumero !== 1) problemas.push(`la final manual de A se movió a ${iso(finalA2.fechaHora)}@${finalA2.canchaNumero}`);
+  if (iso(finalA2.fechaHora) !== iso(fecha(DOM, '13:45')) || finalA2.canchaNumero !== 1) problemas.push(`la final manual de A se movió a ${iso(finalA2.fechaHora)}@${finalA2.canchaNumero}`);
   const finalB = await finalDe(B);
-  if (!finalB.fechaHora) problemas.push('la final de B quedó sin horario');
+  if (iso(finalB.fechaHora) !== iso(fecha(DOM, '13:45'))) problemas.push(`la final de B no compite por las 13:45 (quedó en ${iso(finalB.fechaHora)}@${finalB.canchaNumero})`);
   falla(problemas);
 }
 
@@ -282,7 +283,7 @@ async function run() {
     { nombre: 'S3: control, R32 de la trasnoche del sábado ocupa el sábado', fn: s3_control_r32_trasnoche_sabado },
     { nombre: 'S4: lluvia del sábado, final en cancha 2 de la extensión cuenta como domingo', fn: s4_lluvia_sabado_final_en_extension },
     { nombre: 'S5: control, partido justo en domDayEndMs es del domingo', fn: s5_control_borde_dom_day_end },
-    { nombre: 'S6: final manual en la extensión es fija en la lluvia del domingo', fn: s6_final_manual_en_extension_lluvia_domingo },
+    { nombre: 'S6: final manual en la extensión (13:45) es fija en la lluvia del domingo', fn: s6_final_manual_en_extension_lluvia_domingo },
   ];
 
   const resultados = [];
