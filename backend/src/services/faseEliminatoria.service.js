@@ -151,7 +151,10 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       // Detectar BYE: usar el campo persistente esBye del partido
       const esBye = Boolean(partido.esBye);
 
-      if (esDieciseisavos && partido.estado !== 'FINALIZADO' && !esBye) {
+      // Un R32 sin horario (sin fechaHora o sin cancha) queda marcado para la bandeja; uno ya programado
+      // conserva su horario y no se marca (regla B: un R32 con horario válido no se desasigna)
+      const tieneHorario = Boolean(partido.fechaHora && partido.canchaNumero);
+      if (esDieciseisavos && partido.estado !== 'FINALIZADO' && !esBye && !tieneHorario) {
         updateData.sinHorarioAsignado = true;
       } else if (esBye) {
         updateData.sinHorarioAsignado = false;
