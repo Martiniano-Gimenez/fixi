@@ -358,6 +358,25 @@ async function v19_fechaHora_r32_madrugada_sabado() {
   await esperarAsignado(p.id, { fechaHora: domingo0030.toISOString(), canchaNumero: 1 }, ctx.token, domingo0030, 1);
 }
 
+// ---------------------------------------------------------------------------
+// fechaHora en jueves o lunes, y octavos el viernes antes de viernesInicio (18:00): 400, nunca 500
+// ---------------------------------------------------------------------------
+const JUEVES_20 = () => new Date(2026, 9, 15, 20, 0, 0, 0);
+const LUNES_20 = () => new Date(2026, 9, 19, 20, 0, 0, 0);
+const VIERNES_10 = () => new Date(2026, 9, 16, 10, 0, 0, 0);
+
+async function rechazoPorFechaHora(tipo, fecha, mensaje) {
+  const ctx = await setupBase();
+  const p = await crearPartido(ctx, tipo);
+  await esperarRechazo(p.id, { fechaHora: fecha.toISOString(), canchaNumero: 1 }, ctx.token, 400, mensaje);
+}
+
+const v23_jueves_zona = () => rechazoPorFechaHora('zona', JUEVES_20(), MSG_DIA_ZONA);
+const v24_jueves_octavos = () => rechazoPorFechaHora('octavos', JUEVES_20(), MSG_DIA_OCTAVOS);
+const v25_lunes_zona = () => rechazoPorFechaHora('zona', LUNES_20(), MSG_DIA_ZONA);
+const v26_lunes_octavos = () => rechazoPorFechaHora('octavos', LUNES_20(), MSG_DIA_OCTAVOS);
+const v28_viernes_antes_inicio_octavos = () => rechazoPorFechaHora('octavos', VIERNES_10(), MSG_DIA_OCTAVOS);
+
 async function v20_sin_tipo_sin_restriccion_dia() {
   const ctx = await setupBase();
   const p = await crearPartido(ctx, 'sinTipo');
@@ -445,6 +464,11 @@ async function run() {
     { nombre: 'v18: fechaHora (sin slotId) zona en domingo -> 400 por día', fn: v18_fechaHora_zona_domingo },
     { nombre: 'v19: fechaHora domingo 00:30 (trasnoche del sábado) dieciseisavos -> 200', fn: v19_fechaHora_r32_madrugada_sabado },
     { nombre: 'v20: partido sin zona ni fase en Domingo -> 200 (sin restricción de día)', fn: v20_sin_tipo_sin_restriccion_dia },
+    { nombre: 'v23: fechaHora jueves, zona -> 400', fn: v23_jueves_zona },
+    { nombre: 'v24: fechaHora jueves, octavos -> 400', fn: v24_jueves_octavos },
+    { nombre: 'v25: fechaHora lunes, zona -> 400', fn: v25_lunes_zona },
+    { nombre: 'v26: fechaHora lunes, octavos -> 400', fn: v26_lunes_octavos },
+    { nombre: 'v28: fechaHora viernes 10:00 (antes de 18:00), octavos -> 400', fn: v28_viernes_antes_inicio_octavos },
     { nombre: 'v21: canchas-disponibles con lluvia solo el sábado', fn: v21_canchas_lluvia_solo_sabado },
     { nombre: 'v22: canchas-disponibles con lluvia sábado y domingo distintas', fn: v22_canchas_lluvia_sabado_y_domingo },
   ];
