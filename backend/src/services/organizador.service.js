@@ -2223,8 +2223,6 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   }
 
   // Momento de activación que se guarda en el override: mockTimestamp en tests; si no, el mediodía de la jornada.
-  const overrideActivoDesdeOriginal = torneo.overrideActivoDesde;
-
   let timestampOverride;
   if (mockTimestamp) {
     timestampOverride = new Date(mockTimestamp);
@@ -2238,12 +2236,6 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
 
   // Día lógico de la operación. Restaurar todo (sin jornada) no tiene un día propio: recorre cada override.
   const diaOverrideTs = diaKey ? parseFechaLocal(diaKey) : (diaKeyJornada ? timestampOverride : null);
-
-  const diaAnteriorKey = overrideActivoDesdeOriginal
-    ? getDiaCalendarioConTrasnoche(overrideActivoDesdeOriginal, horariosClubObj)?.key
-    : null;
-  const diaNuevoKey = getDiaCalendarioConTrasnoche(timestampOverride, horariosClubObj)?.key;
-  const esMismoDia = Boolean(diaAnteriorKey && diaNuevoKey && diaAnteriorKey === diaNuevoKey);
 
   const overrideDiaInfo = getDiaCalendarioConTrasnoche(diaOverrideTs, horariosClubObj);
   const overrideDiaKey = overrideDiaInfo?.key || null;
@@ -2271,7 +2263,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         reprogramacion: { ejecutada: false },
       };
     }
-  } else if (overrideNum === canchasActualesDia && (!diaKey || esMismoDia)) {
+  } else if (overrideNum === canchasActualesDia) {
+    // La jornada ya tiene esa cantidad de canchas: no se reprograma (sin mirar cuál fue la última lluvia)
     return {
       message: `La cantidad de canchas activas para ${diaNombre || 'la jornada'} ya es ${overrideNum}.`,
       canchasActivas: overrideNum,
