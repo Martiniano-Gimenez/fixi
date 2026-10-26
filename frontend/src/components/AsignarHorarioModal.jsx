@@ -71,11 +71,11 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       return s.dia === 'Viernes' || s.dia === 'Sabado';
     }
     if (esDieciseisavos) {
-      // Dieciseisavos: Sábado noche (a partir de 18:00hs o trasnoche) o Domingo
+      // Dieciseisavos: solo Sábado noche (a partir de 18:00hs, incluida la trasnoche de la jornada del sábado)
       if (s.dia === 'Sabado') {
         return minutosCronologicosJornada(s.hora) >= HORA_INICIO_NOCHE_DIECISEISAVOS * 60;
       }
-      return s.dia === 'Domingo';
+      return false;
     }
     if (esPartidoEliminatoria) {
       // Eliminatorias regulares (Octavos a Final): estrictamente Domingo
