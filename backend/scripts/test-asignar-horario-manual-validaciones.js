@@ -29,6 +29,7 @@ const { resetTestDb } = require('./reset-test-db');
 const assert = require('node:assert');
 const prisma = require('../src/lib/prisma');
 const partidoService = require('../src/services/partido.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const faseEliminatoriaService = require('../src/services/faseEliminatoria.service');
 const publicController = require('../src/controllers/public.controller');
 const { parseSlotToDate } = require('../src/services/zona.service');
@@ -1737,6 +1738,7 @@ async function test18b_getFasesEliminatorias_ignora_en_curso() {
 async function run() {
   await ensureTestDb();
   resetTestDb();
+  await canchasOverridesService.loadFromDb();
 
   console.log('='.repeat(85));
   console.log('🧪 SUITE OFICIAL: VALIDACIONES EN ASIGNAR HORARIO MANUAL (16 CASOS)');
