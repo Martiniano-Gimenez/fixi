@@ -16,6 +16,7 @@ const zonaService = require('../src/services/zona.service');
 const { parseFechaLocal } = require('../src/utils/dateUtils');
 const { generarEliminatoria } = require('../src/services/faseEliminatoria.service');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 
 async function limpiarDb() {
   await prisma.setPartido.deleteMany();
@@ -129,6 +130,7 @@ async function testCasoA_R32FinalizadoConZonaSinHorario() {
 async function run() {
   await ensureTestDb();
   resetTestDb();
+  await canchasOverridesService.loadFromDb();
 
   console.log('='.repeat(80));
   console.log('🧪 TEST: INMUTABILIDAD DE R32 FINALIZADO ANTE ZONAS SIN HORARIO');

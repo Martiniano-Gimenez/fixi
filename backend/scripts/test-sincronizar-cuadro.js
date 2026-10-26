@@ -4,10 +4,12 @@ const faseEliminatoriaService = require('../src/services/faseEliminatoria.servic
 const zonaService = require('../src/services/zona.service');
 const partidoService = require('../src/services/partido.service');
 const organizadorService = require('../src/services/organizador.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const crypto = require('crypto');
 
 async function testSincronizarCuadro() {
   await ensureTestDb();
+  await canchasOverridesService.loadFromDb();
   console.log('🧪 Iniciando prueba automatizada de Sincronización del Cuadro Eliminatorio...');
 
   let organizador = null;
