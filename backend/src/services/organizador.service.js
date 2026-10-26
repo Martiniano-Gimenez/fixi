@@ -2053,7 +2053,12 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
             diaPartidoOverride.partidosSinSlot[p.id]
           ) {
             motivo = diaPartidoOverride.partidosSinSlot[p.id];
-          } else if (p.fechaHora && torneo.overrideActivoDesde && new Date(p.fechaHora).getTime() < new Date(torneo.overrideActivoDesde).getTime()) {
+          } else if (
+            p.fechaHora &&
+            diaPartidoOverride?.activoDesde &&
+            new Date(p.fechaHora).getTime() < new Date(diaPartidoOverride.activoDesde).getTime()
+          ) {
+            // Se compara con la activación de la lluvia de la jornada del partido, no con la última aplicada
             motivo = 'Horario anterior a la activación del modo lluvia';
           } else if (!p.pareja1Id || !p.pareja2Id) {
             motivo = 'Parejas aún no definidas (clasificados de zona)';
