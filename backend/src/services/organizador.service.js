@@ -1812,7 +1812,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
 
   const organizador = await getOrganizador(organizadorId);
   const canchasClub = organizador.cantidadCanchas || 1;
-  const canchasActivas = getCanchasEfectivas(torneo, organizador);
 
   const partidos = await prisma.partido.findMany({
     where: {
@@ -1841,7 +1840,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
 
   const DURACION_MS = (organizador.duracionPartidoMin || 75) * 60 * 1000;
 
-  // Calcular día lógico del override para limitar canchas fantasma y proveerlo al frontend
+  // Horarios del club para calcular el día lógico de cada partido (canchas fantasma y canchasPorDia)
   const horariosClubObj = {
     viernesInicio: organizador.viernesInicio,
     viernesFin: organizador.viernesFin,
@@ -1850,10 +1849,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     domingoInicio: organizador.domingoInicio,
     domingoFin: organizador.domingoFin,
   };
-  const overrideDiaInfo = (torneo.overrideActivoDesde)
-    ? getDiaCalendarioConTrasnoche(torneo.overrideActivoDesde, horariosClubObj)
-    : null;
-  const overrideDiaKey = overrideDiaInfo?.key || null;
 
   // Categorías con métricas de zonas y fases eliminatorias
   const categoriasTorneo = await prisma.categoria.findMany({
@@ -1978,8 +1973,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   let pendientesConHorarioCount = 0;
   let pendientesSinHorarioCount = 0;
 
-  const canchaOcupadaPorPartido = new Map();
-
   for (const p of partidos) {
     if (esPartidoByeEnVivo(p)) {
       continue;
@@ -2028,9 +2021,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         horaEstimadaFin,
       };
       partidosEnCursoList.push(enCursoObj);
-      if (p.canchaNumero) {
-        canchaOcupadaPorPartido.set(p.canchaNumero, enCursoObj);
-      }
     } else if (p.estado === 'PENDIENTE') {
       if (p.sinHorarioAsignado || (!p.faseEliminatoriaId && !p.fechaHora)) {
         pendientesSinHorarioCount++;
@@ -2124,25 +2114,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     }
   }
 
-  // Grilla de canchas
-  const canchas = [];
-  for (let c = 1; c <= canchasClub; c++) {
-    if (c > canchasActivas) {
-      canchas.push({
-        numero: c,
-        estado: 'INHABILITADA',
-        partidoActual: null,
-      });
-    } else {
-      const partidoEnCancha = canchaOcupadaPorPartido.get(c) || null;
-      canchas.push({
-        numero: c,
-        estado: partidoEnCancha ? 'EN_CURSO' : 'LIBRE',
-        partidoActual: partidoEnCancha,
-      });
-    }
-  }
-
   return {
     torneo: {
       id: torneo.id,
@@ -2150,9 +2121,6 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       fecha: torneo.fecha,
       estado: torneo.estado,
       slug: torneo.slug,
-      canchasDisponiblesOverride: torneo.canchasDisponiblesOverride,
-      overrideActivoDesde: torneo.overrideActivoDesde,
-      overrideDiaKey,
       canchasClub,
       horariosClub: {
         viernesInicio: organizador.viernesInicio,
@@ -2163,10 +2131,9 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
         domingoFin: organizador.domingoFin,
       },
     },
-    canchasActivas,
     canchasClub,
+    // Canchas de cada jornada (OverrideCanchasDia): la única fuente de las canchas activas por día
     canchasPorDia,
-    canchas,
     partidosEnCurso: partidosEnCursoList,
     partidosEnCanchaFantasma: partidosEnCanchaFantasmaList,
     proximosPartidos: proximosPartidosList,
