@@ -608,6 +608,18 @@ function verificarInvariantesPorEtapa({
       }
     }
   }
+
+  // 7. Ningún partido PENDIENTE con la marca de "sin horario" y fechaHora a la vez: la bandeja, en-vivo, los
+  // schedulers y la lluvia lo tratarían como sin horario aunque ocupe una cancha (sesión 84)
+  for (const p of partidos) {
+    if (p.estado === 'PENDIENTE' && p.sinHorarioAsignado && p.fechaHora) {
+      recordFailure(
+        `sin_horario_con_fecha:${etapa}`,
+        seed,
+        `Partido ${p.id} (${p.zonaId ? 'zona' : `ronda ${p.faseEliminatoria?.ronda ?? '?'}`}) PENDIENTE con sinHorarioAsignado true y fechaHora ${new Date(p.fechaHora).toISOString()} (cancha ${p.canchaNumero})`
+      );
+    }
+  }
 }
 
 async function runSingleSeed(seed, recordFailure) {
@@ -1838,6 +1850,7 @@ async function runFuzzSuite() {
     'sin_zonas_en_domingo',
     'mini_bracket_orden_p3_p4',
     'eliminatorias_descanso_y_post_zonas',
+    'sin_horario_con_fecha',
   ];
 
   const INVARIANT_KEYS = [
