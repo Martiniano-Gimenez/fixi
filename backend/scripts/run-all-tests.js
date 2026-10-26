@@ -62,6 +62,7 @@ const TEST_SUITES = [
   'test-determinismo-consultas.js',
   'test-campo-legacy-canchas.js',
   'test-r32-marca-sin-horario.js',
+  'test-solape-finales-extension.js',
 ];
 
 /**
