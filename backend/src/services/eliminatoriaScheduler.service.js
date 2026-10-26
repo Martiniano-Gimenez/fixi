@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma');
 const { horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
 const { proximaFechaPorDia } = require('./zona.service');
-const { requireTorneoFecha, clavesJornadasTorneo } = require('../utils/dateUtils');
+const { requireTorneoFecha, clavesJornadasTorneo, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
 const { calcularVentanaSabadoNoche } = require('../utils/ventanaSabadoNoche');
 const canchasOverridesService = require('./canchasOverrides.service');
 
@@ -117,8 +117,12 @@ async function programarHorariosEliminatorias(
       ? Number(canchasOverride)
       : canchasOverridesService.getCanchasDia(torneo.id, claveDomingo, canchasClub).canchas
   );
+  // Jornada lógica de un horario ya asignado (getDiaCalendarioConTrasnoche): la trasnoche del sábado es del
+  // sábado y la extensión de la final pasada la medianoche es del domingo. No sirve la ventana
+  // [domDayStartMs, domDayEndMs): una final en la extensión quedaría fuera del domingo.
+  const esJornadaDomingo = (startMs) => getDiaCalendarioConTrasnoche(new Date(startMs), organizador)?.key === claveDomingo;
   // Canchas de la jornada a la que pertenece un horario ya asignado (domingo o, si no, sábado)
-  const canchasDeLaJornada = (startMs) => (startMs >= domDayStartMs && startMs < domDayEndMs ? canchasDomingo : canchasSabado);
+  const canchasDeLaJornada = (startMs) => (esJornadaDomingo(startMs) ? canchasDomingo : canchasSabado);
   const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
   const STEP_MS = 15 * 60 * 1000;
 
@@ -204,7 +208,7 @@ async function programarHorariosEliminatorias(
     const c = p.canchaNumero;
 
     if (c && c <= canchasDeLaJornada(pStart)) {
-      if (pStart >= domDayStartMs && pStart < domDayEndMs) {
+      if (esJornadaDomingo(pStart)) {
         sundayCourtTimelines.get(c).push({ startMs: pStart, endMs: pEnd });
       } else {
         saturdayCourtTimelines.get(c).push({ startMs: pStart, endMs: pEnd });
@@ -289,7 +293,7 @@ async function programarHorariosEliminatorias(
               isBye: false,
             });
             if (p.canchaNumero && p.canchaNumero <= canchasDeLaJornada(pStart)) {
-              if (pStart >= domDayStartMs && pStart < domDayEndMs) {
+              if (esJornadaDomingo(pStart)) {
                 sundayCourtTimelines.get(p.canchaNumero).push({ startMs: pStart, endMs: pEnd });
               } else {
                 saturdayCourtTimelines.get(p.canchaNumero).push({ startMs: pStart, endMs: pEnd });
