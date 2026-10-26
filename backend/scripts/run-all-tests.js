@@ -61,6 +61,7 @@ const TEST_SUITES = [
   'test-precheck-monotonia.js',
   'test-determinismo-consultas.js',
   'test-campo-legacy-canchas.js',
+  'test-r32-marca-sin-horario.js',
 ];
 
 /**
