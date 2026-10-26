@@ -24,6 +24,7 @@ const SCRIPTS_DIR = __dirname;
 const TEST_SUITES = [
   'test-alta-tardia-flujo.js',
   'test-asignar-horario-manual-validaciones.js',
+  'test-asignar-horario-manual-bloqueos.js',
   'test-auditoria-fixes.js',
   'test-authz-disponibilidad.js',
   'test-auto-asignar-eliminatoria.js',
