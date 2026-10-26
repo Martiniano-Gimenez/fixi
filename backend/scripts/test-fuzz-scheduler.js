@@ -33,6 +33,9 @@ const FUZZ_METRICAS = process.env.FUZZ_METRICAS === '1';
 // Si está definida, cada semilla escribe "<semilla> <etapa> <sha256>" por etapa (estado canónico sin UUID,
 // ver utils/estadoCanonico.js). Sirve para comparar corridas: misma semilla, mismos hashes.
 const FUZZ_HASH_OUT = process.env.FUZZ_HASH_OUT || null;
+// Con FUZZ_RESULTADOS=1 cada semilla agrega la etapa post-resultados (todas las zonas terminadas por
+// cargarResultado) entre post-inicio y la lluvia. Sin la variable el fuzz no cambia (mismas líneas y hashes).
+const FUZZ_RESULTADOS = process.env.FUZZ_RESULTADOS === '1';
 
 async function registrarHashEtapa(seed, etapa, { torneoId = null, categoriasPlan = null } = {}) {
   if (!FUZZ_HASH_OUT) return;
@@ -1373,6 +1376,41 @@ async function runSingleSeed(seed, recordFailure) {
       allowDayLimitMs: false,
     });
 
+    if (FUZZ_RESULTADOS) {
+      // Etapa opcional post-resultados: termina todas las zonas por partidoService.cargarResultado (gana la
+      // pareja de menor orden, 6-0 6-0), que dispara la auto-asignación de cada categoría al cerrar sus zonas.
+      for (let vuelta = 0; vuelta < 10; vuelta++) {
+        const pendientes = await prisma.partido.findMany({
+          where: { categoria: { torneoId: torneo.id }, zonaId: { not: null }, estado: { not: 'FINALIZADO' }, pareja1Id: { not: null }, pareja2Id: { not: null } },
+          include: { pareja1: true, pareja2: true },
+          orderBy: [{ fechaHora: 'asc' }, { canchaNumero: 'asc' }, { posicionEnRonda: 'asc' }],
+        });
+        if (pendientes.length === 0) break;
+        for (const pz of pendientes) {
+          const ganaPareja1 = pz.pareja1.orden < pz.pareja2.orden;
+          const sets = ganaPareja1
+            ? [{ gamesPareja1: 6, gamesPareja2: 0 }, { gamesPareja1: 6, gamesPareja2: 0 }]
+            : [{ gamesPareja1: 0, gamesPareja2: 6 }, { gamesPareja1: 0, gamesPareja2: 6 }];
+          await partidoService.cargarResultado(organizador.id, pz.id, { sets });
+        }
+      }
+      const partidosPostResultados = await prisma.partido.findMany({
+        where: { categoria: { torneoId: torneo.id } },
+        include: { faseEliminatoria: true },
+      });
+      await registrarHashEtapa(seed, 'post-resultados', { torneoId: torneo.id });
+      verificarInvariantesPorEtapa({
+        partidos: partidosPostResultados,
+        zonas: zonasTorneo,
+        organizador,
+        refFecha,
+        recordFailure,
+        seed,
+        etapa: 'post-resultados',
+        allowDayLimitMs: false,
+      });
+    }
+
     let seedHasR32 = false;
     let seedHasR32ConHorario = false;
     let seedHasSinHorario = false;
@@ -1842,7 +1880,9 @@ async function runFuzzSuite() {
   console.log(`🌐 Test Server activo en: ${baseUrl}`);
   console.log('='.repeat(85));
 
-  const STAGES = ['post-inicio', 'post-reduccion', 'post-restauracion'];
+  const STAGES = FUZZ_RESULTADOS
+    ? ['post-inicio', 'post-resultados', 'post-reduccion', 'post-restauracion']
+    : ['post-inicio', 'post-reduccion', 'post-restauracion'];
   const STATIC_BASE_KEYS = [
     'cancha_sin_solapamiento',
     'pareja_sin_solapamiento',
