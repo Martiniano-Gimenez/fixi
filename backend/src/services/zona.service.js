@@ -212,6 +212,28 @@ function calcularConfigZonas(numParejas) {
 }
 
 /**
+ * Matriz de compatibilidad del armado: cantidad de inicios (slotId) en común entre cada par de parejas.
+ * Una pareja sin disponibilidad cargada (0 slots) es compatible con todas, igual que en
+ * evaluarCompatibilidadZona y en el scheduler. Se marca con 1 porque el armado solo mira si el valor es > 0.
+ * @param {string[][]} slotsPorPareja slotIds de cada pareja, en el orden de las parejas
+ * @returns {number[][]}
+ */
+function construirMatrizCompatibilidad(slotsPorPareja) {
+  const n = slotsPorPareja.length;
+  const matriz = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    const slotsA = slotsPorPareja[i];
+    for (let j = i + 1; j < n; j++) {
+      const slotsB = slotsPorPareja[j];
+      const compat = slotsA.length === 0 || slotsB.length === 0 ? 1 : calcularCompatibilidad(slotsA, slotsB);
+      matriz[i][j] = compat;
+      matriz[j][i] = compat;
+    }
+  }
+  return matriz;
+}
+
+/**
  * Arma grupos de parejas maximizando compatibilidad por slots discretos.
  */
 function armarGruposPorCompatibilidad(parejas, configZonas, matriz) {
@@ -326,17 +348,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
     throw error;
   }
 
-  const n = numParejas;
-  const matriz = Array.from({ length: n }, () => new Array(n).fill(0));
-  for (let i = 0; i < n; i++) {
-    const slotsA = parejas[i].slotsSeleccionados.map((s) => s.slotId);
-    for (let j = i + 1; j < n; j++) {
-      const slotsB = parejas[j].slotsSeleccionados.map((s) => s.slotId);
-      const compat = calcularCompatibilidad(slotsA, slotsB);
-      matriz[i][j] = compat;
-      matriz[j][i] = compat;
-    }
-  }
+  const matriz = construirMatrizCompatibilidad(parejas.map((p) => p.slotsSeleccionados.map((s) => s.slotId)));
 
   const configZonas = calcularConfigZonas(numParejas);
   const { grupos, sinGrupo } = armarGruposPorCompatibilidad(parejas, configZonas, matriz);
@@ -2425,6 +2437,7 @@ module.exports = {
   slotIdToMsWindow,
   asignarHorariosModoLluviaMCF,
   evaluarCompatibilidadZona,
+  construirMatrizCompatibilidad,
   regenerarPartidosZona,
   generarPartidosZonaHelper,
   moverParejaDeZona,
