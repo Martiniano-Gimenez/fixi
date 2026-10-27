@@ -889,7 +889,8 @@ async function programarHorariosEliminatorias(
             if (cand.startMs <= slotTime) return false;
             if (cand.partido.horarioManual && !desfijados.has(cand.partido.id)) return false;
             if (cand.partido.estado === 'FINALIZADO' || cand.partido.estado === 'EN_CURSO') return false;
-            // Techo de la cadena de un hijo fijo
+            // Techo de la cadena de un hijo fijo. Hoy es redundante (el backfill solo adelanta: cand.startMs <= slotTime
+            // descarta antes); se mantiene por si eso cambia.
             if (slotTime > techoDe(`${cand.categoria.id}:${rondaTarget}:${cand.partido.posicionEnRonda}`)) return false;
 
             // Para rondas menores a 16 (Cuartos, Semis, Finales), proteger bloques unificados:
