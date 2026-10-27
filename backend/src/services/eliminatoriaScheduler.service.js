@@ -3,6 +3,7 @@ const { horaAMinutos, DURACION_PARTIDO_MIN } = require('./slots.service');
 const { proximaFechaPorDia } = require('./zona.service');
 const { requireTorneoFecha, clavesJornadasTorneo, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
 const { calcularVentanaSabadoNoche } = require('../utils/ventanaSabadoNoche');
+const { obtenerDescansoMinimoRequeridoMs } = require('../utils/bracketWarnings');
 const canchasOverridesService = require('./canchasOverrides.service');
 
 function esRondaDieciseisavos(ronda) {
@@ -244,6 +245,14 @@ async function programarHorariosEliminatorias(
 
   const updates = [];
   const matchScheduleMap = new Map(); // key: `${catId}:${ronda}:${posicionEnRonda}` -> { startMs, endMs, fechaHora, canchaNumero, isBye }
+  // Partidos fijos de la presiembra (misma clave): { partido, desfijable }. Desfijable = manual PENDIENTE.
+  const fijos = new Map();
+  // Manuales que perdieron la marca en esta corrida porque algún antecesor no entraba antes de su techo
+  const desfijados = new Set();
+  // Techo de inicio de cada antecesor de un partido fijo (misma clave): { techoMs, fuente } (fuente = clave del fijo)
+  const techos = new Map();
+  // Padres sin turno antes de un hijo fijo que no se puede mover (FINALIZADO o EN_CURSO), para la lluvia del domingo
+  const partidosSinSlot = {};
 
   // Pre-cargar partidos ya FINALIZADOS o EN_CURSO (inmutables) o cruces manuales con cancha activa
   for (const cat of catsToSchedule) {
@@ -292,6 +301,10 @@ async function programarHorariosEliminatorias(
               canchaNumero: p.canchaNumero,
               isBye: false,
             });
+            fijos.set(`${cat.id}:${fase.ronda}:${p.posicionEnRonda}`, {
+              partido: p,
+              desfijable: p.estado === 'PENDIENTE' && esManualActivo,
+            });
             if (p.canchaNumero && p.canchaNumero <= canchasDeLaJornada(pStart)) {
               if (esJornadaDomingo(pStart)) {
                 sundayCourtTimelines.get(p.canchaNumero).push({ startMs: pStart, endMs: pEnd });
@@ -311,6 +324,65 @@ async function programarHorariosEliminatorias(
         }
       }
     }
+  }
+
+  // Techo de la cadena de antecesores de cada partido fijo: un antecesor tiene que terminar, más el descanso
+  // mínimo de la ronda de su hijo, antes de que empiece el hijo. Se recorre desde la final hacia atrás:
+  // techoInicio(padre) = inicioHijo - descanso(rondaHijo) - DURACION, con inicioHijo = horario del hijo si es
+  // fijo, o su propio techo si está pendiente y tiene techo. La fuente es el fijo del que sale la cadena.
+  function calcularTechos() {
+    techos.clear();
+    for (const cat of catsToSchedule) {
+      const rondasDesdeLaFinal = cat.fasesEliminatorias.map((f) => f.ronda).sort((a, b) => a - b);
+      for (const ronda of rondasDesdeLaFinal) {
+        const rondaHijo = ronda / 2;
+        if (!cat.fasesEliminatorias.some((f) => f.ronda === rondaHijo)) continue;
+        const fase = cat.fasesEliminatorias.find((f) => f.ronda === ronda);
+        const descansoMs = obtenerDescansoMinimoRequeridoMs(ronda, rondaHijo);
+        for (const p of fase.partidos) {
+          const keyHijo = `${cat.id}:${rondaHijo}:${Math.ceil(p.posicionEnRonda / 2)}`;
+          let inicioHijoMs = null;
+          let fuente = null;
+          if (fijos.has(keyHijo)) {
+            inicioHijoMs = matchScheduleMap.get(keyHijo).startMs;
+            fuente = keyHijo;
+          } else if (techos.has(keyHijo)) {
+            ({ techoMs: inicioHijoMs, fuente } = techos.get(keyHijo));
+          }
+          if (inicioHijoMs === null) continue;
+          techos.set(`${cat.id}:${ronda}:${p.posicionEnRonda}`, { techoMs: inicioHijoMs - descansoMs - DURACION_MS, fuente });
+        }
+      }
+    }
+  }
+  calcularTechos();
+
+  const techoDe = (key) => (techos.has(key) ? techos.get(key).techoMs : Infinity);
+
+  // Un antecesor no entra antes de su techo: si el techo sale de un hijo manual PENDIENTE, el hijo pierde la marca
+  // (deja de ser ocupación fija y se programa con su ronda, después de sus padres) y se recalculan los techos sin
+  // él. Devuelve false si no hay techo o si sale de un hijo que no se puede mover (FINALIZADO o EN_CURSO).
+  function desfijarFuenteDelTecho(key) {
+    const fuente = techos.get(key)?.fuente;
+    const info = fuente ? fijos.get(fuente) : null;
+    if (!info || !info.desfijable) return false;
+    const p = info.partido;
+    const sched = matchScheduleMap.get(fuente);
+    const timelines = esJornadaDomingo(sched.startMs) ? sundayCourtTimelines : saturdayCourtTimelines;
+    const timeline = timelines.get(p.canchaNumero) || [];
+    const idxCancha = timeline.findIndex((it) => it.startMs === sched.startMs);
+    if (idxCancha !== -1) timeline.splice(idxCancha, 1);
+    for (const parejaId of [p.pareja1Id, p.pareja2Id]) {
+      if (!parejaId) continue;
+      const ocupacion = parejaAssignments.get(parejaId) || [];
+      const idxPareja = ocupacion.findIndex((it) => it.startMs === sched.startMs);
+      if (idxPareja !== -1) ocupacion.splice(idxPareja, 1);
+    }
+    matchScheduleMap.delete(fuente);
+    fijos.delete(fuente);
+    desfijados.add(p.id);
+    calcularTechos();
+    return true;
   }
 
   // 4. Sábado: Programar Dieciseisavos (Ronda >= 32)
@@ -411,29 +483,35 @@ async function programarHorariosEliminatorias(
       }
 
       for (const partido of pendingMatches) {
+        const key = `${cat.id}:${fase32.ronda}:${partido.posicionEnRonda}`;
         let asignado = false;
-        for (let T = searchStartMs; T + DURACION_MS <= sabNightEndMs; T += STEP_MS) {
-          const tEnd = T + DURACION_MS;
-          for (let c = 1; c <= canchasSabado; c++) {
-            if (
-              isCourtFree(saturdayCourtTimelines, c, T, tEnd) &&
-              isPairFree(partido.pareja1Id, T, tEnd) &&
-              isPairFree(partido.pareja2Id, T, tEnd)
-            ) {
-              saturdayCourtTimelines.get(c).push({ startMs: T, endMs: tEnd });
-              matchScheduleMap.set(`${cat.id}:${fase32.ronda}:${partido.posicionEnRonda}`, { startMs: T, endMs: tEnd });
-              updates.push({
-                id: partido.id,
-                fechaHora: new Date(T),
-                canchaNumero: c,
-                sinHorarioAsignado: false,
-                horarioManual: false,
-              });
-              asignado = true;
-              break;
+        // Techo desde un octavo fijo; si no entra y el octavo es manual, el octavo pierde la marca y se reintenta
+        for (;;) {
+          const techoMs = techoDe(key);
+          for (let T = searchStartMs; T + DURACION_MS <= sabNightEndMs && T <= techoMs; T += STEP_MS) {
+            const tEnd = T + DURACION_MS;
+            for (let c = 1; c <= canchasSabado; c++) {
+              if (
+                isCourtFree(saturdayCourtTimelines, c, T, tEnd) &&
+                isPairFree(partido.pareja1Id, T, tEnd) &&
+                isPairFree(partido.pareja2Id, T, tEnd)
+              ) {
+                saturdayCourtTimelines.get(c).push({ startMs: T, endMs: tEnd });
+                matchScheduleMap.set(key, { startMs: T, endMs: tEnd });
+                updates.push({
+                  id: partido.id,
+                  fechaHora: new Date(T),
+                  canchaNumero: c,
+                  sinHorarioAsignado: false,
+                  horarioManual: false,
+                });
+                asignado = true;
+                break;
+              }
             }
+            if (asignado) break;
           }
-          if (asignado) break;
+          if (asignado || !desfijarFuenteDelTecho(key)) break;
         }
 
         if (!asignado) {
@@ -493,7 +571,8 @@ async function programarHorariosEliminatorias(
           Boolean(p.fechaHora) &&
           Boolean(p.canchaNumero) &&
           !p.sinHorarioAsignado &&
-          p.canchaNumero <= canchasDomingo;
+          p.canchaNumero <= canchasDomingo &&
+          !desfijados.has(p.id);
         return !esManualActivo;
       });
 
@@ -620,6 +699,9 @@ async function programarHorariosEliminatorias(
               canAssignAll = false;
             }
 
+            // Techo de la cadena de un hijo fijo
+            if (T > techoDe(`${cat.id}:${fase.ronda}:${p.posicionEnRonda}`)) canAssignAll = false;
+
             if (!canAssignAll) break;
           }
 
@@ -697,32 +779,43 @@ async function programarHorariosEliminatorias(
             alignedPStart += DURACION_MS;
           }
 
-          for (let T = alignedPStart; T + DURACION_MS <= maxEndAllowedMs; T += DURACION_MS) {
-            const tEnd = T + DURACION_MS;
-            for (let c = 1; c <= canchasDomingo; c++) {
-              if (
-                isCourtFree(sundayCourtTimelines, c, T, tEnd) &&
-                isPairFree(p.pareja1Id, T, tEnd) &&
-                isPairFree(p.pareja2Id, T, tEnd)
-              ) {
-                sundayCourtTimelines.get(c).push({ startMs: T, endMs: tEnd });
-                matchScheduleMap.set(`${cat.id}:${fase.ronda}:${p.posicionEnRonda}`, { startMs: T, endMs: tEnd, fechaHora: new Date(T), canchaNumero: c });
-                updates.push({
-                  id: p.id,
-                  fechaHora: new Date(T),
-                  canchaNumero: c,
-                  sinHorarioAsignado: false,
-                  horarioManual: false,
-                });
-                assigned = true;
-                break;
+          const key = `${cat.id}:${fase.ronda}:${p.posicionEnRonda}`;
+          // Techo de la cadena de un hijo fijo; si no entra y el hijo es manual, el hijo pierde la marca y se reintenta
+          for (;;) {
+            const techoMs = techoDe(key);
+            for (let T = alignedPStart; T + DURACION_MS <= maxEndAllowedMs && T <= techoMs; T += DURACION_MS) {
+              const tEnd = T + DURACION_MS;
+              for (let c = 1; c <= canchasDomingo; c++) {
+                if (
+                  isCourtFree(sundayCourtTimelines, c, T, tEnd) &&
+                  isPairFree(p.pareja1Id, T, tEnd) &&
+                  isPairFree(p.pareja2Id, T, tEnd)
+                ) {
+                  sundayCourtTimelines.get(c).push({ startMs: T, endMs: tEnd });
+                  matchScheduleMap.set(key, { startMs: T, endMs: tEnd, fechaHora: new Date(T), canchaNumero: c });
+                  updates.push({
+                    id: p.id,
+                    fechaHora: new Date(T),
+                    canchaNumero: c,
+                    sinHorarioAsignado: false,
+                    horarioManual: false,
+                  });
+                  assigned = true;
+                  break;
+                }
               }
+              if (assigned) break;
             }
-            if (assigned) break;
+            if (assigned || !desfijarFuenteDelTecho(key)) break;
           }
 
           if (!assigned) {
             allIndividualAssigned = false;
+            // Sin turno antes de un hijo que no se puede mover (FINALIZADO o EN_CURSO): en la lluvia del domingo
+            // queda registrado en partidosSinSlot
+            if (soloDomingo && techos.has(key)) {
+              partidosSinSlot[p.id] = 'Sin turno antes del partido siguiente, que ya está finalizado o en juego';
+            }
             updates.push({
               id: p.id,
               fechaHora: null,
@@ -794,8 +887,10 @@ async function programarHorariosEliminatorias(
           // Buscar candidatos de esta misma ronda programados en turnos posteriores (cand.startMs > slotTime)
           const candidatos = partidosRonda.filter((cand) => {
             if (cand.startMs <= slotTime) return false;
-            if (cand.partido.horarioManual) return false;
+            if (cand.partido.horarioManual && !desfijados.has(cand.partido.id)) return false;
             if (cand.partido.estado === 'FINALIZADO' || cand.partido.estado === 'EN_CURSO') return false;
+            // Techo de la cadena de un hijo fijo
+            if (slotTime > techoDe(`${cand.categoria.id}:${rondaTarget}:${cand.partido.posicionEnRonda}`)) return false;
 
             // Para rondas menores a 16 (Cuartos, Semis, Finales), proteger bloques unificados:
             // Solo permitir adelantar si la categoría ya juega fraccionada en múltiples turnos en esta ronda
@@ -972,7 +1067,10 @@ async function programarHorariosEliminatorias(
     const cambioCancha = (orig?.canchaNumero || null) !== (u.canchaNumero || null);
     const cambioSinHorario = Boolean(orig?.sinHorarioAsignado) !== Boolean(u.sinHorarioAsignado);
 
-    if (cambioHorario || cambioCancha || cambioSinHorario) {
+    // Un manual que perdió la marca figura aunque haya quedado en el mismo turno y cancha
+    const perdioHorarioManual = desfijados.has(u.id);
+
+    if (cambioHorario || cambioCancha || cambioSinHorario || perdioHorarioManual) {
       cambios.push({
         partidoId: u.id,
         pareja1: formatParejaNombre(orig?.pareja1, orig?.origenPareja1),
@@ -987,6 +1085,7 @@ async function programarHorariosEliminatorias(
           canchaNumero: u.canchaNumero || null,
           sinHorarioAsignado: Boolean(u.sinHorarioAsignado),
         },
+        ...(perdioHorarioManual ? { perdioHorarioManual: true } : {}),
       });
     }
   }
@@ -997,6 +1096,7 @@ async function programarHorariosEliminatorias(
     total: updates.length,
     canchasUtilizadas: canchasDomingo,
     cambios,
+    partidosSinSlot,
   };
 }
 
