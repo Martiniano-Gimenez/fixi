@@ -625,6 +625,27 @@ function verificarInvariantesPorEtapa({
   }
 }
 
+// Invariantes estructurales de verificarInvariantesPorEtapa que aplican a eliminatorias, para las etapas de
+// la lluvia del domingo (no tienen partidos de zona en juego: quedan afuera sin_zonas_en_domingo y
+// mini_bracket_orden_p3_p4; sin diaLluviaKey no corren las de fuera de cierre, que son del viernes y el sábado)
+const INVARIANTES_DOMINGO = [
+  'cancha_sin_solapamiento',
+  'pareja_sin_solapamiento',
+  'grilla_15m_y_horario_club',
+  'eliminatorias_descanso_y_post_zonas',
+  'sin_horario_con_fecha',
+];
+const ETAPAS_DOMINGO = ['post-reduccion-dom', 'post-restauracion-dom'];
+
+function verificarInvariantesDomingo(args) {
+  verificarInvariantesPorEtapa({
+    ...args,
+    recordFailure: (clave, seed, detalle) => {
+      if (INVARIANTES_DOMINGO.includes(clave.split(':')[0])) args.recordFailure(clave, seed, detalle);
+    },
+  });
+}
+
 async function runSingleSeed(seed, recordFailure) {
   if (typeof recordFailure !== 'function') {
     // Sin recordFailure las fallas de invariantes se perdían en silencio
@@ -1798,6 +1819,7 @@ async function runSingleSeed(seed, recordFailure) {
     );
 
     await registrarHashEtapa(seed, 'post-reduccion-dom', { torneoId: torneo.id });
+    const partidosSinSlotDomMap = canchasOverridesService.getCanchasDia(torneo.id, domKey, cantidadCanchas)?.partidosSinSlot || {};
     const partidosPostReduccionDom = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
       include: { faseEliminatoria: true },
@@ -1825,7 +1847,31 @@ async function runSingleSeed(seed, recordFailure) {
           }
         }
       }
+
+      // Mismo chequeo que en la reducción del sábado: ningún PENDIENTE del domingo en una cancha cerrada
+      // que no esté en partidosSinSlot
+      if (p.estado === 'PENDIENTE' && p.fechaHora && !p.sinHorarioAsignado && p.canchaNumero) {
+        const pDiaKey = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key;
+        if (pDiaKey === domKey && p.canchaNumero > canchasReducidasDom && !partidosSinSlotDomMap[p.id]) {
+          recordFailure(
+            'modo_lluvia_domingo:post-reduccion',
+            seed,
+            `Partido PENDIENTE ${p.id} quedó en cancha ${p.canchaNumero} > canchasActivas (${canchasReducidasDom}) sin estar en partidosSinSlot`
+          );
+        }
+      }
     }
+
+    verificarInvariantesDomingo({
+      partidos: partidosPostReduccionDom,
+      zonas: zonasTorneo,
+      organizador,
+      refFecha,
+      recordFailure,
+      seed,
+      etapa: 'post-reduccion-dom',
+      allowDayLimitMs: true,
+    });
 
     await organizadorService.reprogramarPorReduccionCanchas(
       organizador.id,
@@ -1864,6 +1910,17 @@ async function runSingleSeed(seed, recordFailure) {
         }
       }
     }
+
+    verificarInvariantesDomingo({
+      partidos: partidosPostRestauracionDom,
+      zonas: zonasTorneo,
+      organizador,
+      refFecha,
+      recordFailure,
+      seed,
+      etapa: 'post-restauracion-dom',
+      allowDayLimitMs: true,
+    });
   } finally {
     Math.random = origRandom;
   }
@@ -1908,6 +1965,7 @@ async function runFuzzSuite() {
     'fuera_cierre_otra_jornada:post-restauracion',
     'fuera_cierre_marcado:post-reduccion',
     'fuera_cierre_marcado:post-restauracion',
+    ...INVARIANTES_DOMINGO.flatMap((base) => ETAPAS_DOMINGO.map((st) => `${base}:${st}`)),
   ];
 
   const INFORMATIVE_INVARIANTS = new Set([
