@@ -104,6 +104,9 @@ const perfilStats = {
   },
 };
 
+// Partidos fijos antes de la lluvia del domingo (informativo, sesión 86)
+const domingoFijosStats = { finalizados: 0, manuales: 0, manualesDesfijados: 0 };
+
 const manualFuzzStats = {
   totalSeedsConZonasDe4: new Set(),
   seedsConReasignacionAceptada: new Set(),
@@ -1795,19 +1798,53 @@ async function runSingleSeed(seed, recordFailure) {
 
     const canchasReducidasDom = rng.int(1, cantidadCanchas - 1);
 
-    const domPartidosCandidatos = partidosAntesLluviaDom.filter((p) => {
-      if (!p.fechaHora || !p.canchaNumero || p.sinHorarioAsignado || p.esBye) return false;
-      const dKey = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key;
-      return dKey === domKey && p.canchaNumero <= canchasReducidasDom;
-    });
-    if (domPartidosCandidatos.length >= 1) {
-      await prisma.partido.update({
-        where: { id: domPartidosCandidatos[0].id },
-        data: {
-          estado: 'FINALIZADO',
-          ganadorId: domPartidosCandidatos[0].pareja1Id || domPartidosCandidatos[0].pareja2Id,
-        },
+    // Partidos fijos antes de la lluvia del domingo, por caminos de la app (sesión 86). Candidatos: partidos del
+    // domingo en canchas que no se cierran, en orden natural (horario y cancha; sin solapes, el par es único).
+    const domPartidosCandidatos = partidosAntesLluviaDom
+      .filter((p) => {
+        if (!p.fechaHora || !p.canchaNumero || p.sinHorarioAsignado || p.esBye || !p.faseEliminatoria) return false;
+        if (p.estado !== 'PENDIENTE') return false;
+        const dKey = getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key;
+        return dKey === domKey && p.canchaNumero <= canchasReducidasDom;
+      })
+      .sort((a, b) => new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime() || a.canchaNumero - b.canchaNumero);
+    const elimDomPorClave = new Map(
+      partidosAntesLluviaDom
+        .filter((p) => p.faseEliminatoria)
+        .map((p) => [`${p.categoriaId}:${p.faseEliminatoria.ronda}:${p.posicionEnRonda}`, p])
+    );
+    const padresDomDe = (p) =>
+      [2 * p.posicionEnRonda - 1, 2 * p.posicionEnRonda]
+        .map((pos) => elimDomPorClave.get(`${p.categoriaId}:${p.faseEliminatoria.ronda * 2}:${pos}`))
+        .filter(Boolean);
+
+    // 1. Un FINALIZADO como ocupación fija (lo que encontró el solape de la semilla 216 en la sesión 85), por
+    //    cargarResultado: solo un partido con las dos parejas y padres finalizados, BYE o sin padres.
+    const domFinalizar = domPartidosCandidatos.find(
+      (p) => p.pareja1Id && p.pareja2Id && padresDomDe(p).every((pa) => pa.esBye || pa.estado === 'FINALIZADO')
+    );
+    if (domFinalizar) {
+      await partidoService.cargarResultado(organizador.id, domFinalizar.id, {
+        sets: [{ gamesPareja1: 6, gamesPareja2: 0 }, { gamesPareja1: 6, gamesPareja2: 0 }],
       });
+      domingoFijosStats.finalizados++;
+    }
+
+    // 2. Un hijo manual con algún padre del domingo pendiente (de cuartos en adelante: los padres de los octavos
+    //    son R32 del sábado, que la lluvia del domingo no reprograma), por asignarHorarioManual en su mismo turno
+    //    y cancha (el organizador confirma el horario). La lluvia tiene que respetar el techo de su cadena.
+    const domManual = domPartidosCandidatos.find(
+      (p) =>
+        p.id !== domFinalizar?.id &&
+        p.faseEliminatoria.ronda <= 8 &&
+        padresDomDe(p).some((pa) => !pa.esBye && pa.estado !== 'FINALIZADO' && pa.id !== domFinalizar?.id)
+    );
+    if (domManual) {
+      await partidoService.asignarHorarioManual(organizador.id, domManual.id, {
+        fechaHora: domManual.fechaHora,
+        canchaNumero: domManual.canchaNumero,
+      });
+      domingoFijosStats.manuales++;
     }
 
     await organizadorService.reprogramarPorReduccionCanchas(
@@ -1819,6 +1856,10 @@ async function runSingleSeed(seed, recordFailure) {
     );
 
     await registrarHashEtapa(seed, 'post-reduccion-dom', { torneoId: torneo.id });
+    if (domManual) {
+      const manualPost = await prisma.partido.findUnique({ where: { id: domManual.id }, select: { horarioManual: true } });
+      if (!manualPost.horarioManual) domingoFijosStats.manualesDesfijados++;
+    }
     const partidosSinSlotDomMap = canchasOverridesService.getCanchasDia(torneo.id, domKey, cantidadCanchas)?.partidosSinSlot || {};
     const partidosPostReduccionDom = await prisma.partido.findMany({
       where: { categoria: { torneoId: torneo.id } },
@@ -2087,6 +2128,11 @@ async function runFuzzSuite() {
     };
   });
   console.table(desglosePerfilTabla);
+
+  console.log(
+    `[DOMINGO-FIJOS] finalizados por cargarResultado=${domingoFijosStats.finalizados} ` +
+      `hijos manuales=${domingoFijosStats.manuales} manuales que perdieron la marca=${domingoFijosStats.manualesDesfijados}`
+  );
 
   console.log('\n' + '='.repeat(85));
   console.log('📌 ESTADÍSTICAS DE REASIGNACIÓN MANUAL P3/P4 PRE-R1:');
