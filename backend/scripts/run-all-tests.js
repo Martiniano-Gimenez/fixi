@@ -63,6 +63,7 @@ const TEST_SUITES = [
   'test-campo-legacy-canchas.js',
   'test-r32-marca-sin-horario.js',
   'test-solape-finales-extension.js',
+  'test-padres-hijo-fijo.js',
 ];
 
 /**
