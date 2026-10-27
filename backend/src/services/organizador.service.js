@@ -2402,6 +2402,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         partidosSinCambio: schedRes.total - (schedRes.cambios ? schedRes.cambios.length : 0),
         partidosSinHorarioNuevo: schedRes.partidosSinHorario,
         cambios: schedRes.cambios || [],
+        // Padres sin turno antes de un hijo finalizado o en juego (techo de la cadena)
+        partidosSinSlot: schedRes.partidosSinSlot || {},
       };
     } else {
       // Viernes o Sábado (zonas): ejecutar el Scheduler Continuo MCF dentro de tx (scopeado al día lógico)
