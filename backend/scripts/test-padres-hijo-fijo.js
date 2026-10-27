@@ -9,7 +9,7 @@
  * después de sus padres y aparece en cambios. "Iniciar" (PATCH /partidos/:id/estado a EN_CURSO) exige las dos
  * parejas.
  *
- * Torneo del viernes 16/10/2026, club de 4 canchas. Salvo H5, H7, H8 y H9: domingo 10:00-23:00, categoría A de
+ * Torneo del viernes 16/10/2026, club de 4 canchas. Salvo H5, H7, H8, H9 y H10: domingo 10:00-23:00, categoría A de
  * 24 parejas (octavos, cuartos, semis y final) y B de 6 (semis y final). Caminos de la app: asignación manual
  * (PUT /partidos/:id/asignar-horario-manual), lluvia del domingo (POST /torneos/:id/canchas-override con
  * diaKey), reprogramar la categoría (POST /categorias/:id/generar-eliminatoria), resultados
@@ -29,6 +29,9 @@
  * H9  Cadena de antecesores: categoría de 18 parejas (4 octavos con BYE), final fijada a mano a las 17:30;
  *     reprogramar A. Solo entra si los cuartos (abuelos de la final) se adelantan a las 12:30: la final
  *     conserva su horario manual.
+ * H10 Padre sin turno por un hijo EN_CURSO (domingo 10:00-12:30, A y B de 6 parejas): la lluvia del domingo lo
+ *     deja sin horario y en partidosSinSlot del domingo con su motivo; restaurar el domingo con diaKey (H10a) o
+ *     sin diaKey (H10b) borra el override (base y caché) y lo vuelve a programar.
  *
  * En todos los casos de A se verifica que ningún par padre/hijo con horario tenga descanso menor al mínimo de la
  * ronda del hijo (obtenerDescansoMinimoRequeridoMs: 30 min antes de la final, 75 en las demás).
@@ -397,6 +400,58 @@ async function h9_cadena_de_antecesores() {
   assert(v.length === 0, `violaciones de descanso: ${v.join(' | ')}`);
 }
 
+/**
+ * H10. Padre sin turno por un hijo EN_CURSO (no se puede mover), por caminos de la app: se terminan las zonas y las
+ * dos semis de A (PUT resultado), se inicia la final (PATCH estado, con las dos parejas) y se borra el resultado de
+ * la semi 2 (DELETE resultado, que no mira al hijo). Domingo 10:00-12:30 y lluvia a 1 cancha: el techo de la semi 2
+ * es 10:45 y a las 10:00 la cancha 1 la ocupa la semi 1 finalizada. Se verifica partidosSinSlot del domingo y la
+ * restauración del domingo (con diaKey o sin diaKey).
+ */
+const MOTIVO_TECHO = 'Sin turno antes del partido siguiente, que ya está finalizado o en juego';
+
+async function h10_padre_sin_turno_por_hijo_en_curso(restaurarConDiaKey) {
+  const { torneo, cats } = await armar({ domingo: ['10:00', '12:30'], cats: [['A', 6], ['B', 6]] });
+  await cargarZonas(cats.A);
+  const s1 = await partidoDe(cats.A.id, 4, 1);
+  const s2 = await partidoDe(cats.A.id, 4, 2);
+  const final = await partidoDe(cats.A.id, 2, 1);
+  assert(
+    hora(s1.fechaHora) === 'dom, 10:00' && s1.canchaNumero === 1 && hora(final.fechaHora) === 'dom, 12:30' && final.canchaNumero === 1,
+    `precondición: semi 1 ${hora(s1.fechaHora)} c${s1.canchaNumero}, final ${hora(final.fechaHora)} c${final.canchaNumero}`
+  );
+  for (const s of [s1, s2]) {
+    const r = await http('PUT', `/partidos/${s.id}/resultado`, SETS_GANA_1);
+    assert(r.status === 200, `PUT resultado semi: HTTP ${r.status}`);
+  }
+  let r = await http('PATCH', `/partidos/${final.id}/estado`, { estado: 'EN_CURSO' });
+  assert(r.status === 200, `PATCH final EN_CURSO: HTTP ${r.status} ${JSON.stringify(r.json)}`);
+  r = await http('DELETE', `/partidos/${s2.id}/resultado`);
+  assert(r.status === 200, `DELETE resultado semi 2: HTTP ${r.status} ${JSON.stringify(r.json)}`);
+
+  await lluviaDomingo(torneo, 1);
+  const s2Lluvia = await prisma.partido.findUnique({ where: { id: s2.id } });
+  assert(s2Lluvia.estado === 'PENDIENTE' && !tieneHorario(s2Lluvia), `semi 2 tras la lluvia: ${s2Lluvia.estado} ${hora(s2Lluvia.fechaHora)} sinHorario=${s2Lluvia.sinHorarioAsignado}`);
+  const ovDom = await prisma.overrideCanchasDia.findUnique({ where: { torneoId_diaKey: { torneoId: torneo.id, diaKey: DOM } } });
+  const mapa = typeof ovDom?.partidosSinSlot === 'string' ? JSON.parse(ovDom.partidosSinSlot) : ovDom?.partidosSinSlot || {};
+  assert(mapa[s2.id] === MOTIVO_TECHO, `partidosSinSlot del domingo: ${JSON.stringify(mapa)}`);
+
+  // En-vivo no muestra el motivo de un partido sin horario (solo lo suma a pendientesSinHorario): pendiente
+  // documentado en CONTEXT.md, fuera de este ticket.
+
+  // Restaurar el domingo
+  r = restaurarConDiaKey
+    ? await http('POST', `/torneos/${torneo.id}/canchas-override`, { canchasDisponiblesOverride: 4, diaKey: DOM })
+    : await http('POST', `/torneos/${torneo.id}/canchas-override`, { canchasDisponiblesOverride: 4 });
+  assert(r.status === 200, `restaurar: HTTP ${r.status} ${JSON.stringify(r.json)}`);
+  const ovDespues = await prisma.overrideCanchasDia.findMany({ where: { torneoId: torneo.id } });
+  assert(ovDespues.length === 0, `quedaron overrides: ${JSON.stringify(ovDespues.map((o) => [o.diaKey, o.partidosSinSlot]))}`);
+  assert(Object.keys(canchasOverridesService.getCanchasDia(torneo.id, DOM, 4).partidosSinSlot || {}).length === 0, 'la caché conserva partidosSinSlot del domingo');
+  const s2Final = await prisma.partido.findUnique({ where: { id: s2.id } });
+  assert(tieneHorario(s2Final), `la semi 2 no se reprogramó al restaurar: ${hora(s2Final.fechaHora)} sinHorario=${s2Final.sinHorarioAsignado}`);
+  const v = await violacionesDescanso(torneo.id);
+  assert(v.length === 0, `violaciones de descanso: ${v.join(' | ')}`);
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -415,6 +470,8 @@ async function run() {
     { nombre: 'H7: Iniciar exige las dos parejas', fn: h7_iniciar_exige_parejas },
     { nombre: 'H8: semi de primera ronda antes y después de las zonas', fn: h8_semi_primera_ronda },
     { nombre: 'H9: techo de la cadena de antecesores', fn: h9_cadena_de_antecesores },
+    { nombre: 'H10a: padre sin turno por hijo EN_CURSO, restaurar con diaKey', fn: () => h10_padre_sin_turno_por_hijo_en_curso(true) },
+    { nombre: 'H10b: padre sin turno por hijo EN_CURSO, restaurar sin diaKey', fn: () => h10_padre_sin_turno_por_hijo_en_curso(false) },
   ];
 
   const resultados = [];
