@@ -21,7 +21,7 @@
  "parejas": [
   {
    "orden": 1,
-   "nombre": "Albornoz / Ponce",
+   "nombre": "Jugador 1 / Jugador 2",
    "horarioTexto": "Sábado después de 13hs",
    "slots": [
     "Sabado-12:30",
@@ -78,7 +78,7 @@
   },
   {
    "orden": 2,
-   "nombre": "Alcaraz / Lombardi",
+   "nombre": "Jugador 3 / Jugador 4",
    "horarioTexto": "Viernes desde 18hs",
    "slots": [
     "Viernes-17:30",
@@ -115,7 +115,7 @@
   },
   {
    "orden": 3,
-   "nombre": "Almirón / Ponce",
+   "nombre": "Jugador 5 / Jugador 6",
    "horarioTexto": "Viernes desde 15hs",
    "slots": [
     "Viernes-14:30",
@@ -164,7 +164,7 @@
   },
   {
    "orden": 4,
-   "nombre": "Aranda / Becerra",
+   "nombre": "Jugador 7 / Jugador 8",
    "horarioTexto": "Viernes 18hs a 22hs",
    "slots": [
     "Viernes-17:30",
@@ -187,7 +187,7 @@
   },
   {
    "orden": 5,
-   "nombre": "Baigorria / Toledo",
+   "nombre": "Jugador 9 / Jugador 10",
    "horarioTexto": "Viernes 17hs a 22hs / Sábado 16hs a 22hs",
    "slots": [
     "Viernes-16:30",
@@ -238,7 +238,7 @@
   },
   {
    "orden": 6,
-   "nombre": "Bertolotti / Cattaneo",
+   "nombre": "Jugador 11 / Jugador 12",
    "horarioTexto": "Viernes 19:30hs a 23:00hs (sábado también)",
    "slots": [
     "Viernes-19:00",
@@ -273,7 +273,7 @@
   },
   {
    "orden": 7,
-   "nombre": "Calderón / Manzano",
+   "nombre": "Jugador 13 / Jugador 14",
    "horarioTexto": "Sábado 15hs a 21hs",
    "slots": [
     "Sabado-14:30",
@@ -304,7 +304,7 @@
   },
   {
    "orden": 8,
-   "nombre": "Caruso / Vallejos",
+   "nombre": "Jugador 15 / Jugador 16",
    "horarioTexto": "Viernes desde 18hs / Sábado desde 15hs",
    "slots": [
     "Viernes-17:30",
@@ -383,7 +383,7 @@
   },
   {
    "orden": 9,
-   "nombre": "Dávila / Arrieta",
+   "nombre": "Jugador 17 / Jugador 18",
    "horarioTexto": "Viernes 13hs a 17hs",
    "slots": [
     "Viernes-12:30",
@@ -406,7 +406,7 @@
   },
   {
    "orden": 10,
-   "nombre": "Medrano / Palavecino",
+   "nombre": "Jugador 19 / Jugador 20",
    "horarioTexto": "Viernes 19hs a 22hs / Sábado 15hs a 20hs",
    "slots": [
     "Viernes-18:30",
@@ -445,7 +445,7 @@
   },
   {
    "orden": 11,
-   "nombre": "Miranda / Burgos",
+   "nombre": "Jugador 21 / Jugador 22",
    "horarioTexto": "Viernes 17hs a 23hs (partidos no seguidos si es posible)",
    "slots": [
     "Viernes-16:30",
@@ -476,7 +476,7 @@
   },
   {
    "orden": 12,
-   "nombre": "Miranda / Burgos",
+   "nombre": "Jugador 23 / Jugador 24",
    "horarioTexto": "Viernes 17hs a 00:00hs",
    "slots": [
     "Viernes-16:30",
@@ -511,7 +511,7 @@
   },
   {
    "orden": 13,
-   "nombre": "Sandoval / Quevedo",
+   "nombre": "Jugador 25 / Jugador 26",
    "horarioTexto": "Viernes 17hs a 20hs",
    "slots": [
     "Viernes-16:30",
@@ -530,7 +530,7 @@
   },
   {
    "orden": 14,
-   "nombre": "Tapia / Nieva",
+   "nombre": "Jugador 27 / Jugador 28",
    "horarioTexto": "Viernes 17hs a 21hs",
    "slots": [
     "Viernes-16:30",
@@ -553,7 +553,7 @@
   },
   {
    "orden": 15,
-   "nombre": "Nieto / Gauna",
+   "nombre": "Jugador 29 / Jugador 30",
    "horarioTexto": "Sábado desde 13hs",
    "slots": [
     "Sabado-12:30",
@@ -610,7 +610,7 @@
   },
   {
    "orden": 16,
-   "nombre": "Maidana / Valentini",
+   "nombre": "Jugador 31 / Jugador 32",
    "horarioTexto": "Viernes 16hs a 17:30hs / Sábado 14hs a 17hs",
    "slots": [
     "Viernes-15:30",

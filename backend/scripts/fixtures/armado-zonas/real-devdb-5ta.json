@@ -19,7 +19,7 @@
  "parejas": [
   {
    "orden": 1,
-   "nombre": "Amaya / Godoy",
+   "nombre": "Jugador 1 / Jugador 2",
    "slots": [
     "Sabado-13:30",
     "Sabado-13:45",
@@ -45,7 +45,7 @@
   },
   {
    "orden": 2,
-   "nombre": "Barbieri / Lobos",
+   "nombre": "Jugador 3 / Jugador 4",
    "slots": [
     "Sabado-13:30",
     "Sabado-13:45",
@@ -63,7 +63,7 @@
   },
   {
    "orden": 3,
-   "nombre": "Benegas / Juárez",
+   "nombre": "Jugador 5 / Jugador 6",
    "slots": [
     "Sabado-14:30",
     "Sabado-14:45",
@@ -117,14 +117,14 @@
   },
   {
    "orden": 4,
-   "nombre": "Caruso / Bianchi",
+   "nombre": "Jugador 7 / Jugador 8",
    "slots": [
     "Viernes-18:00"
    ]
   },
   {
    "orden": 5,
-   "nombre": "Cattaneo / Echeverría",
+   "nombre": "Jugador 9 / Jugador 10",
    "slots": [
     "Viernes-00:00",
     "Viernes-00:15",
@@ -156,7 +156,7 @@
   },
   {
    "orden": 6,
-   "nombre": "Conti / Conti",
+   "nombre": "Jugador 11 / Jugador 12",
    "slots": [
     "Sabado-00:00",
     "Sabado-00:15",
@@ -208,7 +208,7 @@
   },
   {
    "orden": 7,
-   "nombre": "Duarte / Gallardo",
+   "nombre": "Jugador 13 / Jugador 14",
    "slots": [
     "Viernes-13:15",
     "Viernes-17:30",
@@ -231,7 +231,7 @@
   },
   {
    "orden": 8,
-   "nombre": "Escobar / Colombo",
+   "nombre": "Jugador 15 / Jugador 16",
    "slots": [
     "Sabado-14:30",
     "Sabado-14:45",
@@ -280,7 +280,7 @@
   },
   {
    "orden": 9,
-   "nombre": "Ferraro / Peralta",
+   "nombre": "Jugador 17 / Jugador 18",
    "slots": [
     "Sabado-00:00",
     "Sabado-00:15",
@@ -324,7 +324,7 @@
   },
   {
    "orden": 10,
-   "nombre": "Figueroa / Esquivel",
+   "nombre": "Jugador 19 / Jugador 20",
    "slots": [
     "Sabado-08:30",
     "Sabado-08:45",
@@ -349,7 +349,7 @@
   },
   {
    "orden": 11,
-   "nombre": "Gaitán / Correa",
+   "nombre": "Jugador 21 / Jugador 22",
    "slots": [
     "Viernes-00:00",
     "Viernes-00:15",
@@ -381,7 +381,7 @@
   },
   {
    "orden": 12,
-   "nombre": "Godoy / Ferri",
+   "nombre": "Jugador 23 / Jugador 24",
    "slots": [
     "Viernes-14:30",
     "Viernes-14:45",
@@ -409,7 +409,7 @@
   },
   {
    "orden": 13,
-   "nombre": "Iglesias / Mendoza",
+   "nombre": "Jugador 25 / Jugador 26",
    "slots": [
     "Viernes-13:15",
     "Viernes-13:30",
@@ -436,7 +436,7 @@
   },
   {
    "orden": 14,
-   "nombre": "Luna / Mansur",
+   "nombre": "Jugador 27 / Jugador 28",
    "slots": [
     "Viernes-13:45",
     "Viernes-16:30",
@@ -459,7 +459,7 @@
   },
   {
    "orden": 15,
-   "nombre": "Mancini / Greco",
+   "nombre": "Jugador 29 / Jugador 30",
    "slots": [
     "Viernes-18:30",
     "Viernes-18:45",
@@ -481,7 +481,7 @@
   },
   {
    "orden": 16,
-   "nombre": "Marino / Galarza",
+   "nombre": "Jugador 31 / Jugador 32",
    "slots": [
     "Viernes-00:00",
     "Viernes-00:15",
@@ -513,7 +513,7 @@
   },
   {
    "orden": 17,
-   "nombre": "Monti / Lugones",
+   "nombre": "Jugador 33 / Jugador 34",
    "slots": [
     "Viernes-00:00",
     "Viernes-00:15",
@@ -541,7 +541,7 @@
   },
   {
    "orden": 18,
-   "nombre": "Monzón / Bazán",
+   "nombre": "Jugador 35 / Jugador 36",
    "slots": [
     "Viernes-00:00",
     "Viernes-00:15",
@@ -567,7 +567,7 @@
   },
   {
    "orden": 19,
-   "nombre": "Muñoz / Ruarte",
+   "nombre": "Jugador 37 / Jugador 38",
    "slots": [
     "Viernes-00:00",
     "Viernes-00:15",
@@ -603,7 +603,7 @@
   },
   {
    "orden": 20,
-   "nombre": "Paredes / Bernardi",
+   "nombre": "Jugador 39 / Jugador 40",
    "slots": [
     "Viernes-00:00",
     "Viernes-00:15",
@@ -632,7 +632,7 @@
   },
   {
    "orden": 21,
-   "nombre": "Robledo / Escudero",
+   "nombre": "Jugador 41 / Jugador 42",
    "slots": [
     "Viernes-17:30",
     "Viernes-17:45",
@@ -654,7 +654,7 @@
   },
   {
    "orden": 22,
-   "nombre": "Villegas / Maciel",
+   "nombre": "Jugador 43 / Jugador 44",
    "slots": [
     "Viernes-16:00",
     "Viernes-16:15",
@@ -683,7 +683,7 @@
   },
   {
    "orden": 23,
-   "nombre": "Zelaya / Frías",
+   "nombre": "Jugador 45 / Jugador 46",
    "slots": [
     "Sabado-00:00",
     "Sabado-00:15",
@@ -751,12 +751,12 @@
   },
   {
    "orden": 24,
-   "nombre": "prueba / prueeba",
+   "nombre": "Jugador 47 / Jugador 48",
    "slots": []
   },
   {
    "orden": 25,
-   "nombre": "prueba2 / prueeba2",
+   "nombre": "Jugador 49 / Jugador 50",
    "slots": [
     "Sabado-08:00",
     "Sabado-08:15",
@@ -830,7 +830,7 @@
   },
   {
    "orden": 26,
-   "nombre": "ddgg / sgdgs",
+   "nombre": "Jugador 51 / Jugador 52",
    "slots": [
     "Sabado-08:00",
     "Sabado-08:15",
@@ -847,7 +847,7 @@
   },
   {
    "orden": 27,
-   "nombre": "erer / erer",
+   "nombre": "Jugador 53 / Jugador 54",
    "slots": [
     "Viernes-13:15",
     "Viernes-13:30",
