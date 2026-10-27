@@ -212,9 +212,171 @@ function calcularConfigZonas(numParejas) {
 }
 
 /**
- * Arma grupos de parejas maximizando compatibilidad por slots discretos.
+ * Matriz de compatibilidad del armado: cantidad de inicios (slotId) en común entre cada par de parejas.
+ * Una pareja sin disponibilidad cargada (0 slots) es compatible con todas, igual que en
+ * evaluarCompatibilidadZona y en el scheduler. Se marca con 1 porque el armado solo mira si el valor es > 0.
+ * @param {string[][]} slotsPorPareja slotIds de cada pareja, en el orden de las parejas
+ * @returns {number[][]}
  */
-function armarGruposPorCompatibilidad(parejas, configZonas, matriz) {
+function construirMatrizCompatibilidad(slotsPorPareja) {
+  const n = slotsPorPareja.length;
+  const matriz = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    const slotsA = slotsPorPareja[i];
+    for (let j = i + 1; j < n; j++) {
+      const slotsB = slotsPorPareja[j];
+      const compat = slotsA.length === 0 || slotsB.length === 0 ? 1 : calcularCompatibilidad(slotsA, slotsB);
+      matriz[i][j] = compat;
+      matriz[j][i] = compat;
+    }
+  }
+  return matriz;
+}
+
+// Tope de nodos de la búsqueda exacta que repara el armado (ver repararArmadoExacto).
+const MAX_ITER_REPARACION = 100000;
+
+/**
+ * Búsqueda exacta, con vuelta atrás entre zonas, de un armado con los mismos tamaños de configZonas que deje
+ * MENOS de `sinGrupoActual` parejas sin zona (y, a igual cantidad, menos zonas que no son de 3).
+ * Recorre las parejas en `orden` (el de los candidatos del armado voraz): la primera pareja libre va en una
+ * zona de 3, de 4 o de 2 con parejas libres compatibles con todas, o queda sin zona. Poda con una cota:
+ * parejas que ya no entran en ninguna zona de las que quedan, y la mayor suma de tamaños que queda por cubrir.
+ * Es determinista y cuenta nodos; al pasar `maxIter` corta y devuelve lo mejor que encontró.
+ * @returns {{ zonas: number[][] | null, iteraciones: number, llegoAlTope: boolean }}
+ *   zonas: índices de las parejas de cada zona (la primera es la de menor posición en `orden`), o null si no
+ *   encontró nada estrictamente mejor que `sinGrupoActual`.
+ */
+function repararArmadoExacto(orden, configZonas, matriz, sinGrupoActual, maxIter) {
+  const n = orden.length;
+  const quedan = { 2: 0, 3: 0, 4: 0 };
+  for (const s of configZonas) quedan[s]++;
+  const usado = Array.from({ length: n }, () => false);
+  const zonas = [];
+  let sin = 0;
+  let no3 = 0;
+  let iteraciones = 0;
+  let llegoAlTope = false;
+  let terminado = false;
+  let mejor = null;
+  let mejorSin = sinGrupoActual;
+  let mejorNo3 = Infinity;
+
+  // Mayor suma de tamaños de las zonas que quedan que no pase de `limite`.
+  function maxCubrible(limite) {
+    let best = 0;
+    for (let a = 0; a <= quedan[2]; a++) {
+      for (let c = 0; c <= quedan[4]; c++) {
+        const resto = limite - 2 * a - 4 * c;
+        if (resto < 0) continue;
+        const b = Math.min(quedan[3], Math.floor(resto / 3));
+        best = Math.max(best, 2 * a + 3 * b + 4 * c);
+      }
+    }
+    return best;
+  }
+
+  // Condición necesaria para que la pareja libre i entre en alguna de las zonas que quedan.
+  function puedeEntrar(i) {
+    const vec = [];
+    for (let j = 0; j < n; j++) if (j !== i && !usado[j] && matriz[i][j] > 0) vec.push(j);
+    if (vec.length === 0) return false;
+    if (quedan[2] > 0) return true;
+    if (quedan[3] === 0 && quedan[4] === 0) return false;
+    for (let a = 0; a < vec.length; a++) {
+      for (let b = a + 1; b < vec.length; b++) if (matriz[vec[a]][vec[b]] > 0) return true;
+    }
+    return false;
+  }
+
+  function contarNodo() {
+    iteraciones++;
+    if (iteraciones > maxIter) {
+      llegoAlTope = true;
+      terminado = true;
+    }
+    return !terminado;
+  }
+
+  function elegir(vec, desde, faltan, zona, k) {
+    if (!contarNodo()) return;
+    if (faltan === 0) {
+      zonas.push([...zona]);
+      buscar(k + 1);
+      zonas.pop();
+      return;
+    }
+    for (let a = desde; a < vec.length && !terminado; a++) {
+      const j = vec[a];
+      if (!zona.every((x) => matriz[x][j] > 0)) continue;
+      usado[j] = true;
+      zona.push(j);
+      elegir(vec, a + 1, faltan - 1, zona, k);
+      zona.pop();
+      usado[j] = false;
+    }
+  }
+
+  function buscar(k) {
+    if (!contarNodo()) return;
+    while (k < n && usado[orden[k]]) k++;
+    if (k === n) {
+      if (sin < mejorSin || (mejor !== null && sin === mejorSin && no3 < mejorNo3)) {
+        mejor = zonas.map((z) => [...z]);
+        mejorSin = sin;
+        mejorNo3 = no3;
+        // Sin parejas sin zona se usaron todos los tamaños: no hay nada mejor.
+        if (sin === 0) terminado = true;
+      }
+      return;
+    }
+
+    let libres = 0;
+    let pueden = 0;
+    for (let t = k; t < n; t++) {
+      const j = orden[t];
+      if (usado[j]) continue;
+      libres++;
+      if (puedeEntrar(j)) pueden++;
+    }
+    const cota = sin + libres - maxCubrible(pueden);
+    if (cota > mejorSin || (cota === mejorSin && (mejor === null || no3 >= mejorNo3))) return;
+
+    const i = orden[k];
+    usado[i] = true;
+    const vec = [];
+    for (let t = k + 1; t < n; t++) {
+      const j = orden[t];
+      if (!usado[j] && matriz[i][j] > 0) vec.push(j);
+    }
+    for (const size of [3, 4, 2]) {
+      if (quedan[size] === 0 || terminado) continue;
+      quedan[size]--;
+      if (size !== 3) no3++;
+      elegir(vec, 0, size - 1, [i], k);
+      quedan[size]++;
+      if (size !== 3) no3--;
+    }
+    if (!terminado) {
+      sin++;
+      buscar(k + 1);
+      sin--;
+    }
+    usado[i] = false;
+  }
+
+  buscar(0);
+  return { zonas: mejor, iteraciones: Math.min(iteraciones, maxIter), llegoAlTope };
+}
+
+/**
+ * Arma grupos de parejas maximizando compatibilidad por slots discretos.
+ * Primero el armado voraz de siempre (un grupo por tamaño de configZonas, sin deshacer los anteriores). Si deja
+ * parejas sin zona, repararArmadoExacto busca un armado con los mismos tamaños que deje estrictamente menos; si
+ * lo encuentra, lo reemplaza, con las zonas en el orden de tamaños de configZonas. Si no, queda el voraz.
+ * `reparacion` informa qué pasó (no lo usa la app; lo leen la suite 43 y el benchmark).
+ */
+function armarGruposPorCompatibilidad(parejas, configZonas, matriz, { maxIterReparacion = MAX_ITER_REPARACION } = {}) {
   const n = parejas.length;
   const asignado = new Array(n).fill(false);
   const grupos = [];
@@ -247,7 +409,46 @@ function armarGruposPorCompatibilidad(parejas, configZonas, matriz) {
     if (!asignado[i]) sinGrupo.push(i);
   }
 
-  return { grupos, sinGrupo };
+  const reparacion = {
+    intentada: false,
+    aceptada: false,
+    iteraciones: 0,
+    llegoAlTope: false,
+    sinGrupoAntes: sinGrupo.length,
+    sinGrupoDespues: sinGrupo.length,
+  };
+  if (sinGrupo.length === 0 || configZonas.length === 0) {
+    return { grupos, sinGrupo, reparacion };
+  }
+
+  reparacion.intentada = true;
+  // Mismo orden que los candidatos del voraz: grado de compatibilidad ascendente, estable por índice.
+  const orden = Array.from({ length: n }, (_, i) => i).sort((a, b) => compatibilidad[a] - compatibilidad[b]);
+  const res = repararArmadoExacto(orden, configZonas, matriz, sinGrupo.length, maxIterReparacion);
+  reparacion.iteraciones = res.iteraciones;
+  reparacion.llegoAlTope = res.llegoAlTope;
+  if (!res.zonas) {
+    return { grupos, sinGrupo, reparacion };
+  }
+
+  // Zonas reparadas en el orden de tamaños de configZonas; entre las del mismo tamaño, por su primera pareja.
+  const posicion = new Map(orden.map((idx, k) => [idx, k]));
+  const porTamano = { 2: [], 3: [], 4: [] };
+  for (const z of res.zonas) porTamano[z.length].push(z);
+  for (const s of [2, 3, 4]) porTamano[s].sort((a, b) => posicion.get(a[0]) - posicion.get(b[0]));
+  const gruposReparados = [];
+  for (const size of configZonas) {
+    if (porTamano[size].length > 0) gruposReparados.push(porTamano[size].shift());
+  }
+  const enZona = new Set(gruposReparados.flat());
+  const sinGrupoReparado = [];
+  for (let i = 0; i < n; i++) {
+    if (!enZona.has(i)) sinGrupoReparado.push(i);
+  }
+
+  reparacion.aceptada = true;
+  reparacion.sinGrupoDespues = sinGrupoReparado.length;
+  return { grupos: gruposReparados, sinGrupo: sinGrupoReparado, reparacion };
 }
 
 function intentarArmarGrupo(candidatos, size, asignado, matriz) {
@@ -326,17 +527,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
     throw error;
   }
 
-  const n = numParejas;
-  const matriz = Array.from({ length: n }, () => new Array(n).fill(0));
-  for (let i = 0; i < n; i++) {
-    const slotsA = parejas[i].slotsSeleccionados.map((s) => s.slotId);
-    for (let j = i + 1; j < n; j++) {
-      const slotsB = parejas[j].slotsSeleccionados.map((s) => s.slotId);
-      const compat = calcularCompatibilidad(slotsA, slotsB);
-      matriz[i][j] = compat;
-      matriz[j][i] = compat;
-    }
-  }
+  const matriz = construirMatrizCompatibilidad(parejas.map((p) => p.slotsSeleccionados.map((s) => s.slotId)));
 
   const configZonas = calcularConfigZonas(numParejas);
   const { grupos, sinGrupo } = armarGruposPorCompatibilidad(parejas, configZonas, matriz);
@@ -2425,6 +2616,10 @@ module.exports = {
   slotIdToMsWindow,
   asignarHorariosModoLluviaMCF,
   evaluarCompatibilidadZona,
+  construirMatrizCompatibilidad,
+  calcularConfigZonas,
+  armarGruposPorCompatibilidad,
+  MAX_ITER_REPARACION,
   regenerarPartidosZona,
   generarPartidosZonaHelper,
   moverParejaDeZona,

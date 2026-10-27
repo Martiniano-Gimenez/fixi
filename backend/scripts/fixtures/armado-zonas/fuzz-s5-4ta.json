@@ -1,0 +1,52 @@
+{
+ "id": "fuzz-s5-4ta",
+ "origen": {
+  "tipo": "sintetica-fuzz",
+  "semilla": 5,
+  "perfil": "sabado_extendido",
+  "categoria": "4ta",
+  "perfilManual4": true,
+  "nota": "misma secuencia de sorteos que runSingleSeed del fuzz (perfil manual4 por defecto en semillas múltiplo de 5)"
+ },
+ "club": {
+  "cantidadCanchas": 6,
+  "viernesInicio": "18:00",
+  "viernesFin": "23:30",
+  "sabadoInicio": "08:00",
+  "sabadoFin": "02:30",
+  "domingoInicio": "08:00",
+  "domingoFin": "22:00"
+ },
+ "fecha": "2026-09-04",
+ "parejas": [
+  {
+   "orden": 1,
+   "nombre": "S5_M4_P1",
+   "slots": [
+    "Viernes-18:00"
+   ]
+  },
+  {
+   "orden": 2,
+   "nombre": "S5_M4_P2",
+   "slots": [
+    "Viernes-18:00"
+   ]
+  },
+  {
+   "orden": 3,
+   "nombre": "S5_M4_P3",
+   "slots": [
+    "Viernes-19:15"
+   ]
+  },
+  {
+   "orden": 4,
+   "nombre": "S5_M4_P4",
+   "slots": [
+    "Viernes-19:15"
+   ]
+  }
+ ],
+ "n": 4
+}

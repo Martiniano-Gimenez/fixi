@@ -1,0 +1,235 @@
+{
+ "id": "fuzzchica-s120-4ta",
+ "origen": {
+  "tipo": "sintetica-chica",
+  "semilla": 120,
+  "perfil": "standard",
+  "categoria": "4ta",
+  "perfilManual4": false,
+  "nota": "generador del fuzz (club y disponibilidad) con 1 categoría de 6 a 15 parejas (rng.int(6,15) en lugar de rng.int(8,30))"
+ },
+ "club": {
+  "cantidadCanchas": 6,
+  "viernesInicio": "15:00",
+  "viernesFin": "00:30",
+  "sabadoInicio": "08:00",
+  "sabadoFin": "02:00",
+  "domingoInicio": "09:00",
+  "domingoFin": "21:00"
+ },
+ "fecha": "2026-09-04",
+ "parejas": [
+  {
+   "orden": 1,
+   "nombre": "S120_C1_P1",
+   "slots": [
+    "Sabado-12:15",
+    "Sabado-12:30",
+    "Sabado-12:45",
+    "Sabado-13:00",
+    "Sabado-13:15",
+    "Sabado-13:30",
+    "Sabado-13:45",
+    "Sabado-14:00",
+    "Viernes-15:30",
+    "Viernes-15:45",
+    "Viernes-16:00",
+    "Viernes-16:15",
+    "Viernes-16:30",
+    "Viernes-16:45",
+    "Viernes-17:00",
+    "Viernes-17:15",
+    "Viernes-17:30",
+    "Viernes-17:45",
+    "Viernes-18:00",
+    "Viernes-18:15",
+    "Viernes-18:30",
+    "Viernes-18:45",
+    "Viernes-19:00",
+    "Viernes-19:15",
+    "Viernes-19:30",
+    "Viernes-19:45",
+    "Viernes-20:00",
+    "Viernes-20:15",
+    "Viernes-20:30",
+    "Viernes-20:45",
+    "Viernes-21:00",
+    "Viernes-21:15",
+    "Viernes-21:30"
+   ]
+  },
+  {
+   "orden": 2,
+   "nombre": "S120_C1_P2",
+   "slots": [
+    "Viernes-18:30",
+    "Viernes-18:45",
+    "Viernes-19:00",
+    "Viernes-19:15",
+    "Viernes-19:30",
+    "Viernes-19:45",
+    "Viernes-20:00"
+   ]
+  },
+  {
+   "orden": 3,
+   "nombre": "S120_C1_P3",
+   "slots": [
+    "Sabado-12:30",
+    "Sabado-12:45",
+    "Sabado-13:00",
+    "Sabado-13:15",
+    "Sabado-13:30",
+    "Sabado-13:45",
+    "Sabado-14:00",
+    "Sabado-14:15",
+    "Sabado-14:30",
+    "Sabado-14:45",
+    "Sabado-15:00",
+    "Sabado-15:15",
+    "Sabado-15:30"
+   ]
+  },
+  {
+   "orden": 4,
+   "nombre": "S120_C1_P4",
+   "slots": [
+    "Viernes-17:45",
+    "Viernes-18:00",
+    "Viernes-18:15",
+    "Viernes-18:30",
+    "Viernes-18:45",
+    "Viernes-19:00",
+    "Viernes-19:15",
+    "Viernes-19:30",
+    "Viernes-19:45",
+    "Viernes-20:00",
+    "Viernes-20:15"
+   ]
+  },
+  {
+   "orden": 5,
+   "nombre": "S120_C1_P5",
+   "slots": [
+    "Sabado-09:30",
+    "Sabado-09:45",
+    "Sabado-10:00",
+    "Sabado-10:15",
+    "Sabado-10:30",
+    "Sabado-10:45",
+    "Sabado-11:00",
+    "Sabado-11:15",
+    "Sabado-11:30",
+    "Viernes-20:15",
+    "Viernes-20:30",
+    "Viernes-20:45",
+    "Viernes-21:00",
+    "Viernes-21:15",
+    "Viernes-21:30",
+    "Viernes-21:45",
+    "Viernes-22:00",
+    "Viernes-22:15",
+    "Viernes-22:30",
+    "Viernes-22:45"
+   ]
+  },
+  {
+   "orden": 6,
+   "nombre": "S120_C1_P6",
+   "slots": [
+    "Sabado-11:15",
+    "Sabado-11:30",
+    "Sabado-11:45",
+    "Sabado-12:00",
+    "Sabado-12:15",
+    "Sabado-16:30",
+    "Sabado-16:45",
+    "Sabado-17:00",
+    "Sabado-17:15",
+    "Sabado-17:30",
+    "Sabado-17:45",
+    "Sabado-18:00",
+    "Sabado-18:15",
+    "Sabado-18:30",
+    "Sabado-18:45"
+   ]
+  },
+  {
+   "orden": 7,
+   "nombre": "S120_C1_P7",
+   "slots": [
+    "Viernes-17:00",
+    "Viernes-17:15",
+    "Viernes-17:30",
+    "Viernes-17:45",
+    "Viernes-18:00"
+   ]
+  },
+  {
+   "orden": 8,
+   "nombre": "S120_C1_P8",
+   "slots": [
+    "Viernes-17:45",
+    "Viernes-18:00",
+    "Viernes-18:15",
+    "Viernes-18:30",
+    "Viernes-18:45",
+    "Viernes-19:00",
+    "Viernes-19:15",
+    "Viernes-19:30",
+    "Viernes-19:45",
+    "Viernes-20:00",
+    "Viernes-20:15",
+    "Viernes-20:30",
+    "Viernes-20:45",
+    "Viernes-21:00",
+    "Viernes-21:15",
+    "Viernes-21:30",
+    "Viernes-21:45",
+    "Viernes-22:00",
+    "Viernes-22:15",
+    "Viernes-22:30"
+   ]
+  },
+  {
+   "orden": 9,
+   "nombre": "S120_C1_P9",
+   "slots": [
+    "Viernes-16:00",
+    "Viernes-16:15",
+    "Viernes-16:30",
+    "Viernes-16:45",
+    "Viernes-17:00",
+    "Viernes-17:15",
+    "Viernes-17:30",
+    "Viernes-17:45",
+    "Viernes-18:00",
+    "Viernes-18:15"
+   ]
+  },
+  {
+   "orden": 10,
+   "nombre": "S120_C1_P10",
+   "slots": [
+    "Sabado-20:45",
+    "Sabado-21:00",
+    "Sabado-21:15",
+    "Sabado-21:30",
+    "Sabado-21:45",
+    "Sabado-22:00",
+    "Sabado-22:15",
+    "Sabado-22:30",
+    "Sabado-22:45",
+    "Sabado-23:00",
+    "Sabado-23:15",
+    "Sabado-23:30",
+    "Sabado-23:45",
+    "Sabado-00:00",
+    "Sabado-00:15",
+    "Sabado-00:30",
+    "Sabado-00:45"
+   ]
+  }
+ ],
+ "n": 10
+}
