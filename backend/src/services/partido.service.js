@@ -916,6 +916,14 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
     throw error;
   }
 
+  // Un partido sin las dos parejas no puede estar en juego (mismo mensaje que cargarResultado).
+  // Volver a PENDIENTE sigue permitido sin condición, para deshacer estados ya creados.
+  if (nuevoEstado === 'EN_CURSO' && (!partido.pareja1Id || !partido.pareja2Id)) {
+    const error = new Error('El partido no tiene las parejas definidas todavía.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   if (nuevoEstado === 'PENDIENTE' && partido.estado !== 'EN_CURSO') {
     const error = new Error('Solo se puede volver a PENDIENTE un partido que esté EN_CURSO.');
     error.statusCode = 400;
