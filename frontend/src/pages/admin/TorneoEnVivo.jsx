@@ -1909,33 +1909,35 @@ export default function TorneoEnVivo() {
                   </div>
 
                   <div className="proximo-partido-actions">
-                    {/* Botón iniciar partido (Marcar En Juego) */}
-                    <button
-                      type="button"
-                      onClick={() => handleCambiarEstado(p.id, 'EN_CURSO')}
-                      disabled={updatingPartidoId === p.id}
-                      title="Marcar como En Juego (ingresó a la cancha)"
-                      style={{
-                        background: 'rgba(0, 208, 132, 0.15)',
-                        border: '1px solid rgba(0, 208, 132, 0.4)',
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--color-primary)',
-                        cursor: updatingPartidoId === p.id ? 'not-allowed' : 'pointer',
-                        padding: '0.35rem 0.6rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.3rem',
-                        fontSize: 'var(--font-size-xs)',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        transition: 'var(--transition-fast)',
-                        opacity: updatingPartidoId === p.id ? 0.6 : 1,
-                      }}
-                    >
-                      <Play size={13} fill="currentColor" />
-                      <span>En juego</span>
-                    </button>
+                    {/* Botón iniciar partido (Marcar En Juego): solo con las dos parejas definidas */}
+                    {p.pareja1Id && p.pareja2Id && (
+                      <button
+                        type="button"
+                        onClick={() => handleCambiarEstado(p.id, 'EN_CURSO')}
+                        disabled={updatingPartidoId === p.id}
+                        title="Marcar como En Juego (ingresó a la cancha)"
+                        style={{
+                          background: 'rgba(0, 208, 132, 0.15)',
+                          border: '1px solid rgba(0, 208, 132, 0.4)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--color-primary)',
+                          cursor: updatingPartidoId === p.id ? 'not-allowed' : 'pointer',
+                          padding: '0.35rem 0.6rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.3rem',
+                          fontSize: 'var(--font-size-xs)',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          transition: 'var(--transition-fast)',
+                          opacity: updatingPartidoId === p.id ? 0.6 : 1,
+                        }}
+                      >
+                        <Play size={13} fill="currentColor" />
+                        <span>En juego</span>
+                      </button>
+                    )}
 
                     {/* Botón cargar resultado inline */}
                     <button
