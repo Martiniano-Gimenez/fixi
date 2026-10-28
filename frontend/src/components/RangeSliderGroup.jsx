@@ -103,9 +103,6 @@ export default function RangeSliderGroup({
             <Calendar size={14} strokeWidth={2} className="text-primary" />
             {dia}
           </span>
-          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-            ({slotsCount} de {totalSlots} turnos)
-          </span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
