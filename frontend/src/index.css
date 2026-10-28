@@ -1941,24 +1941,6 @@ tr:nth-child(1) .pos-number {
   font-weight: 700;
 }
 
-.range-slider-time-badge .count-text {
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: normal;
-}
-
-.trasnoche-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  font-size: 10px;
-  background: rgba(234, 179, 8, 0.15);
-  color: var(--color-warning);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-weight: 600;
-}
-
 .btn-remove-range {
   color: var(--color-text-muted);
   padding: 0.2rem;

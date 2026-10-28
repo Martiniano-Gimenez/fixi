@@ -1,11 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, Moon, Trash2 } from 'lucide-react';
-
-function horaAMinutos(hora) {
-  if (!hora) return 0;
-  const [h, m] = hora.split(':').map(Number);
-  return h * 60 + m;
-}
+import { Clock, Trash2 } from 'lucide-react';
 
 export default function RangeSliderDia({
   dia,
@@ -15,7 +9,6 @@ export default function RangeSliderDia({
   onChange,
   onRemove,
   disabled = false,
-  primerSlotMin = 0,
 }) {
   const totalSlots = slotsDisponibles.length;
   const maxIdx = Math.max(0, totalSlots - 1);
@@ -58,13 +51,8 @@ export default function RangeSliderDia({
   const startHora = startSlotId ? startSlotId.split('-')[1] : '--:--';
   const endHora = endSlotId ? endSlotId.split('-')[1] : '--:--';
 
-  const startMin = horaAMinutos(startHora);
-  const endMin = horaAMinutos(endHora);
-  const esTrasnoche = (startMin < primerSlotMin && primerSlotMin > 0) || (endMin < primerSlotMin && primerSlotMin > 0);
-
   const leftPercent = maxIdx > 0 ? (localStart / maxIdx) * 100 : 0;
   const rightPercent = maxIdx > 0 ? ((maxIdx - localEnd) / maxIdx) * 100 : 0;
-  const countTurnos = localEnd - localStart + 1;
 
   return (
     <div className="range-slider-item">
@@ -74,14 +62,6 @@ export default function RangeSliderDia({
           <span className="time-text">
             {startHora} a {endHora}
           </span>
-          <span className="count-text">
-            ({countTurnos} {countTurnos === 1 ? 'turno' : 'turnos'})
-          </span>
-          {esTrasnoche && (
-            <span className="trasnoche-badge" title="Incluye horarios de trasnoche / madrugada">
-              <Moon size={10} /> Trasnoche
-            </span>
-          )}
         </div>
 
         {onRemove && (

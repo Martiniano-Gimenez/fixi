@@ -1,12 +1,6 @@
 import { Calendar, Plus } from 'lucide-react';
 import RangeSliderDia from './RangeSliderDia';
 
-function horaAMinutos(hora) {
-  if (!hora) return 0;
-  const [h, m] = hora.split(':').map(Number);
-  return h * 60 + m;
-}
-
 export default function RangeSliderGroup({
   dia,
   slotsDisponibles = [],
@@ -16,9 +10,6 @@ export default function RangeSliderGroup({
 }) {
   const totalSlots = slotsDisponibles.length;
   if (totalSlots === 0) return null;
-
-  const primerSlotHora = slotsDisponibles[0]?.split('-')[1] || '';
-  const primerSlotMin = horaAMinutos(primerSlotHora);
 
   const handleAddRange = () => {
     if (disabled) return;
@@ -164,7 +155,6 @@ export default function RangeSliderGroup({
               slotsDisponibles={slotsDisponibles}
               startIdx={rango.startIdx}
               endIdx={rango.endIdx}
-              primerSlotMin={primerSlotMin}
               onChange={(start, end) => handleUpdateRange(idx, start, end)}
               onRemove={() => handleRemoveRange(idx)}
               disabled={disabled}
