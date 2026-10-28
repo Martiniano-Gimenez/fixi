@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
+const { conReintentoOrden } = require('../utils/reintentoOrden');
 const {
   calcularCompatibilidad,
   horaAMinutos,
@@ -2488,8 +2489,9 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     }
   }
 
-  // 2. Transacción atómica
-  return await prisma.$transaction(async (tx) => {
+  // 2. Transacción atómica. Va entera dentro del reintento: un choque de orden (P2002) aborta la
+  // transacción y el intento siguiente vuelve a leer max(orden) desde cero.
+  return await conReintentoOrden(() => prisma.$transaction(async (tx) => {
     // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
     const catCheck = await tx.categoria.findUnique({
       where: { id: categoriaId },
@@ -2599,7 +2601,7 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
       pareja: parejaConSlots || nuevaPareja,
       cuadroDesactualizado,
     };
-  });
+  }));
 }
 
 module.exports = {

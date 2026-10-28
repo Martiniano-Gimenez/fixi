@@ -102,6 +102,9 @@ model Pareja {
   partidosComoP2     Partido[]    @relation("Pareja2")
   partidosGanados    Partido[]    @relation("Ganador")
   slotsSeleccionados SlotPareja[]
+
+  // Orden de inscripción, único en la categoría: el scheduler ordena por (orden, id)
+  @@unique([categoriaId, orden])
 }
 
 // Selección de slots de disponibilidad por pareja

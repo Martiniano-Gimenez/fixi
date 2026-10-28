@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
+const { conReintentoOrden } = require('../utils/reintentoOrden');
 
 async function createPareja(organizadorId, categoriaId, data) {
   const categoria = await getCategoriaById(organizadorId, categoriaId); // Verifica existencia y permisos
@@ -18,16 +19,18 @@ async function createPareja(organizadorId, categoriaId, data) {
     throw error;
   }
 
-  // Asignar el orden (seed) como max(orden) + 1: con count + 1 un hueco repetía un orden existente
-  const { _max } = await prisma.pareja.aggregate({ where: { categoriaId }, _max: { orden: true } });
-
-  return await prisma.pareja.create({
-    data: {
-      categoriaId,
-      jugador1: data.jugador1.trim(),
-      jugador2: data.jugador2.trim(),
-      orden: (_max.orden ?? 0) + 1,
-    },
+  // Orden = max(orden) + 1 (count + 1 repetía un orden si había huecos). Con altas simultáneas
+  // dos pueden leer el mismo máximo: la restricción única rechaza la segunda y se reintenta.
+  return await conReintentoOrden(async () => {
+    const { _max } = await prisma.pareja.aggregate({ where: { categoriaId }, _max: { orden: true } });
+    return await prisma.pareja.create({
+      data: {
+        categoriaId,
+        jugador1: data.jugador1.trim(),
+        jugador2: data.jugador2.trim(),
+        orden: (_max.orden ?? 0) + 1,
+      },
+    });
   });
 }
 
@@ -130,24 +133,29 @@ async function deletePareja(organizadorId, parejaId) {
     throw error;
   }
 
-  await prisma.pareja.delete({
-    where: { id: pareja.id },
-  });
+  await prisma.$transaction(async (tx) => {
+    await tx.pareja.delete({
+      where: { id: pareja.id },
+    });
 
-  // Re-secuenciar el orden de las parejas restantes de la categoría
-  const restantes = await prisma.pareja.findMany({
-    where: { categoriaId },
-    orderBy: { orden: 'asc' },
-  });
+    // Re-secuenciar el orden de las parejas restantes a 1..n, de menor a mayor. Con órdenes
+    // distintos y >= 1, el i-ésimo tiene orden >= i + 1 y ninguna otra pareja tiene i + 1 en ese
+    // momento (las anteriores ya están en 1..i, las siguientes son mayores): ningún paso
+    // intermedio choca con @@unique([categoriaId, orden]).
+    const restantes = await tx.pareja.findMany({
+      where: { categoriaId },
+      orderBy: { orden: 'asc' },
+    });
 
-  for (let i = 0; i < restantes.length; i++) {
-    if (restantes[i].orden !== i + 1) {
-      await prisma.pareja.update({
-        where: { id: restantes[i].id },
-        data: { orden: i + 1 },
-      });
+    for (let i = 0; i < restantes.length; i++) {
+      if (restantes[i].orden !== i + 1) {
+        await tx.pareja.update({
+          where: { id: restantes[i].id },
+          data: { orden: i + 1 },
+        });
+      }
     }
-  }
+  });
 
   return { message: 'Pareja eliminada correctamente.' };
 }
