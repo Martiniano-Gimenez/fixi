@@ -23,6 +23,7 @@ router.get('/:torneoId/categorias', categoriaController.getCategorias);
 router.post('/:id/pre-check-inicio', torneoController.preCheckInicioTorneo);
 router.post('/:id/iniciar', torneoController.iniciarTorneo);
 router.post('/:id/reiniciar', torneoController.reiniciarTorneo);
+router.patch('/:id/inscripcion', torneoController.setInscripcion);
 router.get('/:id/partidos-sin-horario', torneoController.getPartidosSinHorarioTorneo);
 router.get('/:id/canchas-disponibles', torneoController.getCanchasDisponiblesTorneo);
 

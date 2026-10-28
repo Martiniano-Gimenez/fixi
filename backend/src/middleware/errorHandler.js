@@ -20,10 +20,11 @@ function errorHandler(err, req, res, _next) {
   }
 
   // Errores con statusCode explícito (lanzados desde services)
+  // `codigo` (opcional) le dice al cliente qué pasó sin que tenga que leer el mensaje
   const statusCode = err.statusCode || 500;
-  res.status(statusCode).json({
-    error: err.message || 'Error interno del servidor.',
-  });
+  const body = { error: err.message || 'Error interno del servidor.' };
+  if (err.codigo) body.codigo = err.codigo;
+  res.status(statusCode).json(body);
 }
 
 module.exports = errorHandler;

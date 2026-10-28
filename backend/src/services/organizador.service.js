@@ -1350,6 +1350,26 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
     // Aplicar el plan cacheado a la base de datos
     const resumen = [];
     await prisma.$transaction(async (tx) => {
+      // Primera escritura: cierra la inscripción por link y toma el bloqueo del torneo, el mismo
+      // que toma cada inscripción. Después se repite la verificación de parejas y club dentro de
+      // la transacción: una inscripción (o un alta) confirmada entre la verificación de arriba y
+      // este punto quedaría sin zona en una categoría ya iniciada.
+      await tx.torneo.update({
+        where: { id: torneoId },
+        data: { inscripcionAbierta: false },
+      });
+      const organizadorTx = await tx.organizador.findUnique({ where: { id: organizadorId } });
+      const categoriasTx = await tx.categoria.findMany({
+        where: { torneoId, estado: 'BORRADOR' },
+        include: { parejas: { include: { slotsSeleccionados: true } } },
+      });
+      if (buildFingerprint(organizadorTx, categoriasTx) !== cached.fingerprint) {
+        planesCache.delete(planId);
+        const error = new Error('Los datos del club o las parejas cambiaron desde la última verificación. Volvé a verificar antes de iniciar.');
+        error.statusCode = 409;
+        throw error;
+      }
+
       const categoriasConSinHorario = [];
       for (const cPlan of cached.categoriasPlan) {
         const categoria = await tx.categoria.findUnique({ where: { id: cPlan.categoriaId } });

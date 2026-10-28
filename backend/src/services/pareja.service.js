@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 const { conReintentoOrden } = require('../utils/reintentoOrden');
+const { colaAltasPareja } = require('../utils/colaSerial');
 
 async function createPareja(organizadorId, categoriaId, data) {
   const categoria = await getCategoriaById(organizadorId, categoriaId); // Verifica existencia y permisos
@@ -19,9 +20,10 @@ async function createPareja(organizadorId, categoriaId, data) {
     throw error;
   }
 
-  // Orden = max(orden) + 1 (count + 1 repetía un orden si había huecos). Con altas simultáneas
-  // dos pueden leer el mismo máximo: la restricción única rechaza la segunda y se reintenta.
-  return await conReintentoOrden(async () => {
+  // Orden = max(orden) + 1 (count + 1 repetía un orden si había huecos). En el proceso, las altas
+  // van de a una (colaAltasPareja); entre procesos, dos pueden leer el mismo máximo: la restricción
+  // única rechaza la segunda y se reintenta.
+  return await colaAltasPareja(() => conReintentoOrden(async () => {
     const { _max } = await prisma.pareja.aggregate({ where: { categoriaId }, _max: { orden: true } });
     return await prisma.pareja.create({
       data: {
@@ -31,7 +33,7 @@ async function createPareja(organizadorId, categoriaId, data) {
         orden: (_max.orden ?? 0) + 1,
       },
     });
-  });
+  }));
 }
 
 async function getParejasByCategoria(organizadorId, categoriaId) {

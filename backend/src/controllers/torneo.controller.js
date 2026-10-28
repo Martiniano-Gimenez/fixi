@@ -1,5 +1,6 @@
 const torneoService = require('../services/torneo.service');
 const organizadorService = require('../services/organizador.service');
+const inscripcionService = require('../services/inscripcion.service');
 
 function getOrgId(req) {
   return req.organizadorId || req.organizador?.id;
@@ -75,6 +76,15 @@ async function iniciarTorneo(req, res, next) {
   }
 }
 
+async function setInscripcion(req, res, next) {
+  try {
+    const result = await inscripcionService.setInscripcionAbierta(getOrgId(req), req.params.id, req.body?.abierta);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function reiniciarTorneo(req, res, next) {
   try {
     const result = await torneoService.reiniciarTorneo(getOrgId(req), req.params.id);
@@ -141,6 +151,7 @@ module.exports = {
   getTorneos,
   getTorneoById,
   updateTorneo,
+  setInscripcion,
   deleteTorneo,
   preCheckInicioTorneo,
   iniciarTorneo,

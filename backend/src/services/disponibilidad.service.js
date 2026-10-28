@@ -31,6 +31,29 @@ async function getParejaAndVerifyPermisos(organizadorId, parejaId) {
   return pareja;
 }
 
+const MENSAJE_DOMINGO =
+  'No se pueden seleccionar horarios los domingos para la disponibilidad de zonas. Los domingos están reservados para los brackets eliminatorios.';
+
+/**
+ * Versión estricta de la validación de disponibilidad, para la inscripción pública: en lugar de
+ * descartar en silencio los slots fuera de la grilla (como setDisponibilidad), rechaza el pedido.
+ * Mismas reglas: sin domingo, dentro del horario del club y en la grilla de 15 min
+ * (getSlotsValidosSet). Devuelve los slotIds sin repetidos, en orden cronológico.
+ */
+function validarSlotIdsEstricto(organizador, slotIds) {
+  const error400 = (mensaje) => Object.assign(new Error(mensaje), { statusCode: 400, codigo: 'DATOS_INVALIDOS' });
+  if (!Array.isArray(slotIds) || slotIds.some((s) => typeof s !== 'string')) {
+    throw error400('Los horarios elegidos no son válidos.');
+  }
+  if (slotIds.some((s) => s.startsWith('Domingo-'))) throw error400(MENSAJE_DOMINGO);
+  const validos = getSlotsValidosSet(organizador);
+  const invalidos = slotIds.filter((s) => !validos.has(s));
+  if (invalidos.length > 0) {
+    throw error400(`Hay horarios fuera de la grilla del club: ${invalidos.slice(0, 3).join(', ')}.`);
+  }
+  return ordenarSlotsCronologicamente([...new Set(slotIds)]);
+}
+
 async function getDisponibilidad(organizadorId, parejaId) {
   await getParejaAndVerifyPermisos(organizadorId, parejaId);
   const slots = await prisma.slotPareja.findMany({
@@ -230,4 +253,5 @@ module.exports = {
   setDisponibilidadDoble,
   removerDisponibilidadDoble,
   getParejaAndVerifyPermisos,
+  validarSlotIdsEstricto,
 };

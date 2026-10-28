@@ -405,7 +405,12 @@ async function main() {
     esperar(pc2, 200);
     const hash2 = preCheckSessions.get(t5.id)?.parejaIdsHash;
     assert(hash2 && hash2 !== hash1 && hash2.includes(nueva.id), 'la sesión no se regeneró con la pareja nueva');
-    assert(pc2.texto.includes(nueva.id), 'el plan nuevo no incluye a la pareja inscripta');
+    // La respuesta sin bloqueo no lista parejas: se mira el plan que quedó en caché
+    const { planesCache } = require('../src/services/organizador.service');
+    const plan = pc2.json.planId ? planesCache.get(pc2.json.planId) : null;
+    assert(plan || pc2.json.bloqueado, `pre-check sin planId ni bloqueo: ${pc2.texto.slice(0, 200)}`);
+    const contenido = plan ? JSON.stringify(plan.categoriasPlan) : pc2.texto;
+    assert(contenido.includes(nueva.id), 'el plan nuevo no incluye a la pareja inscripta');
   });
 
   await caso('I22 una inscripción que entra entre el pre-check y la transacción de inicio → 409 y nada se inicia', async () => {
