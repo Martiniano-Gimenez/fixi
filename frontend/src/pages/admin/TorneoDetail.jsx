@@ -29,6 +29,7 @@ import {
   GitBranch,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
+import InscripcionLinkPanel from '../../components/InscripcionLinkPanel';
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { estadoLabel } from '../../utils/estadoLabels';
@@ -1028,6 +1029,14 @@ export default function TorneoDetail() {
         </div>
       </div>
 
+
+      {/* Inscripción de parejas por link (solo en borrador) */}
+      {torneo.estado === 'BORRADOR' && (
+        <InscripcionLinkPanel
+          torneo={torneo}
+          onCambio={(inscripcionAbierta) => setTorneo((prev) => ({ ...prev, inscripcionAbierta }))}
+        />
+      )}
 
       {/* Sección de partidos pendientes de horario si el torneo está en curso */}
       {torneo.estado === 'EN_CURSO' && (
