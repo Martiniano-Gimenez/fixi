@@ -120,7 +120,24 @@ async function getInscripcionPublica(slug) {
  * POST /api/public/:slug/inscripcion
  * { categoriaId, jugador1, jugador2, telefono, slotIds, cualquierHorario, website }
  */
+// Esperas de la base que no son culpa del pedido: P1008 (SQLite no respondió dentro del
+// busy_timeout, por ejemplo mientras corre la transacción de inicio del torneo) y P2028 (la
+// transacción no se pudo abrir dentro de maxWait o pasó su timeout). Se responde 503 para que
+// la página pida reintentar, en vez de un 500.
+const CODIGOS_ESPERA = new Set(['P1008', 'P2028']);
+
 async function crearInscripcion(slug, body = {}) {
+  try {
+    return await crearInscripcionSinMapear(slug, body);
+  } catch (err) {
+    if (CODIGOS_ESPERA.has(err?.code)) {
+      throw error(503, 'REINTENTAR', 'Hay mucha gente inscribiéndose en este momento. Probá de nuevo en unos segundos.');
+    }
+    throw err;
+  }
+}
+
+async function crearInscripcionSinMapear(slug, body) {
   const { categoriaId, jugador1, jugador2, telefono, slotIds, cualquierHorario, website } = body || {};
 
   // Honeypot: un humano no ve el campo. Se responde como si se hubiera guardado.

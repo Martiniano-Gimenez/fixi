@@ -113,6 +113,10 @@ export default function InscripcionPublica() {
     } catch (err) {
       if (PANTALLA_POR_CODIGO[err.codigo]) {
         setPantalla(PANTALLA_POR_CODIGO[err.codigo]);
+      } else if (err.codigo === 'REINTENTAR') {
+        // 503: la base estuvo ocupada (por ejemplo, mientras se inicia el torneo). No se guardó
+        // nada; el formulario queda cargado para volver a enviarlo.
+        setErrorEnvio('Hay mucha gente inscribiéndose en este momento y no se guardó la inscripción. Esperá unos segundos y tocá "Enviar inscripción" de nuevo.');
       } else {
         if (err.codigo === 'CATEGORIA_NO_DISPONIBLE') {
           // La categoría pudo haber empezado: se recargan las que siguen abiertas

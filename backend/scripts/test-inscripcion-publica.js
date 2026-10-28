@@ -476,6 +476,73 @@ async function main() {
     assert(t.inscripcionAbierta === false, 'quedó abierta con el torneo en curso');
   });
 
+  console.log('\n▶ Cola serial y esperas');
+  await caso('I26 un alta que falla adentro de la cola (duplicado) no traba las siguientes', async () => {
+    const { crearColaSerial } = require('../src/utils/colaSerial');
+    const cola = crearColaSerial();
+    const r = await Promise.allSettled([
+      cola(async () => { throw new Error('falla'); }),
+      cola(async () => 'ok'),
+    ]);
+    assert(r[0].status === 'rejected' && r[1].status === 'fulfilled' && r[1].value === 'ok', `cola: ${JSON.stringify(r.map((x) => x.status))}`);
+
+    const t9 = await crearTorneo(orgA, 'Cola');
+    const cat = await crearCategoria(t9.id, '3ra');
+    esperar(await abrir(t9.id, true, tokenA), 200);
+    esperar(await inscribir(t9.slug, cuerpo(cat.id, { jugador1: 'Repe Uno', jugador2: 'Repe Dos' })), 201);
+    // Los pedidos entran a la cola en orden; los duplicados fallan adentro (409) y los válidos tienen que pasar igual
+    const rs = await Promise.all([
+      inscribir(t9.slug, cuerpo(cat.id, { jugador1: 'repe dos', jugador2: 'REPE UNO' })),
+      inscribir(t9.slug, cuerpo(cat.id, { jugador1: 'Sigue Uno', jugador2: 'Sigue Dos' })),
+      inscribir(t9.slug, cuerpo(cat.id, { jugador1: 'Repe Uno', jugador2: 'Repe Dos' })),
+      inscribir(t9.slug, cuerpo(cat.id, { jugador1: 'Sigue Tres', jugador2: 'Sigue Cuatro' })),
+    ]);
+    const estados = rs.map((x) => `${x.status}${x.json?.codigo ? ' ' + x.json.codigo : ''}`);
+    assert(JSON.stringify(estados) === JSON.stringify(['409 DUPLICADO', '201', '409 DUPLICADO', '201']), `estados: ${JSON.stringify(estados)}`);
+    assert((await contar(cat.id)) === 3, `parejas: ${await contar(cat.id)}`);
+  });
+
+  await caso('I27 inscripción mientras corre el inicio (transacción que tarda más que el busy_timeout) → 409 o 503 REINTENTAR, nunca 500', async () => {
+    const t8 = await crearTorneo(orgA, 'Durante Inicio');
+    const cat = await crearCategoria(t8.id, '2da');
+    await crearParejasConSlots(cat.id, 6, slotsBase);
+    esperar(await abrir(t8.id, true, tokenA), 200);
+    const pc = await http('POST', `/torneos/${t8.id}/pre-check-inicio`, { body: {}, token: tokenA });
+    assert(pc.json?.planId, `pre-check sin planId: ${pc.texto.slice(0, 200)}`);
+
+    // La transacción de inicio se queda abierta 6,5 s después de su trabajo (más que los 5 s de busy_timeout de SQLite)
+    const RETENCION_MS = 6500;
+    const original = prisma.$transaction;
+    let avisarDentro;
+    const dentro = new Promise((resolve) => { avisarDentro = resolve; });
+    prisma.$transaction = function (fn, opts) {
+      prisma.$transaction = original;
+      return original.call(prisma, async (tx) => {
+        const r = await fn(tx);
+        avisarDentro();
+        await new Promise((resolve) => setTimeout(resolve, RETENCION_MS));
+        return r;
+      }, opts);
+    };
+    let inicio;
+    try {
+      const pedidoInicio = http('POST', `/torneos/${t8.id}/iniciar`, { body: { planId: pc.json.planId }, token: tokenA });
+      await dentro;
+      const rs = await Promise.all([1, 2, 3].map((i) => inscribir(t8.slug, cuerpo(cat.id, { jugador1: `Tarde ${i}A`, jugador2: `Tarde ${i}B` }))));
+      inicio = await pedidoInicio;
+      const estados = rs.map((x) => `${x.status} ${x.json?.codigo}`);
+      console.log(`     (estados: ${JSON.stringify(estados)})`);
+      assert(rs.every((x) => (x.status === 409 && x.json?.codigo === 'TORNEO_INICIADO') || (x.status === 503 && x.json?.codigo === 'REINTENTAR')), `estados: ${JSON.stringify(estados)} ${rs.map((x) => x.texto.slice(0, 120)).join(' | ')}`);
+      assert(rs.some((x) => x.status === 503), 'ninguna llegó al tiempo de espera: el caso no probó el 503');
+    } finally {
+      prisma.$transaction = original;
+    }
+    esperar(inicio, 200);
+    const t = await prisma.torneo.findUnique({ where: { id: t8.id } });
+    assert(t.estado === 'EN_CURSO' && t.inscripcionAbierta === false, `torneo: ${t.estado}, abierta ${t.inscripcionAbierta}`);
+    assert((await contar(cat.id)) === 6, `se coló una inscripción: ${await contar(cat.id)} parejas`);
+  });
+
   server.close();
   const fallidos = resultados.filter((r) => !r.ok);
   console.log(`\n${resultados.length - fallidos.length}/${resultados.length} casos OK`);
