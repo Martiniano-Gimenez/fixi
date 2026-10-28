@@ -8,7 +8,12 @@ import ZonaDropdownFilter from '../../components/ZonaDropdownFilter';
 import { estadoLabel } from '../../utils/estadoLabels';
 import { formatHorasDisponibles } from '../../utils/dateUtils';
 import { normalizeText } from '../../utils/textUtils';
-import { ChevronLeft, Plus, Clock, Trash2, Users, Info, AlertTriangle, Search, X } from 'lucide-react';
+import { ChevronLeft, Plus, Clock, Trash2, Users, Info, AlertTriangle, Search, X, Link2, Phone } from 'lucide-react';
+
+// El teléfono se guarda solo en dígitos; con código de país (54...) el link lleva "+"
+function hrefTelefono(digitos) {
+  return digitos.startsWith('54') && digitos.length >= 12 ? `tel:+${digitos}` : `tel:${digitos}`;
+}
 
 const DURACION_PARTIDO_MIN = 75;
 const MINUTOS_POR_SLOT = 15;
@@ -342,7 +347,12 @@ export default function ParejasManager() {
             let textoDisponibilidad = '';
             let titleDisponibilidad = '';
 
-            if (cantSlots === 0) {
+            const porLink = pareja.origen === 'INSCRIPCION';
+            if (cantSlots === 0 && isBorrador && porLink) {
+              // Al inscribirse por link la disponibilidad es obligatoria: 0 slots es "cualquier horario"
+              textoDisponibilidad = 'Cualquier horario';
+              titleDisponibilidad = 'La pareja marcó "Puedo en cualquier horario" al inscribirse (clic para configurar)';
+            } else if (cantSlots === 0) {
               textoDisponibilidad = isBorrador ? 'Sin cargar' : 'Libre';
               titleDisponibilidad = isBorrador
                 ? 'Sin disponibilidad cargada (clic para configurar)'
@@ -509,6 +519,22 @@ export default function ParejasManager() {
                     </div>
                   </div>
                 </div>
+
+                {/* Origen y teléfono (inscripción por link) */}
+                {(porLink || pareja.telefono) && (
+                  <div className="pareja-contacto">
+                    {porLink && (
+                      <span className="pareja-origen-chip" title="Se inscribió con el link público">
+                        <Link2 size={11} aria-hidden="true" /> Por link
+                      </span>
+                    )}
+                    {pareja.telefono && (
+                      <a className="pareja-telefono" href={hrefTelefono(pareja.telefono)} title="Llamar">
+                        <Phone size={11} aria-hidden="true" /> {pareja.telefono}
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 {/* Editor desplegable de disponibilidad */}
                 {isExpanded && (

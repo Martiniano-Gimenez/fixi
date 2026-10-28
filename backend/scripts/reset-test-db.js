@@ -19,6 +19,12 @@ function hashGuards() {
   return crypto.createHash('sha256').update(fs.readFileSync(GUARDS_SQL)).digest('hex');
 }
 
+// Sin contar comentarios de línea (--) ni espacios
+function guardasTienenSentencias() {
+  const sql = fs.readFileSync(GUARDS_SQL, 'utf8').replace(/--.*$/gm, '').trim();
+  return sql.length > 0;
+}
+
 function plantillaTieneGuardasVigentes() {
   if (!fs.existsSync(GUARDS_MARKER)) return false;
   return fs.readFileSync(GUARDS_MARKER, 'utf8').trim() === hashGuards();
@@ -54,15 +60,19 @@ function regenerarPlantilla() {
     throw new Error(`[reset-test-db] ERROR: No se generó ${tempDb} tras prisma migrate deploy.`);
   }
 
-  console.log('⚙️ [reset-test-db] Aplicando guardas de test (scripts/utils/test-db-guards.sql)...');
-  execSync(`npx prisma db execute --file "${GUARDS_SQL}" --schema="${schemaPath}"`, {
-    cwd: path.resolve(__dirname, '..'),
-    env: {
-      ...process.env,
-      DATABASE_URL: `file:./${tempDbName}`,
-    },
-    stdio: 'inherit',
-  });
+  if (guardasTienenSentencias()) {
+    console.log('⚙️ [reset-test-db] Aplicando guardas de test (scripts/utils/test-db-guards.sql)...');
+    execSync(`npx prisma db execute --file "${GUARDS_SQL}" --schema="${schemaPath}"`, {
+      cwd: path.resolve(__dirname, '..'),
+      env: {
+        ...process.env,
+        DATABASE_URL: `file:./${tempDbName}`,
+      },
+      stdio: 'inherit',
+    });
+  } else {
+    console.log('⚙️ [reset-test-db] test-db-guards.sql no tiene sentencias: no se aplica nada.');
+  }
 
   fs.copyFileSync(tempDb, TEMPLATE_DB);
   fs.writeFileSync(GUARDS_MARKER, hashGuards());

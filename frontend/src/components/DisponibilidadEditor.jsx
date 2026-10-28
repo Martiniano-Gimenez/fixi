@@ -19,6 +19,10 @@ export default function DisponibilidadEditor({
   value,
   onChange,
   grillaProp,
+  // Deshabilita los sliders (por ejemplo, con "Puedo en cualquier horario" marcado).
+  // Con grillaProp no se pide la grilla a /organizador/slots (que requiere login); en modo
+  // controlado conviene memoizarla: un objeto nuevo en cada render vuelve a cargar el editor.
+  disabled = false,
 }) {
   const isControlled = Boolean(onChange && !parejaId);
   const [grilla, setGrilla] = useState(grillaProp || { viernes: [], sabado: [] });
@@ -295,7 +299,7 @@ export default function DisponibilidadEditor({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {isControlled ? (
-            totalSlotsSeleccionados > 0 ? (
+            totalSlotsSeleccionados > 0 && !disabled ? (
               <div
                 style={{
                   display: 'flex',
@@ -347,7 +351,7 @@ export default function DisponibilidadEditor({
               slotsDisponibles={grilla.viernes}
               rangos={rangosViernes}
               onRangosChange={handleRangosViernesChange}
-              disabled={saving}
+              disabled={saving || disabled}
             />
           )}
 
@@ -358,7 +362,7 @@ export default function DisponibilidadEditor({
               slotsDisponibles={grilla.sabado}
               rangos={rangosSabado}
               onRangosChange={handleRangosSabadoChange}
-              disabled={saving}
+              disabled={saving || disabled}
             />
           )}
 

@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const { ordenarZonaParejas } = require('../services/faseEliminatoria.service');
+const inscripcionService = require('../services/inscripcion.service');
 
 /**
  * GET /api/public/:slug
@@ -229,4 +230,26 @@ async function getTorneoPublico(req, res, next) {
   }
 }
 
-module.exports = { getTorneoPublico };
+/**
+ * GET /api/public/:slug/inscripcion
+ */
+async function getInscripcion(req, res, next) {
+  try {
+    res.json(await inscripcionService.getInscripcionPublica(req.params.slug));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/public/:slug/inscripcion
+ */
+async function postInscripcion(req, res, next) {
+  try {
+    res.status(201).json(await inscripcionService.crearInscripcion(req.params.slug, req.body));
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getTorneoPublico, getInscripcion, postInscripcion };

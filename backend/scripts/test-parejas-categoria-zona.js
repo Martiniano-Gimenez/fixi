@@ -428,24 +428,34 @@ async function main() {
     }
     console.log('  ✅ PATCH con orden rechazado con 400 sin cambios; PATCH de nombre sigue funcionando.');
 
-    // ─── CASO 7: Guarda de test.db (trigger de orden único por categoría) ────
-    console.log('\n▶ CASO 7: test.db rechaza una pareja con orden repetido en la categoría...');
+    // ─── CASO 7: Restricción @@unique([categoriaId, orden]) (antes, trigger solo de test) ────
+    console.log('\n▶ CASO 7: la base rechaza un orden repetido en la categoría (INSERT y UPDATE)...');
     const cantidadAntes = await prisma.pareja.count({ where: { categoriaId: catBorrador.id } });
-    let rechazada = false;
+    let codigoInsert = null;
     try {
       await prisma.pareja.create({
         data: { categoriaId: catBorrador.id, jugador1: 'Dup A', jugador2: 'Dup B', orden: 1 },
       });
     } catch (err) {
-      // Prisma informa el RAISE(ABORT) del trigger como P2003 (SQLITE_CONSTRAINT)
-      rechazada = true;
-      console.log(`  ✓ Insert rechazado por la guarda (${err.code || err.name})`);
+      codigoInsert = err.code || err.name;
+      console.log(`  ✓ Insert rechazado (${codigoInsert}, target ${JSON.stringify(err.meta?.target)})`);
     }
     const cantidadDespues = await prisma.pareja.count({ where: { categoriaId: catBorrador.id } });
-    if (!rechazada || cantidadDespues !== cantidadAntes) {
-      throw new Error(`La guarda de orden único no está activa en test.db (parejas ${cantidadAntes} -> ${cantidadDespues}). Regenerá la plantilla.`);
+    if (codigoInsert !== 'P2002' || cantidadDespues !== cantidadAntes) {
+      throw new Error(`La restricción de orden único no rechazó el INSERT con P2002 (código ${codigoInsert}, parejas ${cantidadAntes} -> ${cantidadDespues}).`);
     }
-    console.log('  ✅ Guarda de orden único activa en test.db.');
+    let codigoUpdate = null;
+    try {
+      await prisma.pareja.update({ where: { id: createdIds.parejaB2Id }, data: { orden: 1 } });
+    } catch (err) {
+      codigoUpdate = err.code || err.name;
+      console.log(`  ✓ Update rechazado (${codigoUpdate})`);
+    }
+    const pB2Despues = await prisma.pareja.findUnique({ where: { id: createdIds.parejaB2Id } });
+    if (codigoUpdate !== 'P2002' || pB2Despues.orden === 1) {
+      throw new Error(`La restricción de orden único no rechazó el UPDATE con P2002 (código ${codigoUpdate}).`);
+    }
+    console.log('  ✅ Orden único en la categoría garantizado por la base (INSERT y UPDATE).');
 
     console.log('\n🎉 TODOS LOS CASOS DE REGRESIÓN PASARON EXITOSAMENTE!');
   } catch (err) {

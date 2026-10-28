@@ -65,6 +65,7 @@ const TEST_SUITES = [
   'test-solape-finales-extension.js',
   'test-padres-hijo-fijo.js',
   'test-armado-zonas-reparacion.js',
+  'test-inscripcion-publica.js',
 ];
 
 /**

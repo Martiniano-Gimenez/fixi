@@ -32,6 +32,8 @@ async function apiClient(endpoint, options = {}) {
     const error = await response.json().catch(() => ({ error: 'Error desconocido' }));
     const err = new Error(error.error || `Error ${response.status}`);
     err.status = response.status;
+    // Código estable del backend (ej. INSCRIPCION_CERRADA): la UI decide con esto, no con el mensaje
+    err.codigo = error.codigo || null;
     throw err;
   }
 

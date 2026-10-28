@@ -48,6 +48,7 @@ model Torneo {
   estado                     String    @default("BORRADOR") // "BORRADOR" | "EN_CURSO" | "FINALIZADO"
   canchasDisponiblesOverride Int? // null = usar club.cantidadCanchas (legacy / retrocompatibilidad)
   overrideActivoDesde        DateTime? // timestamp de activación del override actual (legacy / retrocompatibilidad)
+  inscripcionAbierta         Boolean   @default(false) // link público de inscripción; solo se abre en BORRADOR
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
@@ -95,6 +96,8 @@ model Pareja {
   jugador2         String
   orden            Int    @default(0)
   resolucionManual Boolean @default(false)
+  telefono         String? // solo dígitos; nunca sale por /api/public/*
+  origen           String  @default("ORGANIZADOR") // "ORGANIZADOR" | "INSCRIPCION"
 
   categoria          Categoria    @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
   zonaParejas        ZonaPareja[]
@@ -102,6 +105,9 @@ model Pareja {
   partidosComoP2     Partido[]    @relation("Pareja2")
   partidosGanados    Partido[]    @relation("Ganador")
   slotsSeleccionados SlotPareja[]
+
+  // Orden de inscripción, único en la categoría: el scheduler ordena por (orden, id)
+  @@unique([categoriaId, orden])
 }
 
 // Selección de slots de disponibilidad por pareja

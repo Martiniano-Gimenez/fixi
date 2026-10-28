@@ -150,6 +150,8 @@ async function updateTorneo(organizadorId, torneoId, data) {
   if (data.nombre !== undefined && data.nombre.trim()) updateData.nombre = data.nombre.trim();
   if (data.fecha !== undefined) updateData.fecha = parsedFecha;
   if (data.estado !== undefined) updateData.estado = data.estado;
+  // La inscripción por link solo vive en BORRADOR (que este endpoint acepte `estado` queda como pendiente aparte)
+  if (data.estado !== undefined && data.estado !== 'BORRADOR') updateData.inscripcionAbierta = false;
 
   return await prisma.torneo.update({
     where: { id: torneo.id },
@@ -207,6 +209,8 @@ async function reiniciarTorneo(organizadorId, torneoId) {
         estado: 'BORRADOR',
         canchasDisponiblesOverride: null,
         overrideActivoDesde: null,
+        // Volver a BORRADOR no reabre la inscripción por link: la abre el organizador a mano
+        inscripcionAbierta: false,
       },
     });
   });

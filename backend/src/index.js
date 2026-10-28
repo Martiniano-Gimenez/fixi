@@ -17,6 +17,14 @@ const publicRoutes = require('./routes/public.routes');
 
 const app = express();
 
+// Detrás de un proxy (Render, Railway) req.ip es la IP del proxy salvo que se confíe en él, y el
+// límite por IP de la inscripción pública se vuelve uno solo para todos. TRUST_PROXY: un número de
+// saltos ("1"), "true" o una lista de subredes, como acepta Express. Sin la variable, no se confía.
+if (process.env.TRUST_PROXY) {
+  const v = process.env.TRUST_PROXY;
+  app.set('trust proxy', /^\d+$/.test(v) ? Number(v) : v === 'true' ? true : v);
+}
+
 // ─── Middlewares globales ────────────────────────────────
 app.use(cors());
 app.use(express.json());
