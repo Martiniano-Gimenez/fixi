@@ -1,12 +1,42 @@
-import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import BracketLines from '../../components/BracketLines';
-import { Award, AlertTriangle, Users, Trophy, Calendar, Clock, Search, X, Star, Play } from 'lucide-react';
-import { formatPartidoHorario, getDiaCalendarioCordoba, formatFechaTorneo } from '../../utils/dateUtils';
-import { estadoLabel } from '../../utils/estadoLabels';
+import { AlertTriangle, Users, Trophy, Clock, Search, X, Play } from 'lucide-react';
+import { formatPartidoHorario, getDiaCalendarioCordoba } from '../../utils/dateUtils';
 import { APP_NAME, APP_TAGLINE } from '../../constants/app';
 import '../admin/EliminatoriaView.css';
+import './publico/publico.css';
+import Encabezado from './publico/Encabezado';
+import NavSecciones from './publico/NavSecciones';
+import Segmentado from './publico/Segmentado';
+import TarjetaPartido, { Estrella } from './publico/TarjetaPartido';
+import TablaZona from './publico/TablaZona';
+import ListaAnimada from './publico/ListaAnimada';
+import useAvisoResultados from './publico/useAvisoResultados';
+import {
+  DIAS_LARGOS,
+  campeones,
+  cifrasTorneo,
+  diaDe,
+  diaDeHoy,
+  diasDelTorneo,
+  horaPartido,
+  normalizar,
+  partidoCoincide,
+  partidosDeCategoria,
+  parejasQueCoinciden,
+  porHorario,
+} from './publico/utilidades';
+
+const SECCIONES = [
+  { key: 'hoy', label: 'Hoy' },
+  { key: 'zonas', label: 'Zonas' },
+  { key: 'cuadro', label: 'Cuadro' },
+  { key: 'horarios', label: 'Horarios' },
+];
+const letraZona = (z) => z.nombre.replace(/^Zona\s+/i, '');
+const claveTarjeta = (p) => p.id;
 
 const POLL_INTERVAL = 15000; // 15 seconds
 
@@ -31,12 +61,6 @@ function setFavPareja(slug, catId, parejaId) {
   } catch {
     // Degradación silenciosa (ej. cookies/storage bloqueado en modo privado)
   }
-}
-
-function formatDiff(val) {
-  if (val > 0) return `+${val}`;
-  if (val < 0) return `\u2212${Math.abs(val)}`;
-  return '0';
 }
 
 function partidoPerteneceAPareja(p, filtro) {
@@ -195,46 +219,35 @@ function PublicMatchCard({ partido, label = '', isMobile = false, isFav = false 
 
 function TorneoPublicSkeleton() {
   return (
-    <div className="public-page" role="status" aria-busy="true">
-      <span className="sr-only">Cargando torneo</span>
-
-      {/* Header Skeleton */}
-      <header className="public-tournament-header" aria-hidden="true">
-        <div className="public-skeleton-title public-skeleton-shimmer" />
-        <div className="public-skeleton-meta">
-          <div className="public-skeleton-meta-chip public-skeleton-shimmer" />
-          <div className="public-skeleton-meta-chip public-skeleton-shimmer" />
-          <div className="public-skeleton-meta-chip public-skeleton-shimmer" />
+    <div className="publico" role="status" aria-busy="true">
+      <span className="pv-sr">Cargando torneo…</span>
+      <header className="pv-cab" aria-hidden="true">
+        <div className="pv-envolver">
+          <div className="pv-cab-fila">
+            <div className="pv-sk" style={{ width: 120, height: 26 }} />
+            <div className="pv-sk" style={{ width: 80, height: 28, borderRadius: 99 }} />
+          </div>
+          <div className="pv-sk" style={{ width: '62%', height: 30, marginTop: 18 }} />
+          <div className="pv-sk" style={{ width: '48%', height: 16, marginTop: 10 }} />
+          <div className="pv-sk" style={{ width: '70%', height: 16, marginTop: 14 }} />
         </div>
       </header>
-
-      {/* Sticky Nav Skeleton: Chips + Control Segmentado */}
-      <div className="public-sticky-nav" aria-hidden="true">
-        <div className="public-skeleton-cat-chips">
-          <div className="public-skeleton-cat-chip public-skeleton-shimmer" />
-          <div className="public-skeleton-cat-chip public-skeleton-shimmer" />
-          <div className="public-skeleton-cat-chip public-skeleton-shimmer" />
-          <div className="public-skeleton-cat-chip public-skeleton-shimmer" />
+      <div className="pv-envolver" aria-hidden="true">
+        <div className="pv-buscador">
+          <div className="pv-sk" style={{ width: 150, height: 18 }} />
+          <div className="pv-sk" style={{ height: 48, marginTop: 10 }} />
         </div>
-        <div className="public-skeleton-segmented">
-          <div className="public-skeleton-segment-tab public-skeleton-shimmer" />
-          <div className="public-skeleton-segment-tab public-skeleton-shimmer" />
-          <div className="public-skeleton-segment-tab public-skeleton-shimmer" />
+        <div className="pv-cats">
+          {[72, 64, 84, 104].map((w) => (
+            <div key={w} className="pv-sk" style={{ flex: 'none', width: w, height: 38, borderRadius: 99 }} />
+          ))}
         </div>
-      </div>
-
-      {/* 3 Tarjetas de Partido Skeleton */}
-      <div className="public-skeleton-cards" aria-hidden="true">
-        {[1, 2, 3].map((id) => (
-          <div key={id} className="public-skeleton-card">
-            <div className="public-skeleton-card-header">
-              <div className="public-skeleton-card-time public-skeleton-shimmer" />
-              <div className="public-skeleton-card-status public-skeleton-shimmer" />
-            </div>
-            <div className="public-skeleton-card-row public-skeleton-shimmer" />
-            <div className="public-skeleton-card-row public-skeleton-shimmer" />
-          </div>
-        ))}
+        <div style={{ paddingTop: 20 }}>
+          <div className="pv-sk" style={{ width: 120, height: 22 }} />
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="pv-sk" style={{ height: 112, marginTop: 10, borderRadius: 14 }} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -307,30 +320,40 @@ function UltimaActualizacion({ timestamp }) {
   const texto = formatTiempoTranscurrido(diffSec);
 
   return (
-    <div className={`public-update-status ${isDesactualizado ? 'is-warning' : ''}`}>
-      <span
-        className={`public-update-dot ${isDesactualizado ? 'is-warning' : ''}`}
-        aria-hidden="true"
-      />
-      <span>{texto}</span>
-    </div>
+    <span className={`pv-actualizado ${isDesactualizado ? 'atrasado' : ''}`}>
+      <i aria-hidden="true" />
+      {texto}
+    </span>
   );
 }
 
 export default function TorneoPublic() {
   const { slug } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Estado inicial desde la URL (categoría, sección, zona, ronda, día y búsqueda): el link se puede compartir
+  const urlInicial = useRef({
+    cat: searchParams.get('cat'),
+    zona: searchParams.get('zona'),
+    ronda: searchParams.get('ronda'),
+    dia: searchParams.get('dia'),
+  });
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [activeCatId, setActiveCatId] = useState(null);
   const [activeZoneId, setActiveZoneId] = useState(null); // null = "Todas"
-  const [activePhase, setActivePhase] = useState('zonas'); // 'zonas' | 'eliminatoria' | 'horarios'
+  const [seccion, setSeccion] = useState(() =>
+    SECCIONES.some((s) => s.key === searchParams.get('sec')) ? searchParams.get('sec') : 'hoy'
+  );
   const [showFinalizados, setShowFinalizados] = useState(false);
   const [filtroParejaHorarios, setFiltroParejaHorarios] = useState(null); // { id, nombre } | null
   const [activeRoundId, setActiveRoundId] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [busqueda, setBusqueda] = useState(() => searchParams.get('pareja') || ''); // lo que se escribe
+  const [searchTerm, setSearchTerm] = useState(() => (searchParams.get('pareja') || '').trim()); // búsqueda aplicada
   const [favParejaId, setFavParejaId] = useState(null);
+  const [animarEntrada, setAnimarEntrada] = useState(true);
+  const [estrellaPop, setEstrellaPop] = useState(0);
 
   // Título de la pestaña: "{torneo} · Fixi" con datos, o "Fixi" cargando/error; restaura al desmontar
   useEffect(() => {
@@ -424,11 +447,20 @@ export default function TorneoPublic() {
       setError(null);
       setLastUpdated(Date.now());
 
-      // Si no hay categoría seleccionada, seleccionar la primera
+      // Si no hay categoría seleccionada, la de la URL o la primera
       if (result?.categorias?.length > 0) {
         setActiveCatId((prev) => {
           const exists = result.categorias.some((c) => c.id === prev);
-          return exists ? prev : result.categorias[0].id;
+          if (exists) return prev;
+          const deUrl = result.categorias.find((c) => c.nombre === urlInicial.current.cat);
+          if (deUrl) {
+            const z = deUrl.zonas?.find((x) => letraZona(x) === urlInicial.current.zona);
+            if (z) setActiveZoneId(z.id);
+            const r = Number(urlInicial.current.ronda);
+            if (r > 0 && deUrl.eliminatoria?.[r - 1]) setActiveRoundId(deUrl.eliminatoria[r - 1].id);
+            return deUrl.id;
+          }
+          return result.categorias[0].id;
         });
       }
     } catch (err) {
@@ -464,14 +496,6 @@ export default function TorneoPublic() {
   const zonasAMostrar = activeZoneId ? zonas.filter((z) => z.id === activeZoneId) : zonas;
   const eliminatoria = useMemo(() => activeCategoria?.eliminatoria || [], [activeCategoria]);
 
-  // Resetear filtros al cambiar de categoría
-  useEffect(() => {
-    setSearchTerm('');
-    setActiveRoundId(null);
-    setActiveZoneId(null); // "Todas" por defecto al cambiar de categoría
-    setFiltroParejaHorarios(null);
-  }, [activeCatId]);
-
   // Si la zona seleccionada deja de existir en una actualización por polling, volver a "Todas" (null)
   useEffect(() => {
     if (activeZoneId !== null && !zonas.some((z) => z.id === activeZoneId)) {
@@ -479,65 +503,86 @@ export default function TorneoPublic() {
     }
   }, [zonas, activeZoneId]);
 
-  // Inicializar activePhase según la fase en disputa al cambiar categoría o cargar datos
-  useEffect(() => {
-    if (!activeCategoria) return;
-
-    const catZonas = activeCategoria.zonas || [];
-    const catElim = activeCategoria.eliminatoria || [];
-    const totalPartidos =
-      catZonas.reduce((acc, z) => acc + (z.partidos?.length || 0), 0) +
-      catElim.reduce((acc, f) => acc + (f.partidos?.length || 0), 0);
-
-    // Si el usuario ya está en Horarios y la categoría tiene partidos, mantener 'horarios'
-    if (activePhase === 'horarios' && totalPartidos > 0) {
-      return;
-    }
-
-    if (catZonas.length > 0 && catElim.length > 0) {
-      const todosGrupos = catZonas.flatMap((z) => z.partidos || []);
-      const gCompletados =
-        todosGrupos.length > 0 && todosGrupos.every((p) => p.estado === 'FINALIZADO');
-      const todosElim = catElim.flatMap((f) => f.partidos || []);
-      const eIniciada = todosElim.some(
-        (p) => p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || Boolean(p.pareja1 && p.pareja2)
-      );
-
-      // Pestaña inicial según la fase actual del torneo
-      setActivePhase(eIniciada || gCompletados ? 'eliminatoria' : 'zonas');
-    } else if (catElim.length > 0) {
-      setActivePhase('eliminatoria');
-    } else {
-      setActivePhase('zonas');
-    }
-  }, [activeCategoria?.id]);
-
+  // Cambio de categoría a mano: zonas en "Todas" y ronda por defecto.
+  // La búsqueda se mantiene: busca en todo el torneo.
   const handleCategorySelect = (catId, e) => {
+    if (catId === activeCatId) return;
     setActiveCatId(catId);
+    setActiveZoneId(null);
+    setActiveRoundId(null);
     setFiltroParejaHorarios(null);
     e?.currentTarget?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   };
 
-  const handleZoneSelect = (zoneId, e) => {
-    setActiveZoneId(zoneId);
-    e?.currentTarget?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-  };
+  // La búsqueda se aplica 140 ms después de dejar de escribir
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(busqueda.trim()), 140);
+    return () => clearTimeout(t);
+  }, [busqueda]);
 
-  const handleSearchResultClick = (res) => {
-    if (activePhase === 'horarios') {
-      setFiltroParejaHorarios({ id: res.parejaId, nombre: res.parejaNombre });
-      setSearchTerm('');
-      return;
+  // Parejas de todo el torneo que coinciden con la búsqueda
+  const coincidencias = useMemo(() => parejasQueCoinciden(data?.categorias || [], searchTerm), [data, searchTerm]);
+
+  // Adónde llevar al usuario: la categoría (y la zona) si la búsqueda apunta a un solo lugar
+  const destinoBusqueda = useMemo(() => {
+    if (!coincidencias.length) return null;
+    if (new Set(coincidencias.map((x) => x.catId)).size > 1) return null;
+    const unaZona = new Set(coincidencias.map((x) => x.zonaId)).size === 1;
+    return { catId: coincidencias[0].catId, zonaId: unaZona ? coincidencias[0].zonaId : null };
+  }, [coincidencias]);
+
+  // Al buscar (o al pasar a Zonas con una búsqueda), ir a la categoría y a la zona de la pareja.
+  // Solo reacciona a la búsqueda y a la sección: si después se elige otra zona a mano, se respeta.
+  const seleccionRef = useRef({ catId: activeCatId, zonaId: activeZoneId });
+  seleccionRef.current = { catId: activeCatId, zonaId: activeZoneId };
+  useEffect(() => {
+    if (!destinoBusqueda) return;
+    const { catId, zonaId } = seleccionRef.current;
+    if (destinoBusqueda.catId !== catId) {
+      setActiveCatId(destinoBusqueda.catId);
+      setActiveRoundId(null);
+      setFiltroParejaHorarios(null);
+      setActiveZoneId(seccion === 'zonas' ? destinoBusqueda.zonaId : null);
+    } else if (seccion === 'zonas' && destinoBusqueda.zonaId && destinoBusqueda.zonaId !== zonaId) {
+      setActiveZoneId(destinoBusqueda.zonaId);
     }
+  }, [destinoBusqueda, seccion]);
 
-    setActivePhase('zonas');
-    setActiveZoneId(res.zonaId);
-    setSearchTerm('');
-    setFiltroParejaHorarios(null);
-    setTimeout(() => {
-      const chip = document.querySelector(`[data-zone-id="${res.zonaId}"]`);
-      chip?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    }, 60);
+  // Link de cada sección con el estado actual (para abrir en otra pestaña o compartir)
+  const construirURL = useCallback(
+    (sec) => {
+      if (!activeCategoria) return '';
+      const p = new URLSearchParams();
+      p.set('cat', activeCategoria.nombre);
+      p.set('sec', sec);
+      const z = zonas.find((x) => x.id === activeZoneId);
+      if (sec === 'zonas' && z) p.set('zona', letraZona(z));
+      const ri = eliminatoria.findIndex((f) => f.id === activeRoundId);
+      if (sec === 'cuadro' && ri >= 0) p.set('ronda', String(ri + 1));
+      if (searchTerm) p.set('pareja', searchTerm);
+      return p.toString();
+    },
+    [activeCategoria, zonas, eliminatoria, activeZoneId, activeRoundId, searchTerm]
+  );
+  const urlActual = construirURL(seccion);
+  useEffect(() => {
+    if (urlActual && urlActual !== window.location.search.slice(1)) setSearchParams(urlActual, { replace: true });
+  }, [urlActual, setSearchParams]);
+
+  // Aviso de resultados nuevos (nunca en la primera carga)
+  const aviso = useAvisoResultados(data, activeCategoria, favParejaId);
+
+  // Entrada en cascada solo la primera vez que llegan los datos
+  const hayDatos = Boolean(data);
+  useEffect(() => {
+    if (!hayDatos) return undefined;
+    const t = setTimeout(() => setAnimarEntrada(false), 1400);
+    return () => clearTimeout(t);
+  }, [hayDatos]);
+
+  const toggleSeguir = (parejaId) => {
+    if (parejaId !== favParejaId) setEstrellaPop((n) => n + 1);
+    handleToggleFav(parejaId);
   };
 
   // Ronda más avanzada con al menos 1 cruce definido por defecto
@@ -598,20 +643,6 @@ export default function TorneoPublic() {
 
     return list;
   }, [zonas]);
-
-  // Normalización sin acentos y case-insensitive
-  const normalize = (text) =>
-    (text || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-
-  // Coincidencias de búsqueda en tiempo real
-  const resultadosBusqueda = useMemo(() => {
-    const q = normalize(searchTerm.trim());
-    if (!q) return [];
-    return parejasPorZona.filter((item) => normalize(item.parejaNombre).includes(q));
-  }, [parejasPorZona, searchTerm]);
 
   // Nombre de la pareja favorita activa (para mostrar chip en buscador)
   const favParejaNombre = useMemo(() => {
@@ -933,11 +964,11 @@ export default function TorneoPublic() {
 
   if (error) {
     return (
-      <div className="public-page" style={{ textAlign: 'center', paddingTop: '4rem' }}>
-        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
-          <AlertTriangle size={36} strokeWidth={2} style={{ color: 'var(--color-danger)' }} />
+      <div className="publico">
+        <div className="pv-envolver" style={{ paddingTop: 64, textAlign: 'center' }}>
+          <AlertTriangle size={32} strokeWidth={2} style={{ color: 'var(--aviso-texto)', marginBottom: 12 }} aria-hidden="true" />
+          <p style={{ color: 'var(--tinta-2)' }}>{error}</p>
         </div>
-        <p style={{ color: 'var(--color-danger)' }}>{error}</p>
       </div>
     );
   }
@@ -945,505 +976,335 @@ export default function TorneoPublic() {
   if (!data) return null;
 
   const { torneo, categorias = [] } = data;
-
-  const todosPartidosGrupos = zonas.flatMap((z) => z.partidos || []);
-  const gruposCompletados =
-    todosPartidosGrupos.length > 0 &&
-    todosPartidosGrupos.every((p) => p.estado === 'FINALIZADO');
-  const gruposEnCurso = todosPartidosGrupos.some((p) => p.estado === 'EN_CURSO');
-
-  const todosPartidosElim = eliminatoria.flatMap((f) => f.partidos || []);
-  const eliminatoriaFinalizada =
-    todosPartidosElim.length > 0 &&
-    todosPartidosElim.every((p) => p.estado === 'FINALIZADO');
-  const eliminatoriaIniciada = todosPartidosElim.some(
-    (p) => p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || (p.pareja1 && p.pareja2)
+  const q = searchTerm;
+  const cifras = cifrasTorneo(categorias);
+  const enVivo = categorias.some((c) => partidosDeCategoria(c).some((p) => p.estado === 'EN_CURSO'));
+  const listaCampeones = torneo.estado === 'FINALIZADO' ? campeones(categorias) : [];
+  const partidosCat = partidosDeCategoria(activeCategoria);
+  const partidosFiltrados = partidosCat.filter((p) => partidoCoincide(p, q));
+  const parejasCat = coincidencias.filter((x) => x.catId === activeCategoria?.id);
+  const unaPareja = new Set(parejasCat.map((x) => x.nombre)).size === 1 ? parejasCat[0] : null;
+  const cascada = (i) => (animarEntrada ? { className: 'pv-cascada', style: { '--i': i } } : {});
+  const conCascada = (clase, i) => ({ className: `${clase}${animarEntrada ? ' pv-cascada' : ''}`, style: animarEntrada ? { '--i': i } : undefined });
+  const tarjeta = (conDia) => (p) => (
+    <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia={conDia} seguidaId={favParejaId} />
   );
 
-  const tieneZonasTab = zonas.length > 0;
-  const tieneElimTab = eliminatoria.length > 0;
-  const tieneHorariosTab = (todosPartidosGrupos.length + todosPartidosElim.length) > 0;
-
-  const availableTabsCount = (tieneZonasTab ? 1 : 0) + (tieneElimTab ? 1 : 0) + (tieneHorariosTab ? 1 : 0);
-  const showSegmentedControl = availableTabsCount >= 2;
-
-  return (
-    <div className="public-page">
-      {/* Header del Torneo (no sticky) */}
-      <header className="public-tournament-header">
-        <h1 className="public-tournament-title">
-          <Award size={24} strokeWidth={2} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-          <span>{torneo.nombre}</span>
-        </h1>
-
-        <div className="public-tournament-meta">
-          <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{estadoLabel(torneo.estado)}</span>
-          <span className="public-meta-item">
-            Club: <strong>{torneo.organizador}</strong>
+  // ─── Línea de resultado del buscador ───
+  let resultado = null;
+  if (q) {
+    const n = partidosFiltrados.length;
+    if (n && unaPareja) {
+      const siguiendo = favParejaId === unaPareja.parejaId;
+      resultado = (
+        <>
+          <span>
+            <b className="num">{n}</b> {n === 1 ? 'partido' : 'partidos'} de <b translate="no">{unaPareja.nombre}</b>
           </span>
-          {torneo.fecha && (
-            <span className="public-meta-item">
-              <Calendar size={13} />
-              {formatFechaTorneo(torneo.fecha)}
-            </span>
+          {unaPareja.parejaId && (
+            <button type="button" className="pv-seguir" aria-pressed={siguiendo} onClick={() => toggleSeguir(unaPareja.parejaId)}>
+              <Estrella contorno={!siguiendo} decorativa className={siguiendo && estrellaPop ? 'pv-estrella-pop' : ''} key={estrellaPop} />
+              {siguiendo ? 'Siguiendo' : 'Seguir'}
+            </button>
           )}
-        </div>
+        </>
+      );
+    } else if (n) {
+      resultado = (
+        <span>
+          <b className="num">{n}</b> {n === 1 ? 'partido coincide' : 'partidos coinciden'} con “{q}”
+        </span>
+      );
+    } else {
+      const otras = categorias.filter((c) => c.id !== activeCategoria?.id && partidosDeCategoria(c).some((p) => partidoCoincide(p, q)));
+      resultado = otras.length ? (
+        <>
+          <span>No hay partidos con “{q}” en {activeCategoria?.nombre}. Está en otra categoría:</span>
+          {otras.map((c) => (
+            <button key={c.id} type="button" className="pv-btn pv-btn-texto" onClick={() => handleCategorySelect(c.id)}>
+              Ver en {c.nombre}
+            </button>
+          ))}
+        </>
+      ) : (
+        <span>No hay partidos con “{q}” en el torneo. Revisá cómo está escrito el apellido.</span>
+      );
+    }
+  } else if (favParejaNombre) {
+    resultado = (
+      <>
+        <span>Seguís a <b translate="no">{favParejaNombre}</b></span>
+        <button type="button" className="pv-btn pv-btn-texto" onClick={() => setBusqueda(favParejaNombre.split(' / ')[0])}>
+          Ver sus partidos
+        </button>
+      </>
+    );
+  }
 
-        <UltimaActualizacion timestamp={lastUpdated} />
-      </header>
+  // ─── Mensaje cuando la búsqueda deja la vista vacía pero la pareja juega en otro lado ───
+  const quien = unaPareja ? <b translate="no">{unaPareja.nombre}</b> : <>Ninguna pareja con “{q}”</>;
+  const verbo = unaPareja ? 'no juega' : 'juega';
+  const mensajeVacio = (texto, botones = null) => (
+    <div className="pv-vacio-busqueda" role="status">
+      <p>{texto}</p>
+      {botones && <div>{botones}</div>}
+    </div>
+  );
 
-      {/* Barra Sticky: Categorías + Control Segmentado */}
-      {(categorias.length > 0 || showSegmentedControl) && (
-        <div className="public-sticky-nav">
-          {/* Selector de Categorías (Pestañas horizontales con scroll, sin wrap, con degradé) */}
-          {categorias.length > 0 && (
-            <div className="public-cat-chips" role="tablist" aria-label="Categorías">
-              {categorias.map((c) => {
-                const isActive = activeCategoria?.id === c.id;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    className={`public-cat-chip ${isActive ? 'active' : ''}`}
-                    onClick={(e) => handleCategorySelect(c.id, e)}
-                  >
-                    <span>{c.nombre}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+  // ─── Hoy ───
+  const vistaHoy = () => {
+    const hoy = diaDeHoy(diasDelTorneo(categorias));
+    if (!hoy) return <p className="pv-vacio">Todavía no hay partidos con horario en este torneo.</p>;
+    const nombreDia = `${hoy.diaNombre.toLowerCase()} ${Number(hoy.key.slice(8))}`;
+    const delDia = partidosFiltrados.filter((p) => diaDe(p) === hoy.key);
+    const enJuego = partidosFiltrados.filter((p) => p.estado === 'EN_CURSO');
+    const pendientes = delDia.filter((p) => p.estado === 'PENDIENTE').sort(porHorario);
+    const terminados = delDia.filter((p) => p.estado === 'FINALIZADO').sort((a, b) => porHorario(b, a));
 
-          {/* Control Segmentado (Tabs reales: Zonas / Eliminatoria / Horarios) */}
-          {showSegmentedControl && (
-            <div className="public-segmented-control" role="tablist" aria-label="Fase del torneo">
-              {tieneZonasTab && (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activePhase === 'zonas'}
-                  className={`public-segment-btn ${activePhase === 'zonas' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActivePhase('zonas');
-                    setFiltroParejaHorarios(null);
-                  }}
-                >
-                  <span>Zonas</span>
-                  <span className="public-segment-subtext">
-                    {gruposCompletados ? '· Completada' : gruposEnCurso ? '· En juego' : '· En disputa'}
-                  </span>
-                </button>
-              )}
-              {tieneElimTab && (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activePhase === 'eliminatoria'}
-                  className={`public-segment-btn ${activePhase === 'eliminatoria' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActivePhase('eliminatoria');
-                    setFiltroParejaHorarios(null);
-                  }}
-                >
-                  <span>Eliminatoria</span>
-                  <span className="public-segment-subtext">
-                    {eliminatoriaFinalizada ? '· Finalizado' : eliminatoriaIniciada ? '· En disputa' : '· Por comenzar'}
-                  </span>
-                </button>
-              )}
-              {tieneHorariosTab && (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activePhase === 'horarios'}
-                  className={`public-segment-btn ${activePhase === 'horarios' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActivePhase('horarios');
-                    setFiltroParejaHorarios(null);
-                  }}
-                >
-                  <span>Horarios</span>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+    if (q && partidosFiltrados.length && !enJuego.length && !pendientes.length && !terminados.length) {
+      const conHora = partidosFiltrados.filter((p) => p.estado !== 'FINALIZADO' && p.fechaHora).sort(porHorario);
+      const prox = conHora.find((p) => diaDe(p) >= hoy.key) || conHora[0];
+      const dia = prox ? DIAS_LARGOS[horaPartido(prox.fechaHora).slice(0, 3)] : null;
+      const frase = !prox
+        ? 'No tiene partidos pendientes con horario.'
+        : diaDe(prox) >= hoy.key
+          ? <>{unaPareja ? 'Su próximo partido es' : 'El próximo es'} el {dia} a las <b className="num">{horaPartido(prox.fechaHora, false)}</b>.</>
+          : <>{unaPareja ? 'Tiene' : 'Hay'} un partido pendiente del {dia} a las <b className="num">{horaPartido(prox.fechaHora, false)}</b>.</>;
+      return mensajeVacio(
+        <>{quien} {verbo} {hoy.momento === 'durante' ? 'hoy' : `el ${nombreDia}`}. {frase}</>,
+        <button type="button" className="pv-btn pv-btn-secundario" onClick={() => setSeccion('horarios')}>Ver horarios</button>
+      );
+    }
 
-      {/* Bloque "Tu próximo partido" (Visible en ambas fases Zonas y Eliminatoria) */}
-      {proximoPartidoInfo && (
-        <div className="public-next-match-wrap">
-          <div className={`public-next-match-card status-${proximoPartidoInfo.tipo}`}>
-            <div className="public-next-match-icon-col">
-              {proximoPartidoInfo.tipo === 'en-curso' && (
-                <div className="public-next-match-icon-pulse">
-                  <Play size={16} className="public-next-icon-play" />
-                </div>
-              )}
-              {proximoPartidoInfo.tipo === 'clasificado' && (
-                <div className="public-next-match-icon-box">
-                  <Trophy size={16} className="public-next-icon-trophy" />
-                </div>
-              )}
-              {(proximoPartidoInfo.tipo === 'programado' ||
-                proximoPartidoInfo.tipo === 'sin-horario' ||
-                proximoPartidoInfo.tipo === 'esperando-rival') && (
-                <div className="public-next-match-icon-box">
-                  <Clock size={16} className="public-next-icon-clock" />
-                </div>
-              )}
-            </div>
-
-            <div className="public-next-match-body">
-              <div className="public-next-match-header">
-                <span className="public-next-match-badge">{proximoPartidoInfo.badge}</span>
-                {proximoPartidoInfo.meta && (
-                  <span className="public-next-match-meta">{proximoPartidoInfo.meta}</span>
-                )}
-              </div>
-              <div className="public-next-match-rival" title={proximoPartidoInfo.rival}>
-                {proximoPartidoInfo.rival}
-              </div>
-            </div>
+    if (hoy.momento === 'antes') {
+      return (
+        <>
+          <h2 {...conCascada('pv-titulo-sec', 5)}>El torneo arranca el {nombreDia}</h2>
+          <div {...cascada(6)}>
+            {pendientes.length
+              ? <ListaAnimada key="antes" items={pendientes} clave={claveTarjeta} render={tarjeta(false)} />
+              : <p className="pv-vacio">Esta categoría no juega ese día.</p>}
+          </div>
+        </>
+      );
+    }
+    if (hoy.momento === 'despues') {
+      return (
+        <>
+          <h2 {...conCascada('pv-titulo-sec', 5)}>Resultados del {nombreDia}</h2>
+          <div {...cascada(6)}>
+            {terminados.length
+              ? <ListaAnimada key="despues" items={terminados} clave={claveTarjeta} render={tarjeta(false)} />
+              : <p className="pv-vacio">Esta categoría no jugó ese día.</p>}
+          </div>
+        </>
+      );
+    }
+    return (
+      <div className="pv-dos-col">
+        <div>
+          <h2 {...conCascada('pv-titulo-sec', 5)}>
+            En juego <small>{enJuego.length ? `${enJuego.length} ${enJuego.length === 1 ? 'partido' : 'partidos'}` : ''}</small>
+          </h2>
+          <div {...cascada(6)}>
+            {enJuego.length
+              ? <ListaAnimada key="vivo" items={enJuego} clave={claveTarjeta} render={tarjeta(false)} />
+              : <p className="pv-vacio">{q ? 'Ninguno.' : 'No hay partidos en juego en esta categoría.'}</p>}
+          </div>
+          <h2 {...conCascada('pv-titulo-sec', 7)}>Pendientes de hoy</h2>
+          <div {...cascada(8)}>
+            {pendientes.length
+              ? <ListaAnimada key="pend" items={pendientes} clave={claveTarjeta} render={tarjeta(false)} />
+              : <p className="pv-vacio">{q ? 'Ninguno.' : 'No quedan partidos para hoy en esta categoría.'}</p>}
           </div>
         </div>
-      )}
+        <div>
+          <h2 {...conCascada('pv-titulo-sec', 9)}>Terminados hoy</h2>
+          <div {...cascada(10)}>
+            {terminados.length
+              ? <ListaAnimada key="fin" items={terminados} clave={claveTarjeta} render={tarjeta(false)} />
+              : <p className="pv-vacio">{q ? 'Ninguno.' : 'Todavía no terminó ningún partido hoy.'}</p>}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
-      {/* Navegación rápida entre zonas (Solo en pestaña Zonas, no sticky, alto táctil min 40px, con "Todas") */}
-      {activePhase === 'zonas' && zonas.length > 1 && (
-        <div className="public-zone-chips" role="navigation" aria-label="Navegación entre zonas">
-          <button
-            type="button"
-            className={`public-zone-chip ${activeZoneId === null ? 'active' : ''}`}
-            onClick={(e) => handleZoneSelect(null, e)}
-            aria-label="Ver todas las zonas"
-            aria-current={activeZoneId === null ? 'true' : undefined}
-            data-zone-id="all"
-          >
-            Todas
+  // ─── Zonas ───
+  const vistaZonas = () => {
+    if (!zonas.length) return <p className="pv-vacio">Las zonas se arman cuando el organizador inicia el torneo.</p>;
+    const items = [
+      { key: 'todas', label: 'Todas', aria: 'Todas las zonas' },
+      ...zonas.map((z) => ({ key: z.id, label: letraZona(z), aria: z.nombre })),
+    ];
+    const activo = activeZoneId ? zonas.findIndex((z) => z.id === activeZoneId) + 1 : 0;
+    const zonaTieneMatch = (z) =>
+      (z.tabla || []).some((r) => normalizar(r.pareja).includes(normalizar(q))) || (z.partidos || []).some((p) => partidoCoincide(p, q));
+    let lista = zonasAMostrar;
+    if (q && !activeZoneId) lista = lista.filter(zonaTieneMatch);
+
+    let vacio = null;
+    if (q && partidosFiltrados.length && (!lista.length || (activeZoneId && !zonaTieneMatch(lista[0])))) {
+      const zonasPareja = zonas.filter(zonaTieneMatch);
+      const actual = zonas.find((z) => z.id === activeZoneId);
+      vacio = mensajeVacio(
+        <>{quien} {verbo} en la zona {actual ? letraZona(actual) : ''}.</>,
+        zonasPareja.map((z) => (
+          <button key={z.id} type="button" className="pv-btn pv-btn-secundario" onClick={() => setActiveZoneId(z.id)}>
+            Ir a la zona {letraZona(z)}
           </button>
-          {zonas.map((z) => {
-            const isActive = activeZoneId === z.id;
+        ))
+      );
+    }
+
+    return (
+      <>
+        <div {...cascada(5)}>
+          <Segmentado items={items} activo={activo} etiqueta="Zonas" onCambiar={(i) => setActiveZoneId(i === 0 ? null : zonas[i - 1].id)} />
+        </div>
+        <div key={activeZoneId || 'todas'} {...conCascada('pv-zonas pv-entra', 6)}>
+          {vacio}
+          {(vacio && activeZoneId ? [] : lista).map((z) => {
+            const ps = (z.partidos || [])
+              .filter((p) => partidoCoincide(p, q))
+              .map((p) => {
+                const r = z.formato === 'MINI_BRACKET' ? { 1: 'Partido 1', 2: 'Partido 2', 3: 'Final de zona', 4: 'Por el 3.er puesto' }[p.posicionEnRonda] : null;
+                return { ...p, etiqueta: r };
+              });
             return (
-              <button
-                key={z.id}
-                type="button"
-                className={`public-zone-chip ${isActive ? 'active' : ''}`}
-                onClick={(e) => handleZoneSelect(z.id, e)}
-                aria-label={`Ver ${z.nombre}`}
-                aria-current={isActive ? 'true' : undefined}
-                data-zone-id={z.id}
-              >
-                {z.nombre}
-              </button>
+              <section key={z.id} className="pv-zona" aria-label={z.nombre}>
+                <TablaZona zona={z} seguidaId={favParejaId} busqueda={q} />
+                <div>
+                  <h3 className="pv-titulo-sec">Partidos de la zona {letraZona(z)}</h3>
+                  {ps.length
+                    ? <ListaAnimada items={ps} clave={claveTarjeta} render={tarjeta(true)} />
+                    : <p className="pv-vacio">{q ? 'Ninguno.' : 'Sin partidos.'}</p>}
+                </div>
+              </section>
             );
           })}
         </div>
-      )}
+      </>
+    );
+  };
 
-      {/* Buscador de parejas de la categoría activa (Visible en Zonas y Horarios) */}
-      {(activePhase === 'zonas' || activePhase === 'horarios') && zonas.length > 0 && (
-        <div className="public-search-wrap">
-          <div className="public-search-box">
-            <Search size={16} className="public-search-icon" aria-hidden="true" />
+  return (
+    <div className="publico">
+      <a className="pv-saltar" href="#contenido">Saltar a los partidos</a>
+      <Encabezado
+        torneo={torneo}
+        cifras={cifras}
+        enVivo={enVivo}
+        animar={animarEntrada}
+        actualizacion={<UltimaActualizacion timestamp={lastUpdated} />}
+      />
+
+      <div className="pv-envolver">
+        <section {...conCascada('pv-buscador', 3)} aria-label="Buscar tu pareja">
+          <label htmlFor="buscar-pareja">¿Cuál es tu pareja?</label>
+          <div className="pv-campo">
+            <Search size={20} strokeWidth={2} aria-hidden="true" />
             <input
-              type="text"
-              className="public-search-input"
-              placeholder="Buscar pareja o jugador..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              aria-label="Buscar pareja o jugador en esta categoría"
+              id="buscar-pareja"
+              type="search"
+              name="pareja"
+              autoComplete="off"
+              spellCheck={false}
+              enterKeyHint="search"
+              placeholder="Por ejemplo, Álvarez…"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
             />
-            {searchTerm && (
-              <button
-                type="button"
-                className="public-search-clear"
-                onClick={() => setSearchTerm('')}
-                aria-label="Limpiar búsqueda"
-              >
-                <X size={14} />
+            {busqueda && (
+              <button type="button" className="pv-limpiar" aria-label="Borrar búsqueda" onClick={() => { setBusqueda(''); setSearchTerm(''); }}>
+                <X size={18} aria-hidden="true" />
               </button>
             )}
           </div>
-
-          {/* Chip de pareja favorita activa cuando no hay búsqueda activa */}
-          {favParejaNombre && !searchTerm.trim() && (
-            <div className="public-fav-chip-bar">
-              <span className="public-fav-chip">
-                <Star size={13} className="public-fav-chip-star" />
-                <span className="public-fav-chip-text">
-                  Mi pareja: <strong>{favParejaNombre}</strong>
-                </span>
-                <button
-                  type="button"
-                  className="public-fav-chip-remove"
-                  onClick={() => handleToggleFav(favParejaId)}
-                  aria-label={`Dejar de seguir a ${favParejaNombre}`}
-                  title="Quitar de favoritos"
-                >
-                  <X size={12} />
-                </button>
+          <div className="pv-resultado" aria-live="polite">{resultado}</div>
+          {proximoPartidoInfo && !q && (
+            <div className="pv-proximo">
+              <span className="pv-proximo-icono" aria-hidden="true">
+                {proximoPartidoInfo.tipo === 'en-curso' ? <Play size={16} /> : proximoPartidoInfo.tipo === 'clasificado' ? <Trophy size={16} /> : <Clock size={16} />}
               </span>
+              <div>
+                <b>{proximoPartidoInfo.badge}</b>
+                <strong translate="no">{proximoPartidoInfo.rival}</strong>
+                {proximoPartidoInfo.meta && <span className="pv-proximo-meta"> {proximoPartidoInfo.meta}</span>}
+              </div>
             </div>
           )}
+        </section>
 
-          {/* Lista de resultados desplegable */}
-          {searchTerm.trim() && (
-            <div className="public-search-results" role="listbox" aria-label="Resultados de búsqueda">
-              {resultadosBusqueda.length > 0 ? (
-                resultadosBusqueda.map((res) => {
-                  const isFav = res.parejaId && favParejaId === res.parejaId;
-                  return (
-                    <div
-                      key={`${res.parejaNombre}-${res.zonaId}`}
-                      className="public-search-item"
-                    >
-                      <button
-                        type="button"
-                        className="public-search-item-info"
-                        onClick={() => handleSearchResultClick(res)}
-                        aria-label={`Ver ${res.parejaNombre} en ${res.zonaNombre}`}
-                      >
-                        <span className="public-search-team">{res.parejaNombre}</span>
-                        <span className="public-search-badge">{res.zonaNombre}</span>
-                      </button>
-                      {res.parejaId && (
-                        <button
-                          type="button"
-                          className={`public-search-fav-btn ${isFav ? 'active' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleFav(res.parejaId);
-                          }}
-                          aria-label={
-                            isFav
-                              ? `Quitar a ${res.parejaNombre} de mis favoritos`
-                              : `Marcar a ${res.parejaNombre} como mi pareja`
-                          }
-                          aria-pressed={isFav}
-                          title={isFav ? 'Quitar de favoritos' : 'Marcar como mi pareja'}
-                        >
-                          <Star size={18} className="public-fav-icon" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="public-search-empty">
-                  No se encontraron parejas con ese nombre
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Contenido de la Categoría Activa */}
-      {!activeCategoria ? (
-        <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)', padding: '2rem' }}>
-          No hay información disponible para este torneo aún.
-        </div>
-      ) : zonas.length === 0 && eliminatoria.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
-          <Users size={40} style={{ color: 'var(--color-primary)', marginBottom: '0.75rem', opacity: 0.8 }} />
-          <h3>Categoría {activeCategoria.nombre} — En Preparación</h3>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            El organizador está configurando las parejas y zonas para esta categoría. ¡Pronto estará disponible el fixture!
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Zonas de la categoría (Solo en pestaña Zonas) */}
-          {activePhase === 'zonas' && zonas.length > 0 && (
-            <section className="public-zonas-section" style={{ marginBottom: '3rem' }}>
-              <h2
-                style={{
-                  marginBottom: '1rem',
-                  fontSize: 'var(--font-size-xl)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}
-              >
-                <Users size={20} strokeWidth={2} />
-                Zonas
-              </h2>
-              {zonasAMostrar.map((zona, zIdx) => (
-                <Fragment key={zona.id}>
-                  {isMobile && activeZoneId === null && zIdx > 0 && (
-                    <hr className="public-zona-separator" />
-                  )}
-                  <div
-                    id={`zona-${zona.id}`}
-                    className={isMobile ? 'public-zona-mobile' : 'torneo-card'}
-                    style={{ marginBottom: '2rem' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <h3 style={{ margin: 0 }}>{zona.nombre}</h3>
-                      {!isMobile && (
-                        <span className="badge badge-en_curso">Clasifican {zona.clasifican}</span>
-                      )}
-                    </div>
-
-                  {/* Posiciones de la zona: Mobile (mini tabla con encabezados alineados) vs Desktop (tabla tradicional) */}
-                  {isMobile ? (
-                    (() => {
-                      const zonaSinJugar = Array.isArray(zona.tabla) && zona.tabla.length > 0 && zona.tabla.every((row) => (row.pj || 0) === 0);
-
-                      return (
-                        <div className="public-tabla-wrap" style={{ marginBottom: '1.5rem' }}>
-                          <table className="public-tabla-mobile">
-                            <thead>
-                              <tr>
-                                <th className="col-pos">#</th>
-                                <th className="col-pareja">Pareja</th>
-                                {zonaSinJugar ? (
-                                  <th className="col-estado text-right" style={{ textAlign: 'right' }}>Estado</th>
-                                ) : (
-                                  <>
-                                    <th className="col-stat text-center" title="Partidos Jugados">PJ</th>
-                                    <th className="col-stat text-center" title="Partidos Ganados">PG</th>
-                                    <th className="col-stat-diff text-center" title="Diferencia de Sets">DS</th>
-                                    <th className="col-stat-diff text-center" title="Diferencia de Games">DG</th>
-                                    <th className="col-pts text-center" title="Puntos">PTS</th>
-                                  </>
-                                )}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {zona.tabla.map((row, idx) => {
-                                const clasifica = idx < zona.clasifican;
-                                const ds = (row.sf || 0) - (row.sc || 0);
-                                const dg = (row.gf || 0) - (row.gc || 0);
-
-                                return (
-                                  <tr key={idx} className={clasifica ? 'clasifica' : ''}>
-                                    <td className="col-pos">{idx + 1}</td>
-                                    <td className="col-pareja">
-                                      <span className="public-tabla-nombre" title={row.pareja}>
-                                        {row.pareja}
-                                      </span>
-                                    </td>
-                                    {zonaSinJugar ? (
-                                      <td className="col-estado text-right" style={{ textAlign: 'right' }}>
-                                        <span className="public-tabla-sin-jugar">Sin jugar</span>
-                                      </td>
-                                    ) : (
-                                      <>
-                                        <td className="col-stat text-center">{row.pj}</td>
-                                        <td className="col-stat text-center">{row.pg}</td>
-                                        <td className="col-stat-diff text-center">{formatDiff(ds)}</td>
-                                        <td className="col-stat-diff text-center">{formatDiff(dg)}</td>
-                                        <td className="col-pts text-center">
-                                          <span className="public-tabla-pts-val">{row.puntos}</span>
-                                        </td>
-                                      </>
-                                    )}
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    })()
-                  ) : (
-                    <div className="table-responsive" style={{ marginBottom: '1.5rem' }}>
-                      <table className="zona-table">
-                        <thead>
-                          <tr>
-                            <th className="col-pos" title="Posición">
-                              <span className="sr-only">Pos</span>
-                              <span aria-hidden="true" className="th-short">#</span>
-                            </th>
-                            <th className="col-pareja">Pareja</th>
-                            <th className="col-pts text-center" title="Puntos">
-                              <span className="sr-only">Pts</span>
-                              <span aria-hidden="true" className="th-short">P</span>
-                            </th>
-                            <th className="col-pj text-center hide-on-mobile" title="Partidos Jugados">PJ</th>
-                            <th className="col-pg text-center" title="Partidos Ganados">
-                              <span className="sr-only">PG</span>
-                              <span aria-hidden="true" className="th-short">G</span>
-                            </th>
-                            <th className="col-pp text-center hide-on-mobile" title="Partidos Perdidos">PP</th>
-                            <th className="col-sets text-center" title="Sets a Favor / En Contra">
-                              <span className="sr-only">Sets</span>
-                              <span aria-hidden="true" className="th-short">S</span>
-                            </th>
-                            <th className="col-games text-center" title="Games a Favor / En Contra">
-                              <span className="sr-only">Games</span>
-                              <span aria-hidden="true" className="th-short">Gm</span>
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {zona.tabla.map((row, idx) => {
-                            const clasifica = idx < zona.clasifican;
-                            return (
-                              <tr
-                                key={idx}
-                                style={{
-                                  backgroundColor: clasifica ? 'var(--color-primary-light)' : 'transparent',
-                                  borderLeft: clasifica ? '4px solid var(--color-primary)' : '4px solid transparent',
-                                }}
-                              >
-                                <td className="col-pos"><span className="pos-number">{idx + 1}</span></td>
-                                <td className="col-pareja team-name" title={row.pareja}>
-                                  {row.pareja}
-                                </td>
-                                <td className="col-pts text-center stat-pts">{row.puntos}</td>
-                                <td className="col-pj text-center hide-on-mobile">{row.pj}</td>
-                                <td className="col-pg text-center stat-highlight">{row.pg}</td>
-                                <td className="col-pp text-center hide-on-mobile">{row.pp}</td>
-                                <td className="col-sets text-center">{row.sf} - {row.sc}</td>
-                                <td className="col-games text-center">{row.gf} - {row.gc}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* Partidos de la zona */}
-                  {zona.partidos.length > 0 && (
-                    <div>
-                      <h4 style={{ color: 'var(--color-text-secondary)', marginBottom: '0.75rem', fontSize: 'var(--font-size-sm)' }}>
-                        Partidos
-                      </h4>
-                      <div className="partidos-public-grid">
-                        {zona.partidos.map((p) => {
-                          let partidoLabel = '';
-                          if (zona.formato === 'MINI_BRACKET') {
-                            if (p.posicionEnRonda === 1) partidoLabel = 'Ronda 1 — Partido 1';
-                            if (p.posicionEnRonda === 2) partidoLabel = 'Ronda 1 — Partido 2';
-                            if (p.posicionEnRonda === 3) partidoLabel = '1° y 2° Puesto (Ganador vs Ganador)';
-                            if (p.posicionEnRonda === 4) partidoLabel = '3° y 4° Puesto (Perdedor vs Perdedor · Clasificación)';
-                          }
-                          return (
-                            <PublicMatchCard
-                              key={p.id}
-                              partido={p}
-                              label={partidoLabel}
-                              isFav={Boolean(favParejaId && (p.pareja1Id === favParejaId || p.pareja2Id === favParejaId))}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Fragment>
+        {listaCampeones.length > 0 && (
+          <section {...conCascada('pv-campeones', 4)} aria-label="Campeones">
+            <h2>
+              <Trophy size={18} className="pv-estrella" aria-hidden="true" />
+              Campeones
+            </h2>
+            {listaCampeones.map((c) => (
+              <div key={c.categoria} className="pv-campeon">
+                <span>{c.categoria}</span>
+                <b translate="no">{c.pareja}</b>
+              </div>
             ))}
-            </section>
-          )}
+          </section>
+        )}
 
+        {categorias.length > 0 && (
+          <div
+            className="pv-cats"
+            role="tablist"
+            aria-label="Categorías"
+            onKeyDown={(e) => {
+              if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+              const i = categorias.findIndex((c) => c.id === activeCategoria?.id);
+              const sig = categorias[(i + (e.key === 'ArrowRight' ? 1 : -1) + categorias.length) % categorias.length];
+              e.preventDefault();
+              handleCategorySelect(sig.id);
+              e.currentTarget.querySelector(`[data-cat="${sig.id}"]`)?.focus();
+            }}
+          >
+            {categorias.map((c) => {
+              const activa = activeCategoria?.id === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="tab"
+                  data-cat={c.id}
+                  aria-selected={activa}
+                  tabIndex={activa ? 0 : -1}
+                  {...conCascada('pv-cat', 4)}
+                  onClick={(e) => handleCategorySelect(c.id, e)}
+                >
+                  {c.nombre}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <NavSecciones secciones={SECCIONES} activa={seccion} onCambiar={setSeccion} href={(k) => `?${construirURL(k)}`} />
+
+      <main id="contenido" tabIndex={-1} className="pv-envolver pv-main">
+        {!activeCategoria ? (
+          <p className="pv-vacio">No hay información disponible para este torneo aún.</p>
+        ) : zonas.length === 0 && eliminatoria.length === 0 ? (
+          <div className="pv-preparacion">
+            <Users size={36} aria-hidden="true" />
+            <h2>{activeCategoria.nombre}: en preparación</h2>
+            <p>El organizador está cargando las parejas y armando las zonas. El fixture aparece acá cuando arranque.</p>
+          </div>
+        ) : (
+          <div key={seccion} className={animarEntrada ? undefined : 'pv-entra'}>
+            {seccion === 'hoy' && vistaHoy()}
+            {seccion === 'zonas' && vistaZonas()}
+            {seccion === 'cuadro' && (
+              <div className="pv-legado">
           {/* Fase Eliminatoria de la categoría (Solo en pestaña Eliminatoria) */}
-          {activePhase === 'eliminatoria' && eliminatoria.length > 0 && (
+          {seccion === 'cuadro' && eliminatoria.length > 0 && (
             <section className="public-eliminatoria-section" style={{ marginBottom: '3rem' }}>
               <h2
                 style={{
@@ -1542,9 +1403,12 @@ export default function TorneoPublic() {
               )}
             </section>
           )}
-
+              </div>
+            )}
+            {seccion === 'horarios' && (
+              <div className="pv-legado">
           {/* Cronograma Horarios (Solo en pestaña Horarios) */}
-          {activePhase === 'horarios' && (
+          {seccion === 'horarios' && (
             <section className="public-horarios-section" aria-label="Cronograma de partidos">
               {/* Barra de acciones: Chip de filtro activo o Toggle "Ver finalizados" */}
               {(horariosData.totalPartidos > 0 || filtroParejaHorarios) && (
@@ -1659,8 +1523,21 @@ export default function TorneoPublic() {
               )}
             </section>
           )}
-        </>
-      )}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      <div className={`pv-aviso ${aviso ? 'on' : ''}`} role="status" aria-live="polite">
+        <span className="pv-aviso-icono" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+        </span>
+        <div>
+          <b>{aviso?.titulo}</b>
+          <span>{aviso?.texto}</span>
+        </div>
+      </div>
     </div>
   );
 }
