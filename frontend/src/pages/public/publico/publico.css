@@ -433,10 +433,19 @@ body:has(.publico) {
   position: absolute; left: 14px; color: var(--gris); pointer-events: none;
 }
 .publico .pv-busqueda-input {
-  width: 100%; height: 44px; padding-left: 42px; padding-right: 44px;
+  width: 100%; height: 44px; padding: 0 44px 0 42px;
   border-radius: var(--r-control); border: 1px solid var(--linea-fuerte);
   background: var(--superficie); color: var(--tinta); font-size: 16px;
   box-shadow: var(--sombra-1);
+}
+.publico .pv-busqueda-input::placeholder {
+  color: var(--gris);
+}
+.publico .pv-busqueda-input::-webkit-search-decoration,
+.publico .pv-busqueda-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
 }
 .publico .pv-busqueda-input:focus-visible {
   outline: none; border-color: var(--marca);

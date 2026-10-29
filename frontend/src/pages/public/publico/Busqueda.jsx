@@ -254,7 +254,7 @@ export default function Busqueda({
               <input
                 ref={inputRef}
                 type="search"
-                className="pv-input pv-busqueda-input"
+                className="pv-busqueda-input"
                 value={query}
                 onChange={handleInputChange}
                 placeholder="Buscar pareja o jugador…"
