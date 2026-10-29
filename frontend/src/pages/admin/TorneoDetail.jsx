@@ -1088,8 +1088,10 @@ export default function TorneoDetail() {
           {torneo.categorias.map((cat) => {
             const totalParejas = cat.parejas?.length || 0;
             const totalZonas = cat.zonas?.length || 0;
-            const totalPartidos = cat.partidos?.length || 0;
-            const partidosFinalizados = (cat.partidos || []).filter((p) => p.estado === 'FINALIZADO').length;
+            // Los "pasa directo" (esBye) de la llave no se juegan: no cuentan como partidos
+            const partidosReales = (cat.partidos || []).filter((p) => !p.esBye);
+            const totalPartidos = partidosReales.length;
+            const partidosFinalizados = partidosReales.filter((p) => p.estado === 'FINALIZADO').length;
 
             return (
               <div

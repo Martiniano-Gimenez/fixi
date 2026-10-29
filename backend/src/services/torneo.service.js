@@ -85,7 +85,7 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
             include: { slotsSeleccionados: true },
           },
           zonas: { select: { id: true, nombre: true } },
-          partidos: { select: { id: true, estado: true } },
+          partidos: { select: { id: true, estado: true, esBye: true } },
         },
         orderBy: { createdAt: 'asc' },
       },
