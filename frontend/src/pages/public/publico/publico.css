@@ -580,9 +580,8 @@ body:has(.publico) {
   padding-bottom: var(--e-8);
 }
 .pv-insc-ancho { max-width: 560px; }
-.pv-insc .pv-cab { padding-bottom: 56px; }
 .pv-insc-card {
-  position: relative; z-index: 2; margin-top: -36px;
+  position: relative; z-index: 2;
   background: var(--superficie); border-radius: var(--r-panel);
   box-shadow: var(--sombra-2), 0 0 0 1px rgba(23, 37, 84, .04);
   padding: var(--e-5) var(--e-4) var(--e-6);
@@ -677,13 +676,16 @@ body:has(.publico) {
   .pv-insc-acciones { grid-template-columns: 1fr 1fr; }
 }
 
-/* Encabezado oscuro de la Inscripción (temporal: pasa al encabezado claro en el paso siguiente) */
-.pv-insc .pv-cab { position: relative; overflow: hidden; background: var(--tinta); color: #fff; padding: calc(var(--e-4) + env(safe-area-inset-top)) 0 56px; }
-.pv-insc .pv-cab h1 { color: #fff; font-size: var(--t-28); line-height: 1.1; font-weight: 700; letter-spacing: -.025em; margin-top: var(--e-4); text-wrap: balance; }
-.pv-insc .pv-cab .pv-marca { color: #fff; }
-.pv-insc .pv-cab .pv-cancha { color: #fff; opacity: .12; top: 6px; right: -56px; }
-.pv-cab-envolver, .pv-cab-contenido { position: relative; }
-.pv-cab-fila { display: flex; align-items: center; justify-content: space-between; gap: var(--e-3); min-height: 32px; }
-.pv-insc .pv-estado { display: inline-flex; align-items: center; height: 28px; padding: 0 var(--e-3); border-radius: var(--r-pill); background: rgba(255, 255, 255, .1); font-size: var(--t-13); font-weight: 600; white-space: nowrap; }
-.pv-cab-fecha { margin-top: var(--e-1); color: #C7D2FE; font-size: var(--t-14); }
-.pv-insc .pv-cab .pv-sk { background: #24346B; }
+/* Metadatos y chip de estado del encabezado público */
+.pv-cabecera-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--e-2) var(--e-3);
+  margin-top: var(--e-1);
+}
+.pv-cabecera-meta .pv-fechas { margin-top: 0; }
+.pv-chip-neutro {
+  display: inline-flex; align-items: center;
+  font-size: var(--t-13); font-weight: 600;
+  padding: 3px 10px; border-radius: var(--r-pill);
+  background: var(--superficie-2); color: var(--tinta);
+  white-space: nowrap;
+}

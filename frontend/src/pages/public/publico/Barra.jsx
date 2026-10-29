@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronLeft, Search } from 'lucide-react';
 
 // Cancha de pádel vista desde arriba: perímetro, red y líneas de saque
@@ -17,8 +18,8 @@ export function Logo() {
 }
 
 /**
- * Barra de arriba, fija al hacer scroll. A la izquierda la marca (inicio) o "Inicio" para volver
- * (categoría); a la derecha, la lupa que abre la búsqueda.
+ * Barra de arriba, fija al hacer scroll. A la izquierda la marca (inicio) o "Inicio" / "Volver"
+ * para volver; a la derecha, la lupa opcional que abre la búsqueda.
  */
 export default function Barra({ volver = null, onBuscar = null }) {
   const [conBorde, setConBorde] = useState(false);
@@ -33,10 +34,14 @@ export default function Barra({ volver = null, onBuscar = null }) {
     <header className={`pv-barra ${conBorde ? 'con-borde' : ''}`}>
       <div className="pv-envolver pv-barra-fila">
         {volver ? (
-          <a className="pv-volver" href={volver.href} onClick={volver.onClick}>
+          <Link
+            className="pv-volver"
+            to={volver.to || volver.href || '#'}
+            onClick={volver.onClick}
+          >
             <ChevronLeft size={22} strokeWidth={2.2} aria-hidden="true" />
-            <span>Inicio</span>
-          </a>
+            <span>{volver.texto || 'Inicio'}</span>
+          </Link>
         ) : (
           <span className="pv-marca" translate="no">
             <Logo />
