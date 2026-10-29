@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import { AlertTriangle, Check, Loader2, Info } from 'lucide-react';
 import RangeSliderGroup from './RangeSliderGroup';
+import { formatHorasDisponibles } from '../utils/dateUtils';
 import {
   reconstruirRangos,
   rangosASlots,
@@ -315,7 +316,7 @@ export default function DisponibilidadEditor({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <Check size={14} style={{ color: 'var(--color-primary)' }} />
-                  <span>Restricción horaria: <strong>{totalSlotsSeleccionados} turnos</strong> seleccionados</span>
+                  <span><strong>{formatHorasDisponibles(totalSlotsSeleccionados)}</strong> disponibles</span>
                 </div>
                 <button
                   type="button"

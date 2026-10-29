@@ -134,7 +134,7 @@ export default function RangeSliderGroup({
       {rangos.length === 0 ? (
         <div className="dia-empty-ranges">
           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-            No tiene horarios seleccionados para el {dia}.
+            No tiene horarios seleccionados para el {dia.toLowerCase()}.
           </span>
           <button
             type="button"
@@ -143,7 +143,7 @@ export default function RangeSliderGroup({
             disabled={disabled}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', alignSelf: 'flex-start' }}
           >
-            <Plus size={12} /> Agregar rango horario en {dia}
+            <Plus size={12} /> Agregar rango horario en {dia.toLowerCase()}
           </button>
         </div>
       ) : (
@@ -175,7 +175,7 @@ export default function RangeSliderGroup({
                 color: 'var(--color-primary)',
               }}
             >
-              <Plus size={12} /> Agregar otro rango horario ({dia})
+              <Plus size={12} /> Agregar otro rango horario ({dia.toLowerCase()})
             </button>
           </div>
         </div>

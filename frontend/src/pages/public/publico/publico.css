@@ -31,8 +31,8 @@ html:has(.publico) {
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
 }
-.publico h1, .publico h2, .publico h3, .publico h4 { font-family: var(--f); letter-spacing: -0.01em; margin: 0; }
-.publico p { margin: 0; }
+:where(.publico) :is(h1, h2, h3, h4) { font-family: var(--f); letter-spacing: -0.01em; margin: 0; }
+:where(.publico) p { margin: 0; }
 /* :where() no suma especificidad: las clases de cada botón (peso, color, fondo) siguen mandando */
 :where(.publico) button, :where(.publico) input { font: inherit; color: inherit; }
 :where(.publico) button { background: none; border: 0; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
@@ -448,7 +448,7 @@ html:has(.publico) {
   box-shadow: var(--sombra-2), 0 0 0 1px rgba(13, 21, 18, .04);
   padding: var(--e-5) var(--e-4) var(--e-6);
 }
-.pv-insc-titulo { font-size: var(--t-20); font-weight: 650; letter-spacing: -.015em; margin-bottom: var(--e-5); }
+.pv-insc-titulo { font-size: var(--t-20); font-weight: 650; letter-spacing: -.015em; margin-bottom: var(--e-6); }
 .pv-campo-form { margin-bottom: var(--e-4); }
 .pv-campo-form label { display: block; font-weight: 600; font-size: var(--t-14); margin-bottom: 6px; color: var(--tinta); }
 .publico .pv-input {
