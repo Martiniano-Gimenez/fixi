@@ -391,7 +391,7 @@ body:has(.publico) {
   .publico *, .publico *::before, .publico *::after {
     animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important;
   }
-  .pv-tramo i, .pv-cascada, .pv-busqueda-panel { animation: none; }
+  .pv-tramo i, .pv-cascada, .pv-busqueda-panel, .pv-busqueda-overlay { animation: none; }
 }
 
 /* ─── Panel de búsqueda ───────────────────────────────────── */
@@ -401,7 +401,7 @@ body:has(.publico) {
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   overflow-y: auto; -webkit-overflow-scrolling: touch;
   display: flex; justify-content: center; align-items: flex-start;
-  animation: pv-fundido .2s ease both;
+  animation: pv-fundido .2s var(--curva) both;
 }
 .pv-busqueda-panel {
   width: 100%; min-height: 100dvh;
@@ -433,7 +433,7 @@ body:has(.publico) {
   position: absolute; left: 14px; color: var(--gris); pointer-events: none;
 }
 .publico .pv-busqueda-input {
-  width: 100%; height: 44px; padding-left: 42px; padding-right: 38px;
+  width: 100%; height: 44px; padding-left: 42px; padding-right: 44px;
   border-radius: var(--r-control); border: 1px solid var(--linea-fuerte);
   background: var(--superficie); color: var(--tinta); font-size: 16px;
   box-shadow: var(--sombra-1);
@@ -443,7 +443,7 @@ body:has(.publico) {
   box-shadow: 0 0 0 3px var(--marca-suave);
 }
 .publico .pv-busqueda-limpiar {
-  position: absolute; right: 4px; width: 36px; height: 36px;
+  position: absolute; right: 2px; width: 44px; height: 44px;
   border-radius: 50%; display: grid; place-items: center;
   color: var(--gris);
 }
@@ -486,12 +486,15 @@ body:has(.publico) {
   display: flex; align-items: center; gap: 6px;
 }
 .pv-busqueda-pareja-cat {
-  font-size: var(--t-13); font-weight: 600; color: var(--progreso-texto);
-  background: var(--progreso-suave); padding: 2px 8px; border-radius: var(--r-pill);
+  font-size: var(--t-13); font-weight: 600; color: var(--tinta-2);
+  background: var(--superficie-2); padding: 2px 8px; border-radius: var(--r-pill);
   align-self: flex-start;
 }
 .pv-busqueda-pareja-acciones {
   display: flex; flex-wrap: wrap; gap: var(--e-2);
+}
+.pv-busqueda-pareja-acciones .pv-btn {
+  min-height: 44px;
 }
 .publico .pv-btn-seguir {
   gap: 6px;

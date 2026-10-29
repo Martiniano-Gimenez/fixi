@@ -325,39 +325,49 @@ export default function TorneoPublic() {
     setSearchParams({ cat: categoria.nombre, ronda: String(i + 1) }, { replace: true, state: location.state });
   };
 
-  // Búsqueda en la URL: ?buscar=<texto> o ?q=<texto>
-  const buscarParam = searchParams.get('buscar') ?? searchParams.get('q');
-  const busquedaAbierta = searchParams.has('buscar') || searchParams.has('q');
+  // Búsqueda en la URL: ?buscar=<texto>
+  const buscarParam = searchParams.get('buscar');
+  const busquedaAbierta = searchParams.has('buscar');
 
   const abrirBusqueda = () => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set('buscar', '');
-      return next;
-    });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('buscar', '');
+        return next;
+      },
+      { state: { ...location.state, busquedaDesdeApp: true } }
+    );
   };
 
   const actualizarBusqueda = (nuevaQuery) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (nuevaQuery) {
-        next.set('buscar', nuevaQuery);
-        next.delete('q');
-      } else {
-        next.set('buscar', '');
-        next.delete('q');
-      }
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (nuevaQuery) {
+          next.set('buscar', nuevaQuery);
+        } else {
+          next.set('buscar', '');
+        }
+        return next;
+      },
+      { replace: true, state: location.state }
+    );
   };
 
   const cerrarBusqueda = () => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete('buscar');
-      next.delete('q');
-      return next;
-    }, { replace: true });
+    if (location.state?.busquedaDesdeApp) {
+      navigate(-1);
+    } else {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('buscar');
+          return next;
+        },
+        { replace: true }
+      );
+    }
   };
 
   const toggleSeguir = (catId, parejaId) => {
@@ -376,7 +386,7 @@ export default function TorneoPublic() {
   const abrirCategoriaDesdeBusqueda = (cat, e) => {
     if (conModificador(e)) return;
     e?.preventDefault();
-    setSearchParams({ cat: cat.nombre }, { state: { desdeInicio: true } });
+    setSearchParams({ cat: cat.nombre }, { replace: true });
   };
 
   // Parejas seguidas, para la línea del inicio

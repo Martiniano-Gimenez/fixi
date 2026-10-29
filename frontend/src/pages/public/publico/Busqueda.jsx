@@ -134,11 +134,19 @@ export default function Busqueda({
   const [query, setQuery] = useState(queryInicial);
   const inputRef = useRef(null);
   const overlayRef = useRef(null);
+  const navegandoRef = useRef(false);
   const ahora = Date.now();
 
-  // Foco automático en el input
+  // Foco automático en el input al abrir y retorno de foco a la lupa al cerrar
   useEffect(() => {
     inputRef.current?.focus();
+    return () => {
+      if (!navegandoRef.current) {
+        requestAnimationFrame(() => {
+          document.querySelector('.pv-lupa')?.focus();
+        });
+      }
+    };
   }, []);
 
   // Sincronizar si cambia desde afuera (ej. atrás en el navegador)
@@ -146,14 +154,46 @@ export default function Busqueda({
     setQuery(queryInicial);
   }, [queryInicial]);
 
-  // Tecla Escape cierra
+  // Tecla Escape para cerrar y Tab trap para que el foco no escape del panel
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onCerrar();
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        const panel = overlayRef.current;
+        if (!panel) return;
+
+        const selectores = 'input:not([disabled]), button:not([disabled]), a[href]:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const elementos = Array.from(panel.querySelectorAll(selectores)).filter(
+          (el) => el.offsetParent !== null || el.getClientRects().length > 0
+        );
+
+        if (elementos.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        const primero = elementos[0];
+        const ultimo = elementos[elementos.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === primero || !panel.contains(document.activeElement)) {
+            e.preventDefault();
+            ultimo.focus();
+          }
+        } else {
+          if (document.activeElement === ultimo || !panel.contains(document.activeElement)) {
+            e.preventDefault();
+            primero.focus();
+          }
+        }
       }
     };
+
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onCerrar]);
@@ -191,6 +231,11 @@ export default function Busqueda({
   const textoLimpio = query.trim();
   const hayBusqueda = textoLimpio.length > 0;
   const sinResultados = hayBusqueda && resultados.length === 0;
+
+  const handleAbrirCategoria = (cat, e) => {
+    navegandoRef.current = true;
+    onAbrirCategoria(cat, e);
+  };
 
   return (
     <div
@@ -265,7 +310,7 @@ export default function Busqueda({
                   esSeguida={Boolean(pareja.parejaId && favs[pareja.cat.id] === pareja.parejaId)}
                   onToggleSeguir={onToggleSeguir}
                   hrefCategoria={hrefCategoria}
-                  onAbrirCategoria={onAbrirCategoria}
+                  onAbrirCategoria={handleAbrirCategoria}
                   ahora={ahora}
                 />
               ))}
