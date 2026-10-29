@@ -1,14 +1,15 @@
 import { useRef } from 'react';
 import BracketLines from '../../../components/BracketLines';
 import TarjetaPartido from './TarjetaPartido';
-import { fraseFase, nombrePareja1, nombrePareja2 } from './utilidades';
+import { fraseFase, ladoDe } from './utilidades';
 
 /**
  * Llave completa en escritorio: una columna por ronda, con líneas que unen cada cruce.
  * Los "pasa directo" ocupan su lugar (si no, las líneas no coinciden con los cruces).
- * Con una búsqueda (coincide), los partidos que no coinciden se atenúan en vez de desaparecer.
+ * Con una búsqueda (coincide), la pareja (su lugar y su próximo cruce) se destaca en verde y el resto
+ * se atenúa en vez de desaparecer. origenes resuelve "1° Zona A" → pareja cuando su zona ya terminó.
  */
-export default function LlaveEscritorio({ fases, seguidaId, coincide }) {
+export default function LlaveEscritorio({ fases, seguidaId, coincide, origenes }) {
   const rondasRef = useRef(null);
   return (
     <div className="pv-llave">
@@ -18,21 +19,21 @@ export default function LlaveEscritorio({ fases, seguidaId, coincide }) {
             <h3>{fraseFase(f.nombre)}</h3>
             <div className="pv-llave-col">
               {f.partidos.map((p) => {
-                const atenuado = Boolean(coincide) && !coincide(p);
+                const marca = coincide ? (coincide(p) ? 'destacado' : 'atenuado') : '';
                 if (p.esBye) {
-                  const quien = p.pareja1 || p.pareja2 ? (p.pareja1 ? nombrePareja1(p) : nombrePareja2(p)) : nombrePareja1(p);
+                  const lado = ladoDe(p, p.pareja2 && !p.pareja1 ? 2 : 1, origenes);
                   return (
-                    <div key={p.id} className={`pv-llave-item ${atenuado ? 'atenuado' : ''}`}>
+                    <div key={p.id} className={`pv-llave-item ${marca}`}>
                       <div className="pv-llave-bye">
-                        <span translate="no">{quien}</span>
-                        <small>Pasa directo</small>
+                        <span translate="no" className={lado.definida ? 'definida' : ''}>{lado.nombre}</span>
+                        <small>{lado.origen ? `${lado.origen}, pasa directo` : 'Pasa directo'}</small>
                       </div>
                     </div>
                   );
                 }
                 return (
-                  <div key={p.id} className={`pv-llave-item ${atenuado ? 'atenuado' : ''}`}>
-                    <TarjetaPartido partido={p} seguidaId={seguidaId} clase="compacta" />
+                  <div key={p.id} className={`pv-llave-item ${marca}`}>
+                    <TarjetaPartido partido={p} seguidaId={seguidaId} clase="compacta" origenes={origenes} />
                   </div>
                 );
               })}

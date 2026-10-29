@@ -13,15 +13,59 @@ export const normalizar = (texto) =>
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '');
 
-export const nombrePareja1 = (p) =>
-  p.pareja1 || p.displayPareja1 || p.origenPareja1 || p.displayOrigenPareja1 || 'A definir';
-export const nombrePareja2 = (p) =>
-  p.pareja2 || p.displayPareja2 || p.origenPareja2 || p.displayOrigenPareja2 || 'A definir';
+// "Ganador Dieciseisavos #2" → "Ganador 16avos #2"; "Ganador Partido 1" → "Ganador partido 1"
+const RONDAS_CORTAS = { Dieciseisavos: '16avos', Semifinal: 'semi', Semifinales: 'semi', Semis: 'semi' };
+export const acortarOrigen = (t) =>
+  (t || '').replace(/^(Ganador|Perdedor) ([A-Za-zÁÉÍÓÚáéíóú]+)(?: de Final)?/, (m, quien, ronda) => `${quien} ${RONDAS_CORTAS[ronda] || ronda.toLowerCase()}`);
 
-export function partidoCoincide(p, q) {
+export const origenPareja1 = (p) => p.origenPareja1 || p.displayOrigenPareja1 || null;
+export const origenPareja2 = (p) => p.origenPareja2 || p.displayOrigenPareja2 || null;
+export const nombrePareja1 = (p) => p.pareja1 || p.displayPareja1 || acortarOrigen(origenPareja1(p)) || 'A definir';
+export const nombrePareja2 = (p) => p.pareja2 || p.displayPareja2 || acortarOrigen(origenPareja2(p)) || 'A definir';
+
+const empateExacto = (a, b) =>
+  a.puntos === b.puntos && a.pg === b.pg && a.sf - a.sc === b.sf - b.sc && a.gf - a.gc === b.gf - b.gc;
+
+/**
+ * Parejas ya ubicadas en la llave por su lugar ("1° Zona A" → pareja), con la misma regla que usa el
+ * backend para completar el cuadro: la zona terminó (todos sus partidos FINALIZADO) y la posición sale
+ * de tabla[], que viene ordenada con ordenarZonaParejas. Si en round robin hay un empate exacto en
+ * todos los criterios, el orden no está garantizado y esa posición no se resuelve.
+ */
+export function clasificadosPorOrigen(categoria) {
+  const mapa = new Map();
+  (categoria?.zonas || []).forEach((z) => {
+    const ps = z.partidos || [];
+    if (!ps.length || !ps.every((p) => p.estado === 'FINALIZADO')) return;
+    const t = z.tabla || [];
+    for (let i = 0; i < Math.min(z.clasifican, t.length); i++) {
+      if (z.formato !== 'MINI_BRACKET' && [t[i - 1], t[i + 1]].some((o) => o && empateExacto(o, t[i]))) continue;
+      mapa.set(`${i + 1}° ${z.nombre}`, { nombre: t[i].pareja, parejaId: t[i].parejaId });
+    }
+  });
+  return mapa;
+}
+
+// Pareja de cada lado, con el nombre resuelto por su lugar en la llave cuando corresponde
+export function ladoDe(p, lado, origenes) {
+  const definida = Boolean(lado === 1 ? p.pareja1 : p.pareja2);
+  const origen = lado === 1 ? origenPareja1(p) : origenPareja2(p);
+  const resuelto = !definida && origen && origenes ? origenes.get(origen) : null;
+  return {
+    nombre: resuelto ? resuelto.nombre : lado === 1 ? nombrePareja1(p) : nombrePareja2(p),
+    parejaId: resuelto ? resuelto.parejaId : lado === 1 ? p.pareja1Id : p.pareja2Id,
+    origen: resuelto ? origen : null,
+    definida: definida || Boolean(resuelto),
+  };
+}
+
+export function partidoCoincide(p, q, origenes = null) {
   if (!q) return true;
   const n = normalizar(q);
-  return normalizar(`${p.pareja1 || ''} ${p.pareja2 || ''}`).includes(n);
+  // Solo nombres de parejas (no textos como "1° Zona A" sin pareja detrás)
+  const nombre = (l) => { const x = ladoDe(p, l, origenes); return x.definida ? x.nombre : ''; };
+  const nombres = `${nombre(1)} ${nombre(2)}`;
+  return normalizar(nombres).includes(n);
 }
 
 // "Sáb 13:30"; sin día cuando la vista ya está filtrada por día

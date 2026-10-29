@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { horaPartido, nombrePareja1, nombrePareja2 } from './utilidades';
+import { horaPartido, ladoDe } from './utilidades';
 
 export function Estrella({ contorno = false, decorativa = false, className = '' }) {
   return (
@@ -44,24 +44,26 @@ function ganadorDe(p, lado) {
  * Tarjeta de partido. La pareja 1 va siempre arriba; los sets se alinean en 3 columnas fijas.
  * Ganador en negrita con sus sets resaltados, perdedor en gris.
  */
-export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, seguidaId, clase = '', atrasado = false }) {
+export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, seguidaId, clase = '', atrasado = false, origenes = null }) {
   const vivo = p.estado === 'EN_CURSO';
   const terminado = p.estado === 'FINALIZADO';
   const sets = Array.isArray(p.sets) ? p.sets : [];
   const hora = horaPartido(p.fechaHora, conDia);
-  const esSeguida = Boolean(seguidaId && (p.pareja1Id === seguidaId || p.pareja2Id === seguidaId));
+  const l1 = ladoDe(p, 1, origenes);
+  const l2 = ladoDe(p, 2, origenes);
+  const esSeguida = Boolean(seguidaId && (l1.parejaId === seguidaId || l2.parejaId === seguidaId));
 
   const fila = (lado) => {
-    const nombre = lado === 1 ? nombrePareja1(p) : nombrePareja2(p);
-    const definida = Boolean(lado === 1 ? p.pareja1 : p.pareja2);
+    const { nombre, definida, origen, parejaId } = lado === 1 ? l1 : l2;
     const gano = ganadorDe(p, lado);
     const clase = terminado ? (gano ? 'gano' : 'perdio') : '';
-    const siguiendo = seguidaId && (lado === 1 ? p.pareja1Id : p.pareja2Id) === seguidaId;
+    const siguiendo = seguidaId && parejaId === seguidaId;
     return (
       <div className={`pv-p-fila ${clase}`}>
         <span className={`pv-p-nombre ${definida ? '' : 'a-definir'}`} translate="no">
           {nombre}
           {siguiendo && <Estrella />}
+          {origen && <small className="pv-p-origen">{origen}</small>}
         </span>
         {[0, 1, 2].map((i) => {
           const s = sets[i];
@@ -80,7 +82,7 @@ export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, se
 
   const resumen =
     terminado && sets.length
-      ? `Ganó ${ganadorDe(p, 1) ? nombrePareja1(p) : nombrePareja2(p)}: ${sets.map((s) => `${s.gamesPareja1} a ${s.gamesPareja2}`).join(', ')}.`
+      ? `Ganó ${ganadorDe(p, 1) ? l1.nombre : l2.nombre}: ${sets.map((s) => `${s.gamesPareja1} a ${s.gamesPareja2}`).join(', ')}.`
       : null;
 
   return (

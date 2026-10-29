@@ -2,9 +2,8 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { AlertTriangle, Users, Trophy, Clock, Search, X, Play } from 'lucide-react';
-import { formatPartidoHorario, getDiaCalendarioCordoba } from '../../utils/dateUtils';
+import { formatPartidoHorario } from '../../utils/dateUtils';
 import { APP_NAME, APP_TAGLINE } from '../../constants/app';
-import '../admin/EliminatoriaView.css';
 import './publico/publico.css';
 import Encabezado from './publico/Encabezado';
 import NavSecciones from './publico/NavSecciones';
@@ -22,8 +21,8 @@ import {
   diaDeHoy,
   diasDelTorneo,
   horaPartido,
-  nombrePareja1,
-  nombrePareja2,
+  clasificadosPorOrigen,
+  ladoDe,
   normalizar,
   partidoCoincide,
   partidosDeCategoria,
@@ -65,160 +64,6 @@ function setFavPareja(slug, catId, parejaId) {
   } catch {
     // Degradación silenciosa (ej. cookies/storage bloqueado en modo privado)
   }
-}
-
-function partidoPerteneceAPareja(p, filtro) {
-  if (!filtro) return true;
-  const p1Match = p.pareja1Id != null
-    ? p.pareja1Id === filtro.id
-    : Boolean(filtro.nombre && p.pareja1 === filtro.nombre);
-
-  const p2Match = p.pareja2Id != null
-    ? p.pareja2Id === filtro.id
-    : Boolean(filtro.nombre && p.pareja2 === filtro.nombre);
-
-  return p1Match || p2Match;
-}
-
-function PublicMatchCard({ partido, label = '', isMobile = false, isFav = false }) {
-  const isFinalizado = partido.estado === 'FINALIZADO';
-  const isEnCurso = partido.estado === 'EN_CURSO';
-  const hasBothPairs = Boolean(partido.pareja1 && partido.pareja2);
-  const isVacio = !partido.pareja1 && !partido.pareja2 && !isFinalizado;
-
-  // Verificación de ganador: id prioritario, fallback a nombre
-  const p1esGanador = isFinalizado && (
-    partido.ganadorId != null && partido.pareja1Id != null
-      ? partido.ganadorId === partido.pareja1Id
-      : Boolean(partido.ganador && partido.pareja1 && partido.ganador === partido.pareja1)
-  );
-  const p2esGanador = isFinalizado && (
-    partido.ganadorId != null && partido.pareja2Id != null
-      ? partido.ganadorId === partido.pareja2Id
-      : Boolean(partido.ganador && partido.pareja2 && partido.ganador === partido.pareja2)
-  );
-
-  // Chip de estado: si falta cualquiera de las dos parejas y no está finalizado, "Esperando"
-  let statusText = 'Pendiente';
-  let statusClass = 'pendiente';
-  if (isFinalizado) {
-    statusText = 'Finalizado';
-    statusClass = 'finalizado';
-  } else if (isEnCurso) {
-    statusText = 'En juego';
-    statusClass = 'en-juego';
-  } else if (!hasBothPairs) {
-    statusText = 'Esperando';
-    statusClass = 'esperando';
-  } else {
-    statusText = 'Pendiente';
-    statusClass = 'pendiente';
-  }
-
-  // Horario formateado en America/Argentina/Cordoba (ej. "Vie · 19:30")
-  const horario = formatPartidoHorario(partido.fechaHora);
-
-  // Sets del partido (W.O. / retiro no muestra sets ni ceros)
-  const tieneSets = Array.isArray(partido.sets) && partido.sets.length > 0;
-
-  // Nombres con fallback "Esperando..."
-  const origenP1 = partido.origenPareja1 || partido.displayOrigenPareja1;
-  const origenP2 = partido.origenPareja2 || partido.displayOrigenPareja2;
-  const nombreP1 = partido.pareja1 || partido.displayPareja1 || origenP1 || 'Esperando...';
-  const nombreP2 = partido.pareja2 || partido.displayPareja2 || origenP2 || 'Esperando...';
-
-  const row1Class = p1esGanador
-    ? 'winner'
-    : isFinalizado && p2esGanador
-    ? 'loser'
-    : !partido.pareja1
-    ? 'esperando'
-    : '';
-
-  const row2Class = p2esGanador
-    ? 'winner'
-    : isFinalizado && p1esGanador
-    ? 'loser'
-    : !partido.pareja2
-    ? 'esperando'
-    : '';
-
-  const cardStateClass = isFinalizado ? 'finalizado' : isEnCurso ? 'en-curso' : isVacio ? 'vacio' : '';
-  const favClass = isFav ? 'fav-match' : '';
-
-  return (
-    <div key={partido.id} className={`bracket-match-wrapper pub-match-card-wrapper ${isMobile ? 'mobile-full' : ''}`}>
-      <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', width: isMobile ? '100%' : undefined }}>
-        <div className={`match-card pub-match-card ${cardStateClass} ${favClass}`}>
-          {label && <span className="pub-match-label">{label}</span>}
-
-          <div className="pub-match-header">
-            {horario ? (
-              <span className="pub-match-time">
-                <Clock size={11} strokeWidth={2} className="pub-match-time-icon" aria-hidden="true" />
-                {horario}
-              </span>
-            ) : (
-              <span />
-            )}
-
-            {statusText && statusText !== 'Esperando' && !partido.esBye && (
-              <span className={`pub-match-status ${statusClass}`}>
-                {isEnCurso && <span className="pub-match-dot" aria-hidden="true" />}
-                {statusText}
-              </span>
-            )}
-          </div>
-
-          <div className="pub-match-body">
-            <div className={`pub-match-row ${row1Class}`}>
-              <span className="pub-match-name" title={nombreP1}>
-                {nombreP1}
-              </span>
-              {tieneSets && (
-                <div className="pub-match-sets" aria-label="Sets pareja 1">
-                  {partido.sets.map((set, idx) => {
-                    const isHigher = set.gamesPareja1 > set.gamesPareja2;
-                    const isLower = set.gamesPareja1 < set.gamesPareja2;
-                    return (
-                      <span
-                        key={idx}
-                        className={`pub-match-set ${isHigher ? 'higher' : isLower ? 'lower' : ''}`}
-                      >
-                        {set.gamesPareja1}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className={`pub-match-row ${row2Class}`}>
-              <span className="pub-match-name" title={nombreP2}>
-                {nombreP2}
-              </span>
-              {tieneSets && (
-                <div className="pub-match-sets" aria-label="Sets pareja 2">
-                  {partido.sets.map((set, idx) => {
-                    const isHigher = set.gamesPareja2 > set.gamesPareja1;
-                    const isLower = set.gamesPareja2 < set.gamesPareja1;
-                    return (
-                      <span
-                        key={idx}
-                        className={`pub-match-set ${isHigher ? 'higher' : isLower ? 'lower' : ''}`}
-                      >
-                        {set.gamesPareja2}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function TorneoPublicSkeleton() {
@@ -350,8 +195,7 @@ export default function TorneoPublic() {
   const [seccion, setSeccion] = useState(() =>
     SECCIONES.some((s) => s.key === searchParams.get('sec')) ? searchParams.get('sec') : 'hoy'
   );
-  const [showFinalizados, setShowFinalizados] = useState(false);
-  const [filtroParejaHorarios, setFiltroParejaHorarios] = useState(null); // { id, nombre } | null
+  const [diaSel, setDiaSel] = useState(() => searchParams.get('dia')); // jornada elegida en Horarios (YYYY-MM-DD)
   const [activeRoundId, setActiveRoundId] = useState(null);
   const [busqueda, setBusqueda] = useState(() => searchParams.get('pareja') || ''); // lo que se escribe
   const [searchTerm, setSearchTerm] = useState(() => (searchParams.get('pareja') || '').trim()); // búsqueda aplicada
@@ -513,7 +357,6 @@ export default function TorneoPublic() {
     setActiveCatId(catId);
     setActiveZoneId(null);
     setActiveRoundId(null);
-    setFiltroParejaHorarios(null);
     e?.currentTarget?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   };
 
@@ -544,8 +387,7 @@ export default function TorneoPublic() {
     if (destinoBusqueda.catId !== catId) {
       setActiveCatId(destinoBusqueda.catId);
       setActiveRoundId(null);
-      setFiltroParejaHorarios(null);
-      setActiveZoneId(seccion === 'zonas' ? destinoBusqueda.zonaId : null);
+        setActiveZoneId(seccion === 'zonas' ? destinoBusqueda.zonaId : null);
     } else if (seccion === 'zonas' && destinoBusqueda.zonaId && destinoBusqueda.zonaId !== zonaId) {
       setActiveZoneId(destinoBusqueda.zonaId);
     }
@@ -562,10 +404,11 @@ export default function TorneoPublic() {
       if (sec === 'zonas' && z) p.set('zona', letraZona(z));
       const ri = eliminatoria.findIndex((f) => f.id === activeRoundId);
       if (sec === 'cuadro' && ri >= 0) p.set('ronda', String(ri + 1));
+      if (sec === 'horarios' && diaSel) p.set('dia', diaSel);
       if (searchTerm) p.set('pareja', searchTerm);
       return p.toString();
     },
-    [activeCategoria, zonas, eliminatoria, activeZoneId, activeRoundId, searchTerm]
+    [activeCategoria, zonas, eliminatoria, activeZoneId, activeRoundId, searchTerm, diaSel]
   );
   const urlActual = construirURL(seccion);
   useEffect(() => {
@@ -868,99 +711,6 @@ export default function TorneoPublic() {
     return null;
   }, [favParejaId, activeCategoria, zonas, eliminatoria]);
 
-  // Agrupamiento y ordenamiento de partidos para la pestaña Horarios
-  const horariosData = useMemo(() => {
-    const todos = [];
-
-    // 1. Partidos de Zonas con etiqueta corta
-    zonas.forEach((z) => {
-      z.partidos?.forEach((p) => {
-        let origenLabel = z.nombre;
-        if (z.formato === 'MINI_BRACKET') {
-          if (p.posicionEnRonda === 1 || p.posicionEnRonda === 2) {
-            origenLabel = `${z.nombre} · Ronda 1`;
-          } else if (p.posicionEnRonda === 3) {
-            origenLabel = `${z.nombre} · 1° y 2° Puesto`;
-          } else if (p.posicionEnRonda === 4) {
-            origenLabel = `${z.nombre} · 3° y 4° Puesto`;
-          }
-        }
-        todos.push({
-          ...p,
-          origenLabel,
-          isFav: Boolean(favParejaId && (p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)),
-        });
-      });
-    });
-
-    // 2. Partidos de Eliminatoria con etiqueta corta (nombre de fase)
-    eliminatoria.forEach((f) => {
-      f.partidos?.forEach((p) => {
-        todos.push({
-          ...p,
-          origenLabel: f.nombre,
-          isFav: Boolean(favParejaId && (p.pareja1Id === favParejaId || p.pareja2Id === favParejaId)),
-        });
-      });
-    });
-
-    const totalPartidos = todos.length;
-
-    // 3. Si hay filtro de pareja, filtramos los partidos
-    const partidosFiltradosPareja = filtroParejaHorarios
-      ? todos.filter((p) => partidoPerteneceAPareja(p, filtroParejaHorarios))
-      : todos;
-
-    // 4. Filtrar finalizados si no hay filtro activo y showFinalizados es false.
-    // Con filtro activo, se muestran TODOS sus partidos (finalizados incluidos).
-    const filtrados = filtroParejaHorarios
-      ? partidosFiltradosPareja
-      : (showFinalizados ? partidosFiltradosPareja : partidosFiltradosPareja.filter((p) => p.estado !== 'FINALIZADO'));
-
-    // 5. Separar partidos EN_CURSO (van SOLO a "En juego")
-    const enJuego = filtrados.filter((p) => p.estado === 'EN_CURSO');
-    enJuego.sort((a, b) => {
-      if (a.fechaHora && b.fechaHora) {
-        return new Date(a.fechaHora) - new Date(b.fechaHora);
-      }
-      if (a.fechaHora) return -1;
-      if (b.fechaHora) return 1;
-      return (a.posicionEnRonda ?? a.posicion ?? 0) - (b.posicionEnRonda ?? b.posicion ?? 0);
-    });
-
-    // 6. Partidos restantes (no EN_CURSO)
-    const restantes = filtrados.filter((p) => p.estado !== 'EN_CURSO');
-
-    const conFecha = restantes.filter((p) => Boolean(p.fechaHora));
-    conFecha.sort((a, b) => new Date(a.fechaHora) - new Date(b.fechaHora));
-
-    const sinFecha = restantes.filter((p) => !p.fechaHora);
-    sinFecha.sort((a, b) => (a.posicionEnRonda ?? a.posicion ?? 0) - (b.posicionEnRonda ?? b.posicion ?? 0));
-
-    // 7. Agrupar conFecha por día calendario en America/Argentina/Cordoba
-    const diasMap = new Map();
-    conFecha.forEach((p) => {
-      const info = getDiaCalendarioCordoba(p.fechaHora);
-      if (!info) return;
-      if (!diasMap.has(info.key)) {
-        diasMap.set(info.key, {
-          key: info.key,
-          diaNombre: info.diaNombre,
-          partidos: [],
-        });
-      }
-      diasMap.get(info.key).partidos.push(p);
-    });
-
-    return {
-      totalPartidos,
-      partidosFiltradosCount: filtrados.length,
-      enJuego,
-      gruposDias: Array.from(diasMap.values()),
-      sinFecha,
-    };
-  }, [zonas, eliminatoria, showFinalizados, favParejaId, filtroParejaHorarios]);
-
   if (loading) {
     return <TorneoPublicSkeleton />;
   }
@@ -984,13 +734,14 @@ export default function TorneoPublic() {
   const enVivo = categorias.some((c) => partidosDeCategoria(c).some((p) => p.estado === 'EN_CURSO'));
   const listaCampeones = torneo.estado === 'FINALIZADO' ? campeones(categorias) : [];
   const partidosCat = partidosDeCategoria(activeCategoria);
-  const partidosFiltrados = partidosCat.filter((p) => partidoCoincide(p, q));
+  const origenes = clasificadosPorOrigen(activeCategoria); // "1° Zona A" → pareja, si su zona ya terminó
+  const partidosFiltrados = partidosCat.filter((p) => partidoCoincide(p, q, origenes));
   const parejasCat = coincidencias.filter((x) => x.catId === activeCategoria?.id);
   const unaPareja = new Set(parejasCat.map((x) => x.nombre)).size === 1 ? parejasCat[0] : null;
   const cascada = (i) => (animarEntrada ? { className: 'pv-cascada', style: { '--i': i } } : {});
   const conCascada = (clase, i) => ({ className: `${clase}${animarEntrada ? ' pv-cascada' : ''}`, style: animarEntrada ? { '--i': i } : undefined });
   const tarjeta = (conDia) => (p) => (
-    <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia={conDia} seguidaId={favParejaId} />
+    <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia={conDia} seguidaId={favParejaId} origenes={origenes} />
   );
 
   // ─── Línea de resultado del buscador ───
@@ -1078,7 +829,7 @@ export default function TorneoPublic() {
           : <>{unaPareja ? 'Tiene' : 'Hay'} un partido pendiente del {dia} a las <b className="num">{horaPartido(prox.fechaHora, false)}</b>.</>;
       return mensajeVacio(
         <>{quien} {verbo} {hoy.momento === 'durante' ? 'hoy' : `el ${nombreDia}`}. {frase}</>,
-        <button type="button" className="pv-btn pv-btn-secundario" onClick={() => setSeccion('horarios')}>Ver horarios</button>
+        <button type="button" className="pv-btn pv-btn-secundario" onClick={() => { if (prox) setDiaSel(diaDe(prox)); setSeccion('horarios'); }}>Ver horarios</button>
       );
     }
 
@@ -1132,7 +883,7 @@ export default function TorneoPublic() {
                 key="atrasados"
                 items={atrasados}
                 clave={claveTarjeta}
-                render={(pt) => <TarjetaPartido partido={pt} etiqueta={pt.etiqueta} conDia={false} seguidaId={favParejaId} atrasado />}
+                render={(pt) => <TarjetaPartido partido={pt} etiqueta={pt.etiqueta} conDia={false} seguidaId={favParejaId} origenes={origenes} atrasado />}
               />
             </>
           )}
@@ -1209,23 +960,10 @@ export default function TorneoPublic() {
 
   // ─── Cuadro ───
   const RONDA_CORTA = { 32: '16avos', 16: 'Octavos', 8: 'Cuartos', 4: 'Semis', 2: 'Final', 1: 'Final' };
-  const nombreBye = (p) => (p.pareja1 ? nombrePareja1(p) : p.pareja2 ? nombrePareja2(p) : nombrePareja1(p));
   const vistaCuadro = () => {
     if (!eliminatoria.length) return <p className="pv-vacio">El cuadro se arma cuando terminan las zonas.</p>;
-    // Si la pareja buscada ya clasificó, en la llave figura por su lugar ("1° Zona A") hasta que se cargan los nombres
-    const origenEnLlave = (() => {
-      if (!unaPareja) return null;
-      const z = zonas.find((x) => x.id === unaPareja.zonaId);
-      if (!z) return null;
-      const mios = (z.partidos || []).filter((p) => p.pareja1Id === unaPareja.parejaId || p.pareja2Id === unaPareja.parejaId);
-      const terminada = (z.partidos || []).length > 0 && z.partidos.every((p) => p.estado === 'FINALIZADO');
-      const termine = mios.length > 0 && mios.every((p) => p.estado === 'FINALIZADO');
-      const pos = (z.tabla || []).findIndex((r) => r.parejaId === unaPareja.parejaId) + 1;
-      return (terminada || termine) && pos > 0 && pos <= z.clasifican ? `${pos}° ${z.nombre}` : null;
-    })();
-    const coincideLlave = (p) =>
-      partidoCoincide(p, q) ||
-      Boolean(origenEnLlave && [p.origenPareja1, p.origenPareja2, p.displayOrigenPareja1, p.displayOrigenPareja2].includes(origenEnLlave));
+    // La búsqueda también encuentra a la pareja por su lugar ("1° Zona A") cuando su zona ya terminó
+    const coincideLlave = (p) => partidoCoincide(p, q, origenes);
     const enLlave = (f) => f.partidos.some((p) => !p.esBye && coincideLlave(p));
     const fasesConPareja = eliminatoria.filter(enLlave);
 
@@ -1275,7 +1013,7 @@ export default function TorneoPublic() {
         <>
           {mensajeCuadro(null)}
           <div {...cascada(5)}>
-            <LlaveEscritorio fases={eliminatoria} seguidaId={favParejaId} coincide={q ? coincideLlave : null} />
+            <LlaveEscritorio fases={eliminatoria} seguidaId={favParejaId} coincide={q ? coincideLlave : null} origenes={origenes} />
           </div>
         </>
       );
@@ -1304,22 +1042,95 @@ export default function TorneoPublic() {
           </h2>
           {mensajeCuadro(fase)}
           {visibles.length > 0
-            ? <ListaAnimada items={visibles} clave={claveTarjeta} render={tarjeta(true)} />
+            ? <ListaAnimada items={visibles} clave={claveTarjeta} render={(p) => <TarjetaPartido partido={p} seguidaId={favParejaId} origenes={origenes} clase={q ? 'destacada' : ''} />} />
             : !q && <p className="pv-vacio">Sin partidos en esta ronda.</p>}
           {byes.length > 0 && (
             <div className="pv-directo">
               <p>Pasan directo a {siguiente ? fraseFase(siguiente.nombre).toLowerCase() : 'la ronda siguiente'}:</p>
               <div className="pv-chips">
                 {byes.map((p) => {
-                  const seguida = favParejaId && (p.pareja1Id === favParejaId || p.pareja2Id === favParejaId);
+                  const lado = ladoDe(p, p.pareja2 && !p.pareja1 ? 2 : 1, origenes);
+                  const seguida = favParejaId && lado.parejaId === favParejaId;
                   return (
-                    <span key={p.id} className={`pv-chip ${q && coincideLlave(p) ? 'coincide' : ''} ${seguida ? 'seguida' : ''}`} translate="no">
-                      {nombreBye(p)}
+                    <span key={p.id} className={`pv-chip ${lado.origen ? 'con-origen' : ''} ${q && coincideLlave(p) ? 'coincide' : ''} ${seguida ? 'seguida' : ''}`} translate="no">
+                      {lado.nombre}
+                      {lado.origen && <small>{lado.origen}</small>}
                     </span>
                   );
                 })}
               </div>
             </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
+  // ─── Horarios ───
+  const vistaHorarios = () => {
+    const dias = diasDelTorneo(categorias); // por jornada: la madrugada cuenta para el día anterior
+    if (!dias.length) return <p className="pv-vacio">Todavía no hay partidos con horario en este torneo.</p>;
+    const hoy = diaDeHoy(dias);
+    const diaActivo = dias.find((d) => d.key === diaSel) || dias.find((d) => d.key === hoy?.key) || dias[0];
+    const idx = dias.indexOf(diaActivo);
+    const conteo = (d) => partidosCat.filter((p) => diaDe(p) === d.key).length;
+    const items = dias.map((d) => ({
+      key: d.key,
+      label: <>{d.diaNombre}<small className="num">{conteo(d)}</small></>,
+      aria: `${d.diaNombre}, ${conteo(d)} partidos`,
+    }));
+    const nombreDia = diaActivo.diaNombre.toLowerCase();
+    const delDia = partidosFiltrados.filter((p) => diaDe(p) === diaActivo.key).sort(porHorario);
+    const sinHora = partidosCat.filter((p) => !p.fechaHora).length;
+    const ahora = Date.now();
+
+    let vacio = null;
+    if (q && partidosFiltrados.length && !delDia.length) {
+      const otros = dias.filter((d) => partidosFiltrados.some((p) => diaDe(p) === d.key));
+      vacio = otros.length
+        ? mensajeVacio(
+            <>{quien} {verbo} el {nombreDia}.</>,
+            otros.map((d) => (
+              <button key={d.key} type="button" className="pv-btn pv-btn-secundario" onClick={() => setDiaSel(d.key)}>
+                Ver el {d.diaNombre.toLowerCase()}
+              </button>
+            ))
+          )
+        : mensajeVacio(<>Los partidos de {quien} todavía no tienen horario.</>);
+    }
+
+    return (
+      <>
+        <div {...cascada(5)}>
+          <Segmentado items={items} activo={idx} etiqueta="Días" onCambiar={(i) => setDiaSel(dias[i].key)} />
+        </div>
+        <div key={diaActivo.key} {...conCascada('pv-entra', 6)}>
+          <div style={{ marginTop: 'var(--e-4)' }}>
+            {vacio}
+            {delDia.length > 0 ? (
+              <ListaAnimada
+                items={delDia}
+                clave={claveTarjeta}
+                className="pv-lista grilla"
+                render={(p) => (
+                  <TarjetaPartido
+                    partido={p}
+                    etiqueta={p.etiqueta}
+                    conDia={false}
+                    seguidaId={favParejaId}
+                    origenes={origenes}
+                    atrasado={sinResultado(p, ahora)}
+                  />
+                )}
+              />
+            ) : (
+              !vacio && <p className="pv-vacio">No hay partidos el {nombreDia} en esta categoría.</p>
+            )}
+          </div>
+          {sinHora > 0 && !q && (
+            <p className="pv-nota">
+              {sinHora} {sinHora === 1 ? 'partido del cuadro todavía no tiene' : 'partidos del cuadro todavía no tienen'} horario: se programan cuando terminan las zonas.
+            </p>
           )}
         </div>
       </>
@@ -1440,126 +1251,7 @@ export default function TorneoPublic() {
             {seccion === 'hoy' && vistaHoy()}
             {seccion === 'zonas' && vistaZonas()}
             {seccion === 'cuadro' && vistaCuadro()}
-            {seccion === 'horarios' && (
-              <div className="pv-legado">
-          {/* Cronograma Horarios (Solo en pestaña Horarios) */}
-          {seccion === 'horarios' && (
-            <section className="public-horarios-section" aria-label="Cronograma de partidos">
-              {/* Barra de acciones: Chip de filtro activo o Toggle "Ver finalizados" */}
-              {(horariosData.totalPartidos > 0 || filtroParejaHorarios) && (
-                <div className="public-horarios-header">
-                  {filtroParejaHorarios ? (
-                    <div className="public-horarios-active-filter">
-                      <span className="public-filter-active-chip">
-                        <span className="public-filter-chip-text" title={filtroParejaHorarios.nombre}>
-                          Mostrando: <strong>{filtroParejaHorarios.nombre}</strong>
-                        </span>
-                        <button
-                          type="button"
-                          className="public-filter-chip-remove"
-                          onClick={() => setFiltroParejaHorarios(null)}
-                          aria-label="Quitar filtro"
-                          title="Quitar filtro"
-                        >
-                          <X size={14} aria-hidden="true" />
-                        </button>
-                      </span>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className={`public-filter-chip ${showFinalizados ? 'active' : ''}`}
-                      onClick={() => setShowFinalizados((prev) => !prev)}
-                      aria-pressed={showFinalizados}
-                    >
-                      Ver finalizados
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Estados vacíos */}
-              {filtroParejaHorarios && horariosData.partidosFiltradosCount === 0 ? (
-                <div className="public-horarios-empty">
-                  <Clock size={32} className="public-horarios-empty-icon" aria-hidden="true" />
-                  <p>Esta pareja no tiene partidos programados.</p>
-                </div>
-              ) : horariosData.totalPartidos === 0 ? (
-                <div className="public-horarios-empty">
-                  <Clock size={32} className="public-horarios-empty-icon" aria-hidden="true" />
-                  <p>No hay partidos programados.</p>
-                </div>
-              ) : horariosData.partidosFiltradosCount === 0 ? (
-                <div className="public-horarios-empty">
-                  <Clock size={32} className="public-horarios-empty-icon" aria-hidden="true" />
-                  <p>No hay partidos pendientes.</p>
-                </div>
-              ) : (
-                <>
-                  {/* Sección "En juego" destacada al principio */}
-                  {horariosData.enJuego.length > 0 && (
-                    <div className="public-horarios-live-section">
-                      <div className="public-horarios-live-badge">
-                        <span className="pub-match-dot" aria-hidden="true" />
-                        <span>En juego</span>
-                      </div>
-                      <div className="partidos-public-grid">
-                        {horariosData.enJuego.map((p) => (
-                          <PublicMatchCard
-                            key={p.id}
-                            partido={p}
-                            label={p.origenLabel}
-                            isMobile={isMobile}
-                            isFav={p.isFav}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Grupos por día */}
-                  {horariosData.gruposDias.map((grupo) => (
-                    <div key={grupo.key} className="public-horarios-day-group">
-                      <h3 className="public-horarios-day-title">{grupo.diaNombre}</h3>
-                      <div className="partidos-public-grid">
-                        {grupo.partidos.map((p) => (
-                          <PublicMatchCard
-                            key={p.id}
-                            partido={p}
-                            label={p.origenLabel}
-                            isMobile={isMobile}
-                            isFav={p.isFav}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Partidos sin fechaHora: "Horario por confirmar" al final */}
-                  {horariosData.sinFecha.length > 0 && (
-                    <div className="public-horarios-tbd-section">
-                      <h3 className="public-horarios-day-title public-horarios-tbd-title">
-                        Horario por confirmar
-                      </h3>
-                      <div className="partidos-public-grid">
-                        {horariosData.sinFecha.map((p) => (
-                          <PublicMatchCard
-                            key={p.id}
-                            partido={p}
-                            label={p.origenLabel}
-                            isMobile={isMobile}
-                            isFav={p.isFav}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </section>
-          )}
-              </div>
-            )}
+            {seccion === 'horarios' && vistaHorarios()}
           </div>
         )}
       </main>
