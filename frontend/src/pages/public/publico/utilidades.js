@@ -1,5 +1,8 @@
 // Funciones auxiliares de la vista pública (diseño v2). Sin estado: solo leen los datos de /api/public/:slug.
-import { formatDiaNombre, formatHora, getDiaCalendarioCordoba } from '../../../utils/dateUtils';
+import { formatDiaNombre, formatHora, getDiaCalendarioConTrasnoche } from '../../../utils/dateUtils';
+
+// Duración fija de un partido (DURACION_PARTIDO_MIN en el backend)
+export const DURACION_PARTIDO_MIN = 75;
 
 export const DIAS_LARGOS = { Vie: 'viernes', 'Sáb': 'sábado', Dom: 'domingo' };
 
@@ -94,26 +97,36 @@ export function campeones(categorias) {
     .filter(Boolean);
 }
 
-// Días del torneo (claves YYYY-MM-DD) según los horarios de todos los partidos
+// Jornada de un horario: la madrugada (hasta las 6) cuenta para el día anterior, como en el resto de Fixi
+const jornada = (fechaHora) => getDiaCalendarioConTrasnoche(fechaHora);
+
+// Días del torneo (claves YYYY-MM-DD, por jornada) según los horarios de todos los partidos
 export function diasDelTorneo(categorias) {
   const dias = new Map();
   categorias.forEach((c) =>
     partidosDeCategoria(c).forEach((p) => {
-      const info = getDiaCalendarioCordoba(p.fechaHora);
+      const info = jornada(p.fechaHora);
       if (info && !dias.has(info.key)) dias.set(info.key, info.diaNombre);
     })
   );
   return [...dias.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, diaNombre]) => ({ key, diaNombre }));
 }
 
-// Qué día muestra "Hoy": hoy si es día de torneo; antes del torneo, el primero; después, el último
+// Qué jornada muestra "Hoy": la actual si es del torneo; antes del torneo, la primera; después, la última
 export function diaDeHoy(dias, ahora = Date.now()) {
   if (!dias.length) return null;
-  const hoy = getDiaCalendarioCordoba(new Date(ahora))?.key;
+  const hoy = jornada(new Date(ahora))?.key;
   if (dias.some((d) => d.key === hoy)) return { ...dias.find((d) => d.key === hoy), momento: 'durante' };
   if (hoy < dias[0].key) return { ...dias[0], momento: 'antes' };
   return { ...dias[dias.length - 1], momento: 'despues' };
 }
 
-export const diaDe = (p) => getDiaCalendarioCordoba(p.fechaHora)?.key || null;
+export const diaDe = (p) => jornada(p.fechaHora)?.key || null;
+
+// Pendiente cuyo horario ya pasó (inicio + duración) y todavía no tiene resultado
+export const sinResultado = (p, ahora = Date.now()) =>
+  p.estado === 'PENDIENTE' && Boolean(p.fechaHora) && new Date(p.fechaHora).getTime() + DURACION_PARTIDO_MIN * 60000 < ahora;
+
+// "Dieciseisavos de Final" → "Dieciseisavos de final" (mayúscula solo al principio)
+export const fraseFase = (texto) => (texto || '').replace(/ de Final(?![a-záéíóú])/g, ' de final');
 export const porHorario = (a, b) => new Date(a.fechaHora) - new Date(b.fechaHora);

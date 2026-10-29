@@ -27,6 +27,8 @@ import {
   partidosDeCategoria,
   parejasQueCoinciden,
   porHorario,
+  sinResultado,
+  fraseFase,
 } from './publico/utilidades';
 
 const SECCIONES = [
@@ -1058,10 +1060,13 @@ export default function TorneoPublic() {
     const nombreDia = `${hoy.diaNombre.toLowerCase()} ${Number(hoy.key.slice(8))}`;
     const delDia = partidosFiltrados.filter((p) => diaDe(p) === hoy.key);
     const enJuego = partidosFiltrados.filter((p) => p.estado === 'EN_CURSO');
-    const pendientes = delDia.filter((p) => p.estado === 'PENDIENTE').sort(porHorario);
+    const ahora = Date.now();
+    const pendientesDelDia = delDia.filter((p) => p.estado === 'PENDIENTE').sort(porHorario);
+    const atrasados = hoy.momento === 'durante' ? pendientesDelDia.filter((p) => sinResultado(p, ahora)) : [];
+    const pendientes = pendientesDelDia.filter((p) => !atrasados.includes(p));
     const terminados = delDia.filter((p) => p.estado === 'FINALIZADO').sort((a, b) => porHorario(b, a));
 
-    if (q && partidosFiltrados.length && !enJuego.length && !pendientes.length && !terminados.length) {
+    if (q && partidosFiltrados.length && !enJuego.length && !pendientes.length && !atrasados.length && !terminados.length) {
       const conHora = partidosFiltrados.filter((p) => p.estado !== 'FINALIZADO' && p.fechaHora).sort(porHorario);
       const prox = conHora.find((p) => diaDe(p) >= hoy.key) || conHora[0];
       const dia = prox ? DIAS_LARGOS[horaPartido(prox.fechaHora).slice(0, 3)] : null;
@@ -1117,6 +1122,19 @@ export default function TorneoPublic() {
               ? <ListaAnimada key="pend" items={pendientes} clave={claveTarjeta} render={tarjeta(false)} />
               : <p className="pv-vacio">{q ? 'Ninguno.' : 'No quedan partidos para hoy en esta categoría.'}</p>}
           </div>
+          {atrasados.length > 0 && (
+            <>
+              <h2 className="pv-titulo-sec">
+                Sin resultado cargado <small>ya pasó su horario</small>
+              </h2>
+              <ListaAnimada
+                key="atrasados"
+                items={atrasados}
+                clave={claveTarjeta}
+                render={(pt) => <TarjetaPartido partido={pt} etiqueta={pt.etiqueta} conDia={false} seguidaId={favParejaId} atrasado />}
+              />
+            </>
+          )}
         </div>
         <div>
           <h2 {...conCascada('pv-titulo-sec', 9)}>Terminados hoy</h2>
@@ -1228,9 +1246,9 @@ export default function TorneoPublic() {
                 {proximoPartidoInfo.tipo === 'en-curso' ? <Play size={16} /> : proximoPartidoInfo.tipo === 'clasificado' ? <Trophy size={16} /> : <Clock size={16} />}
               </span>
               <div>
-                <b>{proximoPartidoInfo.badge}</b>
+                <b>{fraseFase(proximoPartidoInfo.badge)}</b>
                 <strong translate="no">{proximoPartidoInfo.rival}</strong>
-                {proximoPartidoInfo.meta && <span className="pv-proximo-meta"> {proximoPartidoInfo.meta}</span>}
+                {proximoPartidoInfo.meta && <span className="pv-proximo-meta">{fraseFase(proximoPartidoInfo.meta)}</span>}
               </div>
             </div>
           )}

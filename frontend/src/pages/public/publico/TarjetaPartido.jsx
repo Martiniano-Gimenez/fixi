@@ -44,7 +44,7 @@ function ganadorDe(p, lado) {
  * Tarjeta de partido. La pareja 1 va siempre arriba; los sets se alinean en 3 columnas fijas.
  * Ganador en negrita con sus sets resaltados, perdedor en gris.
  */
-export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, seguidaId, clase = '' }) {
+export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, seguidaId, clase = '', atrasado = false }) {
   const vivo = p.estado === 'EN_CURSO';
   const terminado = p.estado === 'FINALIZADO';
   const sets = Array.isArray(p.sets) ? p.sets : [];
@@ -96,6 +96,7 @@ export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, se
           </span>
         )}
         {terminado && <span className="pv-p-estado">Terminado</span>}
+        {atrasado && <span className="pv-p-estado atrasado">Sin resultado cargado</span>}
       </div>
       <div className="pv-p-filas">
         {fila(1)}
