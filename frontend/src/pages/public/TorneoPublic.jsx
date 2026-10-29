@@ -28,6 +28,8 @@ import {
   partidosDeCategoria,
   parejasQueCoinciden,
   porHorario,
+  nombreJornada,
+  rangoFechas,
   sinResultado,
   fraseFase,
 } from './publico/utilidades';
@@ -731,6 +733,7 @@ export default function TorneoPublic() {
   const { torneo, categorias = [] } = data;
   const q = searchTerm;
   const cifras = cifrasTorneo(categorias);
+  const fechasTorneo = rangoFechas(diasDelTorneo(categorias)); // por jornadas; null si hay una sola
   const enVivo = categorias.some((c) => partidosDeCategoria(c).some((p) => p.estado === 'EN_CURSO'));
   const listaCampeones = torneo.estado === 'FINALIZADO' ? campeones(categorias) : [];
   const partidosCat = partidosDeCategoria(activeCategoria);
@@ -1084,19 +1087,45 @@ export default function TorneoPublic() {
     const sinHora = partidosCat.filter((p) => !p.fechaHora).length;
     const ahora = Date.now();
 
-    let vacio = null;
-    if (q && partidosFiltrados.length && !delDia.length) {
-      const otros = dias.filter((d) => partidosFiltrados.some((p) => diaDe(p) === d.key));
-      vacio = otros.length
-        ? mensajeVacio(
-            <>{quien} {verbo} el {nombreDia}.</>,
-            otros.map((d) => (
-              <button key={d.key} type="button" className="pv-btn pv-btn-secundario" onClick={() => setDiaSel(d.key)}>
-                Ver el {d.diaNombre.toLowerCase()}
-              </button>
-            ))
-          )
-        : mensajeVacio(<>Los partidos de {quien} todavía no tienen horario.</>);
+    // Con una búsqueda: todos los partidos de la pareja juntos, por jornada, sin selector de días.
+    // El día elegido (diaSel) no cambia, así que al borrar la búsqueda se vuelve a ese día.
+    if (q) {
+      if (!partidosFiltrados.length) return null; // el buscador ya explica que no hay coincidencias
+      const grupos = dias
+        .map((d) => ({ d, ps: partidosFiltrados.filter((p) => diaDe(p) === d.key).sort(porHorario) }))
+        .filter((g) => g.ps.length);
+      const sinHorario = partidosFiltrados.filter((p) => !p.fechaHora);
+      const lista = (ps, clave) => (
+        <ListaAnimada
+          key={clave}
+          items={ps}
+          clave={claveTarjeta}
+          className="pv-lista grilla"
+          render={(p) => (
+            <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia={false} seguidaId={favParejaId} origenes={origenes} atrasado={sinResultado(p, ahora)} />
+          )}
+        />
+      );
+      return (
+        <div className="pv-entra">
+          {grupos.map(({ d, ps }) => (
+            <section key={d.key} aria-label={nombreJornada(d)}>
+              <h2 className="pv-titulo-sec">
+                {nombreJornada(d)} <small>{ps.length} {ps.length === 1 ? 'partido' : 'partidos'}</small>
+              </h2>
+              {lista(ps, d.key)}
+            </section>
+          ))}
+          {sinHorario.length > 0 && (
+            <section aria-label="A definir">
+              <h2 className="pv-titulo-sec">
+                A definir <small>sin horario todavía</small>
+              </h2>
+              {lista(sinHorario, 'sin-horario')}
+            </section>
+          )}
+        </div>
+      );
     }
 
     return (
@@ -1106,7 +1135,6 @@ export default function TorneoPublic() {
         </div>
         <div key={diaActivo.key} {...conCascada('pv-entra', 6)}>
           <div style={{ marginTop: 'var(--e-4)' }}>
-            {vacio}
             {delDia.length > 0 ? (
               <ListaAnimada
                 items={delDia}
@@ -1124,7 +1152,7 @@ export default function TorneoPublic() {
                 )}
               />
             ) : (
-              !vacio && <p className="pv-vacio">No hay partidos el {nombreDia} en esta categoría.</p>
+              <p className="pv-vacio">No hay partidos el {nombreDia} en esta categoría.</p>
             )}
           </div>
           {sinHora > 0 && !q && (
@@ -1145,6 +1173,7 @@ export default function TorneoPublic() {
         cifras={cifras}
         enVivo={enVivo}
         animar={animarEntrada}
+        fechas={fechasTorneo}
         actualizacion={<UltimaActualizacion timestamp={lastUpdated} />}
       />
 

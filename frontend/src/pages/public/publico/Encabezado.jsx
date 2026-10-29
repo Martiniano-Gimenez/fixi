@@ -22,7 +22,7 @@ export function Logo() {
   );
 }
 
-export default function Encabezado({ torneo, cifras, enVivo, actualizacion, animar }) {
+export default function Encabezado({ torneo, cifras, enVivo, actualizacion, animar, fechas }) {
   const c = (i) => (animar ? { className: 'pv-cascada', style: { '--i': i } } : {});
   return (
     <header className="pv-cab">
@@ -41,7 +41,11 @@ export default function Encabezado({ torneo, cifras, enVivo, actualizacion, anim
             </span>
           </div>
           <h1 {...c(1)}>{torneo.nombre}</h1>
-          {torneo.fecha && <p className={`pv-cab-fecha ${animar ? 'pv-cascada' : ''}`} style={animar ? { '--i': 1 } : undefined}>{formatFechaTorneo(torneo.fecha)}</p>}
+          {(fechas || torneo.fecha) && (
+            <p className={`pv-cab-fecha ${animar ? 'pv-cascada' : ''}`} style={animar ? { '--i': 1 } : undefined}>
+              {fechas || formatFechaTorneo(torneo.fecha)}
+            </p>
+          )}
           <p className={`pv-cifras ${animar ? 'pv-cascada' : ''}`} style={animar ? { '--i': 2 } : undefined}>
             <span><b className="num">{cifras.parejas}</b> parejas</span>
             {cifras.total > 0 && (

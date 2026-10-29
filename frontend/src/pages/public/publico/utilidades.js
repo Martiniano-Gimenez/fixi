@@ -91,7 +91,7 @@ export function partidosDeCategoria(cat) {
     })
   );
   const llave = (cat.eliminatoria || []).flatMap((f) =>
-    (f.partidos || []).filter((p) => !p.esBye).map((p) => ({ ...p, etiqueta: f.nombre, faseId: f.id }))
+    (f.partidos || []).filter((p) => !p.esBye).map((p) => ({ ...p, etiqueta: fraseFase(f.nombre), faseId: f.id }))
   );
   return [...zonas, ...llave];
 }
@@ -163,6 +163,24 @@ export function diaDeHoy(dias, ahora = Date.now()) {
   if (dias.some((d) => d.key === hoy)) return { ...dias.find((d) => d.key === hoy), momento: 'durante' };
   if (hoy < dias[0].key) return { ...dias[0], momento: 'antes' };
   return { ...dias[dias.length - 1], momento: 'despues' };
+}
+
+const MES = new Intl.DateTimeFormat('es-AR', { month: 'long', timeZone: 'UTC' });
+const partesClave = (key) => key.split('-').map(Number); // [año, mes, día]
+const mesDe = (key) => { const [a, m, d] = partesClave(key); return MES.format(new Date(Date.UTC(a, m - 1, d))); };
+
+// "Sábado 5": nombre de una jornada
+export const nombreJornada = (dia) => `${dia.diaNombre} ${partesClave(dia.key)[2]}`;
+
+// "Viernes 4 al domingo 6 de septiembre" con la primera y la última jornada; null si hay una sola o ninguna
+export function rangoFechas(dias) {
+  if (dias.length < 2) return null;
+  const a = dias[0];
+  const b = dias[dias.length - 1];
+  const mesA = mesDe(a.key);
+  const mesB = mesDe(b.key);
+  const desde = mesA === mesB ? nombreJornada(a) : `${nombreJornada(a)} de ${mesA}`;
+  return `${desde} al ${b.diaNombre.toLowerCase()} ${partesClave(b.key)[2]} de ${mesB}`;
 }
 
 export const diaDe = (p) => jornada(p.fechaHora)?.key || null;
