@@ -2,7 +2,7 @@ import { estadoLabel } from '../../../utils/estadoLabels';
 import { formatFechaTorneo } from '../../../utils/dateUtils';
 
 // Cancha de pádel vista desde arriba: perímetro, red y líneas de saque
-function Cancha() {
+export function Cancha() {
   return (
     <svg className="pv-cancha" viewBox="0 0 200 100" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <rect x="1" y="1" width="198" height="98" rx="1" />

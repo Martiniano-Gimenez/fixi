@@ -33,8 +33,9 @@ html:has(.publico) {
 }
 .publico h1, .publico h2, .publico h3, .publico h4 { font-family: var(--f); letter-spacing: -0.01em; margin: 0; }
 .publico p { margin: 0; }
-.publico button, .publico input { font: inherit; color: inherit; }
-.publico button { background: none; border: 0; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+/* :where() no suma especificidad: las clases de cada botón (peso, color, fondo) siguen mandando */
+:where(.publico) button, :where(.publico) input { font: inherit; color: inherit; }
+:where(.publico) button { background: none; border: 0; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .publico a { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .publico a:hover { text-shadow: none; }
 .publico :focus-visible { outline: 2px solid var(--verde-texto); outline-offset: 2px; border-radius: 6px; }
@@ -411,3 +412,128 @@ html:has(.publico) {
 .pv-partido.compacta .pv-set:empty { display: none; }
 .pv-partido.compacta .pv-p-nombre { font-size: var(--t-14); }
 .pv-partido.compacta .pv-set { height: 24px; font-size: var(--t-14); }
+
+/* ─── Inscripción de parejas ─────────────────────────────── */
+/* El editor de disponibilidad es compartido con el panel (diseño v1, con estilos en línea que
+   usan las variables --color-*). Dentro de esta página esas variables toman los valores del tema
+   claro, así el editor se ve claro acá sin tocar el panel. */
+.pv-insc {
+  --color-primary: var(--verde-texto);
+  --color-primary-hover: #005c3d;
+  --color-primary-light: var(--verde-suave);
+  --color-accent-glow: transparent;
+  --color-success: var(--verde-texto);
+  --color-text: var(--tinta);
+  --color-text-secondary: var(--tinta-2);
+  --color-text-muted: var(--gris);
+  --color-bg-input: var(--superficie);
+  --color-bg-card: var(--superficie);
+  --color-surface: var(--superficie);
+  --bg-card-start: var(--superficie);
+  --bg-card-end: var(--superficie);
+  --color-border: var(--linea-fuerte);
+  --color-danger: var(--aviso-texto);
+  --color-danger-bg: var(--aviso-suave);
+  --font-display: var(--f);
+  --font-body: var(--f);
+  --shadow-sm: var(--sombra-1);
+  --border-radius-sm: var(--r-control);
+  padding-bottom: var(--e-8);
+}
+.pv-insc-ancho { max-width: 560px; }
+.pv-insc .pv-cab { padding-bottom: 56px; }
+.pv-insc-card {
+  position: relative; z-index: 2; margin-top: -36px;
+  background: var(--superficie); border-radius: var(--r-panel);
+  box-shadow: var(--sombra-2), 0 0 0 1px rgba(13, 21, 18, .04);
+  padding: var(--e-5) var(--e-4) var(--e-6);
+}
+.pv-insc-titulo { font-size: var(--t-20); font-weight: 650; letter-spacing: -.015em; margin-bottom: var(--e-5); }
+.pv-campo-form { margin-bottom: var(--e-4); }
+.pv-campo-form label { display: block; font-weight: 600; font-size: var(--t-14); margin-bottom: 6px; color: var(--tinta); }
+.publico .pv-input {
+  width: 100%; height: 48px; padding: 0 var(--e-3); border: 1px solid var(--linea-fuerte);
+  border-radius: var(--r-control); background: var(--superficie); color: var(--tinta); font-size: 16px;
+}
+.publico select.pv-input {
+  appearance: none; padding-right: 40px; color-scheme: light;
+  background: var(--superficie) url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%235d6a65%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E") no-repeat right 12px center;
+}
+.publico select.pv-input option { background: var(--superficie); color: var(--tinta); }
+.publico .pv-input::placeholder { color: var(--gris); }
+.publico .pv-input:focus-visible { outline: none; border-color: var(--verde-texto); box-shadow: 0 0 0 3px var(--verde-suave); }
+.publico .pv-input[aria-invalid="true"] { border-color: var(--aviso-texto); }
+.pv-ayuda { margin-top: 6px; font-size: var(--t-13); color: var(--gris); }
+.pv-error { margin-top: 6px; font-size: var(--t-13); font-weight: 500; color: var(--aviso-texto); }
+.pv-hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+.pv-insc-disponibilidad { border: 0; padding: 0; margin: var(--e-6) 0 var(--e-4); min-width: 0; }
+.pv-insc-disponibilidad legend { display: inline-flex; align-items: center; gap: var(--e-2); padding: 0; font-weight: 600; font-size: var(--t-15); color: var(--tinta); }
+.pv-insc-disponibilidad legend svg { color: var(--verde-texto); }
+.pv-check {
+  display: flex; align-items: center; gap: var(--e-3); margin: var(--e-3) 0; padding: 0 var(--e-3);
+  min-height: 48px; border: 1px solid var(--linea-fuerte); border-radius: var(--r-control);
+  background: var(--superficie); font-size: var(--t-15); color: var(--tinta); cursor: pointer;
+}
+.pv-check input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--verde-texto); }
+.pv-check:has(input:checked) { border-color: var(--verde-texto); background: var(--verde-suave); }
+.pv-check:has(input:focus-visible) { outline: 2px solid var(--verde-texto); outline-offset: 2px; }
+.pv-insc-editor { transition: opacity .25s ease; }
+.pv-insc-editor.apagado { opacity: .45; pointer-events: none; }
+.pv-alerta { margin: var(--e-4) 0; padding: var(--e-3) 14px; border-radius: var(--r-control); background: var(--aviso-suave); border: 1px solid #f3d3b4; color: #5a2c00; font-size: var(--t-14); }
+.publico .pv-btn-primario { background: var(--verde); color: var(--tinta); }
+.publico .pv-btn-primario:disabled { opacity: .6; cursor: progress; }
+.pv-insc-enviar { width: 100%; min-height: 50px; font-size: var(--t-15); margin-top: var(--e-2); }
+.pv-insc .pv-nota { text-align: center; }
+
+/* El editor de disponibilidad, con el lenguaje del diseño v2 (solo en esta página) */
+.pv-insc .dia-slots-group { border-color: var(--linea); border-radius: var(--r-tarjeta); padding: var(--e-3) 14px; }
+.pv-insc .dia-slots-header { border-bottom-color: var(--linea); padding-bottom: var(--e-2); }
+.pv-insc .dia-titulo { font-size: var(--t-15); }
+.pv-insc .btn-link-action { font-size: var(--t-13); font-weight: 600; text-decoration: none; min-height: 32px; }
+.pv-insc .btn-link-action.text-danger { color: var(--gris); }
+.pv-insc .btn-secondary {
+  min-height: 44px; padding: 0 var(--e-4); border-radius: var(--r-control); border: 1px dashed var(--linea-fuerte);
+  background: var(--fondo); color: var(--tinta); font-weight: 600; font-size: var(--t-14); transition: transform .15s ease;
+}
+.pv-insc .btn-secondary:active { transform: scale(.96); }
+.pv-insc .range-slider-item { border-color: var(--linea); border-radius: var(--r-control); background: var(--fondo); padding: var(--e-3); }
+.pv-insc .range-slider-time-badge .time-text { color: var(--tinta); font-size: var(--t-15); font-variant-numeric: tabular-nums; }
+.pv-insc .dual-range-wrapper { height: 36px; }
+.pv-insc .dual-range-track { background: #d3dbd7; border-color: #b9c4be; }
+.pv-insc .dual-range-highlight { background: var(--verde); box-shadow: none; }
+.pv-insc .dual-range-input::-webkit-slider-thumb { width: 26px; height: 26px; border-color: var(--verde-texto); box-shadow: var(--sombra-1), 0 2px 6px rgba(13, 21, 18, .2); }
+.pv-insc .dual-range-input::-moz-range-thumb { width: 26px; height: 26px; border-color: var(--verde-texto); box-shadow: var(--sombra-1), 0 2px 6px rgba(13, 21, 18, .2); }
+.pv-insc .dual-range-input.active-thumb::-webkit-slider-thumb { box-shadow: 0 0 0 6px var(--verde-suave); }
+.pv-insc .dual-range-input.active-thumb::-moz-range-thumb { box-shadow: 0 0 0 6px var(--verde-suave); }
+.pv-insc .range-slider-ticks { font-size: var(--t-12); color: var(--gris); font-variant-numeric: tabular-nums; }
+.pv-insc .btn-remove-range { min-width: 36px; min-height: 36px; display: grid; place-items: center; }
+.pv-insc .btn-remove-range:hover { color: var(--aviso-texto); background: var(--aviso-suave); }
+
+/* Estados (cerrada, torneo en curso, no encontrado) y confirmación */
+.pv-insc-estado { text-align: center; padding: var(--e-8) var(--e-5); }
+.pv-insc-estado-icono, .pv-insc-listo {
+  width: 56px; height: 56px; margin: 0 auto var(--e-3); border-radius: 50%;
+  display: grid; place-items: center; background: var(--superficie-2); color: var(--tinta-2);
+}
+.pv-insc-estado h2, .pv-insc-confirmacion h2 { font-size: var(--t-20); font-weight: 650; letter-spacing: -.015em; }
+.pv-insc-estado p { color: var(--tinta-2); margin: var(--e-2) 0 var(--e-5); }
+.pv-insc-confirmacion { text-align: center; }
+.pv-insc-listo { background: var(--verde-suave); color: var(--verde-texto); animation: pv-listo .6s var(--curva-salto) both; animation-delay: .2s; }
+@keyframes pv-listo { from { transform: scale(.4); opacity: 0; } }
+.pv-insc-resumen { text-align: left; margin: var(--e-5) 0 var(--e-4); border-top: 1px solid var(--linea); }
+.pv-insc-resumen > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--e-3); padding: var(--e-3) 0; border-bottom: 1px solid var(--linea); font-size: var(--t-14); }
+.pv-insc-resumen dt { color: var(--gris); }
+.pv-insc-resumen dd { margin: 0; color: var(--tinta); font-weight: 500; overflow-wrap: anywhere; }
+.pv-insc-resumen ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pv-insc-resumen b { font-weight: 600; }
+.pv-insc-acciones { display: grid; gap: var(--e-2); margin-top: var(--e-5); }
+.pv-insc-acciones .pv-btn { min-height: 48px; }
+@media (hover: hover) {
+  .publico .pv-btn-primario:not(:disabled):hover { background: #12dc93; }
+  .pv-check:hover { border-color: var(--tinta-2); }
+  .pv-insc .btn-secondary:hover { background: var(--superficie-2); }
+}
+@media (min-width: 600px) {
+  .pv-insc-card { padding: var(--e-6) var(--e-6) var(--e-8); }
+  .pv-insc-acciones { grid-template-columns: 1fr 1fr; }
+}

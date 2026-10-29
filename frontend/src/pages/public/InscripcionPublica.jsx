@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CalendarDays, CheckCircle2, Clock, Loader2, Lock, SearchX, Trophy } from 'lucide-react';
+import { CheckCircle2, Clock, Loader2, Lock, SearchX, Trophy } from 'lucide-react';
 import { api } from '../../api/client';
 import DisponibilidadEditor from '../../components/DisponibilidadEditor';
 import { agruparSlotsEnRangos } from '../../utils/disponibilidadUtils';
 import { formatFechaTorneo } from '../../utils/dateUtils';
-import './InscripcionPublica.css';
+import './publico/publico.css';
+import { Cancha, Logo } from './publico/Encabezado';
 
 const MAX_NOMBRE = 60;
 
@@ -143,68 +144,114 @@ export default function InscripcionPublica() {
   const torneo = datos?.torneo;
   const linkPublico = `/torneo/${slug}`;
 
-  if (pantalla === 'cargando') {
-    return (
-      <div className="insc-page">
-        <div className="insc-estado" role="status">
-          <Loader2 size={22} className="spin" aria-hidden="true" />
-          <p>Cargando inscripción…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (pantalla === 'no-encontrado' || pantalla === 'error') {
-    return (
-      <div className="insc-page">
-        <div className="insc-estado">
-          <SearchX size={32} aria-hidden="true" />
-          <h1>{pantalla === 'no-encontrado' ? 'No encontramos este torneo' : 'No pudimos cargar la inscripción'}</h1>
-          <p>
-            {pantalla === 'no-encontrado'
-              ? 'Revisá el link que te pasaron o pedile uno nuevo al organizador.'
-              : 'Revisá tu conexión y volvé a intentar.'}
-          </p>
-          {pantalla === 'error' && (
-            <button type="button" className="btn-outline insc-btn-secundario" onClick={() => { setPantalla('cargando'); cargar(); }}>
-              Reintentar
-            </button>
+  // Encabezado oscuro de la vista pública, con el estado de la inscripción
+  const estadoTexto = {
+    abierta: 'Inscripción abierta',
+    confirmacion: 'Inscripción abierta',
+    cerrada: 'Inscripción cerrada',
+    iniciado: 'Torneo en curso',
+  }[pantalla];
+  const encabezado = (
+    <header className="pv-cab">
+      <div className="pv-envolver pv-insc-ancho pv-cab-envolver">
+        <Cancha />
+        <div className="pv-cab-contenido">
+          <div className="pv-cab-fila pv-cascada" style={{ '--i': 0 }}>
+            <div className="pv-marca" translate="no">
+              <Logo />
+              Fixi
+            </div>
+            {torneo && estadoTexto && <span className="pv-estado">{estadoTexto}</span>}
+          </div>
+          {torneo ? (
+            <>
+              <h1 className="pv-cascada" style={{ '--i': 1 }}>{torneo.nombre}</h1>
+              {torneo.fecha && (
+                <p className="pv-cab-fecha pv-cascada" style={{ '--i': 1 }}>
+                  {formatFechaTorneo(torneo.fecha)}
+                </p>
+              )}
+            </>
+          ) : (
+            <h1>Inscripción de parejas</h1>
           )}
         </div>
       </div>
-    );
-  }
-
-  const encabezado = torneo && (
-    <header className="insc-header">
-      <p className="insc-eyebrow">Inscripción de parejas</p>
-      <h1>{torneo.nombre}</h1>
-      {torneo.fecha && (
-        <p className="insc-fecha">
-          <CalendarDays size={15} aria-hidden="true" />
-          {formatFechaTorneo(torneo.fecha)}
-        </p>
-      )}
     </header>
   );
 
-  if (pantalla === 'iniciado' || pantalla === 'cerrada') {
-    const iniciado = pantalla === 'iniciado';
+  // Carga: esqueleto con brillo
+  if (pantalla === 'cargando') {
     return (
-      <div className="insc-page">
-        {encabezado}
-        <div className="insc-estado">
-          {iniciado ? <Trophy size={32} aria-hidden="true" /> : <Lock size={32} aria-hidden="true" />}
-          <h2>{iniciado ? 'El torneo ya empezó' : 'La inscripción está cerrada'}</h2>
-          <p>
-            {iniciado
-              ? 'Ya no se aceptan inscripciones. Podés seguir los resultados en vivo.'
-              : 'Por ahora no se aceptan inscripciones por link. Consultá con el organizador.'}
-          </p>
-          <Link to={linkPublico} className="btn-outline insc-btn-secundario">
-            {iniciado ? 'Ver el torneo en vivo' : 'Ver el torneo'}
-          </Link>
+      <div className="publico pv-insc" role="status" aria-busy="true">
+        <span className="pv-sr">Cargando inscripción…</span>
+        <header className="pv-cab" aria-hidden="true">
+          <div className="pv-envolver pv-insc-ancho">
+            <div className="pv-cab-fila">
+              <div className="pv-sk" style={{ width: 90, height: 26 }} />
+              <div className="pv-sk" style={{ width: 130, height: 28, borderRadius: 99 }} />
+            </div>
+            <div className="pv-sk" style={{ width: '70%', height: 30, marginTop: 18 }} />
+            <div className="pv-sk" style={{ width: '45%', height: 16, marginTop: 10 }} />
+          </div>
+        </header>
+        <div className="pv-envolver pv-insc-ancho" aria-hidden="true">
+          <div className="pv-insc-card">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} style={{ marginBottom: 18 }}>
+                <div className="pv-sk" style={{ width: 140, height: 14 }} />
+                <div className="pv-sk" style={{ height: 48, marginTop: 8 }} />
+              </div>
+            ))}
+          </div>
         </div>
+      </div>
+    );
+  }
+
+  // Estados sin formulario: no encontrado, error, cerrada, torneo iniciado
+  if (['no-encontrado', 'error', 'iniciado', 'cerrada'].includes(pantalla)) {
+    const estados = {
+      'no-encontrado': {
+        icono: <SearchX size={26} aria-hidden="true" />,
+        titulo: 'No encontramos este torneo',
+        texto: 'Revisá el link que te pasaron o pedile uno nuevo al organizador.',
+      },
+      error: {
+        icono: <SearchX size={26} aria-hidden="true" />,
+        titulo: 'No pudimos cargar la inscripción',
+        texto: 'Revisá tu conexión y volvé a intentar.',
+        accion: (
+          <button type="button" className="pv-btn pv-btn-secundario" onClick={() => { setPantalla('cargando'); cargar(); }}>
+            Reintentar
+          </button>
+        ),
+      },
+      iniciado: {
+        icono: <Trophy size={26} aria-hidden="true" />,
+        titulo: 'El torneo ya empezó',
+        texto: 'Ya no se aceptan inscripciones. Podés seguir los resultados en vivo.',
+        accion: <Link to={linkPublico} className="pv-btn pv-btn-secundario">Ver el torneo en vivo</Link>,
+      },
+      cerrada: {
+        icono: <Lock size={26} aria-hidden="true" />,
+        titulo: 'La inscripción está cerrada',
+        texto: 'Por ahora no se aceptan inscripciones por link. Consultá con el organizador.',
+        accion: <Link to={linkPublico} className="pv-btn pv-btn-secundario">Ver el torneo</Link>,
+      },
+    };
+    const e = estados[pantalla] || estados.error;
+    return (
+      <div className="publico pv-insc">
+        {encabezado}
+        <main className="pv-envolver pv-insc-ancho">
+          <section className="pv-insc-card pv-insc-estado pv-cascada" style={{ '--i': 2 }}>
+            <span className="pv-insc-estado-icono">{e.icono}</span>
+            <h2>{e.titulo}</h2>
+            <p>{e.texto}</p>
+            {e.accion}
+          </section>
+        </main>
       </div>
     );
   }
@@ -217,132 +264,159 @@ export default function InscripcionPublica() {
       { nombre: 'Sábado', key: 'Sabado', grilla: grilla.sabado },
     ];
     return (
-      <div className="insc-page">
+      <div className="publico pv-insc">
         {encabezado}
-        <section className="insc-card insc-confirmacion" aria-live="polite">
-          <div className="insc-confirmacion-titulo">
-            <CheckCircle2 size={28} aria-hidden="true" />
+        <main className="pv-envolver pv-insc-ancho">
+          <section className="pv-insc-card pv-insc-confirmacion pv-cascada" style={{ '--i': 2 }} aria-live="polite">
+            <span className="pv-insc-listo" aria-hidden="true">
+              <CheckCircle2 size={28} />
+            </span>
             <h2>¡Listo, quedaron inscriptos!</h2>
-          </div>
-          <dl className="insc-resumen">
-            <div><dt>Categoría</dt><dd>{r.categoria?.nombre}</dd></div>
-            <div><dt>Pareja</dt><dd>{r.jugador1} / {r.jugador2}</dd></div>
-            <div><dt>Teléfono</dt><dd>{confirmada.telefono}</dd></div>
-            <div>
-              <dt>Disponibilidad</dt>
-              <dd>
-                {r.cualquierHorario ? (
-                  'Cualquier horario'
-                ) : (
-                  <ul className="insc-resumen-dias">
-                    {dias.map((d) => {
-                      const slotsDia = r.slotIds.filter((s) => s.startsWith(`${d.key}-`));
-                      if (slotsDia.length === 0) return null;
-                      return <li key={d.key}><strong>{d.nombre}:</strong> {agruparSlotsEnRangos(slotsDia, d.grilla)}</li>;
-                    })}
-                  </ul>
-                )}
-              </dd>
+            <dl className="pv-insc-resumen">
+              <div><dt>Categoría</dt><dd>{r.categoria?.nombre}</dd></div>
+              <div><dt>Pareja</dt><dd translate="no">{r.jugador1} / {r.jugador2}</dd></div>
+              <div><dt>Teléfono</dt><dd className="num">{confirmada.telefono}</dd></div>
+              <div>
+                <dt>Disponibilidad</dt>
+                <dd>
+                  {r.cualquierHorario ? (
+                    'Cualquier horario'
+                  ) : (
+                    <ul>
+                      {dias.map((d) => {
+                        const slotsDia = r.slotIds.filter((s) => s.startsWith(`${d.key}-`));
+                        if (slotsDia.length === 0) return null;
+                        return <li key={d.key}><b>{d.nombre}:</b> {agruparSlotsEnRangos(slotsDia, d.grilla)}</li>;
+                      })}
+                    </ul>
+                  )}
+                </dd>
+              </div>
+            </dl>
+            <p className="pv-nota">La inscripción ya está confirmada. Si necesitan cambiar algo, avisale al organizador.</p>
+            <div className="pv-insc-acciones">
+              <Link to={linkPublico} className="pv-btn pv-btn-primario">Ver el torneo</Link>
+              <button type="button" className="pv-btn pv-btn-secundario" onClick={otraPareja}>
+                Inscribir otra pareja
+              </button>
             </div>
-          </dl>
-          <p className="insc-nota">
-            La inscripción ya está confirmada. Si necesitan cambiar algo, avisale al organizador.
-          </p>
-          <div className="insc-acciones">
-            <Link to={linkPublico} className="btn-primary insc-btn">Ver el torneo</Link>
-            <button type="button" className="btn-ghost insc-btn-secundario" onClick={otraPareja}>
-              Inscribir otra pareja
-            </button>
-          </div>
-        </section>
+          </section>
+        </main>
       </div>
     );
   }
 
   // Inscripción abierta
   return (
-    <div className="insc-page">
+    <div className="publico pv-insc">
       {encabezado}
-      <form className="insc-card" onSubmit={enviar} noValidate>
-        <div className="form-group">
-          <label htmlFor="insc-categoria">Categoría</label>
-          <select
-            id="insc-categoria"
-            className="insc-select"
-            value={form.categoriaId}
-            onChange={set('categoriaId')}
-            aria-invalid={Boolean(errores.categoriaId)}
-          >
-            <option value="">Elegí una categoría</option>
-            {datos.categorias.map((c) => (
-              <option key={c.id} value={c.id}>{c.nombre}</option>
-            ))}
-          </select>
-          {errores.categoriaId && <p className="insc-error-campo">{errores.categoriaId}</p>}
-        </div>
+      <main className="pv-envolver pv-insc-ancho">
+        <form className="pv-insc-card pv-cascada" style={{ '--i': 2 }} onSubmit={enviar} noValidate>
+          <h2 className="pv-insc-titulo">Inscribí a tu pareja</h2>
 
-        <div className="form-group">
-          <label htmlFor="insc-j1">Jugador 1 (nombre y apellido)</label>
-          <input id="insc-j1" value={form.jugador1} onChange={set('jugador1')} maxLength={MAX_NOMBRE + 20} autoComplete="name" aria-invalid={Boolean(errores.jugador1)} />
-          {errores.jugador1 && <p className="insc-error-campo">{errores.jugador1}</p>}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="insc-j2">Jugador 2 (nombre y apellido)</label>
-          <input id="insc-j2" value={form.jugador2} onChange={set('jugador2')} maxLength={MAX_NOMBRE + 20} autoComplete="off" aria-invalid={Boolean(errores.jugador2)} />
-          {errores.jugador2 && <p className="insc-error-campo">{errores.jugador2}</p>}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="insc-tel">Teléfono de contacto</label>
-          <input
-            id="insc-tel"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="Ej: 351 555 1234"
-            value={form.telefono}
-            onChange={set('telefono')}
-            aria-invalid={Boolean(errores.telefono)}
-            aria-describedby="insc-tel-ayuda"
-          />
-          <p id="insc-tel-ayuda" className="insc-ayuda">Solo lo ve el organizador.</p>
-          {errores.telefono && <p className="insc-error-campo">{errores.telefono}</p>}
-        </div>
-
-        {/* Honeypot: invisible para las personas; si viene lleno, el backend no guarda nada */}
-        <div className="insc-hp" aria-hidden="true">
-          <label htmlFor="insc-website">Sitio web</label>
-          <input id="insc-website" name="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={set('website')} />
-        </div>
-
-        <fieldset className="insc-disponibilidad">
-          <legend>
-            <Clock size={15} aria-hidden="true" /> ¿Cuándo pueden jugar la fase de grupos?
-          </legend>
-          <p className="insc-ayuda">Viernes y sábado. Los domingos son para las eliminatorias.</p>
-          <label className="insc-check">
-            <input type="checkbox" checked={form.cualquierHorario} onChange={set('cualquierHorario')} />
-            Puedo en cualquier horario
-          </label>
-          <div className={form.cualquierHorario ? 'insc-editor insc-editor-off' : 'insc-editor'}>
-            <DisponibilidadEditor
-              value={form.slotIds}
-              onChange={onSlotsChange}
-              grillaProp={datos.grilla}
-              disabled={form.cualquierHorario}
-            />
+          <div className="pv-campo-form">
+            <label htmlFor="insc-categoria">Categoría</label>
+            <select
+              id="insc-categoria"
+              className="pv-input"
+              value={form.categoriaId}
+              onChange={set('categoriaId')}
+              aria-invalid={Boolean(errores.categoriaId)}
+              aria-describedby={errores.categoriaId ? 'insc-categoria-error' : undefined}
+            >
+              <option value="">Elegí una categoría</option>
+              {datos.categorias.map((c) => (
+                <option key={c.id} value={c.id}>{c.nombre}</option>
+              ))}
+            </select>
+            {errores.categoriaId && <p id="insc-categoria-error" className="pv-error">{errores.categoriaId}</p>}
           </div>
-          {errores.disponibilidad && <p className="insc-error-campo">{errores.disponibilidad}</p>}
-        </fieldset>
 
-        {errorEnvio && <div className="error-message" role="alert">{errorEnvio}</div>}
+          <div className="pv-campo-form">
+            <label htmlFor="insc-j1">Jugador 1 (nombre y apellido)</label>
+            <input
+              id="insc-j1"
+              name="jugador1"
+              className="pv-input"
+              value={form.jugador1}
+              onChange={set('jugador1')}
+              maxLength={MAX_NOMBRE + 20}
+              autoComplete="name"
+              aria-invalid={Boolean(errores.jugador1)}
+              aria-describedby={errores.jugador1 ? 'insc-j1-error' : undefined}
+            />
+            {errores.jugador1 && <p id="insc-j1-error" className="pv-error">{errores.jugador1}</p>}
+          </div>
 
-        <button type="submit" className="btn-primary insc-btn" disabled={enviando}>
-          {enviando ? (<><Loader2 size={16} className="spin" aria-hidden="true" /> Enviando…</>) : 'Enviar inscripción'}
-        </button>
-        <p className="insc-nota">Al enviarla, la inscripción queda confirmada. Para cambios, hablá con el organizador.</p>
-      </form>
+          <div className="pv-campo-form">
+            <label htmlFor="insc-j2">Jugador 2 (nombre y apellido)</label>
+            <input
+              id="insc-j2"
+              name="jugador2"
+              className="pv-input"
+              value={form.jugador2}
+              onChange={set('jugador2')}
+              maxLength={MAX_NOMBRE + 20}
+              autoComplete="off"
+              aria-invalid={Boolean(errores.jugador2)}
+              aria-describedby={errores.jugador2 ? 'insc-j2-error' : undefined}
+            />
+            {errores.jugador2 && <p id="insc-j2-error" className="pv-error">{errores.jugador2}</p>}
+          </div>
+
+          <div className="pv-campo-form">
+            <label htmlFor="insc-tel">Teléfono de contacto</label>
+            <input
+              id="insc-tel"
+              name="telefono"
+              className="pv-input num"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="Por ejemplo, 351 555 1234…"
+              value={form.telefono}
+              onChange={set('telefono')}
+              aria-invalid={Boolean(errores.telefono)}
+              aria-describedby={errores.telefono ? 'insc-tel-ayuda insc-tel-error' : 'insc-tel-ayuda'}
+            />
+            <p id="insc-tel-ayuda" className="pv-ayuda">Solo lo ve el organizador.</p>
+            {errores.telefono && <p id="insc-tel-error" className="pv-error">{errores.telefono}</p>}
+          </div>
+
+          {/* Honeypot: invisible para las personas; si viene lleno, el backend no guarda nada */}
+          <div className="pv-hp" aria-hidden="true">
+            <label htmlFor="insc-website">Sitio web</label>
+            <input id="insc-website" name="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={set('website')} />
+          </div>
+
+          <fieldset className="pv-insc-disponibilidad">
+            <legend>
+              <Clock size={16} aria-hidden="true" /> ¿Cuándo pueden jugar la fase de grupos?
+            </legend>
+            <p className="pv-ayuda">Viernes y sábado. Los domingos son para las eliminatorias.</p>
+            <label className="pv-check">
+              <input type="checkbox" checked={form.cualquierHorario} onChange={set('cualquierHorario')} />
+              Puedo en cualquier horario
+            </label>
+            <div className={`pv-insc-editor ${form.cualquierHorario ? 'apagado' : ''}`}>
+              <DisponibilidadEditor
+                value={form.slotIds}
+                onChange={onSlotsChange}
+                grillaProp={datos.grilla}
+                disabled={form.cualquierHorario}
+              />
+            </div>
+            {errores.disponibilidad && <p className="pv-error">{errores.disponibilidad}</p>}
+          </fieldset>
+
+          {errorEnvio && <div className="pv-alerta" role="alert">{errorEnvio}</div>}
+
+          <button type="submit" className="pv-btn pv-btn-primario pv-insc-enviar" disabled={enviando}>
+            {enviando ? (<><Loader2 size={18} className="spin" aria-hidden="true" /> Enviando…</>) : 'Enviar inscripción'}
+          </button>
+          <p className="pv-nota">Al enviarla, la inscripción queda confirmada. Para cambios, hablá con el organizador.</p>
+        </form>
+      </main>
     </div>
   );
 }

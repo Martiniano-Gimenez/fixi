@@ -175,7 +175,7 @@ export default function RangeSliderGroup({
                 color: 'var(--color-primary)',
               }}
             >
-              <Plus size={12} /> + Agregar otro rango horario ({dia})
+              <Plus size={12} /> Agregar otro rango horario ({dia})
             </button>
           </div>
         </div>

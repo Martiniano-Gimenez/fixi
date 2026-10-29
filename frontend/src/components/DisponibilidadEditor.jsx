@@ -358,7 +358,7 @@ export default function DisponibilidadEditor({
           {/* Grilla Sábado */}
           {grilla.sabado && grilla.sabado.length > 0 && (
             <RangeSliderGroup
-              dia="Sabado"
+              dia="Sábado"
               slotsDisponibles={grilla.sabado}
               rangos={rangosSabado}
               onRangosChange={handleRangosSabadoChange}
