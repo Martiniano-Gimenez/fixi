@@ -7,6 +7,7 @@ import './publico/publico.css';
 import Barra from './publico/Barra';
 import Inicio from './publico/Inicio';
 import Categoria from './publico/Categoria';
+import Busqueda from './publico/Busqueda';
 import useAvisoResultados from './publico/useAvisoResultados';
 import { diasDelTorneo, rangoFechas } from './publico/utilidades';
 
@@ -324,6 +325,60 @@ export default function TorneoPublic() {
     setSearchParams({ cat: categoria.nombre, ronda: String(i + 1) }, { replace: true, state: location.state });
   };
 
+  // Búsqueda en la URL: ?buscar=<texto> o ?q=<texto>
+  const buscarParam = searchParams.get('buscar') ?? searchParams.get('q');
+  const busquedaAbierta = searchParams.has('buscar') || searchParams.has('q');
+
+  const abrirBusqueda = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('buscar', '');
+      return next;
+    });
+  };
+
+  const actualizarBusqueda = (nuevaQuery) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (nuevaQuery) {
+        next.set('buscar', nuevaQuery);
+        next.delete('q');
+      } else {
+        next.set('buscar', '');
+        next.delete('q');
+      }
+      return next;
+    }, { replace: true });
+  };
+
+  const cerrarBusqueda = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('buscar');
+      next.delete('q');
+      return next;
+    }, { replace: true });
+  };
+
+  const toggleSeguir = (catId, parejaId) => {
+    if (!slug || !catId || !parejaId) return;
+    const esActual = favs[catId] === parejaId;
+    const nuevoId = esActual ? null : parejaId;
+    setFavPareja(slug, catId, nuevoId);
+    setFavs((prev) => {
+      const next = { ...prev };
+      if (nuevoId) next[catId] = nuevoId;
+      else delete next[catId];
+      return next;
+    });
+  };
+
+  const abrirCategoriaDesdeBusqueda = (cat, e) => {
+    if (conModificador(e)) return;
+    e?.preventDefault();
+    setSearchParams({ cat: cat.nombre }, { state: { desdeInicio: true } });
+  };
+
   // Parejas seguidas, para la línea del inicio
   const seguidas = categorias
     .filter((c) => favs[c.id])
@@ -359,7 +414,7 @@ export default function TorneoPublic() {
   return (
     <div className={`publico ${categoria ? 'pv-pagina-cat' : ''}`}>
       <a className="pv-saltar" href="#contenido">Saltar al contenido</a>
-      <Barra volver={categoria ? { href: '?', onClick: volverAlInicio } : null} onBuscar={() => {}} />
+      <Barra volver={categoria ? { href: '?', onClick: volverAlInicio } : null} onBuscar={abrirBusqueda} />
 
       <div id="contenido" tabIndex={-1} className="pv-contenido">
         {categoria ? (
@@ -387,6 +442,19 @@ export default function TorneoPublic() {
           />
         )}
       </div>
+
+      {busquedaAbierta && (
+        <Busqueda
+          categorias={categorias}
+          queryInicial={buscarParam || ''}
+          onCerrar={cerrarBusqueda}
+          onCambiarQuery={actualizarBusqueda}
+          favs={favs}
+          onToggleSeguir={toggleSeguir}
+          hrefCategoria={hrefCategoria}
+          onAbrirCategoria={abrirCategoriaDesdeBusqueda}
+        />
+      )}
 
       <div className={`pv-aviso ${aviso ? 'on' : ''}`} role="status" aria-live="polite">
         <span className="pv-aviso-icono" aria-hidden="true">

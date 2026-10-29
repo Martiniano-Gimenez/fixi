@@ -96,21 +96,102 @@ export function partidosDeCategoria(cat) {
   return [...zonas, ...llave];
 }
 
-// Parejas de todas las categorías que coinciden con la búsqueda, con su categoría y zona
+// Parejas de todas las categorías que coinciden con la búsqueda, con su categoría
 export function parejasQueCoinciden(categorias, q) {
-  if (!q) return [];
-  const n = normalizar(q);
+  if (!q || !q.trim()) return [];
+  const n = normalizar(q.trim());
+  const palabras = n.split(/\s+/).filter(Boolean);
   const out = [];
-  categorias.forEach((c) =>
-    (c.zonas || []).forEach((z) =>
+
+  (categorias || []).forEach((c) => {
+    const mapa = new Map();
+
+    // 1. Parejas registradas en la categoría
+    (c.parejas || []).forEach((p) => {
+      const nombre = `${p.jugador1} / ${p.jugador2}`;
+      mapa.set(p.id, { parejaId: p.id, nombre, cat: c });
+    });
+
+    // 2. Parejas en zonas (tabla y partidos)
+    (c.zonas || []).forEach((z) => {
       (z.tabla || []).forEach((row) => {
-        if (row.pareja && normalizar(row.pareja).includes(n)) {
-          out.push({ parejaId: row.parejaId, nombre: row.pareja, catId: c.id, zonaId: z.id });
+        if (row.parejaId && row.pareja && !mapa.has(row.parejaId)) {
+          mapa.set(row.parejaId, { parejaId: row.parejaId, nombre: row.pareja, cat: c });
         }
-      })
-    )
-  );
+      });
+      (z.partidos || []).forEach((p) => {
+        if (p.pareja1Id && p.pareja1 && !mapa.has(p.pareja1Id)) {
+          mapa.set(p.pareja1Id, { parejaId: p.pareja1Id, nombre: p.pareja1, cat: c });
+        }
+        if (p.pareja2Id && p.pareja2 && !mapa.has(p.pareja2Id)) {
+          mapa.set(p.pareja2Id, { parejaId: p.pareja2Id, nombre: p.pareja2, cat: c });
+        }
+      });
+    });
+
+    // 3. Parejas en cuadro eliminatorio
+    (c.eliminatoria || []).forEach((f) => {
+      (f.partidos || []).forEach((p) => {
+        if (p.pareja1Id && p.pareja1 && !mapa.has(p.pareja1Id)) {
+          mapa.set(p.pareja1Id, { parejaId: p.pareja1Id, nombre: p.pareja1, cat: c });
+        }
+        if (p.pareja2Id && p.pareja2 && !mapa.has(p.pareja2Id)) {
+          mapa.set(p.pareja2Id, { parejaId: p.pareja2Id, nombre: p.pareja2, cat: c });
+        }
+      });
+    });
+
+    mapa.forEach((pareja) => {
+      const norm = normalizar(pareja.nombre);
+      const coincide = norm.includes(n) || (palabras.length > 1 && palabras.every((pal) => norm.includes(pal)));
+      if (coincide) out.push(pareja);
+    });
+  });
+
   return out;
+}
+
+// Todos los partidos de una pareja en una categoría, con sus orígenes resueltos
+export function partidosDePareja(cat, parejaId, parejaNombre) {
+  if (!cat) return [];
+  const origenes = clasificadosPorOrigen(cat);
+  const partidos = partidosDeCategoria(cat);
+  return partidos.filter((p) => {
+    const l1 = ladoDe(p, 1, origenes);
+    const l2 = ladoDe(p, 2, origenes);
+    if (parejaId) {
+      if (l1.parejaId === parejaId || l2.parejaId === parejaId) return true;
+      if (p.pareja1Id === parejaId || p.pareja2Id === parejaId) return true;
+    }
+    if (parejaNombre) {
+      if (l1.definida && l1.nombre === parejaNombre) return true;
+      if (l2.definida && l2.nombre === parejaNombre) return true;
+      if (p.pareja1 === parejaNombre || p.pareja2 === parejaNombre) return true;
+    }
+    return false;
+  });
+}
+
+// Partidos agrupados por jornada ("Sábado 5", "Domingo 6") respetando la regla de trasnoche
+export function agruparPartidosPorJornada(partidos, dias) {
+  const conHora = partidos.filter((p) => Boolean(p.fechaHora)).sort(porHorario);
+  const sinHora = partidos.filter((p) => !p.fechaHora);
+
+  const diasMap = new Map();
+  conHora.forEach((p) => {
+    const key = diaDe(p);
+    if (!key) return;
+    if (!diasMap.has(key)) {
+      const dTorneo = dias.find((d) => d.key === key);
+      const info = jornada(p.fechaHora);
+      const dia = dTorneo || (info ? { key: info.key, diaNombre: info.diaNombre } : { key, diaNombre: '' });
+      diasMap.set(key, { dia, partidos: [] });
+    }
+    diasMap.get(key).partidos.push(p);
+  });
+
+  const jornadas = [...diasMap.values()].sort((a, b) => a.dia.key.localeCompare(b.dia.key));
+  return { jornadas, sinHora };
 }
 
 // Jornada de un horario: la madrugada (hasta las 6) cuenta para el día anterior, como en el resto de Fixi
