@@ -6,7 +6,7 @@ import DisponibilidadEditor from '../../components/DisponibilidadEditor';
 import { agruparSlotsEnRangos } from '../../utils/disponibilidadUtils';
 import { formatFechaTorneo } from '../../utils/dateUtils';
 import './publico/publico.css';
-import { Cancha, Logo } from './publico/Encabezado';
+import { Cancha, Logo } from './publico/Barra';
 
 const MAX_NOMBRE = 60;
 

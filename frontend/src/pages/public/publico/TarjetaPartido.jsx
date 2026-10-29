@@ -42,7 +42,8 @@ function ganadorDe(p, lado) {
 
 /**
  * Tarjeta de partido. La pareja 1 va siempre arriba; los sets se alinean en 3 columnas fijas.
- * Ganador en negrita con sus sets resaltados, perdedor en gris.
+ * El resultado se lee primero: ganador en marino y peso fuerte, perdedor en gris;
+ * en un partido en juego, el set que se está jugando va en un recuadro azul.
  */
 export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, seguidaId, clase = '', atrasado = false, origenes = null }) {
   const vivo = p.estado === 'EN_CURSO';
@@ -70,8 +71,10 @@ export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, se
           if (!s) return <span key={i} className="pv-set" aria-hidden="true" />;
           const mio = lado === 1 ? s.gamesPareja1 : s.gamesPareja2;
           const otro = lado === 1 ? s.gamesPareja2 : s.gamesPareja1;
+          // En un partido en juego, el último set cargado es el que se está jugando
+          const actual = vivo && i === sets.length - 1;
           return (
-            <span key={i} className={`pv-set ${mio > otro ? 'gano' : ''}`}>
+            <span key={i} className={`pv-set ${actual ? 'actual' : mio > otro ? 'gano' : ''}`}>
               <Numero valor={mio} />
             </span>
           );
@@ -89,7 +92,6 @@ export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, se
     <article className={`pv-partido ${vivo ? 'vivo' : ''} ${esSeguida ? 'seguida' : ''} ${clase}`}>
       <div className="pv-p-meta">
         <span className="pv-p-hora num">{hora || 'Horario a definir'}</span>
-        {p.canchaNumero ? <span>Cancha {p.canchaNumero}</span> : null}
         {etiqueta ? <span>{etiqueta}</span> : null}
         {vivo && (
           <span className="pv-p-estado en-juego">

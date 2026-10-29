@@ -96,21 +96,6 @@ export function partidosDeCategoria(cat) {
   return [...zonas, ...llave];
 }
 
-// Cifras del encabezado: parejas y partidos jugados (sin "pasa directo")
-export function cifrasTorneo(categorias) {
-  let parejas = 0;
-  let total = 0;
-  let jugados = 0;
-  categorias.forEach((c) => {
-    parejas += c.totalParejas || 0;
-    partidosDeCategoria(c).forEach((p) => {
-      total++;
-      if (p.estado === 'FINALIZADO') jugados++;
-    });
-  });
-  return { parejas, total, jugados };
-}
-
 // Parejas de todas las categorías que coinciden con la búsqueda, con su categoría y zona
 export function parejasQueCoinciden(categorias, q) {
   if (!q) return [];
@@ -126,19 +111,6 @@ export function parejasQueCoinciden(categorias, q) {
     )
   );
   return out;
-}
-
-// Campeón de cada categoría: ganador de la final (la fase con la ronda más chica)
-export function campeones(categorias) {
-  return categorias
-    .map((c) => {
-      const fases = c.eliminatoria || [];
-      if (!fases.length) return null;
-      const final = fases.reduce((a, f) => (f.ronda < a.ronda ? f : a), fases[0]);
-      const p = final.partidos?.[0];
-      return p?.estado === 'FINALIZADO' && p.ganador ? { categoria: c.nombre, pareja: p.ganador } : null;
-    })
-    .filter(Boolean);
 }
 
 // Jornada de un horario: la madrugada (hasta las 6) cuenta para el día anterior, como en el resto de Fixi
@@ -192,3 +164,57 @@ export const sinResultado = (p, ahora = Date.now()) =>
 // "Dieciseisavos de Final" → "Dieciseisavos de final" (mayúscula solo al principio)
 export const fraseFase = (texto) => (texto || '').replace(/ de Final(?![a-záéíóú])/g, ' de final');
 export const porHorario = (a, b) => new Date(a.fechaHora) - new Date(b.fechaHora);
+
+// ─── Estructura por categorías (v3) ───
+
+// Etiqueta corta de cada fase en el recorrido ("16avos", "8vos", "4tos", "Semi", "Final")
+const ETAPA_CORTA = { 32: '16avos', 16: '8vos', 8: '4tos', 4: 'Semi', 2: 'Final', 1: 'Final' };
+export const etapaCorta = (fase) => ETAPA_CORTA[fase.ronda] || fraseFase(fase.nombre);
+
+// Final de la categoría: la fase con la ronda más chica
+const faseFinal = (cat) => {
+  const fases = cat?.eliminatoria || [];
+  return fases.length ? fases.reduce((a, f) => (f.ronda < a.ronda ? f : a), fases[0]) : null;
+};
+
+// Campeones y subcampeones de una categoría (ganador de la final), o null si todavía no se jugó
+export function podioDe(cat) {
+  const p = faseFinal(cat)?.partidos?.find((x) => !x.esBye);
+  if (!p || p.estado !== 'FINALIZADO' || !p.ganador) return null;
+  const ganaP1 = p.ganadorId != null && p.pareja1Id != null ? p.ganadorId === p.pareja1Id : p.ganador === p.pareja1;
+  return { campeones: p.ganador, subcampeones: (ganaP1 ? p.pareja2 : p.pareja1) || null };
+}
+
+// Etapas del recorrido: las zonas y cada fase del cuadro, con sus partidos jugados (sin "pasa directo")
+export function etapasDe(cat) {
+  const etapas = [];
+  const zonas = (cat?.zonas || []).flatMap((z) => z.partidos || []);
+  if (zonas.length) etapas.push({ key: 'zonas', corta: 'Zonas', larga: 'Zonas', partidos: zonas });
+  (cat?.eliminatoria || []).forEach((f) =>
+    etapas.push({ key: f.id, corta: etapaCorta(f), larga: fraseFase(f.nombre), partidos: (f.partidos || []).filter((p) => !p.esBye) })
+  );
+  // La primera que no terminó es la actual; las anteriores, hechas; las siguientes, futuras
+  let hayActual = false;
+  return etapas.map((e) => {
+    const total = e.partidos.length;
+    const jugados = e.partidos.filter((p) => p.estado === 'FINALIZADO').length;
+    let estado = 'futura';
+    if (total && jugados === total) estado = 'hecha';
+    else if (!hayActual) { estado = 'actual'; hayActual = true; }
+    return { key: e.key, corta: e.corta, larga: e.larga, total, jugados, estado };
+  });
+}
+
+// Estado de una categoría para su tarjeta y su encabezado
+export function estadoDe(cat, ahora = Date.now()) {
+  const ps = partidosDeCategoria(cat);
+  const total = ps.length;
+  const jugados = ps.filter((p) => p.estado === 'FINALIZADO').length;
+  const vivos = ps.filter((p) => p.estado === 'EN_CURSO').length;
+  const terminada = total > 0 && jugados === total;
+  const proximo = ps
+    .filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && new Date(p.fechaHora).getTime() >= ahora)
+    .sort(porHorario)[0] || null;
+  const preparacion = !(cat?.zonas || []).length && !(cat?.eliminatoria || []).length;
+  return { total, jugados, vivos, terminada, proximo, preparacion, podio: terminada ? podioDe(cat) : null };
+}

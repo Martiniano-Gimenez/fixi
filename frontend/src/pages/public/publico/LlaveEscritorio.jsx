@@ -6,7 +6,7 @@ import { fraseFase, ladoDe } from './utilidades';
 /**
  * Llave completa en escritorio: una columna por ronda, con líneas que unen cada cruce.
  * Los "pasa directo" ocupan su lugar (si no, las líneas no coinciden con los cruces).
- * Con una búsqueda (coincide), la pareja (su lugar y su próximo cruce) se destaca en verde y el resto
+ * Con una búsqueda (coincide), la pareja (su lugar y su próximo cruce) se destaca en azul y el resto
  * se atenúa en vez de desaparecer. origenes resuelve "1° Zona A" → pareja cuando su zona ya terminó.
  */
 export default function LlaveEscritorio({ fases, seguidaId, coincide, origenes }) {

@@ -67,37 +67,38 @@
   --transition-base: 250ms ease;
 }
 
-/* ─── Sistema de diseño v2 (rediseño 2026) ───────────────────
-   Tema claro con el verde de Fixi como marca. Lo usan las pantallas ya rediseñadas;
+/* ─── Sistema de diseño v3 (rediseño 2026) ───────────────────
+   Tema claro con el azul de Fixi como marca. Lo usan las pantallas ya rediseñadas;
    las variables --color-*, --space-*, --radius-* de arriba son del diseño v1 y se
-   retiran a medida que se rediseña cada pantalla. Contrastes medidos con WCAG 2.1. */
+   retiran a medida que se rediseña cada pantalla.
+   Contrastes medidos con WCAG 2.1 (texto ≥ 4,5:1; gráficos ≥ 3:1). Celeste y naranja
+   NO se usan como texto: solo como relleno; para texto están --progreso-texto y --vivo-texto. */
 :root {
-  /* Marca: el verde solo como relleno, con texto oscuro encima */
-  --verde: #00d084;
-  --verde-texto: #00704a;      /* texto e íconos verdes sobre claro (6,2:1) */
-  --verde-suave: #e3f6ec;
-  /* Neutros con un toque verde */
-  --tinta: #0d1512;            /* texto principal y encabezado */
-  --tinta-2: #36423d;
-  --gris: #5d6a65;             /* texto secundario y perdedores (5,6:1) */
-  --fondo: #f3f5f4;
-  --superficie: #ffffff;
-  --superficie-2: #eaefec;
-  --linea: #e1e6e3;
-  --linea-fuerte: #c9d2cd;
-  /* Estados: cada color una sola función */
-  --vivo: #d1353b;             /* solo "En vivo" */
-  --vivo-texto: #c62d33;
-  --vivo-suave: #fdeeee;
-  --oro: #b7791f;              /* solo campeones y pareja que seguís */
-  --oro-texto: #8a5a00;
-  --oro-suave: #fff5dc;
-  /* Advertencias del panel (naranja, distinto del dorado) */
-  --aviso-texto: #a14a00;      /* 5,5:1 sobre --aviso-suave */
-  --aviso-suave: #fff2e6;
-  /* Sobre el encabezado oscuro */
-  --sobre-tinta: #ffffff;
-  --sobre-tinta-2: #b4c2bc;
+  /* Identidad */
+  --marca: #2563EB;             /* azul eléctrico: logo, botones, links (5,17:1 sobre blanco) */
+  --marca-hover: #1D4ED8;
+  --marca-suave: #DBEAFE;       /* fondo de chips activos suaves (#1D4ED8 encima: 5,49:1) */
+  --tinta: #172554;             /* azul marino: textos principales (14,7:1) */
+  --tinta-2: #334155;           /* textos de apoyo (10,4:1) */
+  --gris: #5B6B82;              /* secundarios y perdedores (4,73:1 en el fondo más oscuro) */
+  /* Superficies */
+  --fondo: #F8FAFC;
+  --superficie: #FFFFFF;
+  --superficie-2: #EEF2F7;      /* chips neutros, pistas de selectores */
+  --linea: #E2E8F0;             /* separadores dentro de una tarjeta */
+  --linea-fuerte: #CBD5E1;      /* bordes de campos */
+  /* Estados: cada color, una sola función */
+  --vivo: #FF8A3D;              /* SOLO "En juego": chip, punto, borde (relleno, nunca texto) */
+  --vivo-texto: #C2410C;        /* texto "En juego" sobre blanco (5,18:1) */
+  --vivo-suave: #FFF1E6;
+  --progreso: #38BDF8;          /* celeste: recorrido de fases y posiciones que clasifican (relleno) */
+  --progreso-texto: #0369A1;    /* texto en ese tono (5,93:1 sobre blanco) */
+  --progreso-suave: #E0F2FE;
+  --alerta: #DC2626;            /* alertas e incidencias: "Sin resultado cargado", errores (4,83:1) */
+  --alerta-texto: #B91C1C;
+  --alerta-suave: #FEF2F2;
+  --oro: #B7791F;               /* SOLO ícono de trofeo y estrella de la pareja seguida (3,64:1) */
+  --pista: #E2E8F0;             /* pista de barras de progreso */
   /* Tipografía */
   --f: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --t-12: 0.75rem; --t-13: 0.8125rem; --t-14: 0.875rem; --t-15: 0.9375rem;
@@ -106,14 +107,13 @@
   --e-1: 4px; --e-2: 8px; --e-3: 12px; --e-4: 16px; --e-5: 20px; --e-6: 24px; --e-8: 32px; --e-10: 40px;
   /* Radios: chico para datos, medio para controles, grande para contenedores */
   --r-dato: 7px; --r-control: 10px; --r-tarjeta: 14px; --r-panel: 18px; --r-pill: 999px;
-  /* Sombras */
-  --sombra-1: 0 1px 2px rgba(13, 21, 18, .06);
-  --sombra-2: 0 8px 24px -10px rgba(13, 21, 18, .22);
-  --sombra-3: 0 18px 40px -14px rgba(13, 21, 18, .45);
+  /* Sombras suaves azuladas (las tarjetas no llevan borde) */
+  --sombra-1: 0 1px 2px rgba(23, 37, 84, .06), 0 1px 3px rgba(23, 37, 84, .05);
+  --sombra-2: 0 1px 2px rgba(23, 37, 84, .05), 0 6px 18px -6px rgba(37, 99, 235, .16);
+  --sombra-3: 0 2px 4px rgba(23, 37, 84, .06), 0 14px 32px -10px rgba(37, 99, 235, .26);
   /* Movimiento */
   --curva: cubic-bezier(.16, 1, .3, 1);
   --curva-salto: cubic-bezier(.2, .9, .3, 1.4);
-  --nav-alto: 64px;
 }
 
 /* ─── Reset ─────────────────────────────────────────────── */

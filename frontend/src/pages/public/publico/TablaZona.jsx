@@ -1,13 +1,14 @@
 import { Estrella, Numero } from './TarjetaPartido';
 import { normalizar } from './utilidades';
 
-const ALTO_FILA = 56;
+const ALTO_FILA = 52;
 
 /**
  * Tabla de posiciones de una zona. El orden viene del backend (tabla[]).
  * Cada fila se ubica con translateY: cuando cambia el orden, se desliza a su nueva posición.
+ * children: lo que va al pie de la tarjeta (por ejemplo, "Ver partidos").
  */
-export default function TablaZona({ zona, seguidaId, busqueda }) {
+export default function TablaZona({ zona, seguidaId, busqueda, children }) {
   const filas = zona.tabla || [];
   const q = normalizar(busqueda);
   return (
@@ -60,6 +61,7 @@ export default function TablaZona({ zona, seguidaId, busqueda }) {
             );
           })}
       </div>
+      {children}
     </section>
   );
 }
