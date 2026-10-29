@@ -157,12 +157,12 @@ export default function EditBracketMatchModal({
               Posición 1 (Arriba)
             </label>
             <select
+              className="campo-chico"
               value={origen1}
               onChange={(e) => setOrigen1(e.target.value)}
               style={{
                 width: '100%',
                 padding: '0.5rem 0.75rem',
-                fontSize: 'var(--font-size-sm)',
                 background: 'var(--color-bg-input)',
                 color: 'var(--color-text)',
                 border: '1px solid var(--color-border)',
@@ -179,12 +179,12 @@ export default function EditBracketMatchModal({
               Posición 2 (Abajo)
             </label>
             <select
+              className="campo-chico"
               value={origen2}
               onChange={(e) => setOrigen2(e.target.value)}
               style={{
                 width: '100%',
                 padding: '0.5rem 0.75rem',
-                fontSize: 'var(--font-size-sm)',
                 background: 'var(--color-bg-input)',
                 color: 'var(--color-text)',
                 border: '1px solid var(--color-border)',

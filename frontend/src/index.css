@@ -177,12 +177,27 @@ input, select, textarea {
 }
 
 /* Con el zoom habilitado, iOS acerca la pantalla al enfocar un campo con letra
-   menor a 16px. En pantallas táctiles los campos de texto usan 16px. */
+   menor a 16px. En pantallas táctiles los campos chicos suben a 16px; los que ya
+   son más grandes (por ejemplo .resultado-set-input, 1.25rem) no cambian. */
+.campo-chico {
+  font-size: var(--font-size-sm);
+}
+
 @media (pointer: coarse) {
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  /* Campos sin tamaño propio: heredan la letra del contenedor, con un mínimo de 16px */
+  /* :where() no suma especificidad: cualquier clase con tamaño propio sigue mandando */
+  input:where(:not([type="checkbox"]):not([type="radio"]):not([type="range"])),
   select,
   textarea {
-    font-size: 16px !important;
+    font-size: max(16px, 1em);
+  }
+
+  /* Campos con letra chica fijada por clase */
+  html .campo-chico,
+  html .club-time-input,
+  html .insc-panel-link input,
+  html .public-search-input {
+    font-size: 16px;
   }
 }
 
