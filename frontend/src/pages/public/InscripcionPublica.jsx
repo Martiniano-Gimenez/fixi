@@ -154,18 +154,13 @@ export default function InscripcionPublica() {
   const encabezado = (
     <header className="pv-cabecera">
       <div className="pv-envolver pv-insc-ancho">
-        {torneo?.organizador && (
-          <p className="pv-club pv-cascada" style={{ '--i': 0 }}>
-            {torneo.organizador}
-          </p>
-        )}
         <h1 className="pv-cascada" style={{ '--i': 1 }}>
           {torneo ? torneo.nombre : 'Inscripción de parejas'}
         </h1>
         {torneo && (
           <div className="pv-cabecera-meta pv-cascada" style={{ '--i': 1 }}>
-            {(torneo.fechas || torneo.fecha) && (
-              <p className="pv-fechas">{torneo.fechas || formatFechaTorneo(torneo.fecha)}</p>
+            {torneo.fecha && (
+              <p className="pv-fechas">{formatFechaTorneo(torneo.fecha)}</p>
             )}
             {estadoTexto && <span className="pv-chip-neutro">{estadoTexto}</span>}
           </div>
@@ -179,7 +174,7 @@ export default function InscripcionPublica() {
     return (
       <div className="publico pv-insc" role="status" aria-busy="true">
         <span className="pv-sr">Cargando inscripción…</span>
-        <Barra volver={{ href: linkPublico, texto: 'Volver' }} />
+        <Barra volver={{ href: linkPublico, texto: 'Torneo' }} />
         <header className="pv-cabecera" aria-hidden="true">
           <div className="pv-envolver pv-insc-ancho">
             <div className="pv-sk" style={{ width: '65%', height: 32, marginTop: 4, marginBottom: 8 }} />
@@ -237,7 +232,7 @@ export default function InscripcionPublica() {
     const e = estados[pantalla] || estados.error;
     return (
       <div className="publico pv-insc">
-        <Barra volver={{ href: linkPublico, texto: 'Volver' }} />
+        <Barra volver={{ href: linkPublico, texto: 'Torneo' }} />
         {encabezado}
         <main className="pv-envolver pv-insc-ancho">
           <section className="pv-insc-card pv-insc-estado pv-cascada" style={{ '--i': 2 }}>
@@ -260,7 +255,7 @@ export default function InscripcionPublica() {
     ];
     return (
       <div className="publico pv-insc">
-        <Barra volver={{ href: linkPublico, texto: 'Volver' }} />
+        <Barra volver={{ href: linkPublico, texto: 'Torneo' }} />
         {encabezado}
         <main className="pv-envolver pv-insc-ancho">
           <section className="pv-insc-card pv-insc-confirmacion pv-cascada" style={{ '--i': 2 }} aria-live="polite">
@@ -305,7 +300,7 @@ export default function InscripcionPublica() {
   // Inscripción abierta
   return (
     <div className="publico pv-insc">
-      <Barra volver={{ href: linkPublico, texto: 'Volver' }} />
+      <Barra volver={{ href: linkPublico, texto: 'Torneo' }} />
       {encabezado}
       <main className="pv-envolver pv-insc-ancho">
         <form className="pv-insc-card pv-cascada" style={{ '--i': 2 }} onSubmit={enviar} noValidate>
