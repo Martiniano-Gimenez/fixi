@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
-import BracketLines from '../../components/BracketLines';
 import { AlertTriangle, Users, Trophy, Clock, Search, X, Play } from 'lucide-react';
 import { formatPartidoHorario, getDiaCalendarioCordoba } from '../../utils/dateUtils';
 import { APP_NAME, APP_TAGLINE } from '../../constants/app';
@@ -13,6 +12,7 @@ import Segmentado from './publico/Segmentado';
 import TarjetaPartido, { Estrella } from './publico/TarjetaPartido';
 import TablaZona from './publico/TablaZona';
 import ListaAnimada from './publico/ListaAnimada';
+import LlaveEscritorio from './publico/LlaveEscritorio';
 import useAvisoResultados from './publico/useAvisoResultados';
 import {
   DIAS_LARGOS,
@@ -22,6 +22,8 @@ import {
   diaDeHoy,
   diasDelTorneo,
   horaPartido,
+  nombrePareja1,
+  nombrePareja2,
   normalizar,
   partidoCoincide,
   partidosDeCategoria,
@@ -437,7 +439,6 @@ export default function TorneoPublic() {
   const dataRef = useRef(null);
   const inFlightRef = useRef(false);
   const intervalRef = useRef(null);
-  const publicBracketRef = useRef(null);
 
   const fetchData = async () => {
     if (inFlightRef.current) return;
@@ -1206,6 +1207,125 @@ export default function TorneoPublic() {
     );
   };
 
+  // ─── Cuadro ───
+  const RONDA_CORTA = { 32: '16avos', 16: 'Octavos', 8: 'Cuartos', 4: 'Semis', 2: 'Final', 1: 'Final' };
+  const nombreBye = (p) => (p.pareja1 ? nombrePareja1(p) : p.pareja2 ? nombrePareja2(p) : nombrePareja1(p));
+  const vistaCuadro = () => {
+    if (!eliminatoria.length) return <p className="pv-vacio">El cuadro se arma cuando terminan las zonas.</p>;
+    // Si la pareja buscada ya clasificó, en la llave figura por su lugar ("1° Zona A") hasta que se cargan los nombres
+    const origenEnLlave = (() => {
+      if (!unaPareja) return null;
+      const z = zonas.find((x) => x.id === unaPareja.zonaId);
+      if (!z) return null;
+      const mios = (z.partidos || []).filter((p) => p.pareja1Id === unaPareja.parejaId || p.pareja2Id === unaPareja.parejaId);
+      const terminada = (z.partidos || []).length > 0 && z.partidos.every((p) => p.estado === 'FINALIZADO');
+      const termine = mios.length > 0 && mios.every((p) => p.estado === 'FINALIZADO');
+      const pos = (z.tabla || []).findIndex((r) => r.parejaId === unaPareja.parejaId) + 1;
+      return (terminada || termine) && pos > 0 && pos <= z.clasifican ? `${pos}° ${z.nombre}` : null;
+    })();
+    const coincideLlave = (p) =>
+      partidoCoincide(p, q) ||
+      Boolean(origenEnLlave && [p.origenPareja1, p.origenPareja2, p.displayOrigenPareja1, p.displayOrigenPareja2].includes(origenEnLlave));
+    const enLlave = (f) => f.partidos.some((p) => !p.esBye && coincideLlave(p));
+    const fasesConPareja = eliminatoria.filter(enLlave);
+
+    // Mensaje cuando la búsqueda no aparece en el cuadro (o en la ronda elegida)
+    const mensajeCuadro = (fase) => {
+      if (!q || !partidosFiltrados.length) return null;
+      if (fase ? enLlave(fase) : fasesConPareja.length) return null;
+      const pasaDirecto = fase && fase.partidos.some((p) => p.esBye && coincideLlave(p));
+      if (fase && fasesConPareja.length) {
+        if (pasaDirecto) {
+          const sig = fasesConPareja[0];
+          return mensajeVacio(
+            <>{quien} pasa directo a {fraseFase(sig.nombre).toLowerCase()}.</>,
+            <button type="button" className="pv-btn pv-btn-secundario" onClick={() => setActiveRoundId(sig.id)}>
+              Ver {fraseFase(sig.nombre).toLowerCase()}
+            </button>
+          );
+        }
+        return mensajeVacio(
+          <>{quien} {verbo} en {fraseFase(fase.nombre).toLowerCase()}.</>,
+          fasesConPareja.map((f) => (
+            <button key={f.id} type="button" className="pv-btn pv-btn-secundario" onClick={() => setActiveRoundId(f.id)}>
+              Ver {fraseFase(f.nombre).toLowerCase()}
+            </button>
+          ))
+        );
+      }
+      if (!unaPareja) return mensajeVacio(<>Ninguna pareja con “{q}” está en el cuadro todavía.</>);
+      const z = zonas.find((x) => x.id === unaPareja.zonaId);
+      if (!z) return null;
+      const pos = (z.tabla || []).findIndex((r) => r.parejaId === unaPareja.parejaId) + 1;
+      const terminada = (z.partidos || []).length > 0 && z.partidos.every((p) => p.estado === 'FINALIZADO');
+      const texto = terminada && pos > z.clasifican
+        ? <>{quien} quedó afuera en la zona {letraZona(z)} (terminó {pos}.°).</>
+        : <>{quien} todavía no está en el cuadro: los cruces se completan cuando termina la zona {letraZona(z)}.</>;
+      return mensajeVacio(
+        texto,
+        <button type="button" className="pv-btn pv-btn-secundario" onClick={() => { setActiveZoneId(z.id); setSeccion('zonas'); }}>
+          Ver la zona {letraZona(z)}
+        </button>
+      );
+    };
+
+    // Escritorio: la llave completa
+    if (!isMobile) {
+      return (
+        <>
+          {mensajeCuadro(null)}
+          <div {...cascada(5)}>
+            <LlaveEscritorio fases={eliminatoria} seguidaId={favParejaId} coincide={q ? coincideLlave : null} />
+          </div>
+        </>
+      );
+    }
+
+    // Celular: una ronda por vez, con selector
+    const fase = activeFaseMobile;
+    const idx = Math.max(0, eliminatoria.findIndex((f) => f.id === fase.id));
+    const reales = fase.partidos.filter((p) => !p.esBye);
+    const visibles = reales.filter((p) => !q || coincideLlave(p));
+    const byes = fase.partidos.filter((p) => p.esBye);
+    const siguiente = eliminatoria[idx + 1];
+    return (
+      <>
+        <div {...cascada(5)}>
+          <Segmentado
+            items={eliminatoria.map((f) => ({ key: f.id, label: RONDA_CORTA[f.ronda] || fraseFase(f.nombre), aria: fraseFase(f.nombre) }))}
+            activo={idx}
+            etiqueta="Rondas del cuadro"
+            onCambiar={(i) => setActiveRoundId(eliminatoria[i].id)}
+          />
+        </div>
+        <div key={fase.id} {...conCascada('pv-entra', 6)}>
+          <h2 className="pv-titulo-sec" style={{ marginTop: 'var(--e-5)' }}>
+            {fraseFase(fase.nombre)} <small>{reales.length} {reales.length === 1 ? 'partido' : 'partidos'}</small>
+          </h2>
+          {mensajeCuadro(fase)}
+          {visibles.length > 0
+            ? <ListaAnimada items={visibles} clave={claveTarjeta} render={tarjeta(true)} />
+            : !q && <p className="pv-vacio">Sin partidos en esta ronda.</p>}
+          {byes.length > 0 && (
+            <div className="pv-directo">
+              <p>Pasan directo a {siguiente ? fraseFase(siguiente.nombre).toLowerCase() : 'la ronda siguiente'}:</p>
+              <div className="pv-chips">
+                {byes.map((p) => {
+                  const seguida = favParejaId && (p.pareja1Id === favParejaId || p.pareja2Id === favParejaId);
+                  return (
+                    <span key={p.id} className={`pv-chip ${q && coincideLlave(p) ? 'coincide' : ''} ${seguida ? 'seguida' : ''}`} translate="no">
+                      {nombreBye(p)}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
   return (
     <div className="publico">
       <a className="pv-saltar" href="#contenido">Saltar a los partidos</a>
@@ -1306,7 +1426,7 @@ export default function TorneoPublic() {
 
       <NavSecciones secciones={SECCIONES} activa={seccion} onCambiar={setSeccion} href={(k) => `?${construirURL(k)}`} />
 
-      <main id="contenido" tabIndex={-1} className="pv-envolver pv-main">
+      <main id="contenido" tabIndex={-1} className={`pv-envolver pv-main ${seccion === 'cuadro' && !isMobile ? 'pv-main-ancho' : ''}`}>
         {!activeCategoria ? (
           <p className="pv-vacio">No hay información disponible para este torneo aún.</p>
         ) : zonas.length === 0 && eliminatoria.length === 0 ? (
@@ -1319,110 +1439,7 @@ export default function TorneoPublic() {
           <div key={seccion} className={animarEntrada ? undefined : 'pv-entra'}>
             {seccion === 'hoy' && vistaHoy()}
             {seccion === 'zonas' && vistaZonas()}
-            {seccion === 'cuadro' && (
-              <div className="pv-legado">
-          {/* Fase Eliminatoria de la categoría (Solo en pestaña Eliminatoria) */}
-          {seccion === 'cuadro' && eliminatoria.length > 0 && (
-            <section className="public-eliminatoria-section" style={{ marginBottom: '3rem' }}>
-              <h2
-                style={{
-                  marginBottom: '1rem',
-                  fontSize: 'var(--font-size-xl)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}
-              >
-                <Trophy size={20} strokeWidth={2} />
-                Eliminatoria
-              </h2>
-              {isMobile ? (
-                /* MODO MOBILE: Tabs horizontales por ronda + stack vertical 100% ancho */
-                <div className="public-bracket-mobile">
-                  {/* Selector de tabs de ronda */}
-                  <div className="public-bracket-tabs" role="tablist" aria-label="Rondas eliminatorias">
-                    {eliminatoria.map((fase) => {
-                      const isActive = (activeFaseMobile ? activeFaseMobile.id : activeRoundId) === fase.id;
-
-                      return (
-                        <button
-                          key={fase.id}
-                          type="button"
-                          role="tab"
-                          aria-selected={isActive}
-                          className={`public-bracket-tab ${isActive ? 'active' : ''}`}
-                          onClick={() => setActiveRoundId(fase.id)}
-                        >
-                          <span className="public-bracket-tab-name">{fase.nombre}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Partidos de la ronda activa en stack vertical */}
-                  {activeFaseMobile && (
-                    <div className="public-bracket-mobile-content">
-                      <div className="public-bracket-mobile-matches">
-                        {activeFaseMobile.partidos.map((partido) => (
-                          <PublicMatchCard
-                            key={partido.id}
-                            partido={partido}
-                            isMobile={true}
-                            isFav={Boolean(favParejaId && (partido.pareja1Id === favParejaId || partido.pareja2Id === favParejaId))}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* MODO DESKTOP: Bracket horizontal con scroll tradicional y BracketLines */
-                <div className="bracket-container public-bracket-desktop" style={{ padding: '1rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
-                  <div className="bracket-scroll" ref={publicBracketRef} style={{ position: 'relative' }}>
-                    {eliminatoria.map((fase, faseIdx) => {
-                      const tieneData = fase.partidos.some(
-                        (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
-                      );
-
-                      let roundClass = 'ronda-con-datos';
-                      if (!tieneData) {
-                        if (faseIdx === 0) {
-                          roundClass = 'ronda-parcial';
-                        } else {
-                          const prevFase = eliminatoria[faseIdx - 1];
-                          const prevTieneData = prevFase?.partidos.some(
-                            (p) => Boolean(p.pareja1 || p.pareja2 || p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
-                          );
-                          roundClass = prevTieneData ? 'ronda-parcial' : 'ronda-vacia';
-                        }
-                      }
-
-                      return (
-                        <div key={fase.id} className={`ronda-section bracket-section ${roundClass}`}>
-                          <div className="ronda-header-row">
-                            <h3 className="ronda-title">{fase.nombre}</h3>
-                          </div>
-                          <div className="ronda-matches bracket-matches-column">
-                            {fase.partidos.map((partido) => (
-                              <PublicMatchCard
-                                key={partido.id}
-                                partido={partido}
-                                isMobile={false}
-                                isFav={Boolean(favParejaId && (partido.pareja1Id === favParejaId || partido.pareja2Id === favParejaId))}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <BracketLines scrollContainerRef={publicBracketRef} fases={eliminatoria} />
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-              </div>
-            )}
+            {seccion === 'cuadro' && vistaCuadro()}
             {seccion === 'horarios' && (
               <div className="pv-legado">
           {/* Cronograma Horarios (Solo en pestaña Horarios) */}

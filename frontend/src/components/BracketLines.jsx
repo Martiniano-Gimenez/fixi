@@ -2,8 +2,17 @@ import { useEffect, useState, useCallback } from 'react';
 
 /**
  * Dibuja líneas SVG conectoras entre rondas del bracket eliminatorio.
+ * selectorRonda, selectorPartido y color son opcionales: por defecto, los del panel
+ * (.bracket-section, .match-card); la vista pública v2 pasa los suyos.
  */
-export default function BracketLines({ containerRef, scrollContainerRef, fases = [] }) {
+export default function BracketLines({
+  containerRef,
+  scrollContainerRef,
+  fases = [],
+  selectorRonda = '.bracket-section',
+  selectorPartido = '.match-card',
+  color = 'var(--color-border)',
+}) {
   const [lines, setLines] = useState([]);
   const activeRef = containerRef || scrollContainerRef;
 
@@ -11,7 +20,7 @@ export default function BracketLines({ containerRef, scrollContainerRef, fases =
     const container = activeRef?.current;
     if (!container) return;
 
-    const sections = container.querySelectorAll('.bracket-section');
+    const sections = container.querySelectorAll(selectorRonda);
     if (sections.length < 2) {
       setLines([]);
       return;
@@ -27,8 +36,8 @@ export default function BracketLines({ containerRef, scrollContainerRef, fases =
       const currentSection = sections[i];
       const nextSection = sections[i + 1];
 
-      const currentCards = currentSection.querySelectorAll('.match-card');
-      const nextCards = nextSection.querySelectorAll('.match-card');
+      const currentCards = currentSection.querySelectorAll(selectorPartido);
+      const nextCards = nextSection.querySelectorAll(selectorPartido);
 
       if (currentCards.length === 0 || nextCards.length === 0) continue;
 
@@ -69,7 +78,7 @@ export default function BracketLines({ containerRef, scrollContainerRef, fases =
     }
 
     setLines(newLines);
-  }, [activeRef, fases]);
+  }, [activeRef, fases, selectorRonda, selectorPartido]);
 
   useEffect(() => {
     const container = activeRef?.current;
@@ -124,7 +133,7 @@ export default function BracketLines({ containerRef, scrollContainerRef, fases =
           key={i}
           d={d}
           fill="none"
-          stroke="var(--color-border)"
+          stroke={color}
           strokeWidth="2"
           strokeLinecap="round"
         />

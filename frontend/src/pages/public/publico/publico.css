@@ -381,3 +381,31 @@ html:has(.publico) {
   padding: var(--e-4);
   font-family: var(--font-body);
 }
+
+/* ─── Cuadro ─────────────────────────────────────────────── */
+.pv-directo { margin-top: var(--e-2); background: var(--superficie); border: 1px dashed var(--linea-fuerte); border-radius: var(--r-tarjeta); padding: var(--e-3) 14px; }
+.pv-directo p { font-size: var(--t-14); color: var(--tinta-2); margin-bottom: var(--e-2); }
+.pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-chip { font-size: var(--t-13); font-weight: 500; padding: 4px 10px; border-radius: var(--r-pill); background: var(--superficie-2); color: var(--tinta-2); }
+.pv-chip.coincide { background: var(--verde-suave); color: var(--verde-texto); font-weight: 600; }
+.pv-chip.seguida { background: var(--oro-suave); color: var(--oro-texto); }
+
+/* Llave completa en escritorio */
+.pv-llave { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--r-panel); overflow-x: auto; padding: var(--e-5) var(--e-5) var(--e-6); }
+.pv-llave-rondas { position: relative; display: flex; gap: 36px; min-width: min-content; }
+.pv-llave-ronda { flex: 0 0 210px; display: flex; flex-direction: column; }
+/* En Cuadro, el contenido usa más ancho en escritorio para que entre la llave completa */
+.pv-main-ancho { max-width: 1320px; }
+.pv-llave-ronda h3 { font-size: var(--t-14); font-weight: 600; color: var(--gris); margin-bottom: var(--e-3); padding-bottom: var(--e-2); border-bottom: 1px solid var(--linea); }
+.pv-llave-col { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: var(--e-3); }
+.pv-llave-item { position: relative; z-index: 1; transition: opacity .3s ease; }
+.pv-llave-item.atenuado { opacity: .32; }
+.pv-llave .pv-partido:hover { transform: none; }
+.pv-llave-bye { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px dashed var(--linea-fuerte); border-radius: var(--r-control); background: var(--fondo); font-size: var(--t-13); color: var(--tinta-2); }
+.pv-llave-bye small { color: var(--gris); font-size: var(--t-12); }
+.pv-partido.compacta { padding: 10px 12px; }
+.pv-partido.compacta .pv-p-meta { font-size: var(--t-12); }
+.pv-partido.compacta .pv-p-filas { margin-top: 6px; gap: 4px; }
+.pv-partido.compacta .pv-p-fila { grid-template-columns: minmax(0, 1fr) repeat(3, 24px); min-height: 26px; }
+.pv-partido.compacta .pv-p-nombre { font-size: var(--t-14); }
+.pv-partido.compacta .pv-set { height: 24px; font-size: var(--t-14); }
