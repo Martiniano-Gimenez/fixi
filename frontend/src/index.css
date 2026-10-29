@@ -127,6 +127,16 @@ input, select, textarea {
   font-size: inherit;
 }
 
+/* Con el zoom habilitado, iOS acerca la pantalla al enfocar un campo con letra
+   menor a 16px. En pantallas táctiles los campos de texto usan 16px. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 select {
   color-scheme: dark;
 }
