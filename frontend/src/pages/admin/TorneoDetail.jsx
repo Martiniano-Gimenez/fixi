@@ -1243,43 +1243,35 @@ export default function TorneoDetail() {
 
       {/* Modal de conflictos de bloqueo o éxito en pre-check */}
       {(conflictosBloqueo !== null || preCheckAprobado) && (
-        <div className="modal-overlay">
+        <div className="pm-overlay">
           {preCheckAprobado ? (
-            <div className="modal-content" style={{ maxWidth: '560px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-                <CheckCircle size={28} color="var(--color-success)" style={{ flexShrink: 0 }} />
+            <div className="pm-modal pc-modal pc-success" role="dialog" aria-modal="true" aria-labelledby="pc-ready-title">
+              <div className="pm-header pc-success-header">
+                <CheckCircle size={28} className="pc-brand" />
                 <div>
-                  <h3 style={{ margin: 0, color: 'var(--color-success)', fontSize: '1.25rem' }}>
+                  <h3 id="pc-ready-title" className="pm-title pc-title">
                     ¡Listo para iniciar! 0 conflictos
                   </h3>
-                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                  <span className="pc-muted">
                     Todos los cruces y horarios son 100% compatibles
                   </span>
                 </div>
               </div>
 
-              <div
-                style={{
-                  padding: '0.85rem 1rem',
-                  background: 'rgba(34, 197, 94, 0.08)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid rgba(34, 197, 94, 0.2)',
-                  marginBottom: '1.25rem',
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text)',
-                }}
-              >
-                Se verificó la asignación global de todas las categorías en borrador. No existen colisiones de cancha ni incompatibilidades horarias.
+              <div className="pm-body">
+                <div className="pc-success-note">
+                  Se verificó la asignación global de todas las categorías en borrador. No existen colisiones de cancha ni incompatibilidades horarias.
+                </div>
+
+                <p className="pc-copy">
+                  Al confirmar, se guardarán las zonas y los horarios de cada partido de forma definitiva en el torneo.
+                </p>
+
               </div>
-
-              <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                Al confirmar, se guardarán las zonas y los horarios de cada partido de forma definitiva en el torneo.
-              </p>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <div className="pm-footer">
                 <button
                   type="button"
-                  className="btn-secondary"
+                  className="pm-button"
                   onClick={() => {
                     setConflictosBloqueo(null);
                     setPreCheckAprobado(false);
@@ -1291,452 +1283,277 @@ export default function TorneoDetail() {
                 </button>
                 <button
                   type="button"
-                  className="btn-primary"
                   onClick={executeIniciarTorneo}
                   disabled={iniciandoTorneo}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                  className="pm-button pm-primary"
                 >
                   <Play size={16} />
-                  {iniciandoTorneo ? 'Iniciando torneo...' : 'Iniciar Torneo'}
+                  {iniciandoTorneo ? 'Iniciando torneo…' : 'Iniciar torneo'}
                 </button>
               </div>
             </div>
           ) : (
             <div
-              className="modal-content"
-              style={{
-                maxWidth: '720px',
-                maxHeight: '88vh',
-              }}
+              className="pm-modal pc-modal pc-conflicts" role="dialog" aria-modal="true" aria-labelledby="pc-conflicts-title"
             >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '1rem',
-                  paddingBottom: '0.6rem',
-                  borderBottom: '1px solid var(--color-border)',
-                }}
-              >
+              <div className="pm-header pc-header">
                 <div>
-                  <h3 style={{ margin: 0, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.2rem' }}>
+                  <h3 id="pc-conflicts-title" className="pm-title pc-title pc-danger">
                     <AlertTriangle size={22} /> Incompatibilidades detectadas
                   </h3>
                   {conteoInicialConflictos !== null &&
                     conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) < conteoInicialConflictos && (
-                      <span style={{ fontSize: '11.5px', color: 'var(--color-success)', fontWeight: 600, marginTop: '2px', display: 'block' }}>
+                      <span className="pc-resolved">
                         ✓ ¡Resolviste {conteoInicialConflictos - conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)} {conteoInicialConflictos - conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'conflicto' : 'conflictos'}!
                       </span>
                     )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div className="pc-header-tools">
                   {categoriasConflictosOrdenadas.length > 1 && (
                     <button
                       type="button"
-                      className="btn-link-action"
-                      style={{
-                        fontSize: 'var(--font-size-xs)',
-                        color: 'var(--color-text-secondary)',
-                        whiteSpace: 'nowrap',
-                        padding: '0.2rem 0.4rem',
-                      }}
+                      className="pm-button pc-compact"
                       onClick={handleToggleAllConflictos}
                     >
                       {allConflictosExpanded ? 'Colapsar todas' : 'Expandir todas'}
                     </button>
                   )}
-                  <span className="badge badge-danger" style={{ fontSize: 'var(--font-size-xs)' }}>
+                  <span className="pc-badge pc-danger-badge">
                     {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
                     {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'pendiente' : 'pendientes'}
                   </span>
                 </div>
               </div>
 
-              {avisoSesionReiniciada && (
-                <div
-                  style={{
-                    padding: '0.6rem 0.85rem',
-                    marginBottom: '0.75rem',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(59, 130, 246, 0.12)',
-                    border: '1px solid rgba(59, 130, 246, 0.3)',
-                    color: '#3b82f6',
-                    fontSize: 'var(--font-size-xs)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                  }}
-                >
-                  <Info size={16} style={{ flexShrink: 0 }} />
-                  <span>
-                    El servidor se reinició o la sesión expiró. Se recalculó la vista previa con los horarios guardados.
-                  </span>
-                </div>
-              )}
-
-              {avisoDestrabe && (
-                <div
-                  role="status"
-                  style={{
-                    padding: '0.6rem 0.85rem',
-                    marginBottom: '0.75rem',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(234, 179, 8, 0.1)',
-                    border: '1px solid rgba(234, 179, 8, 0.3)',
-                    color: 'var(--color-text)',
-                    fontSize: 'var(--font-size-xs)',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '0.5rem',
-                    minWidth: 0,
-                  }}
-                >
-                  <Info size={16} style={{ flexShrink: 0, color: '#eab308', marginTop: '1px' }} />
-                  <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-                    {avisoDestrabe.lineas.map((linea) => (
-                      <p key={linea} style={{ margin: 0 }}>
-                        {linea}
-                      </p>
-                    ))}
+              <div className="pm-body pc-body">
+                {avisoSesionReiniciada && (
+                  <div className="pc-notice pc-session-notice">
+                    <Info size={16} className="pc-icon" />
+                    <span>
+                      El servidor se reinició o la sesión expiró. Se recalculó la vista previa con los horarios guardados.
+                    </span>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.75rem',
-                  marginBottom: '0.75rem',
-                }}
-              >
-                {categoriasConflictosOrdenadas.map((c) => {
-                  const isExpanded = expandedCategoriasConflictos.has(c.categoriaId);
+                {avisoDestrabe && (
+                  <div
+                    role="status"
+                    className="pc-notice pc-danger-notice"
+                  >
+                    <Info size={16} className="pc-icon" />
+                    <div className="pc-notice-lines">
+                      {avisoDestrabe.lineas.map((linea) => (
+                        <p key={linea} className="pc-notice-line">
+                          {linea}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                  return (
-                    <div
-                      key={c.categoriaId}
-                      style={{
-                        borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--color-border)',
-                        background: 'var(--color-surface)',
-                        overflow: 'hidden',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
-                      }}
-                    >
-                      {/* Header del acordeón */}
+                <div className="pc-conflict-list">
+                  {categoriasConflictosOrdenadas.map((c) => {
+                    const isExpanded = expandedCategoriasConflictos.has(c.categoriaId);
+
+                    return (
                       <div
-                        style={{
-                          padding: '0.65rem 0.85rem',
-                          background: 'var(--color-surface-elevated)',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          cursor: 'pointer',
-                          userSelect: 'none',
-                          borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none',
-                          transition: 'background 150ms ease',
-                        }}
-                        onClick={() => toggleCategoriaConflicto(c.categoriaId)}
+                        key={c.categoriaId}
+                        className="pc-category"
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <Layers size={16} style={{ color: 'var(--color-primary)' }} />
-                          <strong style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
-                            {c.nombreCategoria}
-                          </strong>
-                          <span
-                            className="badge"
-                            style={{
-                              background: 'rgba(255, 255, 255, 0.08)',
-                              fontSize: '11px',
-                              padding: '2px 6px',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {c.partidosSinHorario.length} {c.partidosSinHorario.length === 1 ? 'conflicto' : 'conflictos'}
-                          </span>
-
-                          {c.tieneCriticos && (
-                            <span
-                              style={{
-                                fontSize: '10.5px',
-                                background: 'rgba(239, 68, 68, 0.15)',
-                                color: '#ef4444',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                fontWeight: 600,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                              }}
-                            >
-                              <AlertTriangle size={11} /> Muy restringido
+                        {/* Header del acordeón */}
+                        <button
+                          type="button"
+                          className={`pc-category-toggle${isExpanded ? ' is-expanded' : ''}`}
+                          onClick={() => toggleCategoriaConflicto(c.categoriaId)}
+                          aria-expanded={isExpanded}
+                        >
+                          <div className="pc-category-label">
+                            <Layers size={16} className="pc-brand" />
+                            <strong className="pc-category-name">
+                              {c.nombreCategoria}
+                            </strong>
+                            <span className="pc-badge pc-danger-badge">
+                              {c.partidosSinHorario.length} {c.partidosSinHorario.length === 1 ? 'conflicto' : 'conflictos'}
                             </span>
-                          )}
-                        </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                            {isExpanded ? 'Ocultar' : 'Ver conflictos'}
-                          </span>
-                          {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                        </div>
-                      </div>
+                            {c.tieneCriticos && (
+                              <span className="pc-badge pc-danger-badge">
+                                <AlertTriangle size={11} /> Muy restringido
+                              </span>
+                            )}
+                          </div>
 
-                      {/* Cuerpo expandido */}
-                      {isExpanded && (
-                        <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                          {c.partidosSinHorario.map((p, idx) => (
-                            <div
-                              key={idx}
-                              style={{
-                                padding: '0.65rem 0.75rem',
-                                background: 'var(--color-bg-input)',
-                                borderRadius: 'var(--radius-sm)',
-                                border: '1px solid var(--color-border)',
-                                borderLeft: `3px solid ${
-                                  p.motivo === 'SIN_FRANJA_COMUN'
-                                    ? '#ef4444'
-                                    : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                    ? '#eab308'
-                                    : '#f59e0b'
-                                }`,
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                                <span style={{ fontWeight: 600, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                                  {p.zona}
-                                </span>
-                                <span
-                                  className="badge"
-                                  style={{
-                                    fontSize: '11px',
-                                    padding: '2px 6px',
-                                    background:
-                                      p.motivo === 'SIN_FRANJA_COMUN'
-                                        ? 'rgba(239, 68, 68, 0.15)'
-                                        : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                        ? 'rgba(234, 179, 8, 0.15)'
-                                        : 'rgba(245, 158, 11, 0.15)',
-                                    color:
-                                      p.motivo === 'SIN_FRANJA_COMUN'
-                                        ? '#ef4444'
-                                        : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                        ? '#eab308'
-                                        : '#f59e0b',
-                                  }}
-                                >
-                                  {p.motivo === 'SIN_FRANJA_COMUN'
-                                    ? 'Sin franja común'
-                                    : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                    ? 'Armado manual requerido'
-                                    : 'Canchas saturadas'}
-                                </span>
-                              </div>
+                          <div className="pc-expand-label">
+                            <span className="pc-muted">
+                              {isExpanded ? 'Ocultar' : 'Ver conflictos'}
+                            </span>
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </div>
+                        </button>
 
-                              {p.motivo === 'ZONA_MANUAL_INCOMPLETA' ? (
-                                <div>
-                                  <div style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.35rem', color: 'var(--color-text)' }}>
-                                    <strong>Incompatibilidad para formar grupo:</strong> Las parejas de la zona no tienen horarios comunes para completar el fixture.
-                                  </div>
+                        {/* Cuerpo expandido */}
+                        {isExpanded && (
+                          <div className="pc-category-body">
+                            {c.partidosSinHorario.map((p, idx) => (
+                              <div
+                                key={idx}
+                                className="pc-conflict"
+                              >
+                                <div className="pc-conflict-heading">
+                                  <span className="pc-zone-label">
+                                    {p.zona}
+                                  </span>
+                                  <span className="pc-badge pc-danger-badge">
+                                    {p.motivo === 'SIN_FRANJA_COMUN'
+                                      ? 'Sin franja común'
+                                      : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
+                                      ? 'Armado manual requerido'
+                                      : 'Canchas saturadas'}
+                                  </span>
+                                </div>
 
-                                  {p.crucesIncompatibles && p.crucesIncompatibles.length > 0 && (
-                                    <div style={{ marginBottom: '0.5rem', padding: '0.4rem 0.6rem', background: 'rgba(234, 179, 8, 0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#eab308', marginBottom: '0.2rem' }}>
-                                        Incompatibilidad directa en el grupo:
+                                {p.motivo === 'ZONA_MANUAL_INCOMPLETA' ? (
+                                  <div>
+                                    <div className="pc-copy">
+                                      <strong>Incompatibilidad para formar grupo:</strong> Las parejas de la zona no tienen horarios comunes para completar el fixture.
+                                    </div>
+
+                                    {p.crucesIncompatibles && p.crucesIncompatibles.length > 0 && (
+                                      <div className="pc-notice pc-danger-notice">
+                                        <div className="pc-notice-title">
+                                          Incompatibilidad directa en el grupo:
+                                        </div>
+                                        {p.crucesIncompatibles.map((ci, idx) => (
+                                          <div key={idx} className="pc-conflict-copy">
+                                            • <strong>{ci.p1}</strong> no coincide en ningún turno con <strong>{ci.p2}</strong>.
+                                          </div>
+                                        ))}
                                       </div>
-                                      {p.crucesIncompatibles.map((ci, idx) => (
-                                        <div key={idx} style={{ fontSize: '11.5px', color: 'var(--color-text)', marginBottom: '0.15rem' }}>
-                                          • <strong>{ci.p1}</strong> no coincide en ningún turno con <strong>{ci.p2}</strong>.
+                                    )}
+
+                                    <div className="pc-muted pc-spaced">
+                                      Podés ampliar la disponibilidad de alguna de estas parejas con turnos libres o reestructurar la zona:
+                                    </div>
+
+                                    <div className="pc-manual-pairs">
+                                      {(p.parejasManuales || []).map((pm) => (
+                                        <div
+                                          key={pm.id}
+                                          className="pc-manual-pair"
+                                        >
+                                          <div className="pc-manual-name">
+                                            <strong>{pm.nombre}</strong> ({pm.slotsCount} {pm.slotsCount === 1 ? 'turno cargado' : 'turnos cargados'})
+                                          </div>
+                                          <InlineDisponibilidadEditor
+                                            parejaId={pm.id}
+                                            parejaNombre={pm.nombre}
+                                            initialSlotIds={pm.slotIds || []}
+                                            slotsViables={pm.slotsViables || []}
+                                            slotsQueDestraban={pm.slotsQueDestraban || []}
+                                            esZonaManual={true}
+                                            grilla={grillaOrganizador}
+                                            onSaved={async () => {
+                                              setHayCambiosGuardados(true);
+                                              await handlePreCheckInicio(true);
+                                            }}
+                                          />
                                         </div>
                                       ))}
                                     </div>
-                                  )}
 
-                                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
-                                    Podés ampliar la disponibilidad de alguna de estas parejas con turnos libres o reestructurar la zona:
-                                  </div>
-
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.6rem' }}>
-                                    {(p.parejasManuales || []).map((pm) => (
-                                      <div
-                                        key={pm.id}
-                                        style={{
-                                          padding: '0.35rem 0.5rem',
-                                          background: 'var(--color-surface)',
-                                          borderRadius: 'var(--radius-sm)',
-                                          border: '1px solid var(--color-border)',
-                                        }}
+                                    <div className="pc-manage-row">
+                                      <Link
+                                        to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas`}
+                                        className="pc-manage-link"
                                       >
-                                        <div style={{ fontSize: 'var(--font-size-xs)', marginBottom: '0.2rem' }}>
-                                          <strong>{pm.nombre}</strong> ({pm.slotsCount} {pm.slotsCount === 1 ? 'turno cargado' : 'turnos cargados'})
-                                        </div>
-                                        <InlineDisponibilidadEditor
-                                          parejaId={pm.id}
-                                          parejaNombre={pm.nombre}
-                                          initialSlotIds={pm.slotIds || []}
-                                          slotsViables={pm.slotsViables || []}
-                                          slotsQueDestraban={pm.slotsQueDestraban || []}
-                                          esZonaManual={true}
-                                          grilla={grillaOrganizador}
-                                          onSaved={async () => {
-                                            setHayCambiosGuardados(true);
-                                            await handlePreCheckInicio(true);
-                                          }}
-                                        />
-                                      </div>
-                                    ))}
+                                        Ir a Gestionar Parejas de {c.nombreCategoria} →
+                                      </Link>
+                                    </div>
                                   </div>
+                                ) : (
+                                  <div>
+                                    {/* Título del cruce */}
+                                    <div className="pc-match-names">
+                                      <strong>{p.pareja1}</strong> vs <strong>{p.pareja2}</strong>
+                                    </div>
 
-                                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                    <Link
-                                      to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas`}
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.3rem',
-                                        fontSize: 'var(--font-size-xs)',
-                                        color: 'var(--color-primary)',
-                                        textDecoration: 'none',
-                                        fontWeight: 600,
-                                      }}
-                                    >
-                                      Ir a Gestionar Parejas de {c.nombreCategoria} →
-                                    </Link>
+                                    {/* Opción hero con [Resolver] y toggle de alternativas */}
+                                    <CruceResolver
+                                      opcionesResolucion={p.opcionesResolucion || []}
+                                      pareja1Id={p.pareja1Id}
+                                      pareja2Id={p.pareja2Id}
+                                      pareja1Nombre={p.pareja1}
+                                      pareja2Nombre={p.pareja2}
+                                      onApplied={handleCasiEstrellaApplied}
+                                    />
+
+                                    {/* Toggle: Detalles y opciones manuales */}
+                                    <div className="pc-details">
+                                      <CruceDetalles
+                                        partido={p}
+                                        categoriaId={c.categoriaId}
+                                        torneoId={id}
+                                        onApplied={handleCasiEstrellaApplied}
+                                      />
+                                    </div>
                                   </div>
-                                </div>
-                              ) : (
-                                <div>
-                                  {/* Título del cruce */}
-                                  <div style={{ fontSize: 'var(--font-size-sm)', marginBottom: '0.25rem' }}>
-                                    <strong>{p.pareja1}</strong> vs <strong>{p.pareja2}</strong>
-                                  </div>
-
-                                  {/* Opción hero con [Resolver] y toggle de alternativas */}
-                                  <CruceResolver
-                                    opcionesResolucion={p.opcionesResolucion || []}
-                                    pareja1Id={p.pareja1Id}
-                                    pareja2Id={p.pareja2Id}
-                                    pareja1Nombre={p.pareja1}
-                                    pareja2Nombre={p.pareja2}
-                                    onApplied={handleCasiEstrellaApplied}
-                                  />
-
-                                  {/* Toggle: Detalles y opciones manuales */}
-                                  <CruceDetalles
-                                    partido={p}
-                                    categoriaId={c.categoriaId}
-                                    torneoId={id}
-                                    onApplied={handleCasiEstrellaApplied}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Toast flotante de Deshacer (Undo) */}
-              {undoAction && (
-                <div
-                  style={{
-                    position: 'sticky',
-                    bottom: '0.5rem',
-                    zIndex: 20,
-                    margin: '0.5rem 0',
-                    padding: '0.6rem 0.85rem',
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-success)',
-                    borderRadius: 'var(--radius-sm)',
-                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text)' }}>
-                    <CheckCircle size={15} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
-                    <span>
-                      Se aplicó <strong>{undoAction.label}</strong> a ambas parejas.
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      style={{
-                        padding: '0.25rem 0.6rem',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        color: 'var(--color-warning)',
-                        borderColor: 'rgba(245, 158, 11, 0.4)',
-                      }}
-                      onClick={handleUndo}
-                    >
-                      <RotateCcw size={12} /> Deshacer
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-link-action"
-                      style={{ padding: '0.2rem', color: 'var(--color-text-secondary)' }}
-                      onClick={() => {
-                        if (undoAction.timeoutId) clearTimeout(undoAction.timeoutId);
-                        setUndoAction(null);
-                      }}
-                      title="Cerrar aviso"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  paddingTop: '0.75rem',
-                  borderTop: '1px solid var(--color-border)',
-                }}
-              >
+                {hayCambiosGuardados && (
+                  <span className="pc-notice pc-danger-notice">
+                    <AlertTriangle size={13} />
+                    Hay cambios guardados. Hacé clic en "Volver a verificar".
+                  </span>
+                )}
+
+                {/* Toast flotante de Deshacer (Undo) */}
+                {undoAction && (
+                  <div className="pc-undo">
+                    <div className="pc-undo-copy">
+                      <CheckCircle size={15} className="pc-brand" />
+                      <span>
+                        Se aplicó <strong>{undoAction.label}</strong> a ambas parejas.
+                      </span>
+                    </div>
+                    <div className="pc-undo-actions">
+                      <button
+                        type="button"
+                        className="pm-button pc-compact"
+                        onClick={handleUndo}
+                      >
+                        <RotateCcw size={12} /> Deshacer
+                      </button>
+                      <button
+                        type="button"
+                        className="pm-button pm-close"
+                        onClick={() => {
+                          if (undoAction.timeoutId) clearTimeout(undoAction.timeoutId);
+                          setUndoAction(null);
+                        }}
+                        title="Cerrar aviso"
+                        aria-label="Cerrar aviso"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+              <div className="pm-footer pc-footer">
                 <div>
-                  {hayCambiosGuardados && (
-                    <span
-                      style={{
-                        fontSize: '11.5px',
-                        color: 'var(--color-warning)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      <AlertTriangle size={13} />
-                      Hay cambios guardados. Hacé clic en "Volver a verificar".
-                    </span>
-                  )}
                   <button
                     type="button"
-                    className="btn-link-action"
-                    style={{
-                      fontSize: 'var(--font-size-xs)',
-                      color: 'var(--color-text-muted)',
-                      textDecoration: 'underline',
-                      padding: '0.2rem 0.4rem',
-                      whiteSpace: 'nowrap',
-                    }}
+                    className="pm-button pm-danger-secondary pc-redraw"
                     onClick={() => setConfirmarResorteoModalOpen(true)}
                     disabled={verificandoInicio || iniciandoTorneo}
                   >
@@ -1744,21 +1561,13 @@ export default function TorneoDetail() {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <div className="pc-footer-actions">
                   {/* Botón de salida de emergencia (disponible siempre que haya plan de emergencia y no haya zonas manuales) */}
                   {!conflictosBloqueo.some((c) => c.partidosSinHorario.some((p) => p.motivo === 'ZONA_MANUAL_INCOMPLETA')) &&
                     Boolean(planEmergenciaId) && (
                       <button
                         type="button"
-                        className="btn-secondary"
-                        style={{
-                          color: 'var(--color-warning)',
-                          borderColor: 'rgba(245, 158, 11, 0.5)',
-                          fontSize: 'var(--font-size-xs)',
-                          fontWeight: 600,
-                          padding: '0.4rem 0.75rem',
-                          whiteSpace: 'nowrap',
-                        }}
+                        className="pm-button pm-danger-secondary pc-emergency-action"
                         onClick={() => setConfirmarEmergenciaModalOpen(true)}
                         disabled={verificandoInicio || iniciandoTorneo}
                       >
@@ -1768,8 +1577,7 @@ export default function TorneoDetail() {
 
                   <button
                     type="button"
-                    className="btn-secondary"
-                    style={{ fontSize: 'var(--font-size-xs)', padding: '0.4rem 0.8rem', whiteSpace: 'nowrap' }}
+                    className="pm-button"
                     onClick={() => {
                       setConflictosBloqueo(null);
                       setPreCheckAprobado(false);
@@ -1780,21 +1588,12 @@ export default function TorneoDetail() {
                   </button>
                   <button
                     type="button"
-                    className="btn-primary"
                     onClick={() => handlePreCheckInicio(true)}
                     disabled={verificandoInicio || iniciandoTorneo}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      fontSize: 'var(--font-size-xs)',
-                      padding: '0.4rem 0.85rem',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 600,
-                    }}
+                    className="pm-button pm-primary"
                   >
-                    <RefreshCw size={14} className={verificandoInicio ? 'animate-spin' : ''} />
-                    {verificandoInicio ? 'Verificando...' : 'Volver a verificar'}
+                    <RefreshCw size={14} className={verificandoInicio ? 'pc-spin' : ''} />
+                    {verificandoInicio ? 'Verificando…' : 'Volver a verificar'}
                   </button>
                 </div>
               </div>
@@ -1805,56 +1604,49 @@ export default function TorneoDetail() {
 
       {/* Modal de confirmación de Inicio de Emergencia */}
       {confirmarEmergenciaModalOpen && conflictosBloqueo && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '540px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem', color: 'var(--color-warning)' }}>
+        <div className="pm-overlay pm-confirm-overlay">
+          <div className="pm-modal pc-modal pc-emergency" role="dialog" aria-modal="true" aria-labelledby="pc-emergency-title">
+            <div className="pm-header pc-danger-header">
               <AlertTriangle size={24} />
-              <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-text)' }}>
+              <h3 id="pc-emergency-title" className="pm-title pc-title">
                 ¿Iniciar torneo con partidos pendientes?
               </h3>
             </div>
 
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '0.85rem', lineHeight: 1.4 }}>
-              Estás por iniciar el torneo dejando{' '}
-              <strong style={{ color: 'var(--color-warning)' }}>
-                {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
-                {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1
-                  ? 'partido sin cancha ni horario asignado'
-                  : 'partidos sin cancha ni horario asignado'}
-              </strong>{' '}
-              en las siguientes categorías:
-            </p>
+            <div className="pm-body">
+              <p className="pc-copy">
+                Estás por iniciar el torneo dejando{' '}
+                <strong className="pc-danger">
+                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
+                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1
+                    ? 'partido sin cancha ni horario asignado'
+                    : 'partidos sin cancha ni horario asignado'}
+                </strong>{' '}
+                en las siguientes categorías:
+              </p>
 
-            <div
-              style={{
-                padding: '0.75rem 1rem',
-                background: 'var(--color-surface)',
-                borderRadius: 'var(--radius-sm)',
-                marginBottom: '1rem',
-                fontSize: 'var(--font-size-sm)',
-                border: '1px solid var(--color-border)',
-              }}
-            >
-              <ul style={{ margin: 0, paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                {conflictosBloqueo
-                  .filter((c) => c.partidosSinHorario?.length > 0)
-                  .map((c) => (
-                    <li key={c.categoriaId}>
-                      <strong>{c.nombreCategoria}:</strong> {c.partidosSinHorario.length}{' '}
-                      {c.partidosSinHorario.length === 1 ? 'partido' : 'partidos'}
-                    </li>
-                  ))}
-              </ul>
+              <div className="pc-notice pc-danger-notice">
+                <ul className="pc-summary-list">
+                  {conflictosBloqueo
+                    .filter((c) => c.partidosSinHorario?.length > 0)
+                    .map((c) => (
+                      <li key={c.categoriaId}>
+                        <strong>{c.nombreCategoria}:</strong> {c.partidosSinHorario.length}{' '}
+                        {c.partidosSinHorario.length === 1 ? 'partido' : 'partidos'}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+
+              <p className="pc-muted pc-spaced">
+                Las zonas y cuadros se generarán normalmente y el torneo pasará a estado <strong>EN CURSO</strong>. Podrás asignarles cancha y horario a estos partidos en cualquier momento desde el panel de administración en tiempo real.
+              </p>
+
             </div>
-
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '1.5rem', lineHeight: 1.4 }}>
-              Las zonas y cuadros se generarán normalmente y el torneo pasará a estado <strong>EN CURSO</strong>. Podrás asignarles cancha y horario a estos partidos en cualquier momento desde el panel de administración en tiempo real.
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            <div className="pm-footer">
               <button
                 type="button"
-                className="btn-secondary"
+                className="pm-button"
                 onClick={() => setConfirmarEmergenciaModalOpen(false)}
                 disabled={iniciandoTorneo}
               >
@@ -1862,12 +1654,11 @@ export default function TorneoDetail() {
               </button>
               <button
                 type="button"
-                className="btn-primary"
-                style={{ background: 'var(--color-warning)', color: '#000', fontWeight: 600 }}
+                className="pm-button pm-primary pm-destructive"
                 onClick={executeIniciarTorneoEmergencia}
                 disabled={iniciandoTorneo}
               >
-                {iniciandoTorneo ? 'Iniciando torneo...' : 'Iniciar de todas formas'}
+                {iniciandoTorneo ? 'Iniciando torneo…' : 'Iniciar de todas formas'}
               </button>
             </div>
           </div>
@@ -1875,21 +1666,23 @@ export default function TorneoDetail() {
       )}
       {/* Modal de confirmación de Re-sorteo de Zonas desde cero */}
       {confirmarResorteoModalOpen && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-content" style={{ maxWidth: '480px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem', color: 'var(--color-danger)' }}>
+        <div className="pm-overlay pm-confirm-overlay">
+          <div className="pm-modal pc-modal pc-redraw-modal" role="dialog" aria-modal="true" aria-labelledby="pc-redraw-title">
+            <div className="pm-header pc-danger-header">
               <AlertTriangle size={24} />
-              <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-text)' }}>
+              <h3 id="pc-redraw-title" className="pm-title pc-title">
                 ¿Re-sortear y mezclar todas las zonas?
               </h3>
             </div>
-            <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-              Esta acción descartará la distribución actual de parejas y volverá a sortear todas las zonas de las categorías desde cero en base a las disponibilidades actuales. Se reiniciará el avance de los cruces resueltos en esta sesión.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            <div className="pm-body">
+              <p className="pc-copy">
+                Esta acción descartará la distribución actual de parejas y volverá a sortear todas las zonas de las categorías desde cero en base a las disponibilidades actuales. Se reiniciará el avance de los cruces resueltos en esta sesión.
+              </p>
+            </div>
+            <div className="pm-footer">
               <button
                 type="button"
-                className="btn-secondary"
+                className="pm-button"
                 onClick={() => setConfirmarResorteoModalOpen(false)}
                 disabled={verificandoInicio}
               >
@@ -1897,15 +1690,14 @@ export default function TorneoDetail() {
               </button>
               <button
                 type="button"
-                className="btn-primary"
-                style={{ background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                className="pm-button pm-primary pm-destructive"
                 onClick={async () => {
                   setConfirmarResorteoModalOpen(false);
                   await handlePreCheckInicio(false, true);
                 }}
                 disabled={verificandoInicio}
               >
-                {verificandoInicio ? 'Re-sorteando...' : 'Sí, re-sortear todo'}
+                {verificandoInicio ? 'Re-sorteando…' : 'Sí, re-sortear todo'}
               </button>
             </div>
           </div>

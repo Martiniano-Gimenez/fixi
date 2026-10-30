@@ -142,7 +142,7 @@ export default function InlineDisponibilidadEditor({
 
   if (totalDisponiblesParaAgregar === 0 && !savedSuccess) {
     return (
-      <div style={{ marginTop: '0.4rem', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+      <div className="pc-muted pc-spaced">
         No hay turnos con canchas libres disponibles en el club para ofrecerle a esta pareja.
       </div>
     );
@@ -151,41 +151,16 @@ export default function InlineDisponibilidadEditor({
   const isBusy = saving || isSyncing || Boolean(applyingEstrellaSlot);
 
   return (
-    <div
-      style={{
-        marginTop: '0.5rem',
-        padding: '0.5rem 0.65rem',
-        background: 'rgba(255, 255, 255, 0.03)',
-        borderRadius: 'var(--radius-sm)',
-        border: '1px solid var(--color-border)',
-      }}
-    >
+    <div className="pc-inline">
       <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          cursor: 'pointer',
-        }}
+        className="pc-inline-heading"
         onClick={() => setIsOpen((prev) => !prev)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--color-primary)' }}>
+        <div className="pc-inline-label">
           <Phone size={13} />
           <span>Llamar / Ampliar disponibilidad de {parejaNombre}</span>
           {estrellaSlots.length > 0 && (
-            <span
-              style={{
-                fontSize: '10px',
-                background: 'rgba(34, 197, 94, 0.15)',
-                color: 'var(--color-success)',
-                padding: '2px 6px',
-                borderRadius: '10px',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '2px',
-              }}
-            >
+            <span className="pc-badge pc-blue-badge">
               <Star size={10} fill="currentColor" />
               {estrellaSlots.length === 1 ? '1 opción que destraba' : `${estrellaSlots.length} opciones que destraban`}
             </span>
@@ -193,8 +168,9 @@ export default function InlineDisponibilidadEditor({
         </div>
         <button
           type="button"
-          className="btn-link-action"
-          style={{ padding: 0, fontSize: 'var(--font-size-xs)', display: 'flex', alignItems: 'center' }}
+          className="pc-button pc-inline-toggle"
+          aria-label={`Disponibilidad de ${parejaNombre}`}
+          aria-expanded={isOpen}
           onClick={(e) => {
             e.stopPropagation();
             setIsOpen((prev) => !prev);
@@ -205,12 +181,12 @@ export default function InlineDisponibilidadEditor({
       </div>
 
       {isOpen && (
-        <div style={{ marginTop: '0.6rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.6rem' }}>
+        <div className="pc-inline-body">
           {/* Mensaje contextual */}
-          <div style={{ margin: '0 0 0.5rem 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+          <div className="pc-muted pc-spaced">
             {estrellaSlots.length > 0 ? (
-              <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
-                ★ Tocá cualquier turno para resolver el cruce en 1 click:
+              <span className="pc-quick-copy">
+                <Star size={13} className="pc-star" /> Tocá cualquier turno para resolver el cruce en 1 clic:
               </span>
             ) : esZonaManual ? (
               <span>
@@ -225,13 +201,13 @@ export default function InlineDisponibilidadEditor({
 
           {/* Turnos con Estrella (Prioridad 1) */}
           {estrellaSlots.length > 0 && (
-            <div style={{ marginBottom: '0.6rem' }}>
+            <div className="pc-quick-slots">
               {viernesEstrella.length > 0 && (
-                <div style={{ marginBottom: '0.4rem' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+                <div className="pc-day">
+                  <div className="pc-day-title">
                     Viernes que destraba:
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                  <div className="pc-slots">
                     {viernesEstrella.map((slotId) => {
                       const isThisApplying = applyingEstrellaSlot === slotId;
                       const hora = slotId.split('-')[1];
@@ -240,24 +216,14 @@ export default function InlineDisponibilidadEditor({
                           key={slotId}
                           type="button"
                           disabled={isBusy}
-                          className="slot-chip"
-                          style={{
-                            padding: '0.25rem 0.5rem',
-                            fontSize: '11px',
-                            border: '1px solid var(--color-success)',
-                            background: isThisApplying ? 'var(--color-primary)' : 'rgba(34, 197, 94, 0.08)',
-                            color: isThisApplying ? '#000' : undefined,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                          }}
+                          className={`pc-slot pc-suggested-slot${isThisApplying ? ' is-applying' : ''}`}
                           onClick={() => handleQuickSaveEstrella(slotId)}
                           title="¡Tocá para resolver el cruce con este turno!"
                         >
                           {isThisApplying ? (
-                            <><Loader2 size={11} className="spin" /> {hora}</>
+                            <><Loader2 size={11} className="pc-spin" /> {hora}</>
                           ) : (
-                            <>{hora}<span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>★</span></>
+                            <>{hora}<span className="pc-star">★</span></>
                           )}
                         </button>
                       );
@@ -267,11 +233,11 @@ export default function InlineDisponibilidadEditor({
               )}
 
               {sabadoEstrella.length > 0 && (
-                <div style={{ marginBottom: '0.4rem' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+                <div className="pc-day">
+                  <div className="pc-day-title">
                     Sábado que destraba:
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                  <div className="pc-slots">
                     {sabadoEstrella.map((slotId) => {
                       const isThisApplying = applyingEstrellaSlot === slotId;
                       const hora = slotId.split('-')[1];
@@ -280,24 +246,14 @@ export default function InlineDisponibilidadEditor({
                           key={slotId}
                           type="button"
                           disabled={isBusy}
-                          className="slot-chip"
-                          style={{
-                            padding: '0.25rem 0.5rem',
-                            fontSize: '11px',
-                            border: '1px solid var(--color-success)',
-                            background: isThisApplying ? 'var(--color-primary)' : 'rgba(34, 197, 94, 0.08)',
-                            color: isThisApplying ? '#000' : undefined,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                          }}
+                          className={`pc-slot pc-suggested-slot${isThisApplying ? ' is-applying' : ''}`}
                           onClick={() => handleQuickSaveEstrella(slotId)}
                           title="¡Tocá para resolver el cruce con este turno!"
                         >
                           {isThisApplying ? (
-                            <><Loader2 size={11} className="spin" /> {hora}</>
+                            <><Loader2 size={11} className="pc-spin" /> {hora}</>
                           ) : (
-                            <>{hora}<span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>★</span></>
+                            <>{hora}<span className="pc-star">★</span></>
                           )}
                         </button>
                       );
@@ -310,19 +266,10 @@ export default function InlineDisponibilidadEditor({
 
           {/* Toggle para otros turnos viables sin coincidencia */}
           {otrosViablesSlots.length > 0 && (
-            <div style={{ marginTop: '0.4rem', marginBottom: '0.5rem' }}>
+            <div className="pc-other-slots">
               <button
                 type="button"
-                className="btn-link-action"
-                style={{
-                  padding: 0,
-                  fontSize: '11px',
-                  color: 'var(--color-text-secondary)',
-                  textDecoration: 'underline',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                }}
+                className="pc-link"
                 onClick={() => setShowOtrosViables((prev) => !prev)}
               >
                 {showOtrosViables
@@ -331,25 +278,17 @@ export default function InlineDisponibilidadEditor({
               </button>
 
               {showOtrosViables && (
-                <div
-                  style={{
-                    marginTop: '0.4rem',
-                    padding: '0.5rem',
-                    background: 'var(--color-surface)',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--color-border)',
-                  }}
-                >
-                  <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', marginBottom: '0.4rem', fontStyle: 'italic' }}>
+                <div className="pc-other-body">
+                  <div className="pc-muted pc-spaced">
                     Turnos con cancha libre en el club (requiere que el rival o grupo también confirme disponibilidad en este horario):
                   </div>
 
                   {viernesOtros.length > 0 && (
-                    <div style={{ marginBottom: '0.35rem' }}>
-                      <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
+                    <div className="pc-day">
+                      <div className="pc-day-title">
                         Viernes:
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                      <div className="pc-slots">
                         {viernesOtros.map((slotId) => {
                           const isChecked = selectedNewSlots.has(slotId);
                           const hora = slotId.split('-')[1];
@@ -358,9 +297,9 @@ export default function InlineDisponibilidadEditor({
                               key={slotId}
                               type="button"
                               disabled={isBusy}
-                              className={`slot-chip ${isChecked ? 'selected' : ''}`}
-                              style={{ padding: '0.2rem 0.45rem', fontSize: '10.5px' }}
+                              className={`pc-slot${isChecked ? ' is-selected' : ''}`}
                               onClick={() => toggleSlot(slotId)}
+                              aria-pressed={isChecked}
                             >
                               {hora}
                             </button>
@@ -372,10 +311,10 @@ export default function InlineDisponibilidadEditor({
 
                   {sabadoOtros.length > 0 && (
                     <div>
-                      <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
+                      <div className="pc-day-title">
                         Sábado:
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                      <div className="pc-slots">
                         {sabadoOtros.map((slotId) => {
                           const isChecked = selectedNewSlots.has(slotId);
                           const hora = slotId.split('-')[1];
@@ -384,9 +323,9 @@ export default function InlineDisponibilidadEditor({
                               key={slotId}
                               type="button"
                               disabled={isBusy}
-                              className={`slot-chip ${isChecked ? 'selected' : ''}`}
-                              style={{ padding: '0.2rem 0.45rem', fontSize: '10.5px' }}
+                              className={`pc-slot${isChecked ? ' is-selected' : ''}`}
                               onClick={() => toggleSlot(slotId)}
+                              aria-pressed={isChecked}
                             >
                               {hora}
                             </button>
@@ -400,39 +339,32 @@ export default function InlineDisponibilidadEditor({
             </div>
           )}
 
-          {error && <div className="error-message" style={{ margin: '0.4rem 0', fontSize: '11px' }}>{error}</div>}
+          {error && <div className="pc-notice pc-danger-notice">{error}</div>}
           {warning && (
-            <div style={{ margin: '0.4rem 0', fontSize: '11px', color: 'var(--color-warning)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <div className="pc-notice pc-danger-notice">
               <AlertTriangle size={13} /> {warning}
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem' }}>
+          <div className="pc-save-row">
             <div>
               {savedSuccess && !warning && (
-                <span style={{ color: 'var(--color-success)', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                <span className="pc-saved">
                   <Check size={13} /> Turno guardado exitosamente.
                 </span>
               )}
             </div>
             <button
               type="button"
-              className="btn-primary"
-              style={{
-                padding: '0.3rem 0.75rem',
-                fontSize: 'var(--font-size-xs)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-              }}
+              className="pc-button"
               onClick={handleSave}
               disabled={isBusy || selectedNewSlots.size === 0}
             >
-              {isBusy && <Loader2 size={13} className="spin" />}
+              {isBusy && <Loader2 size={13} className="pc-spin" />}
               {saving
-                ? 'Guardando turno...'
+                ? 'Guardando turno…'
                 : isSyncing
-                ? 'Verificando compatibilidad...'
+                ? 'Verificando compatibilidad…'
                 : `Guardar ${selectedNewSlots.size} ${selectedNewSlots.size === 1 ? 'turno' : 'turnos'}`}
             </button>
           </div>

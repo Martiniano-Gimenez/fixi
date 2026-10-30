@@ -17,7 +17,7 @@ export default function CruceResolver({
 
   if (!Array.isArray(opcionesResolucion) || opcionesResolucion.length === 0) {
     return (
-      <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '0.25rem 0' }}>
+      <div className="pc-muted pc-spaced">
         Sin opciones automáticas — abrí Gestionar Parejas para coordinar manualmente
       </div>
     );
@@ -81,33 +81,27 @@ export default function CruceResolver({
     return (
       <div
         key={opt.slotId}
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '0.5rem',
-          padding: isHero ? '0.35rem 0' : '0.25rem 0',
-        }}
+        className={`pc-option${isHero ? ' is-hero' : ''}`}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 'var(--font-size-xs)' }}>
+        <div className="pc-option-info">
           {isCasiEstrellaDoble ? (
             <Users
               size={13}
-              style={{ color: '#38bdf8', flexShrink: 0 }}
+              className="pc-brand"
               title="Ambas parejas deben estirar disponibilidad"
             />
           ) : (
             <Star
               size={13}
-              style={{ color: '#eab308', fill: '#eab308', flexShrink: 0 }}
+              className="pc-star"
               title={isEstrellaMutua ? 'Horario mutuo coincidente' : '1 pareja confirmada'}
             />
           )}
-          <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+          <span className="pc-option-time">
             {opt.dia} {opt.hora}
           </span>
           {textDetails && (
-            <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>
+            <span className="pc-option-detail">
               {textDetails}
             </span>
           )}
@@ -115,22 +109,14 @@ export default function CruceResolver({
 
         <button
           type="button"
-          className="btn-secondary"
           disabled={Boolean(applyingSlotId)}
-          style={{
-            padding: '0.2rem 0.6rem',
-            fontSize: '11px',
-            fontWeight: 600,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.25rem',
-          }}
+          className="pc-button"
           onClick={() => handleResolver(opt)}
           title={`Resolver cruce asignando ${opt.slotId}`}
         >
           {isThisApplying ? (
             <>
-              <Loader2 size={11} className="spin" /> Resolviendo...
+              <Loader2 size={11} className="pc-spin" /> Resolviendo…
             </>
           ) : (
             'Resolver'
@@ -141,30 +127,22 @@ export default function CruceResolver({
   };
 
   return (
-    <div style={{ margin: '0.35rem 0', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+    <div className="pc-resolver">
       {/* Opción Hero (#1) */}
       {renderOptionRow(heroOption, true)}
 
       {error && (
-        <div className="error-message" style={{ fontSize: '11px', margin: '0.2rem 0' }}>
+        <div className="pc-notice pc-danger-notice">
           {error}
         </div>
       )}
 
       {/* Alternativas (#2..N) - solo si hay más de 1 opción */}
       {alternativas.length > 0 && (
-        <div style={{ marginTop: '0.15rem' }}>
+        <div className="pc-alternatives">
           <button
             type="button"
-            className="btn-link-action"
-            style={{
-              padding: '0.15rem 0',
-              fontSize: '11px',
-              color: 'var(--color-text-secondary)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.25rem',
-            }}
+            className="pc-link"
             onClick={() => setShowAlternativas((prev) => !prev)}
           >
             {showAlternativas ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -176,16 +154,7 @@ export default function CruceResolver({
           </button>
 
           {showAlternativas && (
-            <div
-              style={{
-                marginTop: '0.25rem',
-                paddingLeft: '0.75rem',
-                borderLeft: '2px solid rgba(255, 255, 255, 0.08)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.2rem',
-              }}
-            >
+            <div className="pc-alternative-list">
               {alternativas.map((opt) => renderOptionRow(opt, false))}
             </div>
           )}
