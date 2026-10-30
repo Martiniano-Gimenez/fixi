@@ -426,10 +426,10 @@ export default function TorneoEnVivo() {
 
   if (loading && !data) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <div style={{ textAlign: 'center' }}>
-          <RefreshCw size={36} className="animate-spin" style={{ color: 'var(--color-primary)', marginBottom: '1rem' }} />
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+      <div className="dt-screen dt-loading">
+        <div className="dt-center">
+          <RefreshCw size={36} className="dt-loading-icon dt-spin" />
+          <p className="dt-muted">
             Cargando estado en vivo del torneo...
           </p>
         </div>
@@ -439,17 +439,17 @@ export default function TorneoEnVivo() {
 
   if (error && !data) {
     return (
-      <div style={{ maxWidth: '600px', margin: '3rem auto', padding: '1.5rem', textAlign: 'center' }}>
-        <AlertTriangle size={48} style={{ color: 'var(--color-danger)', marginBottom: '1rem' }} />
-        <h2 style={{ fontSize: '1.25rem', marginBottom: '0.75rem' }}>No se pudo cargar el Modo Día de Torneo</h2>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginBottom: '1.5rem' }}>
+      <div className="dt-screen dt-error-page">
+        <AlertTriangle size={48} className="dt-error-icon" />
+        <h2 className="dt-error-title">No se pudo cargar el día de torneo</h2>
+        <p className="dt-muted">
           {error}
         </p>
-        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-          <button type="button" className="btn-secondary" onClick={() => navigate(`/admin/torneos/${id}`)}>
+        <div className="dt-actions dt-centered">
+          <button type="button" className="dt-button" onClick={() => navigate(`/admin/torneos/${id}`)}>
             Volver al torneo
           </button>
-          <button type="button" className="btn-primary" onClick={() => fetchEnVivoData()}>
+          <button type="button" className="dt-button dt-primary" onClick={() => fetchEnVivoData()}>
             Reintentar
           </button>
         </div>
@@ -485,17 +485,9 @@ export default function TorneoEnVivo() {
   // Aviso de partidos que terminan después del cierre del club (en la tarjeta de canchas)
   const avisoFueraDeHorario = fueraDeHorarioFiltrados.length > 0 ? (
     <p
-      style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '0.35rem',
-        fontSize: 'var(--font-size-xs)',
-        color: 'var(--color-warning)',
-        margin: '0.35rem 0 0',
-        fontWeight: 600,
-      }}
+      className="dt-after-hours"
     >
-      <Moon size={13} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+      <Moon size={13} className="dt-icon" />
       <span>
         {fueraDeHorarioFiltrados.length}{' '}
         {fueraDeHorarioFiltrados.length === 1 ? 'partido termina' : 'partidos terminan'} después del cierre del club
@@ -522,108 +514,59 @@ export default function TorneoEnVivo() {
 
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '4rem' }}>
+    <div className="dt-container">
+      <div className="dt-screen">
       {/* ─── 1. Header de Navegación y En Vivo ─────────────────────── */}
       <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '0.75rem',
-          marginBottom: '1.25rem',
-        }}
+        className="dt-heading"
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="dt-heading-main">
           <Link
             to={`/admin/torneos/${id}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '38px',
-              height: '38px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-card-start)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-text)',
-            }}
+            className="dt-button dt-icon-button"
             title="Volver al detalle del torneo"
           >
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h1 style={{ fontSize: '1.35rem', fontWeight: 700 }}>Día de Torneo</h1>
+            <div className="dt-title-row">
+              <h1 className="dt-title">Día de torneo</h1>
               <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  fontSize: 'var(--font-size-xs)',
-                  padding: '0.2rem 0.55rem',
-                  borderRadius: '999px',
-                  background: 'rgba(0, 208, 132, 0.15)',
-                  color: 'var(--color-primary)',
-                  fontWeight: 600,
-                  border: '1px solid rgba(0, 208, 132, 0.3)',
-                }}
+                className="dt-badge dt-blue"
               >
                 <span
-                  style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    background: 'var(--color-primary)',
-                    display: 'inline-block',
-                    animation: 'pulse 2s infinite',
-                  }}
+                  className="dt-dot dt-blue-dot"
                 />
                 En vivo
               </span>
             </div>
-            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+            <p className="dt-muted">
               {torneo.nombre}
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="dt-actions">
           {torneo.slug && (
             <Link
               to={`/torneo/${torneo.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-secondary"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                fontSize: 'var(--font-size-xs)',
-                padding: '0.45rem 0.85rem',
-                textDecoration: 'none',
-              }}
+              className="dt-button"
               title="Abrir vista pública del torneo en una pestaña nueva"
             >
               <ExternalLink size={14} />
-              <span>Vista Pública</span>
+              <span>Vista pública</span>
             </Link>
           )}
 
           <button
             type="button"
-            className="btn-secondary"
             onClick={() => fetchEnVivoData(true)}
             disabled={refreshing}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              fontSize: 'var(--font-size-xs)',
-              padding: '0.45rem 0.85rem',
-            }}
+            className="dt-button dt-primary"
           >
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={refreshing ? 'dt-spin' : ''} />
             {refreshing ? 'Actualizando...' : 'Actualizar ahora'}
           </button>
         </div>
@@ -632,15 +575,7 @@ export default function TorneoEnVivo() {
       {/* ─── Selector Global de Jornada ─────────────────────────────── */}
       {jornadasDisponibles.length > 0 && (
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginBottom: '1.25rem',
-            overflowX: 'auto',
-            paddingBottom: '0.4rem',
-            scrollbarWidth: 'none',
-          }}
+          className="dt-days"
         >
           {jornadasDisponibles.map((jornada) => {
             const isActive = activeTabDay === jornada.key;
@@ -654,29 +589,11 @@ export default function TorneoEnVivo() {
                   setActiveTabDay(jornada.key);
                   setUserTouchedTarget(false);
                 }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.55rem 1rem',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: isActive ? 700 : 500,
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(0, 208, 132, 0.15), rgba(18, 21, 28, 0.95))'
-                    : 'var(--bg-card-start)',
-                  color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                  border: isActive
-                    ? '1px solid var(--color-primary)'
-                    : '1px solid var(--color-border)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap',
-                  boxShadow: isActive ? '0 0 12px rgba(0, 208, 132, 0.15)' : 'none',
-                }}
+                className={`dt-day${isActive ? ' is-active' : ''}`}
+                aria-pressed={isActive}
               >
                 {jornada.diaNombre === 'Domingo' ? (
-                  <Trophy size={16} style={{ color: isActive ? 'var(--color-primary)' : '#f59e0b' }} />
+                  <Trophy size={16} className="dt-icon" />
                 ) : (
                   <Calendar size={16} />
                 )}
@@ -685,7 +602,7 @@ export default function TorneoEnVivo() {
                 {data?.canchasPorDia?.[jornada.key] && data.canchasPorDia[jornada.key].canchas < canchasClub && (
                   <CloudRain
                     size={14}
-                    style={{ color: '#60a5fa' }}
+                    className="dt-rain-icon"
                     title={`Modo Lluvia activo (${data.canchasPorDia[jornada.key].canchas}/${canchasClub} canchas)`}
                   />
                 )}
@@ -693,28 +610,14 @@ export default function TorneoEnVivo() {
                 {/* Indicador de partidos en juego */}
                 {hasLive && (
                   <span
-                    style={{
-                      width: '7px',
-                      height: '7px',
-                      borderRadius: '50%',
-                      background: 'var(--color-primary)',
-                      display: 'inline-block',
-                      animation: 'pulse 1.5s infinite',
-                    }}
+                    className="dt-dot dt-live-dot"
                     title={`${jornada.enCursoCount} partido(s) en juego`}
                   />
                 )}
 
                 {/* Badge de cantidad */}
                 <span
-                  style={{
-                    fontSize: '11px',
-                    padding: '0.1rem 0.45rem',
-                    borderRadius: '999px',
-                    background: isActive ? 'rgba(0, 208, 132, 0.25)' : 'rgba(255, 255, 255, 0.08)',
-                    color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    fontWeight: 700,
-                  }}
+                  className="dt-day-count"
                 >
                   {jornada.totalPartidos}
                 </span>
@@ -729,38 +632,13 @@ export default function TorneoEnVivo() {
               setActiveTabDay('TODO');
               setUserTouchedTarget(false);
             }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.45rem',
-              padding: '0.55rem 1rem',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: activeTabDay === 'TODO' ? 700 : 500,
-              background: activeTabDay === 'TODO'
-                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(18, 21, 28, 0.95))'
-                : 'var(--bg-card-start)',
-              color: activeTabDay === 'TODO' ? '#60a5fa' : 'var(--color-text-secondary)',
-              border: activeTabDay === 'TODO'
-                ? '1px solid #60a5fa'
-                : '1px solid var(--color-border)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              whiteSpace: 'nowrap',
-              boxShadow: activeTabDay === 'TODO' ? '0 0 12px rgba(59, 130, 246, 0.15)' : 'none',
-            }}
+            className={`dt-day${activeTabDay === 'TODO' ? ' is-active' : ''}`}
+            aria-pressed={activeTabDay === 'TODO'}
           >
             <Layers size={16} />
-            <span>Todo el Torneo</span>
+            <span>Todo el torneo</span>
             <span
-              style={{
-                fontSize: '11px',
-                padding: '0.1rem 0.45rem',
-                borderRadius: '999px',
-                background: activeTabDay === 'TODO' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.08)',
-                color: activeTabDay === 'TODO' ? '#60a5fa' : 'var(--color-text-muted)',
-                fontWeight: 700,
-              }}
+              className="dt-day-count"
             >
               {data.resumenEstado.totalPartidos}
             </span>
@@ -771,37 +649,22 @@ export default function TorneoEnVivo() {
       {/* Aviso si hay partidos en juego en otra jornada distinta a la activa */}
       {partidosEnCursoOtraJornada.length > 0 && (
         <div
-          style={{
-            background: 'rgba(0, 208, 132, 0.08)',
-            border: '1px solid rgba(0, 208, 132, 0.25)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.6rem 0.9rem',
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            fontSize: 'var(--font-size-xs)',
-            gap: '0.5rem',
-          }}
+          className="dt-notice dt-other-live"
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Flame size={14} style={{ color: 'var(--color-primary)' }} />
+          <div className="dt-notice-main">
+            <Flame size={14} className="dt-live-icon" />
             <span>
               Hay <strong>{partidosEnCursoOtraJornada.length} partido(s) en juego</strong> en otra jornada.
             </span>
           </div>
           <button
             type="button"
-            className="btn-secondary"
             onClick={() => {
               const primerOtraJornada = partidosEnCursoOtraJornada[0];
               const info = getDiaCalendarioConTrasnoche(primerOtraJornada.fechaHora, horariosClub);
               if (info) setActiveTabDay(info.key);
             }}
-            style={{
-              padding: '0.25rem 0.6rem',
-              fontSize: '11px',
-            }}
+            className="dt-button"
           >
             Ir a jornada en juego →
           </button>
@@ -810,18 +673,7 @@ export default function TorneoEnVivo() {
 
       {error && (
         <div
-          style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.75rem 1rem',
-            marginBottom: '1rem',
-            color: 'var(--color-danger)',
-            fontSize: 'var(--font-size-sm)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-          }}
+          className="dt-notice dt-danger"
         >
           <AlertTriangle size={18} />
           <span>{error}</span>
@@ -833,28 +685,18 @@ export default function TorneoEnVivo() {
       {esModoTodo ? (
         (anyDayHasLluvia || avisoFueraDeHorario) && (
           <div
-            className="canchas-control-card"
-            style={{
-              border: anyDayHasLluvia ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid var(--color-border)',
-            }}
+            className="dt-courts-card"
           >
             {anyDayHasLluvia && (
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem 0.75rem' }}>
+              <div className="dt-rain-summary">
                 <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.3rem',
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: 600,
-                    color: '#60a5fa',
-                  }}
+                  className="dt-rain-label"
                 >
                   <CloudRain size={14} />
-                  Modo Lluvia
+                  Modo lluvia
                 </span>
                 {diasConLluvia.map((d) => (
-                  <span key={d.key} style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                  <span key={d.key} className="dt-muted">
                     {d.nombre}: {d.canchas} de {canchasClub} canchas
                   </span>
                 ))}
@@ -865,77 +707,37 @@ export default function TorneoEnVivo() {
         )
       ) : (
       <div
-        className="canchas-control-card"
-        style={{
-          border: isTabBajoOverride ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid var(--color-border)',
-        }}
+        className="dt-courts-card"
       >
-        <div className="canchas-control-layout">
+        <div className="dt-courts-layout">
           {/* Info de canchas activas */}
-          <div style={{ flex: '1 1 auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)' }}>
+          <div className="dt-courts-info">
+            <div className="dt-courts-title">
+              <span className="dt-strong">
                 Canchas activas {activeJornadaInfo ? `(${activeJornadaInfo.diaNombre})` : ''}:
               </span>
               <span
-                style={{
-                  fontSize: '1.25rem',
-                  fontWeight: 800,
-                  color: isTabBajoOverride ? '#60a5fa' : 'var(--color-primary)',
-                }}
+                className="dt-courts-count"
               >
                 {canchasActivasContextuales} / {canchasClub}
               </span>
               {isTabBajoOverride ? (
                 <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.3rem',
-                    fontSize: 'var(--font-size-xs)',
-                    padding: '0.15rem 0.5rem',
-                    borderRadius: '999px',
-                    background: 'rgba(59, 130, 246, 0.2)',
-                    color: '#60a5fa',
-                    fontWeight: 600,
-                    border: '1px solid rgba(59, 130, 246, 0.4)',
-                  }}
+                  className="dt-badge dt-blue"
                 >
                   <CloudRain size={13} />
-                  Modo Lluvia{diaLluviaNombre ? ` (${diaLluviaNombre})` : ''}
+                  Modo lluvia{diaLluviaNombre ? ` (${diaLluviaNombre})` : ''}
                 </span>
               ) : anyDayHasLluvia ? (
                 <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.3rem',
-                    fontSize: 'var(--font-size-xs)',
-                    padding: '0.15rem 0.5rem',
-                    borderRadius: '999px',
-                    background: 'rgba(59, 130, 246, 0.1)',
-                    color: '#93c5fd',
-                    fontWeight: 600,
-                    border: '1px solid rgba(59, 130, 246, 0.25)',
-                  }}
+                  className="dt-badge dt-neutral"
                 >
                   <CloudRain size={13} />
                   Lluvia en otra jornada
                 </span>
               ) : (
                 <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.3rem',
-                    fontSize: 'var(--font-size-xs)',
-                    padding: '0.15rem 0.5rem',
-                    borderRadius: '999px',
-                    background: 'rgba(0, 208, 132, 0.1)',
-                    color: 'var(--color-primary)',
-                    fontWeight: 600,
-                    border: '1px solid rgba(0, 208, 132, 0.25)',
-                  }}
+                  className="dt-badge dt-neutral"
                 >
                   <Sun size={13} />
                   Normal
@@ -943,7 +745,7 @@ export default function TorneoEnVivo() {
               )}
             </div>
             {(isTabBajoOverride || anyDayHasLluvia) && (
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0 }}>
+              <p className="dt-muted">
                 {isTabBajoOverride
                   ? 'Partidos de esta jornada reprogramados sobre las canchas disponibles.'
                   : 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'}
@@ -953,24 +755,16 @@ export default function TorneoEnVivo() {
           </div>
 
           {/* Selector y Acciones */}
-          <div className="canchas-control-actions">
+          <div className="dt-courts-actions">
             {/* Botón Restaurar todas: Solo visible si la solapa actual está bajo override */}
             {isTabBajoOverride && (
               <button
                 type="button"
-                className="btn-secondary canchas-action-btn"
                 onClick={() => setConfirmRestaurarOpen(true)}
                 disabled={actionLoading}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  fontSize: 'var(--font-size-xs)',
-                  padding: '0.5rem 0.85rem',
-                  whiteSpace: 'nowrap',
-                }}
+                className="dt-button"
               >
-                <Sun size={15} style={{ color: '#f59e0b' }} />
+                <Sun size={15} className="dt-icon" />
                 Restaurar todas ({canchasClub})
               </button>
             )}
@@ -979,22 +773,9 @@ export default function TorneoEnVivo() {
             {targetCanchas < canchasActivasContextuales && (
               <button
                 type="button"
-                className="btn-primary canchas-action-btn"
                 onClick={() => setConfirmReducirOpen(true)}
                 disabled={actionLoading}
-                style={{
-                  background: '#2563eb',
-                  color: 'white',
-                  border: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  fontSize: 'var(--font-size-xs)',
-                  fontWeight: 600,
-                  padding: '0.5rem 0.9rem',
-                  borderRadius: 'var(--radius-md)',
-                  whiteSpace: 'nowrap',
-                }}
+                className="dt-button dt-button-blue"
               >
                 <CloudRain size={15} />
                 Reducir a {targetCanchas} {targetCanchas === 1 ? 'cancha' : 'canchas'}
@@ -1003,15 +784,7 @@ export default function TorneoEnVivo() {
 
             {/* Control +/- (anclado a la derecha para mantener posición estable del cursor) */}
             <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                background: 'var(--bg-body)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                overflow: 'hidden',
-                flexShrink: 0,
-              }}
+              className="dt-stepper"
             >
               <button
                 type="button"
@@ -1020,27 +793,13 @@ export default function TorneoEnVivo() {
                   setUserTouchedTarget(true);
                 }}
                 disabled={targetCanchas <= 1 || actionLoading}
-                style={{
-                  padding: '0.45rem 0.75rem',
-                  background: 'transparent',
-                  border: 'none',
-                  color: targetCanchas <= 1 ? 'var(--color-text-muted)' : 'var(--color-text)',
-                  cursor: targetCanchas <= 1 ? 'not-allowed' : 'pointer',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                }}
+                className="dt-step-button"
+                aria-label="Reducir cantidad de canchas"
               >
                 −
               </button>
               <span
-                style={{
-                  padding: '0.45rem 0.75rem',
-                  fontWeight: 700,
-                  fontSize: '0.95rem',
-                  minWidth: '2.2rem',
-                  textAlign: 'center',
-                  color: 'var(--color-text)',
-                }}
+                className="dt-step-value"
               >
                 {targetCanchas}
               </span>
@@ -1051,15 +810,8 @@ export default function TorneoEnVivo() {
                   setUserTouchedTarget(true);
                 }}
                 disabled={targetCanchas >= canchasClub || actionLoading}
-                style={{
-                  padding: '0.45rem 0.75rem',
-                  background: 'transparent',
-                  border: 'none',
-                  color: targetCanchas >= canchasClub ? 'var(--color-text-muted)' : 'var(--color-text)',
-                  cursor: targetCanchas >= canchasClub ? 'not-allowed' : 'pointer',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                }}
+                className="dt-step-button"
+                aria-label="Aumentar cantidad de canchas"
               >
                 +
               </button>
@@ -1072,49 +824,35 @@ export default function TorneoEnVivo() {
       {/* ─── 3. Banner de Feedback Post-Reprogramación ──────────────── */}
       {isFeedbackVisible && (
         <div
-          style={{
-            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(18, 21, 28, 0.95))',
-            border: '1px solid rgba(59, 130, 246, 0.4)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '1.25rem',
-            marginBottom: '1.25rem',
-            position: 'relative',
-          }}
+          className="dt-notice dt-feedback"
         >
           <button
             type="button"
             onClick={() => setFeedbackReprogramacion(null)}
-            style={{
-              position: 'absolute',
-              top: '0.75rem',
-              right: '0.75rem',
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--color-text-secondary)',
-              cursor: 'pointer',
-            }}
+            className="dt-button dt-icon-button dt-dismiss"
             title="Cerrar aviso"
+            aria-label="Cerrar aviso"
           >
             <X size={18} />
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-            <CheckCircle2 size={22} style={{ color: '#60a5fa' }} />
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
-              Reprogramación por Modo Lluvia completada
+          <div className="dt-section-heading dt-feedback-heading">
+            <CheckCircle2 size={22} className="dt-brand-icon" />
+            <h3 className="dt-section-title">
+              Reprogramación por modo lluvia completada
               {feedbackDiaNombre && ` — ${feedbackDiaNombre}`}
             </h3>
           </div>
 
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
+          <p className="dt-feedback-copy">
             Se ajustaron los partidos pendientes respetando el orden relativo original.
             {' '}
-            <strong style={{ color: 'var(--color-text)' }}>
+            <strong className="dt-strong">
               {feedbackReprogramacion.partidosReprogramados} partido(s) modificaron su horario
             </strong>
             {feedbackReprogramacion.partidosSinCambio > 0 && `, ${feedbackReprogramacion.partidosSinCambio} mantuvieron su horario`}
             {feedbackReprogramacion.partidosSinHorarioNuevo > 0 && (
-              <span style={{ color: 'var(--color-danger)' }}>
+              <span className="dt-danger-text">
                 {`, ${feedbackReprogramacion.partidosSinHorarioNuevo} quedaron sin horario disponible`}
               </span>
             )}
@@ -1126,19 +864,7 @@ export default function TorneoEnVivo() {
               <button
                 type="button"
                 onClick={() => setFeedbackExpanded((prev) => !prev)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#60a5fa',
-                  fontSize: 'var(--font-size-xs)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.3rem',
-                  padding: 0,
-                  marginBottom: '0.5rem',
-                }}
+                className="dt-text-button"
               >
                 {feedbackExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 {feedbackExpanded ? 'Ocultar detalle de cambios' : `Ver detalle de ${feedbackReprogramacion.cambios.length} cambios de horario`}
@@ -1146,47 +872,30 @@ export default function TorneoEnVivo() {
 
               {feedbackExpanded && (
                 <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                    maxHeight: '260px',
-                    overflowY: 'auto',
-                    marginTop: '0.25rem',
-                  }}
+                  className="dt-change-list"
                 >
                   {feedbackReprogramacion.cambios.map((c, idx) => (
                     <div
                       key={c.partidoId || idx}
-                      style={{
-                        background: 'rgba(0, 0, 0, 0.3)',
-                        borderRadius: 'var(--radius-sm)',
-                        padding: '0.6rem 0.85rem',
-                        fontSize: 'var(--font-size-xs)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: '0.5rem',
-                      }}
+                      className="dt-change"
                     >
                       <div>
                         <strong>{c.pareja1}</strong> vs <strong>{c.pareja2}</strong>
-                        <span style={{ color: 'var(--color-text-secondary)', marginLeft: '0.4rem' }}>
+                        <span className="dt-muted">
                           ({c.categoria})
                         </span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: 'var(--color-text-muted)', textDecoration: 'line-through' }}>
+                      <div className="dt-change-times">
+                        <span className="dt-old-time">
                           C{c.antes.canchaNumero} • {formatDiaHorario(c.antes.fechaHora)}
                         </span>
                         <span>→</span>
                         {c.despues.canchaNumero ? (
-                          <span style={{ color: '#60a5fa', fontWeight: 600 }}>
+                          <span className="dt-new-time">
                             C{c.despues.canchaNumero} • {formatDiaHorario(c.despues.fechaHora)}
                           </span>
                         ) : (
-                          <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                          <span className="dt-danger-text">
                             Sin horario disponible
                           </span>
                         )}
@@ -1203,82 +912,51 @@ export default function TorneoEnVivo() {
       {/* ─── 4. Alerta de Partidos en Cancha Fantasma ─────────────────── */}
       {partidosEnCanchaFantasma && partidosEnCanchaFantasma.length > 0 && (
         <div
-          style={{
-            background: 'rgba(245, 158, 11, 0.1)',
-            border: '1px solid rgba(245, 158, 11, 0.35)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '1.25rem',
-            marginBottom: '1.25rem',
-          }}
+          className="dt-notice dt-danger"
         >
           <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              flexWrap: 'wrap',
-              gap: '0.5rem',
-              marginBottom: '0.5rem',
-            }}
+            className="dt-section-heading"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: '#fbbf24' }}>
-                ⚠️ {partidosEnCanchaFantasma.length} partido(s) en canchas inhabilitadas requieren atención manual
+            <div className="dt-notice-main">
+              <AlertTriangle size={20} className="dt-icon" />
+              <h3 className="dt-section-title">
+                {partidosEnCanchaFantasma.length} partido(s) en canchas inhabilitadas requieren atención manual
               </h3>
             </div>
             <button
               type="button"
               onClick={() => setFantasmaExpanded((prev) => !prev)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#fbbf24',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.3rem',
-                padding: 0,
-              }}
+              className="dt-text-button"
             >
               {fantasmaExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               {fantasmaExpanded ? 'Ocultar lista' : 'Ver lista'}
             </button>
           </div>
 
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.75rem' }}>
+          <p className="dt-notice-copy">
             Estos partidos tenían asignada una cancha que ahora está inhabilitada por la lluvia de su jornada y no pudieron ser reprogramados automáticamente. Revisá su asignación en cada categoría.
           </p>
 
           {fantasmaExpanded && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div className="dt-match-list">
               {partidosEnCanchaFantasma.map((p) => (
                 <div
                   key={p.id}
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '0.75rem 1rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '0.5rem',
-                  }}
+                  className="dt-ghost-match"
                 >
                   <div>
-                    <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>
-                      {p.pareja1} vs {p.pareja2}
+                    <div className="dt-pair-names">
+                      <span className="dt-pair-name">{p.pareja1}</span>
+                      <span className="dt-versus">vs</span>
+                      <span className="dt-pair-name">{p.pareja2}</span>
                     </div>
-                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                    <div className="dt-muted">
                       {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''} • Asignado a: Cancha {p.canchaNumero} ({formatDiaHorario(p.fechaHora)})
-                      <span style={{ display: 'block', marginTop: '0.2rem' }}>
+                      <span className="dt-block">
                         Inhabilitadas ese día: Cancha &gt; {canchasDeLaJornadaDe(p.fechaHora)}
                       </span>
                       {p.motivo && (
-                        <span style={{ display: 'block', color: '#f59e0b', marginTop: '0.2rem', fontWeight: 500 }}>
+                        <span className="dt-block dt-danger-text">
                           Motivo: {p.motivo}
                         </span>
                       )}
@@ -1286,14 +964,7 @@ export default function TorneoEnVivo() {
                   </div>
                   <Link
                     to={`/admin/torneos/${id}/categorias/${p.categoriaId}`}
-                    style={{
-                      fontSize: 'var(--font-size-xs)',
-                      color: 'var(--color-primary)',
-                      fontWeight: 600,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.25rem',
-                    }}
+                    className="dt-button dt-button-blue"
                   >
                     Reasignar horario <ExternalLink size={12} />
                   </Link>
@@ -1309,40 +980,28 @@ export default function TorneoEnVivo() {
       {/* ─── Banner / Alerta de Acción de Cruces ───────────────────── */}
       {alertaEliminatoria && (
         <div
-          style={{
-            background: alertaEliminatoria.tipo === 'error'
-              ? 'rgba(239, 68, 68, 0.1)'
-              : (alertaEliminatoria.esDieciseisavos ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)'),
-            border: `1px solid ${alertaEliminatoria.tipo === 'error' ? 'var(--color-error)' : (alertaEliminatoria.esDieciseisavos ? '#f59e0b' : 'var(--color-success)')}`,
-            borderRadius: 'var(--radius-lg)',
-            padding: '1rem 1.25rem',
-            marginBottom: '1.25rem',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '1rem',
-          }}
+          className={`dt-notice dt-bracket-notice${alertaEliminatoria.tipo === 'error' || alertaEliminatoria.esDieciseisavos ? ' dt-danger' : ' dt-info'}`}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div className="dt-notice-main">
             {alertaEliminatoria.tipo === 'error' ? (
-              <AlertTriangle size={20} style={{ color: 'var(--color-error)' }} />
+              <AlertTriangle size={20} className="dt-icon" />
             ) : (alertaEliminatoria.esDieciseisavos ? (
-              <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+              <AlertTriangle size={20} className="dt-icon" />
             ) : (
-              <CheckCircle2 size={20} style={{ color: 'var(--color-success)' }} />
+              <CheckCircle2 size={20} className="dt-icon" />
             ))}
             <div>
-              <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>
+              <div className="dt-strong">
                 {alertaEliminatoria.mensaje}
               </div>
               {alertaEliminatoria.esDieciseisavos && (
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginTop: '0.2rem' }}>
+                <div className="dt-muted">
                   Los partidos de dieciseisavos se juegan el sábado a la noche y quedaron listos para asignación manual.{' '}
                   <a
                     href="#partidos-pendientes-section"
-                    style={{ color: '#60a5fa', fontWeight: 600, textDecoration: 'underline' }}
+                    className="dt-inline-link"
                   >
-                    Ir a Partidos Pendientes ↓
+                    Ir a partidos pendientes ↓
                   </a>
                 </div>
               )}
@@ -1351,8 +1010,8 @@ export default function TorneoEnVivo() {
           <button
             type="button"
             onClick={() => setAlertaEliminatoria(null)}
-            className="btn-icon"
-            style={{ color: 'var(--color-text-secondary)' }}
+            className="dt-button dt-icon-button"
+            aria-label="Cerrar aviso de eliminatoria"
           >
             <X size={18} />
           </button>
@@ -1362,30 +1021,14 @@ export default function TorneoEnVivo() {
       {/* ─── 5. Cuadros Eliminatorios (Brackets) — Solo Domingo o Todo el Torneo ─── */}
       {!esViernes && !esSabado && ((data.categorias && data.categorias.length > 0) || (data.categoriasListasParaEliminatoria && data.categoriasListasParaEliminatoria.length > 0)) && (
         <div
-          style={{
-            background: esDomingo
-              ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(18, 21, 28, 0.98))'
-              : 'var(--bg-card-start)',
-            border: esDomingo ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '1.25rem',
-            marginBottom: '1.5rem',
-            boxShadow: esDomingo ? '0 0 20px rgba(245, 158, 11, 0.08)' : 'none',
-          }}
+          className="dt-brackets"
         >
           <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '0.75rem',
-              marginBottom: '1rem',
-            }}
+            className="dt-section-heading"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Trophy size={22} style={{ color: esDomingo ? '#f59e0b' : 'var(--color-primary)' }} />
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
+            <div className="dt-notice-main">
+              <Trophy size={22} className="dt-trophy-icon" />
+              <h3 className="dt-section-title">
                 Eliminatoria
               </h3>
             </div>
@@ -1394,27 +1037,16 @@ export default function TorneoEnVivo() {
           {/* Aviso si alguna categoría completó sus zonas */}
           {data.categorias && data.categorias.some((c) => c.zonasFinalizadas) && (
             <div
-              style={{
-                background: 'rgba(16, 185, 129, 0.12)',
-                border: '1px solid var(--color-success)',
-                borderRadius: 'var(--radius-md)',
-                padding: '0.65rem 0.9rem',
-                marginBottom: '1rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--color-text)',
-              }}
+              className="dt-notice dt-info"
             >
-              <Zap size={16} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+              <Zap size={16} className="dt-brand-icon" />
               <span>
                 <strong>¡Fase de grupos completada!</strong> Los clasificados y horarios de domingo se asignan y programan automáticamente al cuadro eliminatorio.
               </span>
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '0.85rem' }}>
+          <div className="dt-bracket-grid">
             {(data.categorias || data.categoriasListasParaEliminatoria || []).map((cat) => {
               const isGenerating = generandoCrucesCatId === cat.id;
               const isReadyToAssign = cat.estadoEliminatoria === 'LISTA_PARA_ASIGNAR' || (!cat.estadoEliminatoria && data.categoriasListasParaEliminatoria?.some((c) => c.id === cat.id));
@@ -1425,69 +1057,43 @@ export default function TorneoEnVivo() {
               return (
                 <div
                   key={cat.id}
-                  style={{
-                    background: cat.clasificadosAsignados
-                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(20, 24, 33, 0.95))'
-                      : 'rgba(0, 0, 0, 0.35)',
-                    border: `1px solid ${cat.clasificadosAsignados ? 'rgba(16, 185, 129, 0.35)' : 'rgba(255, 255, 255, 0.08)'}`,
-                    borderRadius: 'var(--radius-md)',
-                    padding: '0.9rem 1rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: '0.75rem',
-                    boxShadow: cat.clasificadosAsignados ? '0 0 15px rgba(16, 185, 129, 0.08)' : 'none',
-                    transition: 'all 0.2s ease',
-                  }}
+                  className={`dt-bracket-card${cat.clasificadosAsignados ? ' is-assigned' : ''}`}
                 >
                   <div>
                     {/* Header de Categoría + Badge */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                      <div style={{ fontWeight: 700, fontSize: 'var(--font-size-base)', color: 'var(--color-text)' }}>
+                    <div className="dt-category-heading">
+                      <div className="dt-category-name">
                         {cat.nombre}
                       </div>
 
                       {/* Badge de Estado */}
                       {cat.clasificadosAsignados && cat.estadoEliminatoria !== 'FINALIZADA' ? (
                         <span
-                          className="badge badge-success"
-                          style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
+                          className="dt-badge dt-neutral"
                         >
                           <CheckCircle2 size={11} /> Clasificados listos
                         </span>
                       ) : isReadyToAssign ? (
                         <span
-                          className="badge badge-success"
-                          style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
+                          className="dt-badge dt-blue"
                         >
                           <Zap size={11} /> ¡Zonas listas!
                         </span>
                       ) : cat.estadoEliminatoria === 'ESPERANDO_ZONAS' ? null : cat.estadoEliminatoria === 'EN_CURSO' ? (
                         <span
-                          className="badge badge-warning"
-                          style={{
-                            fontSize: '0.7rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            padding: '0.15rem 0.45rem',
-                            background: 'rgba(59, 130, 246, 0.15)',
-                            color: '#60a5fa',
-                            borderColor: 'rgba(59, 130, 246, 0.3)',
-                          }}
+                          className="dt-badge dt-neutral"
                         >
                           <Flame size={11} /> En disputa
                         </span>
                       ) : cat.estadoEliminatoria === 'FINALIZADA' ? (
                         <span
-                          className="badge badge-success"
-                          style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.15rem 0.45rem' }}
+                          className="dt-badge dt-neutral"
                         >
-                          <CheckCircle2 size={11} /> 🏆 Definido
+                          <CheckCircle2 size={11} /> Definido
                         </span>
                       ) : (
                         <span
-                          style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)' }}
+                          className="dt-muted"
                         >
                           {cat.tieneEliminatoria ? 'Cuadro listo' : 'Sin cuadro'}
                         </span>
@@ -1497,20 +1103,14 @@ export default function TorneoEnVivo() {
 
                     {/* Progreso de Zonas */}
                     {cat.totalPartidosZona > 0 && (
-                      <div style={{ marginTop: '0.4rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
+                      <div className="dt-progress">
+                        <div className="dt-progress-label">
                           <span>Zonas</span>
                           <span>{cat.partidosZonaFinalizados}/{cat.totalPartidosZona} jugados ({pctZonas}%)</span>
                         </div>
-                        <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div className="dt-progress-track">
                           <div
-                            style={{
-                              width: `${pctZonas}%`,
-                              height: '100%',
-                              background: pctZonas === 100 ? 'var(--color-success)' : 'var(--color-primary)',
-                              borderRadius: '2px',
-                              transition: 'width 0.3s ease',
-                            }}
+                            className="dt-progress-fill" style={{ width: `${pctZonas}%` }}
                           />
                         </div>
                       </div>
@@ -1518,51 +1118,32 @@ export default function TorneoEnVivo() {
 
                     {/* Info de Eliminatoria */}
                     {cat.tieneEliminatoria && cat.estadoEliminatoria !== 'ESPERANDO_ZONAS' && cat.totalPartidosEliminatoria > 0 && (
-                      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginTop: '0.45rem' }}>
+                      <div className="dt-muted dt-block">
                         <span>{cat.primeraRondaNombre || 'Eliminatoria'}: {cat.partidosEliminatoriaFinalizados}/{cat.totalPartidosEliminatoria} jugados</span>
                       </div>
                     )}
                   </div>
 
                   {/* Acciones */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.6rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                  <div className="dt-card-actions">
                     {cat.tieneEliminatoria && (
                       <Link
                         to={`/admin/torneos/${id}/categorias/${cat.id}/eliminatoria`}
-                        className="btn-secondary"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          padding: '0.4rem 0.75rem',
-                          fontSize: 'var(--font-size-xs)',
-                          textDecoration: 'none',
-                          flex: '1',
-                          justifyContent: 'center',
-                        }}
+                        className="dt-button dt-grow"
                         title={`Ver cuadro eliminatorio de ${cat.nombre}`}
                       >
-                        <GitBranch size={14} /> Ver Bracket
+                        <GitBranch size={14} /> Ver cuadro
                       </Link>
                     )}
 
                     {!cat.tieneEliminatoria && (
                       <button
                         type="button"
-                        className="btn-secondary"
                         disabled={isGenerating}
                         onClick={() => handleGenerarCruces(cat.id, cat.nombre)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.4rem',
-                          padding: '0.4rem 0.75rem',
-                          fontSize: 'var(--font-size-xs)',
-                          flex: '1',
-                          justifyContent: 'center',
-                        }}
+                        className="dt-button dt-grow"
                       >
-                        <GitBranch size={14} /> Generar Bracket
+                        <GitBranch size={14} /> Generar cuadro
                       </button>
                     )}
                   </div>
@@ -1575,122 +1156,74 @@ export default function TorneoEnVivo() {
 
       {/* ─── 6. Resumen Estadístico ───────────────────────────────── */}
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-          gap: '0.75rem',
-          marginBottom: '1.75rem',
-        }}
+        className="dt-stats"
       >
         <div
-          style={{
-            background: 'var(--bg-card-start)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.75rem 1rem',
-            textAlign: 'center',
-          }}
+          className="dt-stat"
         >
-          <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{resumenContextual.totalPartidos}</div>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+          <div className="dt-stat-value">{resumenContextual.totalPartidos}</div>
+          <div className="dt-muted">
             {esModoTodo ? 'Total Torneo' : `Partidos ${activeJornadaInfo?.diaNombre || ''}`}
           </div>
         </div>
 
         <div
-          style={{
-            background: 'var(--bg-card-start)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.75rem 1rem',
-            textAlign: 'center',
-          }}
+          className="dt-stat dt-stat-live"
         >
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-primary)' }}>
+          <div className="dt-stat-value">
             {resumenContextual.enCurso}
           </div>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>En Juego</div>
+          <div className="dt-muted">En juego</div>
         </div>
 
         <div
-          style={{
-            background: 'var(--bg-card-start)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.75rem 1rem',
-            textAlign: 'center',
-          }}
+          className="dt-stat"
         >
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#60a5fa' }}>
+          <div className="dt-stat-value">
             {resumenContextual.pendientesConHorario}
           </div>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>Programados</div>
+          <div className="dt-muted">Programados</div>
         </div>
 
         <div
-          style={{
-            background: 'var(--bg-card-start)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.75rem 1rem',
-            textAlign: 'center',
-          }}
+          className="dt-stat"
         >
-          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-secondary)' }}>
+          <div className="dt-stat-value">
             {resumenContextual.finalizados}
           </div>
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>Finalizados</div>
+          <div className="dt-muted">Finalizados</div>
         </div>
 
         {resumenContextual.pendientesSinHorario > 0 && (
           <div
-            style={{
-              background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              borderRadius: 'var(--radius-md)',
-              padding: '0.75rem 1rem',
-              textAlign: 'center',
-            }}
+            className="dt-stat dt-stat-danger"
           >
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-danger)' }}>
+            <div className="dt-stat-value">
               {resumenContextual.pendientesSinHorario}
             </div>
-            <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-danger)' }}>Sin Horario</div>
+            <div className="dt-muted">Sin horario</div>
           </div>
         )}
       </div>
 
       {/* ─── 7. Partidos en Curso y Próximos ──────────────────────── */}
       <div
-        style={{
-          display: partidosEnCursoFiltrados.length === 0 ? 'flex' : 'grid',
-          flexDirection: partidosEnCursoFiltrados.length === 0 ? 'column' : undefined,
-          gridTemplateColumns: partidosEnCursoFiltrados.length === 0 ? undefined : 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: partidosEnCursoFiltrados.length === 0 ? '1rem' : '1.5rem',
-        }}
+        className={`dt-match-columns${partidosEnCursoFiltrados.length === 0 ? ' is-empty' : ''}`}
       >
         {/* Partidos en Juego */}
         <div>
           <h3
-            style={{
-              fontSize: partidosEnCursoFiltrados.length === 0 ? '0.95rem' : '1.05rem',
-              fontWeight: partidosEnCursoFiltrados.length === 0 ? 600 : 700,
-              marginBottom: partidosEnCursoFiltrados.length === 0 ? 0 : '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              color: partidosEnCursoFiltrados.length === 0 ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
-            }}
+            className={`dt-section-title dt-live-title${partidosEnCursoFiltrados.length === 0 ? ' is-empty' : ''}`}
           >
             <Flame
               size={partidosEnCursoFiltrados.length === 0 ? 16 : 18}
-              style={{ color: partidosEnCursoFiltrados.length === 0 ? 'var(--color-text-muted)' : 'var(--color-primary)' }}
+              className={partidosEnCursoFiltrados.length === 0 ? 'dt-muted-icon' : 'dt-live-icon'}
             />
-            Partidos en Juego ({partidosEnCursoFiltrados.length})
+            Partidos en juego ({partidosEnCursoFiltrados.length})
           </h3>
 
           {partidosEnCursoFiltrados.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="dt-match-list">
               {partidosEnCursoFiltrados.map((p) => {
                 const sets = p.sets || [];
                 const resultadoStr = sets.length > 0
@@ -1700,91 +1233,49 @@ export default function TorneoEnVivo() {
                 return (
                   <div
                     key={p.id}
-                    style={{
-                      background: 'var(--bg-card-start)',
-                      border: '1px solid rgba(0, 208, 132, 0.35)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '1rem',
-                    }}
+                    className="dt-match-card dt-current-match"
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <div className="dt-match-top">
+                      <div className="dt-match-badges">
                         <span
-                          style={{
-                            fontSize: 'var(--font-size-xs)',
-                            fontWeight: 700,
-                            padding: '0.15rem 0.5rem',
-                            borderRadius: 'var(--radius-sm)',
-                            background: 'rgba(0, 208, 132, 0.15)',
-                            color: 'var(--color-primary)',
-                          }}
+                          className="dt-badge dt-neutral"
                         >
                           Cancha {p.canchaNumero}
                         </span>
                         {resultadoStr && (
                           <span
-                            style={{
-                              fontSize: 'var(--font-size-xs)',
-                              fontWeight: 700,
-                              padding: '0.15rem 0.5rem',
-                              borderRadius: 'var(--radius-sm)',
-                              background: 'rgba(0, 208, 132, 0.2)',
-                              color: 'var(--color-primary)',
-                              border: '1px solid rgba(0, 208, 132, 0.35)',
-                            }}
+                            className="dt-badge dt-neutral"
                           >
                             Parcial: {resultadoStr}
                           </span>
                         )}
                       </div>
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                      <span className="dt-muted">
                         {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''}
                       </span>
                     </div>
 
-                    <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.2rem' }}>
+                    <div className="dt-pair-name">
                       {p.pareja1}
                     </div>
-                    <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>vs</div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                    <div className="dt-versus">vs</div>
+                    <div className="dt-pair-name">
                       {p.pareja2}
                     </div>
 
                     <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: 'var(--font-size-xs)',
-                        color: 'var(--color-text-secondary)',
-                        paddingTop: '0.5rem',
-                        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                      }}
+                      className="dt-match-footer"
                     >
                       <span>
                         Inicio: {formatHora(p.horaInicio)}
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <div className="dt-actions">
                         <button
                           type="button"
                           onClick={() => handleCambiarEstado(p.id, 'PENDIENTE')}
                           disabled={updatingPartidoId === p.id}
                           title="Revertir a Pendiente (sacar de la cancha)"
-                          style={{
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid var(--color-border)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--color-text-secondary)',
-                            cursor: updatingPartidoId === p.id ? 'not-allowed' : 'pointer',
-                            padding: '0.35rem 0.6rem',
-                            fontSize: 'var(--font-size-xs)',
-                            fontWeight: 600,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.3rem',
-                            transition: 'var(--transition-fast)',
-                            opacity: updatingPartidoId === p.id ? 0.6 : 1,
-                          }}
+                          className="dt-button"
                         >
                           <RotateCcw size={13} />
                           Revertir
@@ -1792,23 +1283,10 @@ export default function TorneoEnVivo() {
                         <button
                           type="button"
                           onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
-                          style={{
-                            background: 'rgba(0, 208, 132, 0.15)',
-                            border: '1px solid rgba(0, 208, 132, 0.35)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--color-primary)',
-                            cursor: 'pointer',
-                            padding: '0.35rem 0.75rem',
-                            fontSize: 'var(--font-size-xs)',
-                            fontWeight: 600,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.35rem',
-                            transition: 'var(--transition-fast)',
-                          }}
+                          className="dt-button dt-button-blue"
                         >
                           <ClipboardList size={14} />
-                          {sets.length > 0 ? 'Actualizar Resultado' : 'Cargar Resultado'}
+                          {sets.length > 0 ? 'Actualizar resultado' : 'Cargar resultado'}
                         </button>
                       </div>
                     </div>
@@ -1821,85 +1299,52 @@ export default function TorneoEnVivo() {
 
         {/* Próximos Partidos */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Clock size={18} style={{ color: '#60a5fa' }} />
-              Próximos Partidos ({proximosFiltrados.length})
+          <div className="dt-section-heading">
+            <h3 className="dt-section-title">
+              <Clock size={18} className="dt-brand-icon" />
+              Próximos partidos ({proximosFiltrados.length})
             </h3>
           </div>
 
           {proximosFiltrados.length === 0 ? (
             <div
-              style={{
-                background: 'var(--bg-card-start)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '2rem 1rem',
-                textAlign: 'center',
-                color: 'var(--color-text-muted)',
-                fontSize: 'var(--font-size-sm)',
-              }}
+              className="dt-empty"
             >
               {esDomingo
                 ? 'Los partidos del domingo se agendarán automáticamente cuando se completen las zonas y se asignen los clasificados.'
                 : 'No hay partidos programados para esta jornada.'}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '480px', overflowY: 'auto' }}>
+            <div className="dt-match-list">
               {proximosFiltrados.map((p) => (
-                <div key={p.id} className="proximo-partido-card">
-                  <div className="proximo-partido-main">
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                <div key={p.id} className="dt-match-card dt-upcoming-match">
+                  <div className="dt-upcoming-main">
+                    <div className="dt-grow">
                       <div
-                        style={{
-                          fontSize: 'var(--font-size-sm)',
-                          fontWeight: 600,
-                          lineHeight: 1.35,
-                          wordBreak: 'break-word',
-                        }}
+                        className="dt-pair-names"
                       >
-                        {p.pareja1} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>vs</span> {p.pareja2}
+                        <span className="dt-pair-name">{p.pareja1}</span>
+                        <span className="dt-versus">vs</span>
+                        <span className="dt-pair-name">{p.pareja2}</span>
                       </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginTop: '0.15rem' }}>
+                      <div className="dt-muted">
                         {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''}
                       </div>
                     </div>
 
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div className="dt-match-schedule">
                       <div
-                        style={{
-                          fontSize: 'var(--font-size-xs)',
-                          fontWeight: 700,
-                          padding: '0.15rem 0.45rem',
-                          borderRadius: 'var(--radius-sm)',
-                          background: 'rgba(255, 255, 255, 0.08)',
-                          color: 'var(--color-text)',
-                          display: 'inline-block',
-                          marginBottom: '0.2rem',
-                        }}
+                        className="dt-badge dt-neutral"
                       >
                         Cancha {p.canchaNumero}
                       </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: '#60a5fa', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      <div className="dt-match-time">
                         {formatDiaHorario(p.fechaHora)}
                       </div>
                       {(p.minutosDespuesDelCierre || 0) > 0 && (
                         <div
                           title="Agendado después del cierre del club por Modo Lluvia"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            marginTop: '0.2rem',
-                            fontSize: 'var(--font-size-xs)',
-                            fontWeight: 600,
-                            padding: '0.1rem 0.4rem',
-                            borderRadius: '999px',
-                            whiteSpace: 'nowrap',
-                            color: 'var(--color-warning)',
-                            background: 'rgba(245, 158, 11, 0.12)',
-                            border: '1px solid rgba(245, 158, 11, 0.35)',
-                          }}
+                          className="dt-badge dt-after-hours"
                         >
                           <Moon size={11} />
                           +{p.minutosDespuesDelCierre} min tras cierre
@@ -1908,7 +1353,7 @@ export default function TorneoEnVivo() {
                     </div>
                   </div>
 
-                  <div className="proximo-partido-actions">
+                  <div className="dt-card-actions">
                     {/* Botón iniciar partido (Marcar En Juego): solo con las dos parejas definidas */}
                     {p.pareja1Id && p.pareja2Id && (
                       <button
@@ -1916,23 +1361,7 @@ export default function TorneoEnVivo() {
                         onClick={() => handleCambiarEstado(p.id, 'EN_CURSO')}
                         disabled={updatingPartidoId === p.id}
                         title="Marcar como En Juego (ingresó a la cancha)"
-                        style={{
-                          background: 'rgba(0, 208, 132, 0.15)',
-                          border: '1px solid rgba(0, 208, 132, 0.4)',
-                          borderRadius: 'var(--radius-sm)',
-                          color: 'var(--color-primary)',
-                          cursor: updatingPartidoId === p.id ? 'not-allowed' : 'pointer',
-                          padding: '0.35rem 0.6rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.3rem',
-                          fontSize: 'var(--font-size-xs)',
-                          fontWeight: 600,
-                          whiteSpace: 'nowrap',
-                          transition: 'var(--transition-fast)',
-                          opacity: updatingPartidoId === p.id ? 0.6 : 1,
-                        }}
+                        className="dt-button dt-play-button"
                       >
                         <Play size={13} fill="currentColor" />
                         <span>En juego</span>
@@ -1944,22 +1373,7 @@ export default function TorneoEnVivo() {
                       type="button"
                       onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
                       title="Cargar resultado"
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: 'var(--radius-sm)',
-                        color: 'var(--color-text-secondary)',
-                        cursor: 'pointer',
-                        padding: '0.35rem 0.6rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.3rem',
-                        fontSize: 'var(--font-size-xs)',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        transition: 'var(--transition-fast)',
-                      }}
+                      className="dt-button"
                     >
                       <ClipboardList size={14} />
                       <span>Resultado</span>
@@ -1974,40 +1388,22 @@ export default function TorneoEnVivo() {
 
       {/* ─── 8. Partidos Finalizados (acordeón, colapsado por default) ─── */}
       {finalizadosFiltrados && finalizadosFiltrados.length > 0 && (
-        <div style={{ marginTop: '1.75rem' }}>
+        <div className="dt-finished">
           <button
             type="button"
             onClick={() => setFinalizadosExpanded((prev) => !prev)}
-            style={{
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: 'var(--bg-card-start)',
-              border: '1px solid var(--color-border)',
-              borderRadius: finalizadosExpanded ? 'var(--radius-md) var(--radius-md) 0 0' : 'var(--radius-md)',
-              padding: '0.85rem 1rem',
-              cursor: 'pointer',
-              color: 'var(--color-text)',
-            }}
+            className={`dt-finished-toggle${finalizadosExpanded ? ' is-expanded' : ''}`}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem' }}>
-              <Trophy size={18} style={{ color: 'var(--color-text-secondary)' }} />
-              Partidos Finalizados {activeJornadaInfo ? `(${activeJornadaInfo.diaNombre})` : ''} ({finalizadosFiltrados.length})
+            <span className="dt-section-title">
+              <Trophy size={18} className="dt-muted-icon" />
+              Partidos finalizados {activeJornadaInfo ? `(${activeJornadaInfo.diaNombre})` : ''} ({finalizadosFiltrados.length})
             </span>
             {finalizadosExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
 
           {finalizadosExpanded && (
             <div
-              style={{
-                border: '1px solid var(--color-border)',
-                borderTop: 'none',
-                borderRadius: '0 0 var(--radius-md) var(--radius-md)',
-                overflow: 'hidden',
-                maxHeight: '420px',
-                overflowY: 'auto',
-              }}
+              className="dt-finished-list"
             >
               {finalizadosFiltrados.map((p, idx) => {
                 const sets = p.sets || [];
@@ -2021,55 +1417,32 @@ export default function TorneoEnVivo() {
                 return (
                   <div
                     key={p.id}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      padding: '0.75rem 1rem',
-                      background: idx % 2 === 0 ? 'var(--bg-card-start)' : 'rgba(255,255,255,0.02)',
-                      borderBottom: idx < partidosFinalizados.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                    }}
+                    className={`dt-finished-match${idx % 2 === 0 ? ' is-even' : ''}${idx < partidosFinalizados.length - 1 ? ' is-divided' : ''}`}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 'var(--font-size-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div className="dt-grow">
+                      <div className="dt-pair-names dt-finished-names">
                         <span
-                          style={{
-                            color: isP1Winner ? 'var(--color-primary)' : 'var(--color-text)',
-                            fontWeight: isP1Winner ? 700 : 500,
-                          }}
+                          className={`dt-pair-name${isP1Winner ? ' is-winner' : ' is-loser'}`}
                         >
                           {p.pareja1}
                         </span>
-                        <span style={{ color: 'var(--color-text-muted)', fontWeight: 400, margin: '0 0.35rem' }}>vs</span>
+                        <span className="dt-versus">vs</span>
                         <span
-                          style={{
-                            color: isP2Winner ? 'var(--color-primary)' : 'var(--color-text)',
-                            fontWeight: isP2Winner ? 700 : 500,
-                          }}
+                          className={`dt-pair-name${isP2Winner ? ' is-winner' : ' is-loser'}`}
                         >
                           {p.pareja2}
                         </span>
                       </div>
-                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                      <div className="dt-muted">
                         {p.categoria}{p.zona ? ` • ${p.zona}` : p.fase ? ` • ${p.fase}` : ''}
                         {p.canchaNumero && ` • C${p.canchaNumero}`}
                         {p.fechaHora && ` • ${formatDiaHorario(p.fechaHora)}`}
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+                    <div className="dt-finished-actions">
                       <div
-                        style={{
-                          fontSize: 'var(--font-size-xs)',
-                          fontWeight: 700,
-                          color: 'var(--color-primary)',
-                          background: 'rgba(0, 208, 132, 0.1)',
-                          border: '1px solid rgba(0, 208, 132, 0.2)',
-                          borderRadius: 'var(--radius-sm)',
-                          padding: '0.15rem 0.5rem',
-                          whiteSpace: 'nowrap',
-                        }}
+                        className="dt-score"
                       >
                         {resultadoStr}
                       </div>
@@ -2079,17 +1452,7 @@ export default function TorneoEnVivo() {
                         type="button"
                         onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
                         title="Editar resultado"
-                        style={{
-                          background: 'transparent',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: 'var(--radius-sm)',
-                          color: 'var(--color-text-secondary)',
-                          cursor: 'pointer',
-                          padding: '0.3rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
+                        className="dt-button dt-icon-button"
                       >
                         <ClipboardList size={14} />
                       </button>
@@ -2102,8 +1465,10 @@ export default function TorneoEnVivo() {
         </div>
       )}
 
+      </div>
+
       {/* ─── Partidos Pendientes de Horario ─────────────────────────── */}
-      <div id="partidos-pendientes-section" style={{ marginTop: '2.5rem' }}>
+      <div id="partidos-pendientes-section" className="dt-pending-space">
         <PartidosPendientesSection
           torneoId={id}
           torneoEstado={data?.torneo?.estado}
