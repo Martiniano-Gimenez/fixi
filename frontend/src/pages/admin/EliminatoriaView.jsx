@@ -226,8 +226,6 @@ export default function EliminatoriaView() {
                         setEditBracketModal(partido);
                       }}
                       className="pm-button cb-icon-button"
-                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
                     >
                       <Settings size={13} strokeWidth={2} />
                     </button>
@@ -239,8 +237,6 @@ export default function EliminatoriaView() {
                         setPartidoReprogramar(partido);
                       }}
                       className="pm-button cb-icon-button"
-                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
                     >
                       <Clock size={13} strokeWidth={2} />
                     </button>

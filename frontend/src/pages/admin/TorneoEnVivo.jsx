@@ -430,7 +430,7 @@ export default function TorneoEnVivo() {
         <div className="dt-center">
           <RefreshCw size={36} className="dt-loading-icon dt-spin" />
           <p className="dt-muted">
-            Cargando estado en vivo del torneo...
+            Cargando estado en vivo del torneo…
           </p>
         </div>
       </div>
@@ -463,7 +463,7 @@ export default function TorneoEnVivo() {
         <div className="dt-center">
           <RefreshCw size={36} className="dt-loading-icon dt-spin" />
           <p className="dt-muted">
-            Cargando estado en vivo del torneo...
+            Cargando estado en vivo del torneo…
           </p>
         </div>
       </div>

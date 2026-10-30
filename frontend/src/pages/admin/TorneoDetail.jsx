@@ -94,20 +94,13 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
         key={slotId}
         type="button"
         disabled={Boolean(applyingSlotId)}
-        className="slot-chip"
-        style={{
-          padding: '0.2rem 0.45rem',
-          fontSize: '11px',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.25rem',
-        }}
+        className="pc-slot"
         onClick={() => handleApplySlot(slotId)}
         title={`Asignar ${slotId} a ambas parejas y resolver cruce (1 click)`}
       >
         {isThisApplying ? (
           <>
-            <Loader2 size={10} className="spin" /> {hora}
+            <Loader2 size={10} className="pc-spin" /> {hora}
           </>
         ) : (
           hora
@@ -117,18 +110,10 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
   };
 
   return (
-    <div style={{ marginTop: '0.35rem' }}>
+    <div className="pc-details-content">
       <button
         type="button"
-        className="btn-link-action"
-        style={{
-          padding: '0.15rem 0',
-          fontSize: '11px',
-          color: 'var(--color-text-secondary)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.3rem',
-        }}
+        className="pc-link"
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <Info size={12} />
@@ -137,29 +122,18 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
       </button>
 
       {isOpen && (
-        <div
-          style={{
-            marginTop: '0.4rem',
-            padding: '0.5rem 0.65rem',
-            background: 'var(--color-surface)',
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--color-border)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.4rem',
-          }}
-        >
-          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+        <div className="pc-details-body">
+          <div className="pc-muted">
             {p.motivo === 'SIN_FRANJA_COMUN'
               ? 'Ambas parejas no tienen ninguna ventana horaria en común.'
               : 'Coinciden en disponibilidad pero las canchas están 100% ocupadas en esa franja.'}
           </div>
 
           {p.parejaMasRestringidaNombre && (
-            <div style={{ fontSize: 'var(--font-size-xs)' }}>
-              <span style={{ color: 'var(--color-text-secondary)' }}>Pareja más restringida a contactar: </span>
-              <strong style={{ color: 'var(--color-text)' }}>{p.parejaMasRestringidaNombre}</strong>{' '}
-              <span style={{ color: 'var(--color-text-secondary)' }}>
+            <div className="pc-restricted-pair">
+              <span className="pc-muted">Pareja más restringida a contactar: </span>
+              <strong className="pc-details-name">{p.parejaMasRestringidaNombre}</strong>{' '}
+              <span className="pc-muted">
                 ({p.parejaMasRestringidaSlots} turnos, {p.parejaMasRestringidaOpciones}{' '}
                 {p.parejaMasRestringidaOpciones === 1 ? 'franja' : 'franjas'})
               </span>
@@ -167,19 +141,10 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
           )}
 
           {slotsViables.length > 0 && (
-            <div style={{ marginTop: '0.2rem' }}>
+            <div className="pc-spaced">
               <button
                 type="button"
-                className="btn-link-action"
-                style={{
-                  padding: 0,
-                  fontSize: '11px',
-                  color: 'var(--color-text-secondary)',
-                  textDecoration: 'underline',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                }}
+                className="pc-link"
                 onClick={() => setShowOtrosViables((prev) => !prev)}
               >
                 {showOtrosViables
@@ -188,31 +153,23 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
               </button>
 
               {showOtrosViables && (
-                <div
-                  style={{
-                    marginTop: '0.35rem',
-                    padding: '0.45rem',
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--color-border)',
-                  }}
-                >
-                  <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', marginBottom: '0.35rem', fontStyle: 'italic' }}>
+                <div className="pc-other-body">
+                  <div className="pc-muted pc-spaced">
                     Hacé clic en cualquier turno para asignarlo a ambas parejas y resolver el cruce:
                   </div>
 
                   {error && (
-                    <div className="error-message" style={{ fontSize: '11px', margin: '0.2rem 0' }}>
+                    <div className="pc-notice pc-danger-notice">
                       {error}
                     </div>
                   )}
 
                   {viernesViables.length > 0 && (
-                    <div style={{ marginBottom: '0.3rem' }}>
-                      <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
+                    <div className="pc-day">
+                      <div className="pc-day-title">
                         Viernes:
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                      <div className="pc-slots">
                         {viernesViables.map(renderSlotChip)}
                       </div>
                     </div>
@@ -220,10 +177,10 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
 
                   {sabadoViables.length > 0 && (
                     <div>
-                      <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.2rem' }}>
+                      <div className="pc-day-title">
                         Sábado:
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                      <div className="pc-slots">
                         {sabadoViables.map(renderSlotChip)}
                       </div>
                     </div>
@@ -234,18 +191,10 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
           )}
 
           {p.parejaMasRestringidaId && (
-            <div style={{ marginTop: '0.2rem' }}>
+            <div className="pc-spaced">
               <Link
                 to={`/admin/torneos/${torneoId}/categorias/${categoriaId}/parejas?parejaId=${p.parejaMasRestringidaId}`}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                  fontSize: '11px',
-                  color: 'var(--color-primary)',
-                  textDecoration: 'none',
-                  fontWeight: 500,
-                }}
+                className="pc-manage-link"
               >
                 Ver disponibilidad completa en Gestionar Parejas →
               </Link>

@@ -61,22 +61,6 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
     <div
       onClick={handleClick}
       className={`cd-match-card${handleClick ? ' is-clickable' : ''}`}
-      onMouseEnter={(e) => {
-        if (handleClick) {
-          e.currentTarget.style.borderColor = 'var(--color-primary)';
-          e.currentTarget.style.transform = 'translateY(-1px)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (handleClick) {
-          e.currentTarget.style.borderColor = isFinalizado
-            ? 'var(--color-primary)'
-            : isEnCurso
-            ? 'var(--color-success)'
-            : 'var(--color-border)';
-          e.currentTarget.style.transform = 'none';
-        }
-      }}
     >
       <div className={`cd-match-header ${handleClick || (partido.estado === 'PENDIENTE' && onReprogramar) ? 'has-actions' : ''}`}>
         <div className="cd-match-info">
