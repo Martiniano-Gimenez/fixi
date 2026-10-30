@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import { Building2, Calendar, Save, ChevronLeft, Minus, Plus } from 'lucide-react';
-import './ConfiguracionClub.css';
 
 const DIAS = [
   { key: 'viernes', label: 'Viernes', inicio: 'viernesInicio', fin: 'viernesFin' },
@@ -120,47 +119,47 @@ export default function ConfiguracionClub() {
     }
   };
 
-  if (loading) return <div className="loading">Cargando configuración del club...</div>;
+  if (loading) return <div className="cc-loading">Cargando configuración del club…</div>;
 
   return (
-    <div className="page club-page">
-      <div className="flex-header club-header">
+    <div className="cc-page">
+      <div className="cc-header">
         <div>
-          <Link to="/admin" className="club-back-link">
+          <Link to="/admin" className="cc-back">
             <ChevronLeft size={16} strokeWidth={2} />
-            Volver a Mis Torneos
+            Volver a mis torneos
           </Link>
-          <h1 className="club-title">
+          <h1 className="cc-title">
             <Building2 size={24} strokeWidth={2} />
-            <span>Configuración del Club</span>
+            <span>Configuración del club</span>
           </h1>
         </div>
       </div>
 
-      <div className="torneo-card club-card">
-        {error && <div className="error-message">{error}</div>}
+      <div className="cc-card">
+        {error && <div className="cc-error" role="alert">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="club-form">
+        <form onSubmit={handleSubmit} className="cc-form">
           {/* Columna Izquierda: Datos del club y botón guardar */}
-          <div className="club-col-datos">
-            <div className="form-group">
-              <label htmlFor="club-nombre">Nombre del Club / Organizador</label>
+          <div className="cc-data">
+            <div className="cc-field">
+              <label htmlFor="club-nombre">Nombre del club u organizador</label>
               <input
                 id="club-nombre"
                 type="text"
-                className="club-text-input"
+                className="cc-input"
                 value={form.nombre}
                 onChange={(e) => setForm({ ...form, nombre: e.target.value })}
                 required
               />
             </div>
 
-            <div className="form-group">
+            <div className="cc-field">
               <label htmlFor="club-canchas">Cantidad de canchas disponibles</label>
-              <div className="club-stepper">
+              <div className="cc-stepper">
                 <button
                   type="button"
-                  className="club-stepper-btn"
+                  className="cc-step-button"
                   onClick={() => {
                     const current = Number(form.cantidadCanchas) || 1;
                     if (current > 1) {
@@ -177,14 +176,14 @@ export default function ConfiguracionClub() {
                   type="number"
                   min="1"
                   max="30"
-                  className="club-stepper-input"
+                  className="cc-step-input"
                   value={form.cantidadCanchas}
                   onChange={(e) => setForm({ ...form, cantidadCanchas: e.target.value })}
                   required
                 />
                 <button
                   type="button"
-                  className="club-stepper-btn"
+                  className="cc-step-button"
                   onClick={() => {
                     const current = Number(form.cantidadCanchas) || 1;
                     if (current < 30) {
@@ -200,32 +199,32 @@ export default function ConfiguracionClub() {
             </div>
 
             {/* En escritorio el botón se posiciona junto a los datos; en móvil se ancla al fondo del viewport */}
-            <div className="club-save-bar">
+            <div className="cc-save-bar">
               <button
                 type="submit"
-                className="btn-primary club-save-btn"
+                className="cc-save-button"
                 disabled={saving}
               >
                 <Save size={16} strokeWidth={2} />
-                <span>{saving ? 'Guardando...' : 'Guardar configuración del club'}</span>
+                <span>{saving ? 'Guardando…' : 'Guardar'}</span>
               </button>
             </div>
           </div>
 
           {/* Columna Derecha: Horarios de apertura compactos */}
-          <div className="club-col-horarios">
-            <div className="club-horarios-header">
+          <div className="cc-schedule">
+            <div className="cc-schedule-heading">
               <Calendar size={18} strokeWidth={2} />
-              <h3>Horarios de Apertura (Jornada)</h3>
+              <h3>Horarios de apertura</h3>
             </div>
 
-            <div className="club-table-wrapper">
-              <table className="club-horarios-table">
+            <div className="cc-table-wrap">
+              <table className="cc-table">
                 <thead>
                   <tr>
-                    <th className="th-dia">Día</th>
-                    <th className="th-hora">Inicio</th>
-                    <th className="th-hora">Fin</th>
+                    <th className="cc-day-column" scope="col">Día</th>
+                    <th className="cc-time-column" scope="col">Inicio</th>
+                    <th className="cc-time-column" scope="col">Fin</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -235,27 +234,29 @@ export default function ConfiguracionClub() {
 
                     return (
                       <tr key={dia.key}>
-                        <td className="td-dia">
-                          <span className="club-dia-name">{dia.label}</span>
+                        <td className="cc-day-cell">
+                          <span className="cc-day-name">{dia.label}</span>
                         </td>
-                        <td className="td-hora">
+                        <td className="cc-time-cell">
+                          <label className="cc-time-label" htmlFor={`time-${dia.inicio}`}>Inicio</label>
                           <input
                             id={`time-${dia.inicio}`}
                             type="time"
-                            className="club-time-input"
+                            className="cc-time-input"
                             value={horaInicio}
                             onChange={(e) => setForm({ ...form, [dia.inicio]: e.target.value })}
-                            aria-label={`Horario de inicio para ${dia.label}`}
+                            aria-label={`Horario de inicio para el ${dia.label.toLowerCase()}`}
                           />
                         </td>
-                        <td className="td-hora">
+                        <td className="cc-time-cell">
+                          <label className="cc-time-label" htmlFor={`time-${dia.fin}`}>Fin</label>
                           <input
                             id={`time-${dia.fin}`}
                             type="time"
-                            className="club-time-input"
+                            className="cc-time-input"
                             value={horaFin}
                             onChange={(e) => setForm({ ...form, [dia.fin]: e.target.value })}
-                            aria-label={`Horario de fin para ${dia.label}`}
+                            aria-label={`Horario de fin para el ${dia.label.toLowerCase()}`}
                           />
                         </td>
                       </tr>
@@ -269,16 +270,16 @@ export default function ConfiguracionClub() {
       </div>
 
       {toast && (
-        <div className="toast-container">
-          <div className="toast-message">{toast}</div>
+        <div className="cc-toast-container" role="status">
+          <div className="cc-toast">{toast}</div>
         </div>
       )}
 
       {confirmModal.isOpen && (
         <ConfirmModal
           isOpen={true}
-          title="⚠️ Cambios en Horarios del Club"
-          message={`Este cambio va a invalidar ${confirmModal.slotsAfectados} selección(es) de ${confirmModal.parejasAfectadas} pareja(s) en total (entre todos tus torneos). ¿Deseas continuar y actualizar los horarios?`}
+          title="Cambios en los horarios del club"
+          message={`Este cambio va a invalidar ${confirmModal.slotsAfectados} selección(es) de ${confirmModal.parejasAfectadas} pareja(s) en total (entre todos tus torneos). ¿Querés continuar y actualizar los horarios?`}
           onConfirm={executeGuardadoConImpacto}
           onCancel={() => setConfirmModal({ isOpen: false, slotsAfectados: 0, parejasAfectadas: 0, pendingData: null })}
           confirmText="Sí, actualizar y limpiar turnos"
