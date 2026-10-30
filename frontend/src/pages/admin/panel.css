@@ -1,0 +1,172 @@
+/* Base v3 del panel. Las pantallas conservan sus estilos hasta su migración. */
+.panel.admin-layout {
+  min-width: 0;
+  background: var(--fondo);
+}
+
+.panel .admin-header {
+  flex-wrap: nowrap;
+  height: auto;
+  min-height: 60px;
+  gap: var(--e-4);
+  padding: var(--e-2) var(--e-8);
+  background: var(--superficie);
+  color: var(--tinta);
+  color-scheme: light;
+  border: 0;
+  box-shadow: var(--sombra-2);
+  backdrop-filter: none;
+  font-family: var(--f);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel .admin-logo,
+.panel .admin-nav-link,
+.panel .btn-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--r-control);
+  text-shadow: none;
+  transition: transform .15s var(--curva);
+}
+
+.panel .admin-logo {
+  gap: var(--e-2);
+  font-family: var(--f);
+  font-size: var(--t-20);
+  /* El logo v1 fija el color con !important. */
+  color: var(--marca) !important;
+}
+
+.panel .admin-logo:hover {
+  color: var(--marca-hover) !important;
+  opacity: 1;
+  text-shadow: none;
+}
+
+.panel .admin-logo-text {
+  display: inline;
+}
+
+.panel .admin-nav {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+  justify-content: flex-start;
+  gap: var(--e-1);
+}
+
+.panel .admin-nav-link {
+  flex-shrink: 0;
+  gap: var(--e-2);
+  padding: 0 var(--e-3);
+  font-size: var(--t-14);
+  color: var(--tinta-2);
+  white-space: nowrap;
+}
+
+.panel .admin-nav-link:hover {
+  background: var(--superficie-2);
+  color: var(--tinta);
+  text-shadow: none;
+}
+
+.panel .admin-nav-link.active {
+  background: var(--superficie-2);
+  color: var(--marca);
+  font-weight: 600;
+}
+
+.panel .admin-nav-link.active:hover {
+  background: var(--marca-suave);
+  color: var(--marca-hover);
+}
+
+.panel .admin-nav-actions {
+  padding-left: var(--e-4);
+  margin-left: 0;
+  border-left: 1px solid var(--linea);
+}
+
+.panel .btn-logout {
+  gap: var(--e-2);
+  padding: 0 var(--e-3);
+  color: var(--gris);
+  font-size: var(--t-13);
+}
+
+.panel .btn-logout:hover {
+  background: var(--superficie-2);
+  color: var(--tinta);
+}
+
+.panel .admin-header :is(a, button):focus-visible {
+  outline: 2px solid var(--marca);
+  outline-offset: 2px;
+}
+
+.panel .admin-header :is(a, button):active {
+  transform: scale(.96);
+}
+
+.panel .admin-main {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .panel .admin-header {
+    padding-inline: var(--e-4);
+    gap: var(--e-2);
+  }
+
+  .panel .admin-nav-actions {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .panel .btn-logout {
+    padding: 0;
+  }
+
+  .panel .btn-logout-text {
+    display: none;
+  }
+}
+
+@media (max-width: 440px) {
+  .panel .admin-header {
+    padding-inline: var(--e-2);
+    gap: var(--e-1);
+  }
+
+  .panel .admin-logo {
+    gap: var(--e-1);
+    font-size: var(--t-17);
+  }
+
+  .panel .admin-nav {
+    justify-content: center;
+  }
+
+  .panel .admin-nav-link {
+    padding-inline: var(--e-2);
+    font-size: var(--t-13);
+  }
+
+  .panel .admin-nav-icon {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel .admin-header :is(a, button) {
+    transition: none;
+  }
+
+  .panel .admin-header :is(a, button):active {
+    transform: none;
+  }
+}

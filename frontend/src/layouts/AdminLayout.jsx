@@ -2,6 +2,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Award, Trophy, Building2, LogOut } from 'lucide-react';
 import { APP_NAME } from '../constants/app';
+import '../pages/admin/panel.css';
 
 export default function AdminLayout() {
   const { logout } = useAuth();
@@ -19,7 +20,7 @@ export default function AdminLayout() {
   const isClub = location.pathname.startsWith('/admin/club');
 
   return (
-    <div className="admin-layout">
+    <div className="admin-layout panel">
       <header className="admin-header">
         <div className="admin-header-left">
           <Link to="/admin" className="admin-logo" aria-label={APP_NAME}>
@@ -34,14 +35,14 @@ export default function AdminLayout() {
             className={`admin-nav-link${isTorneos ? ' active' : ''}`}
           >
             <Trophy size={16} strokeWidth={2} className="admin-nav-icon" />
-            <span>Mis Torneos</span>
+            <span>Mis torneos</span>
           </Link>
           <Link
             to="/admin/club"
             className={`admin-nav-link${isClub ? ' active' : ''}`}
           >
             <Building2 size={16} strokeWidth={2} className="admin-nav-icon" />
-            <span>Mi Club</span>
+            <span>Mi club</span>
           </Link>
         </nav>
 
