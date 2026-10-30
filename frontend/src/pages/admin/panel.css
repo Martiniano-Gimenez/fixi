@@ -205,7 +205,7 @@ body:has(.panel) {
 .panel .dt-live-icon { color: var(--vivo-texto); }
 .panel .dt-trophy-icon { color: var(--oro); }
 
-/* Un único botón principal: Actualizar ahora (Reintentar si falla la carga). */
+/* Botones de la pantalla. */
 .panel .dt-button, .panel .dt-text-button {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--e-2);
   min-height: 44px; min-width: 44px; max-width: 100%; padding: var(--e-2) var(--e-3);
@@ -326,8 +326,6 @@ body:has(.panel) {
 .panel .dt-match-schedule { text-align: right; min-width: 0; max-width: 45%; }
 .panel .dt-match-schedule .dt-after-hours { text-align: left; }
 .panel .dt-match-time { font-size: var(--t-13); font-weight: 600; color: var(--tinta-2); margin-top: var(--e-1); }
-.panel .dt-play-button { color: var(--vivo-texto); background: var(--vivo-suave); box-shadow: none; }
-.panel .dt-play-button:hover { color: var(--vivo-texto); background: var(--vivo-suave); }
 .panel .dt-empty { background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--r-tarjeta); padding: var(--e-6) var(--e-4); color: var(--gris); }
 .panel .dt-finished { margin-top: var(--e-6); }
 .panel .dt-finished-toggle { width: 100%; min-height: 44px; display: flex; justify-content: space-between; align-items: center; gap: var(--e-3); padding: var(--e-4); border-radius: var(--r-tarjeta); color: var(--tinta); text-align: left; }
@@ -348,7 +346,7 @@ body:has(.panel) {
 .panel .dt-error-page .dt-actions { margin-top: var(--e-5); }
 .panel .dt-error-icon { color: var(--alerta); }
 .panel .dt-error-title { font-size: var(--t-20); margin-bottom: var(--e-3); }
-.panel .dt-spin { animation: dt-spin 1.2s var(--curva) infinite; }
+.panel .dt-spin { animation: dt-spin 1.2s linear infinite; }
 @keyframes dt-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {

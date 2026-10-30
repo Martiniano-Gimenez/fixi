@@ -564,10 +564,10 @@ export default function TorneoEnVivo() {
             type="button"
             onClick={() => fetchEnVivoData(true)}
             disabled={refreshing}
-            className="dt-button dt-primary"
+            className="dt-button"
           >
             <RefreshCw size={14} className={refreshing ? 'dt-spin' : ''} />
-            {refreshing ? 'Actualizando...' : 'Actualizar ahora'}
+            {refreshing ? 'Actualizando…' : 'Actualizar ahora'}
           </button>
         </div>
       </div>
