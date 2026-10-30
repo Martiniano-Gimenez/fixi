@@ -42,12 +42,11 @@ body:has(.panel) {
   gap: var(--e-2);
   font-family: var(--f);
   font-size: var(--t-20);
-  /* El logo v1 fija el color con !important. */
-  color: var(--marca) !important;
+  color: var(--marca);
 }
 
 .panel .admin-logo:hover {
-  color: var(--marca-hover) !important;
+  color: var(--marca-hover);
   opacity: 1;
   text-shadow: none;
 }
