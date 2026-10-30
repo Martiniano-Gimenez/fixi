@@ -7,10 +7,9 @@ import ConfirmModal from '../../components/ConfirmModal';
 import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import AdvertenciasHorarioModal from '../../components/AdvertenciasHorarioModal';
 import BracketLines from '../../components/BracketLines';
-import { ChevronLeft, GitBranch, Settings, Clock, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, GitBranch, Settings, Clock, AlertTriangle, Trophy } from 'lucide-react';
 import { formatDiaHorario } from '../../utils/dateUtils';
 import { estadoLabel } from '../../utils/estadoLabels';
-import './EliminatoriaView.css';
 
 function formatParejaDisplay(pareja) {
   if (!pareja) return '';
@@ -199,10 +198,10 @@ export default function EliminatoriaView() {
     }
 
     return (
-      <div key={partido.id} className="bracket-match-wrapper">
-        <div className="match-card-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div key={partido.id} className="cb-match-wrap">
+        <div className="cb-card-wrap">
           <div
-            className={`match-card ${isBye ? 'bye-card' : ''} ${isFinalizado && !isBye ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
+            className={`match-card cb-card ${isBye ? 'bye-card' : ''} ${isFinalizado && !isBye ? 'finalizado' : ''} ${isJugable && !isFinalizado ? 'jugable' : ''}`}
             onClick={() => {
               if (!isBye && isJugable) {
                 handleClickPartido(partido);
@@ -210,54 +209,36 @@ export default function EliminatoriaView() {
             }}
             title={titleTexto}
           >
-            <div className="match-card-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="cb-match-header">
+              <div className="cb-match-tools">
                 {(isFinalizado || isJugable) && !isBye && (
-                  <span className={`match-status-badge ${isFinalizado ? 'finalizado' : 'pendiente'}`}>
-                    {isFinalizado ? 'Finalizado' : 'Pendiente'}
+                  <span className={`cb-state${partido.estado === 'EN_CURSO' ? ' is-live' : ''}`}>
+                    {isFinalizado ? 'Finalizado' : partido.estado === 'EN_CURSO' ? 'En juego' : 'Pendiente'}
                   </span>
                 )}
                 {!isFinalizado && !isBye && (
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div className="cb-match-actions">
                     <button
-                      className="btn-icon"
+
                       title="Editar cruce"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditBracketModal(partido);
                       }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '2px',
-                        color: 'var(--color-text-muted)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        transition: 'color 0.2s',
-                      }}
+                      className="pm-button cb-icon-button"
                       onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
                       onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
                     >
                       <Settings size={13} strokeWidth={2} />
                     </button>
                     <button
-                      className="btn-icon"
+
                       title={partido.fechaHora ? "Reprogramar horario y cancha" : "Asignar horario y cancha"}
                       onClick={(e) => {
                         e.stopPropagation();
                         setPartidoReprogramar(partido);
                       }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '2px',
-                        color: 'var(--color-text-muted)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        transition: 'color 0.2s',
-                      }}
+                      className="pm-button cb-icon-button"
                       onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-primary)')}
                       onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
                     >
@@ -266,26 +247,22 @@ export default function EliminatoriaView() {
                   </div>
                 )}
               </div>
-              <span className="match-position">#{partido.posicionEnRonda}</span>
+              <span className="cb-position">#{partido.posicionEnRonda}</span>
             </div>
 
             {!isBye && (
               partido.fechaHora ? (
-                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                    <Clock size={11} style={{ color: 'var(--color-primary)' }} />
+                <div className="cb-time-row">
+                  <div className="cb-time">
+                    <Clock size={11} className="cb-brand-icon" />
                     {formatDiaHorario(partido.fechaHora)}
+                    {partido.canchaNumero && <span className="cb-court">Cancha {partido.canchaNumero}</span>}
                   </div>
                   {partido.horarioManual === true && Array.isArray(partido.advertencias) && partido.advertencias.length > 0 && (
                     <button
                       type="button"
-                      className="badge badge-warning"
-                      style={{
-                        cursor: 'pointer',
-                        border: 'none',
-                        maxWidth: '100%',
-                        whiteSpace: 'nowrap',
-                      }}
+
+                      className="pm-button cb-review"
                       onClick={(e) => {
                         e.stopPropagation();
                         setAdvertenciasModal(partido.advertencias);
@@ -296,33 +273,34 @@ export default function EliminatoriaView() {
                   )}
                 </div>
               ) : (
-                <div className="match-time-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-warning)', fontWeight: 600 }}>
+                <div className="cb-time-row">
+                  <div className="cb-no-time">
                     <AlertTriangle size={10} /> Sin horario
                   </div>
+                  {partido.canchaNumero && <span className="cb-court">Cancha {partido.canchaNumero}</span>}
                 </div>
               )
             )}
 
-            <div className="parejas-list">
-              <div className={`pareja-row ${p1esGanador ? 'ganador' : ''}`}>
-                <div className="pareja-info">
+            <div className="cb-pairs">
+              <div className={`cb-pair ${p1esGanador ? 'ganador' : ''}${isFinalizado && !p1esGanador ? ' is-loser' : ''}`}>
+                <div className="cb-pair-info">
                   {isBye && !lado1Definido ? (
-                    <span className="pareja-bye">BYE</span>
+                    <span className="cb-bye">BYE</span>
                   ) : p1Pareja ? (
-                    <span className="pareja-nombre">
+                    <span className="cb-name">
                       {formatParejaDisplay(p1Pareja)}
                     </span>
                   ) : (
-                    <span className="pareja-esperando">
+                    <span className="cb-placeholder">
                       {p1Origen || 'Esperando...'}
                     </span>
                   )}
                 </div>
                 {partido.sets && partido.sets.length > 0 && (
-                  <div className="sets-container">
+                  <div className="cb-sets">
                     {partido.sets.map((set, idx) => (
-                      <span key={idx} className="set-score">
+                      <span key={idx} className="cb-set-score">
                         {set.gamesPareja1}
                       </span>
                     ))}
@@ -330,24 +308,24 @@ export default function EliminatoriaView() {
                 )}
               </div>
 
-              <div className={`pareja-row ${p2esGanador ? 'ganador' : ''}`}>
-                <div className="pareja-info">
+              <div className={`cb-pair ${p2esGanador ? 'ganador' : ''}${isFinalizado && !p2esGanador ? ' is-loser' : ''}`}>
+                <div className="cb-pair-info">
                   {isBye && !lado2Definido ? (
-                    <span className="pareja-bye">BYE</span>
+                    <span className="cb-bye">BYE</span>
                   ) : p2Pareja ? (
-                    <span className="pareja-nombre">
+                    <span className="cb-name">
                       {formatParejaDisplay(p2Pareja)}
                     </span>
                   ) : (
-                    <span className="pareja-esperando">
+                    <span className="cb-placeholder">
                       {p2Origen || 'Esperando...'}
                     </span>
                   )}
                 </div>
                 {partido.sets && partido.sets.length > 0 && (
-                  <div className="sets-container">
+                  <div className="cb-sets">
                     {partido.sets.map((set, idx) => (
-                      <span key={idx} className="set-score">
+                      <span key={idx} className="cb-set-score">
                         {set.gamesPareja2}
                       </span>
                     ))}
@@ -362,108 +340,81 @@ export default function EliminatoriaView() {
   };
 
   if (loading) {
-    return <div className="loading">Cargando...</div>;
+    return <div className="cb-page cb-loading">Cargando…</div>;
   }
 
   if (!categoria) {
-    return <div className="error">Categoría no encontrada</div>;
+    return <div className="cb-page pm-alert">Categoría no encontrada</div>;
   }
 
   const backUrl = `/admin/torneos/${torneoId || categoria.torneoId}/categorias/${categoriaId}`;
 
   return (
-    <div className="eliminatoria-container">
-      <div className="header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+    <div className="cb-page">
+      <div className="cb-heading">
+        <div className="cb-navigation">
           <Link
             to={backUrl}
-            className="back-btn"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+
+            className="pm-button"
           >
             <ChevronLeft size={16} strokeWidth={2} />
-            Volver a Categoría {categoria.nombre}
+            Volver a categoría {categoria.nombre}
           </Link>
           {categoria.torneo?.estado === 'EN_CURSO' && (
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}/en-vivo`}
-              className="back-btn"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                textDecoration: 'none',
-                background: 'rgba(0, 208, 132, 0.12)',
-                color: 'var(--color-primary)',
-                border: '1px solid rgba(0, 208, 132, 0.35)',
-              }}
+
+              className="pm-button pm-blue-button"
             >
-              🏟️ Ir a Día de Torneo
+              Ir a Día de Torneo
             </Link>
           )}
         </div>
-        <div className="eliminatoria-title-container">
+        <div className="cb-title-group">
           {categoria.torneo?.nombre && (
             <>
-              <span className="eliminatoria-torneo-sub">{categoria.torneo.nombre}</span>
-              <span className="eliminatoria-title-sep">—</span>
+              <span className="cb-tournament">{categoria.torneo.nombre}</span>
+              <span className="cb-title-sep">—</span>
             </>
           )}
-          <h1 className="eliminatoria-header-title">
+          <h1 className="cb-title">
             {categoria.nombre}
           </h1>
         </div>
-        <div className="header-actions">
+        <div className="cb-heading-actions">
 
-          <span className={`badge badge-${(categoria.estado || '').toLowerCase()}`}>
+          <span className="cb-state">
             {estadoLabel(categoria.estado)}
           </span>
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="pm-alert">{error}</div>}
 
       {estadoCuadro?.desactualizado && (
         <div
-          className="cuadro-desactualizado-banner"
-          style={{
-            background: 'rgba(234, 179, 8, 0.12)',
-            border: '1px solid rgba(234, 179, 8, 0.4)',
-            borderRadius: 'var(--radius-md, 8px)',
-            padding: '0.85rem 1.25rem',
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '0.75rem',
-          }}
+
+          className="pm-alert cb-stale"
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <AlertTriangle size={20} color="#eab308" />
+          <div className="cb-alert-main">
+            <AlertTriangle size={20} className="cb-alert-icon" />
             <div>
-              <span style={{ fontWeight: 600, color: 'var(--color-text, #fff)' }}>
+              <span className="pm-strong">
                 El cuadro está desactualizado:
               </span>{' '}
-              <span style={{ color: 'var(--color-text-muted, #ccc)' }}>
+              <span className="cb-alert-copy">
                 las zonas esperan {estadoCuadro.totalClasificadosEsperados} clasificados y el cuadro reserva{' '}
                 {estadoCuadro.lugaresEnPrimeraRonda} lugares.
               </span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="cb-alert-actions">
             <button
-              className="btn-primary"
+
               onClick={() => setSincronizarModalOpen(true)}
               disabled={estadoCuadro.huboJuegoEliminatoria || sincronizando}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.45rem 0.9rem',
-                fontSize: '0.85rem',
-                opacity: estadoCuadro.huboJuegoEliminatoria ? 0.5 : 1,
-                cursor: estadoCuadro.huboJuegoEliminatoria ? 'not-allowed' : 'pointer',
-              }}
+              className="pm-button pm-blue-button"
               title={
                 estadoCuadro.huboJuegoEliminatoria
                   ? 'No se puede sincronizar porque ya hay partidos eliminatorios jugados o en juego'
@@ -474,7 +425,7 @@ export default function EliminatoriaView() {
               Sincronizar cuadro
             </button>
             {estadoCuadro.huboJuegoEliminatoria && (
-              <span style={{ fontSize: '0.8rem', color: '#ef4444' }}>
+              <span className="cb-blocked">
                 (Bloqueado: ya hay partidos eliminatorios jugados)
               </span>
             )}
@@ -483,21 +434,21 @@ export default function EliminatoriaView() {
       )}
 
       {fases.length === 0 ? (
-        <div className="no-eliminatoria">
+        <div className="cb-empty">
           <p>La fase eliminatoria aún no ha sido generada.</p>
           <button
             onClick={handleGenerarEliminatoria}
             disabled={generando}
-            className="btn-primary"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', margin: '0 auto' }}
+
+            className="pm-button pm-primary"
           >
             <GitBranch size={16} strokeWidth={2} />
-            {generando ? 'Generando...' : 'Generar Eliminatoria'}
+            {generando ? 'Generando…' : 'Generar eliminatoria'}
           </button>
         </div>
       ) : isMobile ? (
-        <div className="eliminatoria-bracket-mobile">
-          <div className="eliminatoria-bracket-tabs" role="tablist" aria-label="Rondas eliminatorias">
+        <div className="cb-mobile">
+          <div className="cb-tabs" role="tablist" aria-label="Rondas eliminatorias">
             {fases.map((fase) => {
               const isActive = (activeFaseMobile ? activeFaseMobile.id : activeRoundId) === fase.id;
               return (
@@ -506,9 +457,10 @@ export default function EliminatoriaView() {
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  className={`eliminatoria-bracket-tab ${isActive ? 'active' : ''}`}
+                  className={`cb-tab ${isActive ? 'active' : ''}`}
                   onClick={() => setActiveRoundId(fase.id)}
                 >
+                  {fase.ronda === 2 && <Trophy size={16} className="cb-trophy" />}
                   <span>{fase.nombre}</span>
                 </button>
               );
@@ -516,23 +468,26 @@ export default function EliminatoriaView() {
           </div>
 
           {activeFaseMobile && (
-            <div className="eliminatoria-mobile-matches">
+            <div className="cb-mobile-matches">
               {activeFaseMobile.partidos.map((partido) => renderMatch(partido))}
             </div>
           )}
         </div>
       ) : (
-        <div className="bracket-container">
-          <div className="bracket-scroll" ref={bracketScrollRef} style={{ position: 'relative' }}>
+        <div className="cb-viewport">
+          <div ref={bracketScrollRef} className="cb-scroll">
             {fases.map((fase) => (
-              <div key={fase.id} className="ronda-section bracket-section">
-                <h3 className="ronda-title">{fase.nombre}</h3>
-                <div className="ronda-matches bracket-matches-column">
+              <div key={fase.id} className="bracket-section cb-round">
+                <h3 className="cb-round-title">
+                  {fase.ronda === 2 && <Trophy size={18} className="cb-trophy" />}
+                  {fase.nombre}
+                </h3>
+                <div className="cb-matches-column">
                   {fase.partidos.map((partido) => renderMatch(partido))}
                 </div>
               </div>
             ))}
-            <BracketLines scrollContainerRef={bracketScrollRef} fases={fases} />
+            <BracketLines scrollContainerRef={bracketScrollRef} fases={fases} color="var(--linea-fuerte)" />
           </div>
         </div>
       )}
@@ -602,84 +557,58 @@ export default function EliminatoriaView() {
 
       {sincronizarModalOpen && estadoCuadro?.simulacion && (
         <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1200,
-            backdropFilter: 'blur(4px)',
-            padding: '1rem',
-          }}
+          className="pm-overlay"
         >
           <div
-            className="card"
-            style={{
-              maxWidth: '520px',
-              width: '100%',
-              background: 'var(--color-bg-card, #1e293b)',
-              border: '1px solid var(--color-border, #334155)',
-              borderRadius: 'var(--radius-lg, 12px)',
-              padding: '1.5rem',
-              boxShadow: 'var(--shadow-xl)',
-            }}
+
+            className="pm-modal pm-sync"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sincronizar cuadro eliminatorio"
           >
-            <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text, #fff)' }}>
-              <GitBranch size={20} color="var(--color-primary, #00d084)" />
-              Sincronizar Cuadro Eliminatorio
+            <h3 className="pm-header pm-title">
+              <GitBranch size={20} className="cb-brand-icon" />
+              Sincronizar cuadro eliminatorio
             </h3>
-            <p style={{ color: 'var(--color-text-muted, #94a3b8)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+            <div className="pm-body">
+            <p className="cb-sync-copy">
               Los clasificados de las zonas cambiaron. Esta acción regenerará la estructura de la llave y reprogramará los horarios respetando las zonas ya disputadas:
             </p>
 
             <div
-              style={{
-                background: 'rgba(0, 0, 0, 0.25)',
-                border: '1px solid var(--color-border, #334155)',
-                borderRadius: 'var(--radius-md, 8px)',
-                padding: '1rem',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.6rem',
-                fontSize: '0.9rem',
-                marginBottom: '1.5rem',
-              }}
+              className="cb-sync-summary"
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Estructura de llaves:</span>
-                <strong style={{ color: 'var(--color-primary, #00d084)' }}>{estadoCuadro.simulacion.rondasTexto}</strong>
+              <div className="cb-sync-row">
+                <span className="pm-muted">Estructura de llaves:</span>
+                <strong className="cb-sync-value">{estadoCuadro.simulacion.rondasTexto}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Tamaño del cuadro:</span>
+              <div className="cb-sync-row">
+                <span className="pm-muted">Tamaño del cuadro:</span>
                 <span>{estadoCuadro.simulacion.tamanoActual} cupos → <strong>{estadoCuadro.simulacion.tamanoNuevo} cupos</strong></span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Clasificados totales:</span>
+              <div className="cb-sync-row">
+                <span className="pm-muted">Clasificados totales:</span>
                 <span>{estadoCuadro.simulacion.totalClasificadosActual} → <strong>{estadoCuadro.simulacion.totalClasificadosNuevo} parejas</strong></span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Pases directos (BYEs):</span>
+              <div className="cb-sync-row">
+                <span className="pm-muted">Pases directos (BYEs):</span>
                 <span>{estadoCuadro.simulacion.byesActuales} → <strong>{estadoCuadro.simulacion.byesNuevos} BYEs</strong></span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Partidos creados / reemplazados:</span>
+              <div className="cb-sync-row">
+                <span className="pm-muted">Partidos creados / reemplazados:</span>
                 <span><strong>{estadoCuadro.simulacion.partidosACrear} partidos</strong> (se reemplazan {estadoCuadro.simulacion.partidosAEliminar})</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>Horarios a reprogramar:</span>
-                <span style={{ color: '#eab308' }}><strong>{estadoCuadro.simulacion.horariosQueCambian} cruces</strong> en cronograma</span>
+              <div className="cb-sync-row">
+                <span className="pm-muted">Horarios a reprogramar:</span>
+                <span className="cb-blocked"><strong>{estadoCuadro.simulacion.horariosQueCambian} cruces</strong> en cronograma</span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            </div>
+            <div className="pm-footer">
               <button
                 type="button"
-                className="btn-secondary"
+                className="pm-button"
                 onClick={() => setSincronizarModalOpen(false)}
                 disabled={sincronizando}
               >
@@ -687,12 +616,12 @@ export default function EliminatoriaView() {
               </button>
               <button
                 type="button"
-                className="btn-primary"
+
                 onClick={handleConfirmarSincronizar}
                 disabled={sincronizando}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                className="pm-button pm-primary"
               >
-                {sincronizando ? 'Sincronizando...' : 'Confirmar Sincronización'}
+                {sincronizando ? 'Sincronizando…' : 'Confirmar sincronización'}
               </button>
             </div>
           </div>

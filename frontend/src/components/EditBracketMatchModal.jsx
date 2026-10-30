@@ -121,101 +121,81 @@ export default function EditBracketMatchModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
-      <div className="modal-content" style={{ maxWidth: '400px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.75rem' }}>
+    <div className="pm-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+      <div className="pm-modal pm-edit-bracket" role="dialog" aria-modal="true" aria-label="Editar cruce">
+        <div className="pm-header">
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-text)', lineHeight: 1.25 }}>
-              Editar Cruce
+            <h3 className="pm-title">
+              Editar cruce
             </h3>
             {partido.posicionEnRonda && (
-              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+              <span className="pm-muted">
                 Partido #{partido.posicionEnRonda}
               </span>
             )}
           </div>
           <button
             type="button"
-            className="btn-link-action"
+
             onClick={onClose}
-            style={{ color: 'var(--color-text-secondary)', padding: '0.25rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            className="pm-button pm-close"
             aria-label="Cerrar modal"
           >
             <X size={18} />
           </button>
         </div>
 
+        <form onSubmit={handleSubmit} className="pm-edit-form">
+        <div className="pm-body pm-stack">
         {error && (
-          <div className="error-message" style={{ marginBottom: '1rem', padding: '0.5rem 0.75rem', fontSize: 'var(--font-size-sm)' }}>
+          <div className="pm-alert" role="alert">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.35rem', fontWeight: 600 }}>
-              Posición 1 (Arriba)
+            <label className="pm-label" htmlFor="cb-origen-1">
+              Posición 1 (arriba)
             </label>
             <select
-              className="campo-chico"
+
               value={origen1}
               onChange={(e) => setOrigen1(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.75rem',
-                background: 'var(--color-bg-input)',
-                color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-              }}
+              className="pm-select"
+              id="cb-origen-1"
             >
-              <option value="">-- Sin Definir / Vacío --</option>
+              <option value="">Sin definir / vacío</option>
               {originOptions.map(renderOption)}
             </select>
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '0.35rem', fontWeight: 600 }}>
-              Posición 2 (Abajo)
+            <label className="pm-label" htmlFor="cb-origen-2">
+              Posición 2 (abajo)
             </label>
             <select
-              className="campo-chico"
+
               value={origen2}
               onChange={(e) => setOrigen2(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.75rem',
-                background: 'var(--color-bg-input)',
-                color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-              }}
+              className="pm-select"
+              id="cb-origen-2"
             >
-              <option value="">-- Sin Definir / Vacío --</option>
+              <option value="">Sin definir / vacío</option>
               {originOptions.map(renderOption)}
             </select>
           </div>
 
           {movimientos.length > 0 && (
             <div
-              style={{
-                padding: '0.75rem',
-                backgroundColor: 'rgba(234, 179, 8, 0.1)',
-                border: '1px solid rgba(234, 179, 8, 0.35)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 'var(--font-size-xs)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.4rem',
-              }}
+              className="pm-alert pm-stack"
             >
-              <div style={{ fontWeight: 600, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span>⚠️</span> Reasignación de cruces (Swap)
+              <div className="pm-strong">
+                Reasignación de cruces
               </div>
-              <p style={{ margin: 0, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+              <p className="pm-alert-copy">
                 Al guardar, se liberará automáticamente la posición en los partidos correspondientes:
               </p>
-              <ul style={{ margin: 0, paddingLeft: '1.25rem', color: 'var(--color-text)', lineHeight: 1.4 }}>
+              <ul className="pm-warning-list">
                 {movimientos.map((m, idx) => (
                   <li key={idx}>
                     <strong>{m.origen}</strong> se moverá desde el <strong>Partido #{m.origenPartidoNum}</strong> a este partido ({m.posicionDestino}).
@@ -225,25 +205,26 @@ export default function EditBracketMatchModal({
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+        </div>
+          <div className="pm-footer">
             <button
               type="button"
-              className="btn-secondary"
+
               onClick={onClose}
-              style={{ flex: 1 }}
+              className="pm-button pm-grow"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="btn-primary"
+
               disabled={loading}
-              style={{ flex: 1 }}
+              className="pm-button pm-primary pm-grow"
             >
               {loading
-                ? 'Guardando...'
+                ? 'Guardando…'
                 : movimientos.length > 0
-                ? 'Confirmar y Guardar'
+                ? 'Confirmar y guardar'
                 : 'Guardar'}
             </button>
           </div>

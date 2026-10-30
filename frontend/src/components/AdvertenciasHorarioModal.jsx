@@ -5,44 +5,45 @@ export default function AdvertenciasHorarioModal({ isOpen, advertencias, onClose
 
   return (
     <div
-      className="modal-overlay"
+      className="pm-overlay"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="modal-content"
-        style={{
-          maxWidth: '420px',
-          width: '90%',
-          boxSizing: 'border-box',
-          padding: '1.25rem',
-        }}
+
+        className="pm-modal pm-warnings"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Advertencias de horario"
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--color-text)' }}>
+        <div className="pm-header">
+          <h3 className="pm-title">
             Advertencias de horario
           </h3>
           <button
             type="button"
-            className="btn-link-action"
+
             onClick={onClose}
-            style={{ color: 'var(--color-text-secondary)', padding: '0.25rem' }}
+            className="pm-button pm-close"
+            aria-label="Cerrar advertencias de horario"
           >
             <X size={18} />
           </button>
         </div>
 
-        <ul style={{ margin: '0.5rem 0 1rem 0', paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="pm-body">
+        <ul className="pm-warning-list cb-warning-list">
           {advertencias.map((adv, idx) => (
-            <li key={idx} style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text)', lineHeight: 1.4 }}>
+            <li key={idx} className="pm-alert">
               {adv.mensaje}
             </li>
           ))}
         </ul>
+        </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem' }}>
-          <button type="button" className="btn-secondary" onClick={onClose} style={{ minWidth: '80px' }}>
+        <div className="pm-footer">
+          <button type="button" onClick={onClose} className="pm-button">
             Cerrar
           </button>
         </div>
