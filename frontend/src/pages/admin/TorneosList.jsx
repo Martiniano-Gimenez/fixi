@@ -48,47 +48,46 @@ export default function TorneosList() {
     }
   };
 
-  if (loading) return <div className="loading">Cargando torneos...</div>;
+  if (loading) return <div className="tl-loading">Cargando torneos…</div>;
 
   return (
-    <div className="page">
-      <div className="flex-header">
+    <div className="tl-screen">
+      <div className="tl-header">
         <div>
-          <h1 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <Trophy size={26} strokeWidth={2} style={{ color: 'var(--color-primary)' }} />
-            Mis Torneos
+          <h1 className="tl-title">
+            <Trophy size={26} strokeWidth={2} className="tl-trophy" />
+            Mis torneos
           </h1>
-          <p style={{ margin: '0.25rem 0 0 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+          <p className="tl-intro">
             Gestioná los eventos de tu club y sus respectivas categorías.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div className="tl-header-actions">
           <Link
             to="/admin/torneos/nuevo"
-            className="btn-primary"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+            className="tl-button tl-primary"
           >
             <Plus size={16} strokeWidth={2} />
-            Nuevo Torneo
+            Nuevo torneo
           </Link>
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="tl-error">{error}</div>}
 
       {torneos.length === 0 && !error ? (
-        <div className="empty-state" style={{ padding: '3rem 1rem', textAlign: 'center' }}>
-          <Trophy size={48} strokeWidth={1.5} style={{ color: 'var(--color-text-secondary)', marginBottom: '1rem', opacity: 0.5 }} />
-          <h3 style={{ margin: '0 0 0.5rem 0' }}>No tenés torneos creados</h3>
-          <p style={{ margin: '0 0 1.5rem 0', color: 'var(--color-text-secondary)' }}>
+        <div className="tl-empty">
+          <Trophy size={48} strokeWidth={1.5} className="tl-empty-icon" />
+          <h3 className="tl-empty-title">No tenés torneos creados</h3>
+          <p className="tl-empty-copy">
             Creá tu primer torneo (ej. "Pares Agosto") y comenzá a cargar sus categorías.
           </p>
-          <Link to="/admin/torneos/nuevo" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}>
-            <Plus size={16} /> Crear Torneo
+          <Link to="/admin/torneos/nuevo" className="tl-button">
+            <Plus size={16} /> Crear torneo
           </Link>
         </div>
       ) : (
-        <div className="torneos-grid">
+        <div className="tl-grid">
           {torneos.map((torneo) => {
             const totalCategorias = torneo.categorias?.length || 0;
             const totalParejas = torneo.categorias?.reduce(
@@ -97,83 +96,51 @@ export default function TorneosList() {
             ) || 0;
 
             return (
-              <Link
-                key={torneo.id}
-                to={`/admin/torneos/${torneo.id}`}
-                className="torneo-card"
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: '1rem',
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-                    <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>{torneo.nombre}</h3>
-                    <span className={`badge badge-${(torneo.estado || 'borrador').toLowerCase()}`}>
-                      {estadoLabel(torneo.estado)}
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      color: 'var(--color-text-secondary)',
-                      fontSize: 'var(--font-size-sm)',
-                      marginTop: '0.5rem',
-                    }}
-                  >
-                    <Calendar size={14} />
-                    <span>
-                      {torneo.fecha ? formatFechaTorneo(torneo.fecha) : 'Fecha a confirmar'}
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingTop: '0.75rem',
-                    borderTop: '1px solid var(--color-border)',
-                    fontSize: 'var(--font-size-sm)',
-                  }}
+              <article key={torneo.id} className="tl-card">
+                <Link
+                  to={`/admin/torneos/${torneo.id}`}
+                  className="tl-card-link"
                 >
-                  <div style={{ display: 'flex', gap: '1rem', color: 'var(--color-text-secondary)' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <Layers size={14} style={{ color: 'var(--color-primary)' }} />
-                      <strong style={{ color: 'var(--color-text)' }}>{totalCategorias}</strong>{' '}
-                      {totalCategorias === 1 ? 'categoría' : 'categorías'}
-                    </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <Users size={14} style={{ color: 'var(--color-accent)' }} />
-                      <strong style={{ color: 'var(--color-text)' }}>{totalParejas}</strong> parejas
-                    </span>
+                  <div>
+                    <div className="tl-card-heading">
+                      <h3 className="tl-card-title">{torneo.nombre}</h3>
+                      <span className={`tl-state tl-state-${(torneo.estado || 'borrador').toLowerCase()}`}>
+                        {estadoLabel(torneo.estado)}
+                      </span>
+                    </div>
+
+                    <div className="tl-date">
+                      <Calendar size={14} />
+                      <span>
+                        {torneo.fecha ? formatFechaTorneo(torneo.fecha) : 'Fecha a confirmar'}
+                      </span>
+                    </div>
                   </div>
 
-                  <button
-                    type="button"
-                    className="btn-danger"
-                    title="Eliminar torneo"
-                    onClick={(e) => handleDelete(e, torneo)}
-                    style={{
-                      padding: '0.35rem 0.5rem',
-                      fontSize: '0.8rem',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      background: 'transparent',
-                      borderColor: 'transparent',
-                    }}
-                  >
-                    <Trash2 size={16} strokeWidth={1.75} style={{ color: 'var(--color-danger)' }} />
-                  </button>
-                </div>
-              </Link>
+                  <div className="tl-card-footer">
+                    <div className="tl-stats">
+                      <span className="tl-stat">
+                        <Layers size={14} className="tl-brand" />
+                        <strong className="tl-strong">{totalCategorias}</strong>{' '}
+                        {totalCategorias === 1 ? 'categoría' : 'categorías'}
+                      </span>
+                      <span className="tl-stat">
+                        <Users size={14} className="tl-brand" />
+                        <strong className="tl-strong">{totalParejas}</strong> parejas
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  title="Eliminar torneo"
+                  aria-label={`Eliminar torneo ${torneo.nombre}`}
+                  onClick={(e) => handleDelete(e, torneo)}
+                  className="tl-delete"
+                >
+                  <Trash2 size={16} strokeWidth={1.75} className="tl-icon" />
+                </button>
+              </article>
             );
           })}
         </div>

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { isViernes } from '../../utils/dateUtils';
-import './TorneoCreate.css';
 
 export default function TorneoCreate() {
   const [nombre, setNombre] = useState('');
@@ -38,52 +37,55 @@ export default function TorneoCreate() {
   };
 
   return (
-    <div className="page">
-      <div className="auth-card torneo-create-card">
-        <h2>Crear Torneo</h2>
-        {error && <div className="error-message">{error}</div>}
-        
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
+    <div className="tc-page">
+      <div className="tc-card">
+        <h1 className="tc-title">Crear torneo</h1>
+        <p className="tc-intro">Elegí el nombre y la fecha de inicio para organizar el fin de semana.</p>
+        {error && <div className="tc-error" role="alert">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="tc-form">
+          <div className="tc-field">
             <label htmlFor="nombre">Nombre del torneo</label>
-            <input 
-              type="text" 
-              id="nombre" 
-              value={nombre} 
-              onChange={(e) => setNombre(e.target.value)} 
-              required 
+            <input
+              className="tc-input"
+              type="text"
+              id="nombre"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              required
               autoFocus
-              placeholder="Ej: Copa Verano 2026"
+              placeholder="Ej.: Copa Verano 2026"
             />
           </div>
-          <div className="form-group">
+          <div className="tc-field">
             <label htmlFor="fecha">Fecha de inicio (viernes)</label>
-            <input 
-              type="date" 
-              id="fecha" 
-              value={fecha} 
-              onChange={(e) => setFecha(e.target.value)} 
+            <input
+              className="tc-input"
+              type="date"
+              id="fecha"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
               required
             />
-            <p className="form-help">
+            <p className="tc-help">
               Seleccioná la fecha de inicio del torneo. Es requerida para calcular los horarios y programar los partidos del fin de semana.
             </p>
           </div>
-          <div className="torneo-create-actions">
-            <button 
-              type="button" 
-              className="btn-secondary" 
+          <div className="tc-actions">
+            <button
+              type="button"
+              className="tc-button"
               onClick={() => navigate('/admin')}
               disabled={loading}
             >
               Cancelar
             </button>
-            <button 
-              type="submit" 
-              className="btn-primary" 
+            <button
+              type="submit"
+              className="tc-button tc-primary"
               disabled={loading}
             >
-              {loading ? 'Creando...' : 'Crear torneo'}
+              {loading ? 'Creando…' : 'Crear torneo'}
             </button>
           </div>
         </form>

@@ -1158,3 +1158,90 @@ body:has(.panel) {
   .panel :is(.pc-button, .pc-link, .pc-slot, .pc-spin), .panel .pc-details * { animation: none; transition: none; }
   .panel .pc-button:active, .panel .pc-slot:active { transform: none; }
 }
+
+/* Mis torneos: el enlace de cada tarjeta y su acción de borrar son independientes. */
+.panel .tl-screen { max-width: 1180px; margin: 0 auto; padding: var(--e-6) var(--e-5) var(--e-10); min-width: 0; color: var(--tinta); font: var(--t-14)/1.5 var(--f); font-variant-numeric: tabular-nums; }
+.panel .tl-screen svg { flex-shrink: 0; }
+.panel .tl-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--e-4); margin-bottom: var(--e-6); min-width: 0; }
+.panel .tl-header > div:first-child { min-width: 0; }
+.panel .tl-title { display: flex; align-items: center; gap: var(--e-3); margin: 0; color: var(--tinta); font: 700 var(--t-28)/1.2 var(--f); letter-spacing: -.025em; overflow-wrap: anywhere; }
+.panel .tl-trophy { color: var(--oro); }
+.panel .tl-intro { margin: var(--e-2) 0 0; color: var(--gris); overflow-wrap: anywhere; }
+.panel .tl-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-3); }
+.panel :is(.tl-button, .tc-button, .au-button) { display: inline-flex; align-items: center; justify-content: center; gap: var(--e-2); min-height: 44px; min-width: 44px; max-width: 100%; padding: var(--e-2) var(--e-4); border: 0; border-radius: var(--r-control); background: var(--superficie); color: var(--tinta-2); box-shadow: inset 0 0 0 1px var(--linea-fuerte); font: 600 var(--t-14)/1.4 var(--f); text-decoration: none; text-shadow: none; text-align: center; cursor: pointer; transition: transform .2s var(--curva), opacity .2s var(--curva); }
+.panel :is(.tl-button, .tc-button, .au-button):hover { background: var(--superficie-2); color: var(--tinta); text-shadow: none; }
+.panel :is(.tl-button, .tc-button, .au-button):active { transform: scale(.97); }
+.panel :is(.tc-button, .au-button):disabled { opacity: .6; cursor: not-allowed; transform: none; }
+.panel :is(.tl-primary, .tc-primary, .au-primary) { color: var(--superficie); background: var(--marca); box-shadow: none; }
+.panel :is(.tl-primary, .tc-primary, .au-primary):hover { color: var(--superficie); background: var(--marca-hover); }
+.panel :is(.tl-button, .tl-card-link, .tl-delete, .tc-button, .tc-input, .au-button, .au-input):focus-visible, .panel .au-links a:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+.panel .tl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--e-4); }
+.panel .tl-card { position: relative; min-width: 0; background: var(--superficie); border-radius: var(--r-tarjeta); box-shadow: var(--sombra-1); }
+.panel .tl-card-link { display: flex; flex-direction: column; justify-content: space-between; gap: var(--e-5); min-width: 0; min-height: 44px; height: 100%; padding: var(--e-5); color: var(--tinta); border-radius: var(--r-tarjeta); text-decoration: none; text-shadow: none; }
+.panel .tl-card-link:hover { color: var(--tinta); text-shadow: none; }
+.panel .tl-card-link:hover .tl-card-title { color: var(--marca-hover); }
+.panel .tl-card-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--e-2); min-width: 0; }
+.panel .tl-card-title { margin: 0; min-width: 0; color: var(--tinta); font: 650 var(--t-20)/1.4 var(--f); overflow-wrap: anywhere; }
+.panel .tl-state { display: inline-flex; align-items: center; max-width: 100%; padding: var(--e-1) var(--e-2); color: var(--tinta-2); background: var(--superficie-2); border-radius: var(--r-dato); font-size: var(--t-12); font-weight: 600; overflow-wrap: anywhere; }
+.panel .tl-state-en_curso { color: var(--marca-hover); background: var(--marca-suave); }
+.panel .tl-date { display: flex; align-items: center; gap: var(--e-2); margin-top: var(--e-3); color: var(--gris); min-width: 0; overflow-wrap: anywhere; }
+.panel .tl-card-footer { min-height: 44px; padding-top: var(--e-3); padding-right: 52px; border-top: 1px solid var(--linea); }
+.panel .tl-stats { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2) var(--e-4); min-width: 0; color: var(--gris); }
+.panel .tl-stat { display: inline-flex; align-items: center; gap: var(--e-1); flex-wrap: wrap; }
+.panel .tl-brand { color: var(--marca); }
+.panel .tl-strong { color: var(--tinta); font-weight: 600; }
+.panel .tl-delete { position: absolute; bottom: var(--e-5); right: var(--e-5); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--r-control); color: var(--alerta-texto); background: none; cursor: pointer; transition: transform .2s var(--curva); }
+.panel .tl-delete:hover { background: var(--alerta-suave); }
+.panel .tl-delete:active { transform: scale(.97); }
+.panel .tl-empty { padding: var(--e-10) var(--e-4); background: var(--superficie); border-radius: var(--r-tarjeta); box-shadow: var(--sombra-1); text-align: center; }
+.panel .tl-empty-icon { color: var(--oro); margin-bottom: var(--e-4); }
+.panel .tl-empty-title { margin: 0 0 var(--e-2); color: var(--tinta); font-size: var(--t-20); }
+.panel .tl-empty-copy { margin: 0 auto var(--e-5); max-width: 520px; color: var(--gris); }
+.panel :is(.tl-error, .tc-error, .au-error) { padding: var(--e-3); border-radius: var(--r-control); color: var(--alerta-texto); background: var(--alerta-suave); font: var(--t-13)/1.5 var(--f); overflow-wrap: anywhere; }
+.panel .tl-error { margin-bottom: var(--e-5); }
+.panel .tl-loading { display: grid; place-items: center; min-height: 50vh; padding: var(--e-5); color: var(--gris); font-family: var(--f); }
+
+/* Crear torneo: formulario claro independiente de las clases auth-* v1. */
+.panel .tc-page { max-width: 1180px; margin: 0 auto; padding: var(--e-8) var(--e-5) var(--e-10); min-width: 0; }
+.panel .tc-card { max-width: 560px; min-width: 0; margin: 0 auto; padding: var(--e-6); background: var(--superficie); color: var(--tinta); border-radius: var(--r-panel); box-shadow: var(--sombra-2); font: var(--t-14)/1.5 var(--f); }
+.panel .tc-title { margin: 0; color: var(--tinta); font: 700 var(--t-28)/1.2 var(--f); letter-spacing: -.025em; }
+.panel .tc-intro { margin: var(--e-3) 0 var(--e-5); color: var(--gris); }
+.panel :is(.tc-form, .au-form) { display: flex; flex-direction: column; gap: var(--e-5); }
+.panel :is(.tc-field, .au-field) { display: flex; flex-direction: column; gap: var(--e-2); min-width: 0; }
+.panel :is(.tc-field, .au-field) label { color: var(--tinta-2); font: 600 var(--t-14)/1.4 var(--f); }
+.panel :is(.tc-input, .au-input) { width: 100%; min-width: 0; max-width: 100%; min-height: 48px; padding: var(--e-3); border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); color: var(--tinta); font: var(--t-15)/1.4 var(--f); color-scheme: light; }
+.panel :is(.tc-input, .au-input)::placeholder { color: var(--gris); }
+.panel .tc-input { font-variant-numeric: tabular-nums; }
+.panel .tc-error { margin-bottom: var(--e-5); }
+.panel .tc-help { margin: 0; color: var(--gris); font-size: var(--t-13); }
+.panel .tc-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--e-3); margin-top: var(--e-1); }
+
+/* Autenticación fuera de AdminLayout: el contenedor raíz también define .panel. */
+.panel.au-page { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 100vh; min-height: 100dvh; padding: var(--e-8) var(--e-4); background: var(--fondo); color: var(--tinta); font: var(--t-14)/1.5 var(--f); }
+.panel .au-shell { width: 100%; max-width: 420px; min-width: 0; }
+.panel .au-brand { display: flex; align-items: center; justify-content: center; gap: var(--e-2); margin: 0 0 var(--e-5); color: var(--marca); font: 750 var(--t-28)/1.2 var(--f); letter-spacing: -.025em; }
+.panel .au-brand-icon { color: var(--marca); flex-shrink: 0; }
+.panel .au-card { min-width: 0; padding: var(--e-8); border-radius: var(--r-panel); background: var(--superficie); box-shadow: var(--sombra-2); }
+.panel .au-title { margin: 0; color: var(--tinta); font: 700 var(--t-20)/1.3 var(--f); letter-spacing: -.02em; }
+.panel .au-intro { margin: var(--e-2) 0 var(--e-5); color: var(--gris); }
+.panel .au-error { margin-bottom: var(--e-5); }
+.panel .au-button { width: 100%; }
+.panel .au-links { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0 var(--e-1); margin: var(--e-5) 0 0; color: var(--gris); font-size: var(--t-14); }
+.panel .au-links a { display: inline-flex; align-items: center; min-height: 44px; color: var(--marca); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-shadow: none; }
+.panel .au-links a:hover { color: var(--marca-hover); text-shadow: none; }
+@media (max-width: 600px) {
+  .panel .tl-screen { padding: var(--e-5) var(--e-3) var(--e-10); }
+  .panel .tl-title, .panel .tc-title { font-size: var(--t-20); }
+  .panel .tl-card-link { padding: var(--e-4); }
+  .panel .tl-delete { right: var(--e-4); bottom: var(--e-4); }
+  .panel .tc-page { padding: var(--e-5) var(--e-3) var(--e-10); }
+  .panel .tc-card, .panel .au-card { padding: var(--e-5); }
+  .panel .tc-actions > .tc-button { flex: 1; }
+}
+@media (pointer: coarse) {
+  .panel :is(.tc-input, .au-input) { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel :is(.tl-button, .tl-delete, .tc-button, .au-button) { transition: none; }
+  .panel :is(.tl-button, .tl-delete, .tc-button, .au-button):active { transform: none; }
+}
