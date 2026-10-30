@@ -144,8 +144,8 @@ export default function CategoriaDetail() {
   };
 
 
-  if (loading) return <div className="loading">Cargando categoría...</div>;
-  if (error || !categoria) return <div className="error-message">{error || 'Categoría no encontrada'}</div>;
+  if (loading) return <div className="cd-page cd-loading">Cargando categoría…</div>;
+  if (error || !categoria) return <div className="cd-page pm-alert">{error || 'Categoría no encontrada'}</div>;
 
   const activeZona = zonas.find((z) => z.id === activeZonaId);
   const partidosDeZona = activeZona ? partidos.filter((p) => p.zonaId === activeZona.id) : [];
@@ -153,19 +153,13 @@ export default function CategoriaDetail() {
   const partidosOrdenados = ordenarPartidos(partidosDeZona);
 
   return (
-    <div className="page">
+    <div className="cd-page">
+      <div className="cd-screen">
       {/* Breadcrumb de navegación */}
-      <div style={{ marginBottom: '1rem' }}>
+      <div className="cd-back-row">
         <Link
           to={`/admin/torneos/${torneoId || categoria.torneoId}`}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            color: 'var(--color-text-secondary)',
-            textDecoration: 'none',
-            fontSize: 'var(--font-size-sm)',
-          }}
+          className="cd-back-link"
         >
           <ChevronLeft size={16} /> Volver a {categoria.torneo?.nombre || 'Torneo'}
         </Link>
@@ -173,34 +167,15 @@ export default function CategoriaDetail() {
 
       {cuadroDesactualizadoAviso && (
         <div
-          style={{
-            background: 'rgba(234, 179, 8, 0.15)',
-            border: '1px solid rgba(234, 179, 8, 0.5)',
-            color: 'var(--color-text, #fff)',
-            padding: '0.85rem 1.25rem',
-            borderRadius: 'var(--radius-md, 8px)',
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '0.75rem',
-            flexWrap: 'wrap',
-          }}
+          className="pm-alert cd-stale"
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <AlertTriangle size={18} color="#eab308" />
+          <div className="cd-notice-main">
+            <AlertTriangle size={18} className="cd-alert-icon" />
             <span>El cuadro eliminatorio quedó desactualizado por el cambio en los clasificados de la zona.</span>
           </div>
           <Link
             to={`/admin/torneos/${torneoId || categoria?.torneoId}/categorias/${id}/eliminatoria`}
-            style={{
-              color: 'var(--color-primary, #00d084)',
-              fontWeight: 600,
-              textDecoration: 'underline',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-            }}
+            className="cd-inline-link"
           >
             Ir al cuadro para sincronizarlo →
           </Link>
@@ -208,35 +183,35 @@ export default function CategoriaDetail() {
       )}
 
       {/* Header de la Categoría */}
-      <div className="card" style={{ marginBottom: '1.5rem', background: 'var(--color-surface-elevated)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+      <div className="cd-header-card">
+        <div className="cd-heading">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <h1 style={{ margin: 0, fontSize: 'var(--font-size-2xl)' }}>
+            <div className="cd-title-row">
+              <h1 className="cd-title">
                 Categoría {categoria.nombre}
               </h1>
-              <span className={`badge badge-${categoria.estado.toLowerCase()}`}>{estadoLabel(categoria.estado)}</span>
+              <span className="cd-state">{estadoLabel(categoria.estado)}</span>
             </div>
 
-            <p style={{ margin: '0.4rem 0 0 0', color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-              Torneo: <strong style={{ color: 'var(--color-text)' }}>{categoria.torneo?.nombre}</strong>
+            <p className="cd-tournament">
+              Torneo: <strong className="cd-strong">{categoria.torneo?.nombre}</strong>
             </p>
           </div>
 
           {/* Acciones principales de la categoría */}
-          <div className="categoria-header-actions">
+          <div className="cd-header-actions">
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/parejas`}
-              className="btn-outline"
+              className="pm-button pm-primary"
             >
               <Users size={16} /> Parejas ({parejas.length})
             </Link>
 
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/eliminatoria`}
-              className="btn-outline"
+              className="pm-button"
             >
-              <GitBranch size={16} /> <span className="cat-header-fase-word">Fase </span>Eliminatoria
+              <GitBranch size={16} /> Cuadro
             </Link>
 
             {categoria.estado !== 'BORRADOR' && (
@@ -249,7 +224,7 @@ export default function CategoriaDetail() {
                       role="menuitem"
                       onClick={() => setMoverModalOpen(true)}
                     >
-                      <ArrowRightLeft size={15} /> Mover Pareja de Zona
+                      <ArrowRightLeft size={15} /> Mover pareja de zona
                     </button>
                     <button
                       type="button"
@@ -257,9 +232,9 @@ export default function CategoriaDetail() {
                       role="menuitem"
                       onClick={() => setAgregarModalOpen(true)}
                     >
-                      <UserPlus size={15} /> Agregar Pareja a Zona
+                      <UserPlus size={15} /> Agregar pareja a zona
                     </button>
-                    <div style={{ height: '1px', background: 'var(--color-border)', margin: '0.25rem 0' }} />
+                    <div className="cd-menu-divider" />
                   </>
                 )}
                 <button
@@ -268,7 +243,7 @@ export default function CategoriaDetail() {
                   role="menuitem"
                   onClick={() => setLimpiarModalOpen(true)}
                 >
-                  <Eraser size={15} /> Limpiar Resultados
+                  <Eraser size={15} /> Limpiar resultados
                 </button>
                 <button
                   type="button"
@@ -276,7 +251,7 @@ export default function CategoriaDetail() {
                   role="menuitem"
                   onClick={() => setReiniciarModalOpen(true)}
                 >
-                  <Trash2 size={15} /> Reiniciar Categoría
+                  <Trash2 size={15} /> Reiniciar categoría
                 </button>
               </ActionsMenu>
             )}
@@ -286,28 +261,28 @@ export default function CategoriaDetail() {
 
       {/* Estado Borrador */}
       {categoria.estado === 'BORRADOR' && (
-        <div className="card" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
-          <Users size={44} style={{ color: 'var(--color-primary)', marginBottom: '1rem', opacity: 0.8 }} />
-          <h3 style={{ margin: '0 0 0.5rem 0' }}>Categoría en Borrador</h3>
-          <p style={{ color: 'var(--color-text-secondary)', maxWidth: '540px', margin: '0 auto 1.5rem auto', lineHeight: '1.5' }}>
+        <div className="cd-empty">
+          <Users size={44} className="cd-empty-icon" />
+          <h3 className="cd-empty-title">Categoría en borrador</h3>
+          <p className="cd-empty-copy">
             {parejas.length < 2
               ? 'Cargá al menos 2 parejas con su disponibilidad para que esta categoría esté lista para el inicio del torneo.'
               : `Hay ${parejas.length} parejas inscriptas listas. El armado de zonas y la asignación global de turnos se realiza para todas las categorías juntas desde la pantalla principal del torneo.`}
           </p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div className="cd-empty-actions">
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/parejas`}
-              className="btn-primary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', textDecoration: 'none' }}
+
+              className="pm-button"
             >
-              <Users size={16} /> Cargar Parejas y Disponibilidad
+              <Users size={16} /> Cargar parejas y disponibilidad
             </Link>
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}`}
-              className="btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', textDecoration: 'none' }}
+
+              className="pm-button"
             >
-              <ChevronLeft size={16} /> Volver al Torneo para Iniciar
+              <ChevronLeft size={16} /> Volver al torneo para iniciar
             </Link>
           </div>
         </div>
@@ -317,14 +292,15 @@ export default function CategoriaDetail() {
       {categoria.estado !== 'BORRADOR' && (
         <>
           {/* Selector de Zonas */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          <div className="cd-zone-tabs">
             {zonas.map((z) => (
               <button
                 key={z.id}
                 type="button"
-                className={activeZonaId === z.id ? 'btn-primary' : 'btn-secondary'}
+
                 onClick={() => setActiveZonaId(z.id)}
-                style={{ width: 'auto', padding: '0.5rem 1rem' }}
+                className={`cd-zone-tab${activeZonaId === z.id ? ' is-active' : ''}`}
+                aria-pressed={activeZonaId === z.id}
               >
                 {z.nombre}
               </button>
@@ -332,7 +308,7 @@ export default function CategoriaDetail() {
           </div>
 
           {activeZona && (
-            <div className="zona-grid">
+            <div className="cd-zones-grid">
               {/* Tabla de posiciones de la zona */}
               <div>
                 <ZonaTable zona={activeZona} />
@@ -340,7 +316,7 @@ export default function CategoriaDetail() {
 
               {/* Partidos de la zona */}
               <div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div className="cd-match-list">
                   {partidosOrdenados.map((partido) => (
                     <PartidoCard
                       key={partido.id}
@@ -356,6 +332,8 @@ export default function CategoriaDetail() {
           )}
         </>
       )}
+
+      </div>
 
       {/* Modal para Cargar/Editar Resultado */}
       {partidoSeleccionado && (
@@ -445,25 +423,9 @@ export default function CategoriaDetail() {
       {/* Toast Notification */}
       {toastMessage && (
         <div
-          style={{
-            position: 'fixed',
-            bottom: '2rem',
-            right: '2rem',
-            background: 'var(--color-bg-card)',
-            color: 'var(--color-text)',
-            border: '1px solid var(--color-primary)',
-            boxShadow: 'var(--shadow-xl)',
-            borderRadius: 'var(--border-radius-md)',
-            padding: '0.85rem 1.25rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.6rem',
-            zIndex: 1200,
-            fontSize: 'var(--font-size-sm)',
-            animation: 'fadeIn 0.3s ease',
-          }}
+          className="cd-toast"
         >
-          <CheckCircle2 size={18} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+          <CheckCircle2 size={18} className="cd-brand-icon" />
           <span>{toastMessage}</span>
         </div>
       )}

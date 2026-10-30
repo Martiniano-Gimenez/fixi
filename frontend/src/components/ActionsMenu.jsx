@@ -89,11 +89,11 @@ export default function ActionsMenu({ children, title = 'Más opciones' }) {
   };
 
   return (
-    <div className="actions-menu" ref={containerRef}>
+    <div className="actions-menu cd-menu" ref={containerRef}>
       <button
         type="button"
         ref={btnRef}
-        className={`actions-menu-btn ${isOpen ? 'active' : ''}`}
+        className={`cd-menu-trigger ${isOpen ? 'active' : ''}`}
         onClick={() => setIsOpen((prev) => !prev)}
         title={title}
         aria-label={title}
@@ -106,16 +106,10 @@ export default function ActionsMenu({ children, title = 'Más opciones' }) {
         createPortal(
           <div
             ref={panelRef}
-            className="actions-menu-panel"
+
             role="menu"
             onClick={handlePanelClick}
-            style={{
-              position: 'fixed',
-              opacity: 0,
-              pointerEvents: 'none',
-              zIndex: 1050,
-              maxWidth: 'calc(100vw - 16px)',
-            }}
+            className="panel actions-menu-panel cd-menu-panel"
           >
             {children}
           </div>,

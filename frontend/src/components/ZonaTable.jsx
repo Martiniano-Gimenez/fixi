@@ -27,36 +27,36 @@ export default function ZonaTable({ zona }) {
   }, [zonaParejas]);
 
   return (
-    <div className="torneo-card" style={{ marginBottom: '1.5rem' }}>
-      <h3 style={{ marginBottom: '1rem' }}>{zona.nombre}</h3>
+    <div className="cd-zone-card">
+      <h3 className="cd-zone-title">{zona.nombre}</h3>
 
-      <div className={`table-responsive-wrapper ${hasOverflow ? 'has-overflow' : ''}`}>
-        <div className="table-responsive" ref={tableContainerRef}>
-          <table className="zona-table">
+      <div className={`cd-table-wrap ${hasOverflow ? 'has-overflow' : ''}`}>
+        <div className="cd-table-viewport" ref={tableContainerRef}>
+          <table className="cd-zone-table">
             <thead>
               <tr>
-                <th className="col-pos" title="Posición">
-                  <span className="sr-only">Pos</span>
-                  <span aria-hidden="true" className="th-short">#</span>
+                <th className="cd-col-pos" title="Posición">
+                  <span className="cd-sr">Pos</span>
+                  <span aria-hidden="true" className="cd-th-short">#</span>
                 </th>
-                <th className="col-pareja">Pareja</th>
-                <th className="col-pts text-center" title="Puntos">
-                  <span className="sr-only">Pts</span>
-                  <span aria-hidden="true" className="th-short">P</span>
+                <th className="cd-col-pareja">Pareja</th>
+                <th className="cd-col-pts cd-numeric" title="Puntos">
+                  <span className="cd-sr">Pts</span>
+                  <span aria-hidden="true" className="cd-th-short">P</span>
                 </th>
-                <th className="col-pj text-center hide-on-mobile" title="Partidos Jugados">PJ</th>
-                <th className="col-pg text-center" title="Partidos Ganados">
-                  <span className="sr-only">PG</span>
-                  <span aria-hidden="true" className="th-short">G</span>
+                <th className="cd-col-pj cd-numeric cd-desktop-stat" title="Partidos Jugados">PJ</th>
+                <th className="cd-col-pg cd-numeric" title="Partidos Ganados">
+                  <span className="cd-sr">PG</span>
+                  <span aria-hidden="true" className="cd-th-short">G</span>
                 </th>
-                <th className="col-pp text-center hide-on-mobile" title="Partidos Perdidos">PP</th>
-                <th className="col-sets text-center" title="Sets a Favor / En Contra">
-                  <span className="sr-only">Sets</span>
-                  <span aria-hidden="true" className="th-short">S</span>
+                <th className="cd-col-pp cd-numeric cd-desktop-stat" title="Partidos Perdidos">PP</th>
+                <th className="cd-col-sets cd-numeric" title="Sets a Favor / En Contra">
+                  <span className="cd-sr">Sets</span>
+                  <span aria-hidden="true" className="cd-th-short">S</span>
                 </th>
-                <th className="col-games text-center" title="Games a Favor / En Contra">
-                  <span className="sr-only">Games</span>
-                  <span aria-hidden="true" className="th-short">Gm</span>
+                <th className="cd-col-games cd-numeric" title="Games a Favor / En Contra">
+                  <span className="cd-sr">Games</span>
+                  <span aria-hidden="true" className="cd-th-short">Gm</span>
                 </th>
               </tr>
             </thead>
@@ -64,26 +64,23 @@ export default function ZonaTable({ zona }) {
               {zonaParejas.map((zp, index) => {
                 const clasifica = index < zona.clasifican;
                 return (
-                  <tr 
-                    key={zp.id} 
-                    style={{ 
-                      backgroundColor: clasifica ? 'var(--color-classify-bg)' : 'transparent',
-                      borderLeft: clasifica ? '4px solid var(--color-classify-border)' : '4px solid transparent',
-                    }}
+                  <tr
+                    key={zp.id}
+                    className={clasifica ? 'cd-qualifies' : ''}
                   >
-                    <td className="col-pos"><span className="pos-number">{index + 1}</span></td>
-                    <td 
-                      className="col-pareja team-name"
+                    <td className="cd-col-pos"><span className="cd-position">{index + 1}</span></td>
+                    <td
+                      className="cd-col-pareja cd-team-name"
                       title={`${zp.pareja.jugador1} / ${zp.pareja.jugador2}`}
                     >
                       {zp.pareja.jugador1} / {zp.pareja.jugador2}
                     </td>
-                    <td className="col-pts text-center stat-pts">{zp.puntos}</td>
-                    <td className="col-pj text-center hide-on-mobile">{zp.pj}</td>
-                    <td className="col-pg text-center stat-highlight">{zp.pg}</td>
-                    <td className="col-pp text-center hide-on-mobile">{zp.pp}</td>
-                    <td className="col-sets text-center">{zp.sf} - {zp.sc}</td>
-                    <td className="col-games text-center">{zp.gf} - {zp.gc}</td>
+                    <td className="cd-col-pts cd-numeric cd-points" data-label="Puntos">{zp.puntos}</td>
+                    <td className="cd-col-pj cd-numeric cd-desktop-stat" data-label="Jugados">{zp.pj}</td>
+                    <td className="cd-col-pg cd-numeric cd-highlight" data-label="Ganados">{zp.pg}</td>
+                    <td className="cd-col-pp cd-numeric cd-desktop-stat" data-label="Perdidos">{zp.pp}</td>
+                    <td className="cd-col-sets cd-numeric" data-label="Sets"><span className="cd-stat-pair">{zp.sf}<span>–</span>{zp.sc}</span></td>
+                    <td className="cd-col-games cd-numeric" data-label="Games"><span className="cd-stat-pair">{zp.gf}<span>–</span>{zp.gc}</span></td>
                   </tr>
                 );
               })}
