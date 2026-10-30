@@ -736,91 +736,56 @@ export default function TorneoDetail() {
     }
   };
 
-  if (loading) return <div className="loading">Cargando torneo...</div>;
-  if (error || !torneo) return <div className="error-message">{error || 'Torneo no encontrado'}</div>;
+  if (loading) return <div className="td-loading">Cargando torneo…</div>;
+  if (error || !torneo) return <div className="td-error td-load-error">{error || 'Torneo no encontrado'}</div>;
 
   const categoriasBorrador = (torneo.categorias || []).filter((c) => c.estado === 'BORRADOR');
   const puedeIniciar = categoriasBorrador.length > 0 && categoriasBorrador.some((c) => c.parejas?.length >= 2);
 
   return (
-    <div className="page">
+    <div className="page td-screen">
       {/* Volver */}
-      <div style={{ marginBottom: '1rem' }}>
+      <div className="td-back-row">
         <Link
           to="/admin"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            color: 'var(--color-text-secondary)',
-            textDecoration: 'none',
-            fontSize: 'var(--font-size-sm)',
-          }}
+          className="td-back"
         >
-          <ChevronLeft size={16} /> Volver a Mis Torneos
+          <ChevronLeft size={16} /> Volver a mis torneos
         </Link>
       </div>
 
       {/* Header del Torneo */}
-      <div className="card" style={{ marginBottom: '1.5rem', background: 'var(--color-surface-elevated)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+      <div className="td-card td-header">
+        <div className="td-header-layout">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="td-title-row">
               {!isEditingNombre ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <div className="td-name-row">
                   <h1
-                    style={{
-                      margin: 0,
-                      fontSize: 'var(--font-size-2xl)',
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      wordBreak: 'break-word',
-                      maxWidth: '100%',
-                    }}
+                    className="td-name"
                     onClick={handleStartEditingNombre}
                     title="Hacé click para cambiar el nombre del torneo"
-                    className="editable-title-hover"
                   >
                     <span>{torneo.nombre}</span>
                   </h1>
                   <button
                     type="button"
                     onClick={handleStartEditingNombre}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '0.25rem',
-                      color: 'var(--color-text-secondary)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                    className="hover-card"
+                    className="td-button td-edit-name"
                     title="Cambiar nombre del torneo"
                     aria-label="Cambiar nombre del torneo"
                   >
-                    <Edit2 size={14} style={{ color: 'var(--color-primary)' }} />
+                    <Edit2 size={14} className="td-brand-icon" />
                   </button>
-                  <span className={`badge badge-${torneo.estado.toLowerCase()}`}>{estadoLabel(torneo.estado)}</span>
+                  <span className={`td-state td-state-${torneo.estado.toLowerCase()}`}>{estadoLabel(torneo.estado)}</span>
                 </div>
               ) : (
                 <form
                   onSubmit={handleSaveNombreInline}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    flexWrap: 'wrap',
-                    width: '100%',
-                    maxWidth: '520px',
-                  }}
+                  className="td-name-form"
                 >
                   <input
+                    aria-label="Nombre del torneo"
                     ref={inlineNombreInputRef}
                     type="text"
                     value={nombreInline}
@@ -829,42 +794,23 @@ export default function TorneoDetail() {
                       if (nombreInlineError) setNombreInlineError('');
                     }}
                     disabled={guardandoNombreInline}
-                    placeholder="Nombre del torneo..."
-                    style={{
-                      fontSize: 'var(--font-size-xl)',
-                      fontWeight: 700,
-                      padding: '0.35rem 0.65rem',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'var(--color-surface)',
-                      color: 'var(--color-text)',
-                      border: '1px solid var(--color-primary)',
-                      outline: 'none',
-                      boxShadow: '0 0 0 2px rgba(0, 208, 132, 0.2)',
-                      flex: '1 1 200px',
-                      minWidth: 0,
-                    }}
+                    placeholder="Nombre del torneo…"
+                    className="td-input td-name-input"
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
                         handleCancelEditingNombre();
                       }
                     }}
                   />
-                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                  <div className="td-inline-actions">
                     <button
                       type="submit"
-                      className="btn-primary"
                       disabled={guardandoNombreInline || !nombreInline.trim() || nombreInline.trim() === torneo.nombre}
                       title="Guardar nombre (Enter)"
-                      style={{
-                        padding: '0.4rem 0.65rem',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem',
-                        fontSize: 'var(--font-size-sm)',
-                      }}
+                      className="td-button"
                     >
                       {guardandoNombreInline ? (
-                        <RefreshCw size={14} className="spin" />
+                        <RefreshCw size={14} className="td-spin" />
                       ) : (
                         <Check size={15} strokeWidth={2.5} />
                       )}
@@ -872,24 +818,17 @@ export default function TorneoDetail() {
                     </button>
                     <button
                       type="button"
-                      className="btn-secondary"
                       onClick={handleCancelEditingNombre}
                       disabled={guardandoNombreInline}
                       title="Cancelar (Esc)"
-                      style={{
-                        padding: '0.4rem 0.65rem',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem',
-                        fontSize: 'var(--font-size-sm)',
-                      }}
+                      className="td-button"
                     >
                       <X size={15} />
                       <span>Cancelar</span>
                     </button>
                   </div>
                   {nombreInlineError && (
-                    <div style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-xs)', width: '100%', marginTop: '0.2rem' }}>
+                    <div className="td-error td-name-error">
                       {nombreInlineError}
                     </div>
                   )}
@@ -897,53 +836,29 @@ export default function TorneoDetail() {
               )}
             </div>
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1.25rem',
-                color: 'var(--color-text-secondary)',
-                fontSize: 'var(--font-size-sm)',
-                marginTop: '0.6rem',
-                flexWrap: 'wrap',
-              }}
-            >
+            <div className="td-meta">
               {torneo.estado === 'BORRADOR' ? (
                 <button
                   type="button"
                   onClick={handleOpenEditTorneo}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    background: 'transparent',
-                    border: '1px dashed var(--color-border)',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '0.2rem 0.5rem',
-                    color: 'inherit',
-                    cursor: 'pointer',
-                    fontSize: 'inherit',
-                    fontFamily: 'inherit',
-                    transition: 'all 0.15s ease',
-                  }}
-                  className="hover-card"
+                  className="td-button td-date-button"
                   title="Click para cambiar la fecha del torneo"
                 >
-                  <Calendar size={15} style={{ color: 'var(--color-primary)' }} />
+                  <Calendar size={15} className="td-brand-icon" />
                   <span>
                     {torneo.fecha ? formatFechaTorneo(torneo.fecha) : 'Fecha a confirmar'}
                   </span>
-                  <Edit2 size={12} style={{ opacity: 0.7, marginLeft: '0.2rem' }} />
+                  <Edit2 size={12} className="td-date-edit-icon" />
                 </button>
               ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span className="td-meta-item">
                   <Calendar size={15} />
                   <span>
                     {torneo.fecha ? formatFechaTorneo(torneo.fecha) : 'Fecha a confirmar'}
                   </span>
                 </span>
               )}
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span className="td-meta-item">
                 <Layers size={15} />
                 {torneo.categorias?.length || 0} {torneo.categorias?.length === 1 ? 'categoría' : 'categorías'}
               </span>
@@ -951,25 +866,25 @@ export default function TorneoDetail() {
           </div>
 
           {/* Acciones principales */}
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="td-actions">
             <button
               type="button"
-              className="btn-ghost"
+              className="td-button"
               onClick={handleCopyLink}
               title="Copiar link público para compartir con jugadores"
             >
-              {copiado ? <Check size={16} style={{ color: 'var(--color-primary)' }} /> : <Copy size={16} />}
-              {copiado ? 'Link Copiado!' : 'Copiar Link'}
+              {copiado ? <Check size={16} className="td-brand-icon" /> : <Copy size={16} />}
+              {copiado ? 'Link copiado' : 'Copiar link'}
             </button>
 
             <Link
               to={`/torneo/${torneo.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-ghost"
+              className="td-button"
               title="Abrir vista pública en nueva pestaña"
             >
-              <Eye size={16} /> Ver Público
+              <Eye size={16} /> Ver público
             </Link>
 
             {torneo.estado !== 'BORRADOR' && (
@@ -980,7 +895,7 @@ export default function TorneoDetail() {
                   role="menuitem"
                   onClick={() => setReiniciarModalOpen(true)}
                 >
-                  <RotateCcw size={15} /> Reiniciar Torneo
+                  <RotateCcw size={15} /> Reiniciar torneo
                 </button>
               </ActionsMenu>
             )}
@@ -988,39 +903,27 @@ export default function TorneoDetail() {
             {torneo.estado === 'EN_CURSO' && (
               <Link
                 to={`/admin/torneos/${torneo.id}/en-vivo`}
-                className="btn-primary"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  width: 'auto',
-                  maxWidth: '100%',
-                  textDecoration: 'none',
-                  background: 'linear-gradient(135deg, var(--color-primary), #00b372)',
-                  boxShadow: '0 2px 8px rgba(0, 208, 132, 0.3)',
-                  fontWeight: 700,
-                }}
+                className="td-button td-primary"
                 title="Abrir panel de control en vivo y reprogramación por lluvia"
               >
-                <Activity size={16} /> Día de Torneo (En Vivo)
+                <Activity size={16} /> Día de Torneo
               </Link>
             )}
 
             {puedeIniciar && (
               <button
                 type="button"
-                className="btn-primary"
                 onClick={() => handlePreCheckInicio()}
                 disabled={verificandoInicio}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto', maxWidth: '100%' }}
+                className={`td-button${torneo.estado === 'EN_CURSO' ? '' : ' td-primary'}`}
               >
                 {verificandoInicio ? (
                   <>
-                    <RefreshCw size={16} className="spin" /> Verificando turnos...
+                    <RefreshCw size={16} className="td-spin" /> Verificando turnos…
                   </>
                 ) : (
                   <>
-                    <Play size={16} /> Iniciar Torneo y Asignar Horarios
+                    <Play size={16} /> Iniciar torneo
                   </>
                 )}
               </button>
@@ -1048,43 +951,42 @@ export default function TorneoDetail() {
       )}
 
       {/* Listado de Categorías */}
-      <div className="torneo-section-header">
+      <div className="td-section-heading">
         <div>
-          <h2 style={{ margin: 0, fontSize: 'var(--font-size-xl)', display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}>
-            <Layers size={22} style={{ color: 'var(--color-primary)' }} />
+          <h2 className="td-section-title">
+            <Layers size={22} className="td-brand-icon" />
             Categorías
           </h2>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="td-category-tools">
           <button
             type="button"
-            className="btn-primary torneo-nueva-cat-btn"
+            className="td-button"
             onClick={() => setNuevaCatModalOpen(true)}
           >
-            <Plus size={16} /> Nueva Categoría
+            <Plus size={16} /> Nueva categoría
           </button>
         </div>
       </div>
 
       {(!torneo.categorias || torneo.categorias.length === 0) ? (
-        <div className="empty-state" style={{ padding: '3rem 1rem', textAlign: 'center' }}>
-          <Layers size={44} style={{ color: 'var(--color-text-secondary)', marginBottom: '0.75rem', opacity: 0.5 }} />
-          <h3 style={{ margin: '0 0 0.4rem 0' }}>No hay categorías cargadas</h3>
-          <p style={{ margin: '0 0 1.25rem 0', color: 'var(--color-text-secondary)' }}>
+        <div className="td-card td-empty">
+          <Layers size={44} className="td-empty-icon" />
+          <h3 className="td-empty-title">No hay categorías cargadas</h3>
+          <p className="td-empty-copy">
             Comenzá agregando las categorías que participarán en este torneo (ej. 4ta, 6ta, 8va, Damas 5ta).
           </p>
           <button
             type="button"
-            className="btn-primary"
             onClick={() => setNuevaCatModalOpen(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', width: 'auto' }}
+            className="td-button"
           >
-            <Plus size={16} /> Agregar Categoría
+            <Plus size={16} /> Agregar categoría
           </button>
         </div>
       ) : (
-        <div className="torneos-grid">
+        <div className="td-category-grid">
           {torneo.categorias.map((cat) => {
             const totalParejas = cat.parejas?.length || 0;
             const totalZonas = cat.zonas?.length || 0;
@@ -1096,54 +998,37 @@ export default function TorneoDetail() {
             return (
               <div
                 key={cat.id}
-                className="torneo-card"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  gap: '1rem',
-                  cursor: 'default',
-                }}
+                className="td-card td-category"
               >
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-                    <h3 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>{cat.nombre}</h3>
-                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                  <div className="td-category-heading">
+                    <h3 className="td-category-title">{cat.nombre}</h3>
+                    <div className="td-category-state">
                       {cat.estado !== torneo.estado && (
-                        <span className={`badge badge-${cat.estado.toLowerCase()}`}>{estadoLabel(cat.estado)}</span>
+                        <span className={`td-state td-state-${cat.estado.toLowerCase()}`}>{estadoLabel(cat.estado)}</span>
                       )}
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '0.75rem',
-                      color: 'var(--color-text-secondary)',
-                      fontSize: 'var(--font-size-sm)',
-                      marginTop: '0.75rem',
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <Users size={15} style={{ color: 'var(--color-primary)' }} />
-                      <strong style={{ color: 'var(--color-text)' }}>{totalParejas}</strong> parejas
+                  <div className="td-category-meta">
+                    <span className="td-meta-item">
+                      <Users size={15} className="td-brand-icon" />
+                      <strong className="td-strong">{totalParejas}</strong> parejas
                     </span>
                     {totalZonas > 0 && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <span className="td-meta-item">
                         <Layers size={15} />
-                        <strong style={{ color: 'var(--color-text)' }}>{totalZonas}</strong> zonas
+                        <strong className="td-strong">{totalZonas}</strong> zonas
                       </span>
                     )}
                     {totalPartidos > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '95px' }}>
-                        <span style={{ fontSize: 'var(--font-size-xs)', lineHeight: 1.2 }}>
-                          <strong style={{ color: 'var(--color-text)' }}>{partidosFinalizados}</strong>/{totalPartidos} jugados
+                      <div className="td-progress">
+                        <span className="td-progress-label">
+                          <strong className="td-strong">{partidosFinalizados}</strong>/{totalPartidos} jugados
                         </span>
-                        <div className="progress-bar-mini">
+                        <div className="td-progress-track">
                           <div
-                            className="progress-bar-mini-fill"
+                            className="td-progress-fill"
                             style={{
                               width: `${Math.round((partidosFinalizados / totalPartidos) * 100)}%`,
                             }}
@@ -1159,25 +1044,25 @@ export default function TorneoDetail() {
                   </div>
                 </div>
 
-                <div className="torneo-card-actions">
+                <div className="td-card-actions">
                   <Link
                     to={`/admin/torneos/${torneo.id}/categorias/${cat.id}`}
-                    className="btn-outline"
+                    className="td-button td-category-action"
                   >
                     <Settings size={15} /> Administrar
                   </Link>
 
                   <Link
                     to={`/admin/torneos/${torneo.id}/categorias/${cat.id}/eliminatoria`}
-                    className="btn-secondary"
-                    title="Ver Bracket Eliminatorio"
+                    className="td-button td-category-action"
+                    title="Ver cuadro eliminatorio"
                   >
-                    <GitBranch size={15} /> Bracket
+                    <GitBranch size={15} /> Cuadro
                   </Link>
 
                   <button
                     type="button"
-                    className="cat-delete-btn"
+                    className="td-button td-delete"
                     title="Eliminar categoría"
                     aria-label={`Eliminar categoría ${cat.nombre}`}
                     onClick={() => setCategoriaAEliminar(cat)}
@@ -1193,39 +1078,42 @@ export default function TorneoDetail() {
 
       {/* Modal para editar fecha del torneo */}
       {editTorneoModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '440px' }}>
-            <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Calendar size={20} style={{ color: 'var(--color-primary)' }} /> Editar Fecha del Torneo
-            </h3>
+        <div className="pm-overlay">
+          <div className="pm-modal td-date-modal" role="dialog" aria-modal="true" aria-labelledby="td-date-title">
+            <div className="pm-header">
+              <h2 id="td-date-title" className="pm-title td-modal-title">
+                <Calendar size={20} className="td-brand-icon" /> Editar fecha del torneo
+              </h2>
+            </div>
 
-            {editTorneoError && (
-              <div className="error-message" style={{ marginBottom: '1rem' }}>
-                {editTorneoError}
+            <form onSubmit={handleGuardarTorneo} className="td-modal-form">
+              <div className="pm-body">
+                {editTorneoError && (
+                  <div className="pm-alert td-modal-alert" role="alert">
+                    {editTorneoError}
+                  </div>
+                )}
+                <div className="td-field">
+                  <label className="td-label" htmlFor="td-edit-date">
+                    Fecha de inicio (viernes)
+                  </label>
+                  <input
+                    id="td-edit-date"
+                    type="date"
+                    value={editFecha}
+                    onChange={(e) => setEditFecha(e.target.value)}
+                    required
+                    className="td-input"
+                  />
+                  <p className="pm-muted td-field-help">
+                    Seleccioná el día viernes en que inicia el torneo. Los partidos de viernes y sábado se programarán de acuerdo a esta fecha.
+                  </p>
+                </div>
               </div>
-            )}
-
-            <form onSubmit={handleGuardarTorneo}>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
-                  Fecha de inicio (Viernes):
-                </label>
-                <input
-                  type="date"
-                  value={editFecha}
-                  onChange={(e) => setEditFecha(e.target.value)}
-                  required
-                  style={{ width: '100%' }}
-                />
-                <p style={{ margin: '0.4rem 0 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                  Seleccioná el día viernes en que inicia el torneo. Los partidos de Viernes y Sábado se programarán de acuerdo a esta fecha.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <div className="pm-footer">
                 <button
                   type="button"
-                  className="btn-secondary"
+                  className="pm-button"
                   onClick={() => setEditTorneoModalOpen(false)}
                   disabled={guardandoTorneo}
                 >
@@ -1233,10 +1121,10 @@ export default function TorneoDetail() {
                 </button>
                 <button
                   type="submit"
-                  className="btn-primary"
+                  className="pm-button pm-primary"
                   disabled={guardandoTorneo}
                 >
-                  {guardandoTorneo ? 'Guardando...' : 'Guardar Cambios'}
+                  {guardandoTorneo ? 'Guardando…' : 'Guardar cambios'}
                 </button>
               </div>
             </form>
@@ -1246,32 +1134,36 @@ export default function TorneoDetail() {
 
       {/* Modal para crear categoría */}
       {nuevaCatModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '420px' }}>
-            <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Plus size={20} style={{ color: 'var(--color-primary)' }} /> Nueva Categoría
-            </h3>
+        <div className="pm-overlay">
+          <div className="pm-modal td-category-modal" role="dialog" aria-modal="true" aria-labelledby="td-category-title">
+            <div className="pm-header">
+              <h2 id="td-category-title" className="pm-title td-modal-title">
+                <Plus size={20} className="td-brand-icon" /> Nueva categoría
+              </h2>
+            </div>
 
-            <form onSubmit={handleCrearCategoria}>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: 'var(--font-size-sm)' }}>
-                  Nombre de la categoría:
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: 4ta, 6ta, 8va, Damas 5ta..."
-                  value={nombreNuevaCat}
-                  onChange={(e) => setNombreNuevaCat(e.target.value)}
-                  autoFocus
-                  style={{ width: '100%' }}
-                />
+            <form onSubmit={handleCrearCategoria} className="td-modal-form">
+              <div className="pm-body">
+                <div className="td-field">
+                  <label className="td-label" htmlFor="td-new-category">
+                    Nombre de la categoría:
+                  </label>
+                  <input
+                    id="td-new-category"
+                    type="text"
+                    required
+                    placeholder="Ej.: 4ta, 6ta, 8va, Damas 5ta…"
+                    value={nombreNuevaCat}
+                    onChange={(e) => setNombreNuevaCat(e.target.value)}
+                    autoFocus
+                    className="td-input"
+                  />
+                </div>
               </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <div className="pm-footer">
                 <button
                   type="button"
-                  className="btn-secondary"
+                  className="pm-button"
                   onClick={() => {
                     setNuevaCatModalOpen(false);
                     setNombreNuevaCat('');
@@ -1280,8 +1172,8 @@ export default function TorneoDetail() {
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={creandoCat || !nombreNuevaCat.trim()}>
-                  {creandoCat ? 'Creando...' : 'Crear Categoría'}
+                <button type="submit" className="pm-button pm-primary" disabled={creandoCat || !nombreNuevaCat.trim()}>
+                  {creandoCat ? 'Creando…' : 'Crear categoría'}
                 </button>
               </div>
             </form>

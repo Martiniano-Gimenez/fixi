@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { Check, Copy, Link2, Loader2, Lock, MessageCircle, Unlock } from 'lucide-react';
 import { api } from '../api/client';
-import './InscripcionLinkPanel.css';
 
 /**
  * Abrir/cerrar la inscripción por link y compartirlo (TorneoDetail, solo en BORRADOR).
@@ -43,26 +42,27 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
   };
 
   return (
-    <section className="insc-panel" aria-labelledby="insc-panel-titulo">
-      <div className="insc-panel-cabecera">
-        <h2 id="insc-panel-titulo">
+    <section className="td-card td-inscription" aria-labelledby="insc-panel-titulo">
+      <div className="td-inscription-heading">
+        <h2 id="insc-panel-titulo" className="td-section-title">
           <Link2 size={18} aria-hidden="true" /> Inscripción por link
         </h2>
-        <span className={abierta ? 'insc-panel-chip insc-panel-chip-on' : 'insc-panel-chip'}>
+        <span className={abierta ? 'td-state td-state-open' : 'td-state'}>
           {abierta ? 'Abierta' : 'Cerrada'}
         </span>
       </div>
 
-      <p className="insc-panel-texto">
+      <p className="td-inscription-copy">
         {abierta
           ? 'Las parejas se anotan solas con este link y quedan inscriptas al enviarlo. Al iniciar el torneo se cierra sola.'
           : 'Abrila para que las parejas se anoten solas, con su teléfono y su disponibilidad.'}
       </p>
 
       {abierta && (
-        <div className="insc-panel-link">
+        <div className="td-inscription-link">
           <input
             ref={inputRef}
+            className="td-input"
             readOnly
             value={url}
             aria-label="Link de inscripción"
@@ -71,17 +71,17 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
         </div>
       )}
 
-      {error && <p className="insc-panel-error" role="alert">{error}</p>}
+      {error && <p className="td-error td-inscription-error" role="alert">{error}</p>}
 
-      <div className="insc-panel-acciones">
+      <div className="td-inscription-actions">
         {abierta && (
           <>
-            <button type="button" className="btn-ghost" onClick={copiar}>
+            <button type="button" className="td-button" onClick={copiar}>
               {copiado ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
               {copiado ? 'Link copiado' : 'Copiar link'}
             </button>
             <a
-              className="btn-ghost"
+              className="td-button"
               href={`https://wa.me/?text=${encodeURIComponent(textoWhatsApp)}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -92,12 +92,12 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
         )}
         <button
           type="button"
-          className={abierta ? 'btn-ghost' : 'btn-outline'}
+          className="td-button td-brand-button"
           onClick={cambiar}
           disabled={guardando}
         >
           {guardando ? (
-            <Loader2 size={16} className="spin" aria-hidden="true" />
+            <Loader2 size={16} className="td-spin" aria-hidden="true" />
           ) : abierta ? (
             <Lock size={16} aria-hidden="true" />
           ) : (
