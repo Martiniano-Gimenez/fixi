@@ -84,10 +84,10 @@ export default function TorneoEnVivo() {
     async (isSilent = false) => {
       if (!isSilent) setLoading(true);
       else setRefreshing(true);
-      setError(null);
       try {
         const res = await api.get(`/torneos/${id}/en-vivo`);
         setData(res);
+        setError(null);
       } catch (err) {
         setError(err.message || 'Error al cargar el estado en vivo del torneo');
       } finally {
@@ -452,6 +452,19 @@ export default function TorneoEnVivo() {
           <button type="button" className="dt-button dt-primary" onClick={() => fetchEnVivoData()}>
             Reintentar
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="dt-screen dt-loading">
+        <div className="dt-center">
+          <RefreshCw size={36} className="dt-loading-icon dt-spin" />
+          <p className="dt-muted">
+            Cargando estado en vivo del torneo...
+          </p>
         </div>
       </div>
     );
