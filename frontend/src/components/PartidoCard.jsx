@@ -1,5 +1,6 @@
 import { Edit2, Play, Plus, Clock, Trophy, AlertTriangle } from 'lucide-react';
 import { formatDiaHorario } from '../utils/dateUtils';
+import { sinResultado } from '../pages/public/publico/utilidades';
 
 export default function PartidoCard({ partido, onClick, onCargarResultado, onReprogramar }) {
   if (!partido) return null;
@@ -178,12 +179,14 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
               );
             })}
           </div>
-        ) : (
+        ) : sinResultado(partido) ? (
           <div
             className="cd-no-score"
           >
             Sin resultado cargado
           </div>
+        ) : (
+          <div className="cd-placeholder">vs</div>
         )}
 
       </div>
