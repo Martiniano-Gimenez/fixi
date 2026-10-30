@@ -12,40 +12,31 @@ export default function ConfirmModal({ isOpen, title, message, onConfirm, onCanc
   if (!isOpen) return null;
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
-      backdropFilter: 'blur(4px)'
-    }}>
-      <div className="auth-card" style={{ width: '90%', maxWidth: '400px', padding: '2rem', textAlign: 'center' }}>
-        <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: isDanger ? 'var(--color-danger)' : 'var(--color-text)' }}>
+    <div className="pm-overlay pm-confirm-overlay">
+      <div className="pm-modal pm-confirm" role="dialog" aria-modal="true" aria-label={title}>
+        <h2 className={`pm-header pm-title${isDanger ? ' pm-danger-text' : ''}`}>
           {title}
         </h2>
-        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '2rem', lineHeight: '1.5' }}>
+        <p className="pm-confirm-message">
           {message}
         </p>
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+        <div className="pm-footer">
           {!isAlert && (
-            <button 
+            <button
               ref={cancelRef}
-              type="button" 
-              onClick={onCancel} 
-              className="btn-primary"
-              style={{ flex: 1, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+              type="button"
+              onClick={onCancel}
+
+              className="pm-button pm-grow"
             >
               Cancelar
             </button>
           )}
-          <button 
-            type="button" 
-            onClick={onConfirm} 
-            className="btn-primary"
-            style={{ 
-              flex: 1, 
-              background: isDanger ? 'var(--color-danger)' : 'var(--color-primary)', 
-              color: 'white',
-              border: 'none'
-            }}
+          <button
+            type="button"
+            onClick={onConfirm}
+
+            className={`pm-button pm-grow pm-primary${isDanger ? ' pm-destructive' : ''}`}
           >
             {confirmText || 'Confirmar'}
           </button>

@@ -263,37 +263,15 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
 
   return (
     <>
-      <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
-        <div className="modal-content" style={{ maxWidth: '440px', textAlign: 'left' }}>
+      <div className="pm-overlay" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+        <div className="pm-modal pm-result" role="dialog" aria-modal="true" aria-label={getTitle()}>
           {/* Cabecera del modal */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: '1.25rem',
-            borderBottom: '1px solid var(--color-border)',
-            paddingBottom: '0.75rem',
-            textAlign: 'left',
-          }}>
-            <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
-              <h2 style={{
-                margin: 0,
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                color: 'var(--color-text)',
-                fontFamily: 'var(--font-display)',
-                textAlign: 'left',
-                lineHeight: 1.2
-              }}>
+          <div className="pm-header">
+            <div className="pm-grow">
+              <h2 className="pm-title">
                 {getTitle()}
               </h2>
-              <p style={{
-                margin: '0.25rem 0 0',
-                fontSize: 'var(--font-size-xs)',
-                color: 'var(--color-text-secondary)',
-                textAlign: 'left',
-                lineHeight: 1.4
-              }}>
+              <p className="pm-muted">
                 {getSubtitle()}
               </p>
             </div>
@@ -301,107 +279,50 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
               type="button"
               onClick={onClose}
               aria-label="Cerrar modal"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--color-text-secondary)',
-                fontSize: '1.5rem',
-                cursor: 'pointer',
-                lineHeight: 1,
-                padding: '0 0.25rem',
-                marginLeft: '0.75rem',
-                flexShrink: 0
-              }}
+              className="pm-button pm-close"
             >
               &times;
             </button>
           </div>
 
-          {/* Encabezado con nombres de las dos parejas una sola vez (columnas alineadas con los inputs) */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            marginBottom: '0.85rem',
-            padding: '0 calc(1rem + 1px)',
-          }}>
-            <div style={{
-              flex: 1,
-              minWidth: 0,
-              textAlign: 'center',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 600,
-              color: 'var(--color-text)',
-              lineHeight: 1.3,
-              wordBreak: 'break-word',
-              overflowWrap: 'break-word',
-            }}>
+          <form onSubmit={handleSubmit} className="pm-result-form">
+          <div className="pm-body">
+          {error && <div className="pm-alert" role="alert">{error}</div>}
+          {/* Pareja 1 arriba; los campos mantienen sus referencias y su orden de foco. */}
+          <div className="pm-result-scoreboard">
+          <div className="pm-result-teams">
+            <span className="pm-set-label">Parejas</span>
+            <div className={`pm-team${resumen?.esDefinido ? (resumen.texto.startsWith(`Gana ${p1Name} (`) ? ' is-winner' : ' is-loser') : ''}`}>
               {p1Name}
             </div>
 
-            <span style={{
-              width: '20px',
-              textAlign: 'center',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-muted)',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              userSelect: 'none',
-              flexShrink: 0
-            }}>
+            <span className="pm-visually-hidden">
               vs
             </span>
 
-            <div style={{
-              flex: 1,
-              minWidth: 0,
-              textAlign: 'center',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 600,
-              color: 'var(--color-text)',
-              lineHeight: 1.3,
-              wordBreak: 'break-word',
-              overflowWrap: 'break-word',
-            }}>
+            <div className={`pm-team${resumen?.esDefinido ? (resumen.texto.startsWith(`Gana ${p2Name} (`) ? ' is-winner' : ' is-loser') : ''}`}>
               {p2Name}
             </div>
           </div>
 
-          {error && <div className="error-message" style={{ marginBottom: '1rem' }}>{error}</div>}
-
-          <form onSubmit={handleSubmit}>
             {[0, 1, 2].map((idx) => {
               const isDisabled = getIsSetDisabled(idx);
               return (
-                <div key={idx} style={{ 
-                  marginBottom: '0.75rem', 
-                  padding: '0.75rem 1rem', 
-                  background: isDisabled ? 'transparent' : 'rgba(255, 255, 255, 0.02)', 
-                  border: '1px solid var(--color-border)', 
-                  borderRadius: 'var(--radius-md)',
-                  opacity: isDisabled ? 0.35 : 1,
-                  transition: 'opacity var(--transition-fast)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <span style={{
-                      fontSize: 'var(--font-size-xs)',
-                      fontWeight: 700,
-                      color: isDisabled ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
-                      letterSpacing: '0.05em'
-                    }}>
-                      SET {idx + 1} {idx === 2 && isSet3DisabledByWin && '(No necesario)'}
+                <div key={idx} className={`pm-set${isDisabled ? ' is-disabled' : ''}`}>
+                  <div className="pm-set-heading">
+                    <span className="pm-set-label">
+                      Set {idx + 1} <span className="pm-set-note">{idx === 2 && isSet3DisabledByWin && '(No necesario)'}</span>
                     </span>
                   </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+
+                  <div className="pm-set-fields">
+                    <div className="pm-input-wrap">
                       <input
                         ref={(el) => { inputRefs.current[`${idx}-g1`] = el; }}
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        className="resultado-set-input"
+                        className="pm-set-input"
                         value={setsInput[idx].g1}
                         onChange={(e) => handleInputChange(idx, 'g1', e.target.value)}
                         onFocus={(e) => e.target.select()}
@@ -412,26 +333,17 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
                       />
                     </div>
 
-                    <span style={{
-                      width: '20px',
-                      textAlign: 'center',
-                      fontWeight: 700,
-                      color: 'var(--color-text-secondary)',
-                      fontSize: '1.25rem',
-                      userSelect: 'none',
-                      lineHeight: 1,
-                      flexShrink: 0
-                    }}>
+                    <span className="pm-visually-hidden">
                       -
                     </span>
 
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="pm-input-wrap">
                       <input
                         ref={(el) => { inputRefs.current[`${idx}-g2`] = el; }}
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        className="resultado-set-input"
+                        className="pm-set-input"
                         value={setsInput[idx].g2}
                         onChange={(e) => handleInputChange(idx, 'g2', e.target.value)}
                         onFocus={(e) => e.target.select()}
@@ -445,47 +357,37 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
                 </div>
               );
             })}
+          </div>
 
             {/* Resumen calculado sobre los botones de acción */}
             {resumen && (
               <div
-                style={{
-                  marginTop: '1rem',
-                  marginBottom: '0.25rem',
-                  padding: '0.55rem 0.85rem',
-                  background: resumen.esDefinido ? 'rgba(0, 208, 132, 0.08)' : 'rgba(255, 255, 255, 0.04)',
-                  border: `1px solid ${resumen.esDefinido ? 'rgba(0, 208, 132, 0.25)' : 'var(--color-border)'}`,
-                  borderRadius: 'var(--radius-md)',
-                  color: resumen.esDefinido ? 'var(--color-primary)' : 'var(--color-text)',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 600,
-                  textAlign: 'center',
-                  lineHeight: 1.4
-                }}
+                className={`pm-summary${resumen.esDefinido ? ' is-defined' : ''}`}
               >
                 {resumen.texto}
               </div>
             )}
+          </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.25rem', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="pm-footer pm-result-footer">
               {(isFinished || isEnCurso) ? (
-                <button 
-                  type="button" 
-                  className="btn-danger" 
-                  onClick={() => setConfirmDeleteOpen(true)} 
+                <button
+                  type="button"
+
+                  onClick={() => setConfirmDeleteOpen(true)}
                   disabled={loading}
-                  style={{ width: 'auto', padding: '0.5rem 1rem' }}
+                  className="pm-button pm-danger-secondary"
                 >
-                  Borrar Resultado
+                  Borrar resultado
                 </button>
               ) : <div />}
 
-              <div style={{ display: 'flex', gap: '0.75rem', marginLeft: 'auto' }}>
-                <button type="button" className="btn-secondary" onClick={onClose} disabled={loading} style={{ width: 'auto' }}>
+              <div className="pm-footer-actions">
+                <button type="button" onClick={onClose} disabled={loading} className="pm-button">
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={loading} style={{ width: 'auto' }}>
-                  {loading ? 'Guardando...' : 'Guardar Resultado'}
+                <button type="submit" disabled={loading} className="pm-button pm-primary">
+                  {loading ? 'Guardando…' : 'Guardar resultado'}
                 </button>
               </div>
             </div>

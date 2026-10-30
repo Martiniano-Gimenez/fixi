@@ -106,23 +106,14 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
   };
 
   return (
-    <div className="card partidos-pendientes-banner">
+    <div className="pm-pending">
       {/* Encabezado */}
       <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '0.75rem',
-          marginBottom: '1rem',
-          borderBottom: '1px solid rgba(245, 158, 11, 0.15)',
-          paddingBottom: '0.75rem',
-          flexWrap: 'wrap',
-        }}
+        className="pm-pending-header"
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <AlertTriangle size={20} color="var(--color-warning)" style={{ flexShrink: 0 }} />
-          <h3 className="partidos-pendientes-title">
+        <div className="pm-heading-main">
+          <AlertTriangle size={20} className="pm-icon" />
+          <h3 className="pm-pending-title">
             Partidos pendientes de asignación de horario ({partidosPendientes.length})
           </h3>
         </div>
@@ -131,14 +122,8 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
         {gruposCategorias.length > 1 && (
           <button
             type="button"
-            className="btn-link-action"
-            style={{
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-secondary)',
-              whiteSpace: 'nowrap',
-              padding: '0.2rem 0.4rem',
-              flexShrink: 0,
-            }}
+
+            className="pm-text-button"
             onClick={handleToggleAll}
           >
             {allExpanded ? 'Colapsar todas' : 'Expandir todas'}
@@ -146,82 +131,57 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
         )}
       </div>
 
-      {error && <div className="error-message" style={{ marginBottom: '1rem' }}>{error}</div>}
+      {error && <div className="pm-alert">{error}</div>}
 
       {/* Lista de Grupos de Categorías en Acordeón */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div className="pm-stack">
         {gruposCategorias.map((grupo) => {
           const isExpanded = expandedCategorias.has(grupo.catNombre);
 
           return (
             <div
               key={grupo.catNombre}
-              style={{
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-surface)',
-                overflow: 'hidden',
-              }}
+              className="pm-pending-group"
             >
               {/* Header del acordeón */}
-              <div
-                style={{
-                  padding: '0.65rem 0.85rem',
-                  background: 'var(--color-surface-elevated)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                }}
+              <button
+                type="button"
+                className="pm-pending-toggle"
                 onClick={() => toggleCategoria(grupo.catNombre)}
+                aria-expanded={isExpanded}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <Layers size={16} style={{ color: 'var(--color-primary)' }} />
-                  <strong style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
+                <span className="pm-pending-category">
+                  <Layers size={16} className="pm-brand-icon" />
+                  <strong className="pm-strong">
                     {grupo.catNombre}
                   </strong>
                   <span
-                    className="badge"
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      fontSize: '11px',
-                      padding: '2px 6px',
-                    }}
+
+                    className="pm-badge"
                   >
                     {grupo.partidos.length} {grupo.partidos.length === 1 ? 'partido' : 'partidos'}
                   </span>
 
                   {grupo.tieneCriticos && (
                     <span
-                      style={{
-                        fontSize: '10.5px',
-                        background: 'rgba(239, 68, 68, 0.15)',
-                        color: '#ef4444',
-                        padding: '1px 6px',
-                        borderRadius: '4px',
-                        fontWeight: 600,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                      }}
+                      className="pm-badge pm-alert"
                     >
                       <AlertCircle size={11} /> Muy restringido
                     </span>
                   )}
-                </div>
+                </span>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                <span className="pm-pending-expand">
+                  <span className="pm-muted">
                     {isExpanded ? 'Ocultar' : 'Ver partidos'}
                   </span>
                   {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </div>
-              </div>
+                </span>
+              </button>
 
               {/* Contenido expandible */}
               {isExpanded && (
-                <div className="partidos-pendientes-grid">
+                <div className="pm-pending-grid">
                   {grupo.partidos.map((p) => {
                     const p1Nombre = p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : 'Por definirse';
                     const p2Nombre = p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : 'Por definirse';
@@ -231,54 +191,35 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                     return (
                       <div
                         key={p.id}
-                        style={{
-                          padding: '0.75rem',
-                          background: 'var(--color-bg-input)',
-                          borderRadius: 'var(--radius-sm)',
-                          border: '1px solid var(--color-border)',
-                          borderLeft: `3px solid ${esCritico ? '#ef4444' : 'var(--color-border)'}`,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          gap: '0.6rem',
-                        }}
+                        className={`pm-pending-match${esCritico ? ' is-critical' : ''}`}
                       >
                         <div>
-                          <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <div className="pm-match-meta">
                             <span
-                              style={{
-                                display: 'inline-block',
-                                fontSize: '10.5px',
-                                fontWeight: 600,
-                                color: 'var(--color-text-secondary)',
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
-                                borderRadius: '4px',
-                                padding: '1px 6px',
-                                letterSpacing: '0.3px',
-                                lineHeight: 1.4,
-                              }}
+                              className="pm-badge"
                             >
                               {p.zona?.nombre || 'Zona'}
                             </span>
                           </div>
 
-                          <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.2rem', lineHeight: 1.35, wordBreak: 'break-word' }}>
-                            {p1Nombre} vs {p2Nombre}
+                          <div className="pm-pair-names">
+                            <span>{p1Nombre}</span>
+                            <span className="pm-versus">vs</span>
+                            <span>{p2Nombre}</span>
                           </div>
 
                           {viables === 0 && (
-                            <div style={{ fontSize: '10.5px', color: 'var(--color-danger)', marginTop: '0.3rem', lineHeight: 1.3 }}>
+                            <div className="pm-alert">
                               Canchas saturadas en todos los horarios. Es necesario liberar turnos de otros partidos o acordar un nuevo horario.
                             </div>
                           )}
                         </div>
 
-                        {/* Botón de acción primario verde deportivo */}
-                        <div className="partidos-pendientes-btn-wrap">
+                        {/* Acción de asignación por partido */}
+                        <div className="pm-pending-actions">
                           <button
                             type="button"
-                            className="btn-primary partidos-pendientes-btn"
+                            className="pm-button pm-blue-button"
                             onClick={() => setPartidoParaAsignar(p)}
                           >
                             <Clock size={13} />

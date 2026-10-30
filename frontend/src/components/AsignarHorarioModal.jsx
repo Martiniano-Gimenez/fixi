@@ -205,24 +205,17 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         key={s.slotId}
         type="button"
         disabled={Boolean(guardandoSlotId)}
-        className="slot-chip"
-        style={{
-          padding: '0.25rem 0.5rem',
-          fontSize: '11px',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.25rem',
-          minHeight: '28px',
-        }}
+
+        className="pm-button pm-slot"
         onClick={() => handleAsignar(s)}
         title={`Asignar ${formatSlotCalendario(s.slotId)} (${s.canchasLibres?.length || 0} canchas libres)`}
       >
         {isApplying ? (
           <>
-            <Loader2 size={10} className="spin" /> {s.hora}
+            <Loader2 size={10} className="pm-spinner" /> {s.hora}
           </>
         ) : (
-          `${s.hora} (${s.canchasLibres.length} lib.)`
+          `${s.hora} · Cancha ${s.canchasLibres[0]}`
         )}
       </button>
     );
@@ -233,22 +226,19 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     const bloques = agruparSlotsEnBloques(slots);
 
     return (
-      <div style={{ marginBottom: '0.45rem' }}>
-        <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>
+      <div className="pm-day-block">
+        <div className="pm-day-label">
           {diaNombre}:
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        <div className="pm-stack">
           {bloques.map((bloque, bIdx) => (
-            <div key={bIdx} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            <div key={bIdx} className="pm-stack">
               {bIdx > 0 && (
                 <div
-                  style={{
-                    borderTop: '1px dashed rgba(255, 255, 255, 0.1)',
-                    margin: '0.2rem 0',
-                  }}
+                  className="pm-block-divider"
                 />
               )}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+              <div className="pm-slot-grid">
                 {bloque.map(renderSlotChip)}
               </div>
             </div>
@@ -320,74 +310,37 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       <div
         key={opt.slotId}
         onClick={() => setExpandedSlotId((prev) => (prev === opt.slotId ? null : opt.slotId))}
-        style={{
-          padding: isHero ? '0.55rem 0.65rem' : '0.45rem 0.55rem',
-          background: isHero ? 'rgba(255, 255, 255, 0.03)' : 'rgba(255, 255, 255, 0.01)',
-          border: isHero ? '1px solid rgba(234, 179, 8, 0.35)' : '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.35rem',
-          cursor: 'pointer',
-          transition: 'border-color 0.15s ease, background-color 0.15s ease',
-        }}
+        className={`pm-option${isHero ? ' is-hero' : ''}`}
       >
         <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '0.4rem',
-          }}
+          className="pm-option-row"
         >
           <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-              fontSize: isHero ? 'var(--font-size-sm)' : 'var(--font-size-xs)',
-              flex: 1,
-              minWidth: 0,
-            }}
+            className="pm-option-info"
           >
             {isCasiEstrellaDoble ? (
-              <Users size={14} style={{ color: '#38bdf8', flexShrink: 0 }} />
+              <Users size={14} className="pm-brand-icon" />
             ) : (
-              <Star size={14} style={{ color: '#eab308', fill: '#eab308', flexShrink: 0 }} />
+              <Star size={14} className="pm-brand-icon" />
             )}
-            <strong style={{ color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
+            <strong className="pm-strong">
               {formatSlotCalendario(opt.slotId)}
             </strong>
-            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
-              ({opt.canchasLibres.length} lib.)
+            <span className="pm-muted">
+              Cancha {opt.canchasLibres[0]} · {opt.canchasLibres.length} libres
             </span>
             <ChevronDown
               size={12}
-              style={{
-                flexShrink: 0,
-                color: 'var(--color-text-secondary)',
-                opacity: 0.6,
-                transform: isExpanded ? 'rotate(180deg)' : 'none',
-                transition: 'transform 0.2s ease',
-              }}
+              className={`pm-chevron${isExpanded ? ' is-expanded' : ''}`}
             />
           </div>
 
-          <div style={{ flexShrink: 0 }}>
+          <div className="pm-option-action">
             <button
               type="button"
-              className={isHero ? 'btn-primary' : 'btn-secondary'}
+
               disabled={Boolean(guardandoSlotId)}
-              style={{
-                padding: '0.25rem 0.65rem',
-                fontSize: '11px',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.25rem',
-                minHeight: '28px',
-                whiteSpace: 'nowrap',
-              }}
+              className={`pm-button${isHero ? ' pm-primary' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 handleAsignar(opt);
@@ -395,7 +348,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             >
               {isThisApplying ? (
                 <>
-                  <Loader2 size={11} className="spin" /> Asignando...
+                  <Loader2 size={11} className="pm-spinner" /> Asignando…
                 </>
               ) : (
                 'Asignar'
@@ -407,14 +360,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         {/* Detalle desplegable con disclosure progresivo */}
         {isExpanded && textDetails && (
           <div
-            style={{
-              paddingTop: '0.35rem',
-              borderTop: '1px solid rgba(255, 255, 255, 0.06)',
-              fontSize: '11px',
-              color: 'var(--color-text-secondary)',
-              lineHeight: 1.35,
-              wordBreak: 'break-word',
-            }}
+            className="pm-option-details"
           >
             {textDetails}
           </div>
@@ -425,55 +371,47 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
 
   return (
     <div
-      className="modal-overlay"
+      className="pm-overlay"
       onClick={(e) => {
         if (e.target === e.currentTarget && !guardandoSlotId) {
           handleCerrarModal();
         }
       }}
     >
-      <div className="modal-content" style={{ maxWidth: '640px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="pm-modal pm-schedule" role="dialog" aria-modal="true" aria-label="Horario y cancha">
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.5rem' }}>
+        <div className="pm-header">
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text)', lineHeight: 1.25 }}>
+            <h3 className="pm-title">
               {partido.fechaHora ? 'Reprogramar horario y cancha' : 'Asignar horario y cancha libre'}
             </h3>
-            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+            <span className="pm-muted">
               {partido.categoria?.nombre} · {contextoNombre}
             </span>
           </div>
-          <button type="button" className="btn-link-action" onClick={handleCerrarModal} style={{ color: 'var(--color-text-secondary)', padding: '0.25rem' }}>
+          <button type="button" onClick={handleCerrarModal} className="pm-button pm-close" aria-label="Cerrar horario y cancha">
             <X size={18} />
           </button>
         </div>
 
+        <div className="pm-body">
         {/* Info del partido */}
-        <div style={{ padding: '0.65rem 0.85rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-sm)', marginBottom: '0.85rem' }}>
-          <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--color-text)' }}>
+        <div className="pm-match-info">
+          <div className="pm-strong">
             {cruceTexto}
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 0.75rem', marginTop: '0.5rem', alignItems: 'center' }}>
+          <div className="pm-match-meta">
             {partido.fechaHora && (
               <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  fontSize: '11.5px',
-                  color: 'var(--color-text-secondary)',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid var(--color-border)',
-                  padding: '0.25rem 0.6rem',
-                  borderRadius: 'var(--radius-sm)',
-                }}
+                className="pm-current-time"
               >
-                <Clock size={12} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                <Clock size={12} className="pm-brand-icon" />
                 <span>
-                  <strong style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>Actualmente:</strong>{' '}
-                  <span style={{ color: 'var(--color-text)', fontWeight: 600 }}>
+                  <strong className="pm-strong">Actualmente:</strong>{' '}
+                  <span className="pm-strong">
                     {formatDiaHorario(partido.fechaHora)}
+                    {partido.canchaNumero && ` · Cancha ${partido.canchaNumero}`}
                   </span>
                 </span>
               </div>
@@ -482,38 +420,18 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             {!esPartidoEliminatoria && !esSinParejasDefinidas && (
               slotsEnComunOriginales.length > 0 && slotsEnComunDisponibles.length === 0 ? (
                 <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    fontSize: '11px',
-                    color: 'var(--color-warning)',
-                    background: 'rgba(245, 158, 11, 0.08)',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid rgba(245, 158, 11, 0.25)',
-                  }}
+                  className="pm-alert pm-match-notice"
                   title="Coincidían en disponibilidad pero las canchas están 100% ocupadas en esos turnos"
                 >
-                  <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                  <AlertTriangle size={12} className="pm-icon" />
                   <span>Coincidían en {slotsEnComunOriginales.length} {slotsEnComunOriginales.length === 1 ? 'turno' : 'turnos'} pero sin canchas libres</span>
                 </div>
               ) : slotsEnComunOriginales.length === 0 ? (
                 <div
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    fontSize: '11px',
-                    color: 'var(--color-text-secondary)',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--color-border)',
-                  }}
+                  className="pm-alert pm-match-notice"
                   title="Ambas parejas no tienen ninguna ventana horaria en común declarada"
                 >
-                  <Users size={12} style={{ flexShrink: 0 }} />
+                  <Users size={12} className="pm-icon" />
                   <span>Sin coincidencia horaria directa</span>
                 </div>
               ) : null
@@ -521,19 +439,9 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
 
             {esSinParejasDefinidas && (
               <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  fontSize: '11px',
-                  color: 'var(--color-text-secondary)',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  padding: '0.2rem 0.5rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--color-border)',
-                }}
+                className="pm-alert pm-match-notice"
               >
-                <Clock size={12} style={{ flexShrink: 0 }} />
+                <Clock size={12} className="pm-icon" />
                 <span>Cruce pendiente de resultados previos. Podés fijar o cambiar su horario y cancha anticipadamente.</span>
               </div>
             )}
@@ -541,31 +449,26 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         </div>
 
         {error && (
-          <div className="error-message" style={{ marginBottom: '0.75rem', fontSize: '11px' }}>
+          <div className="pm-alert">
             {error}
           </div>
         )}
 
         {/* Contenido principal */}
         {advertenciasAsignacion ? (
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem 0' }}>
+          <div className="pm-stack">
             <div
-              style={{
-                padding: '1rem',
-                background: 'rgba(245, 158, 11, 0.08)',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
-                borderRadius: 'var(--radius-md)',
-              }}
+              className="pm-alert"
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                <AlertTriangle size={18} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
-                <strong style={{ color: 'var(--color-warning)', fontSize: 'var(--font-size-sm)' }}>
+              <div className="pm-alert-heading">
+                <AlertTriangle size={18} className="pm-icon" />
+                <strong className="pm-strong">
                   Horario asignado con advertencias
                 </strong>
               </div>
-              <ul style={{ margin: '0.5rem 0 0 0', paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <ul className="pm-warning-list">
                 {advertenciasAsignacion.advertencias.map((adv, idx) => (
-                  <li key={idx} style={{ color: 'var(--color-text)', fontSize: 'var(--font-size-xs)', lineHeight: 1.4 }}>
+                  <li key={idx} className="pm-warning-item">
                     {adv.mensaje}
                   </li>
                 ))}
@@ -573,48 +476,32 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             </div>
           </div>
         ) : (
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
+          <div className="pm-stack">
           {loadingCanchas ? (
-            <div className="loading" style={{ padding: '2rem' }}>
-              <Loader2 size={18} className="spin" /> Consultando canchas y disponibilidad en tiempo real...
+            <div className="pm-loading">
+              <Loader2 size={18} className="pm-spinner" /> Consultando canchas y disponibilidad en tiempo real...
             </div>
           ) : slotsValidos.length === 0 ? (
             <div
-              style={{
-                padding: '1.25rem',
-                background: 'rgba(245, 158, 11, 0.08)',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '0.75rem',
-              }}
+              className="pm-alert pm-empty"
             >
-              <AlertTriangle size={22} color="var(--color-warning)" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <AlertTriangle size={22} className="pm-icon" />
               <div>
-                <strong style={{ color: 'var(--color-warning)', fontSize: 'var(--font-size-sm)', display: 'block', marginBottom: '0.3rem' }}>
+                <strong className="pm-strong">
                   {esPartidoEliminatoria
                     ? 'No hay turnos con cancha disponible para este cruce de playoffs'
                     : 'No hay turnos disponibles donde haya cancha libre y ambas parejas no estén jugando'}
                 </strong>
-                <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+                <p className="pm-alert-copy">
                   {esPartidoEliminatoria
                     ? 'Todas las canchas del club están 100% ocupadas en los horarios correspondientes a esta fase.'
                     : 'En todos los turnos del torneo las canchas están 100% ocupadas por otros partidos o alguna de las dos parejas ya tiene un partido asignado en simultáneo.'}
                 </p>
                 {!esPartidoEliminatoria && (
-                  <div style={{ marginTop: '0.6rem' }}>
+                  <div className="pm-block">
                     <Link
                       to={`/admin/torneos/${torneoId}/categorias/${partido.categoriaId || partido.categoria?.id}/parejas`}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        fontSize: 'var(--font-size-xs)',
-                        color: 'var(--color-primary)',
-                        textDecoration: 'none',
-                        fontWeight: 600,
-                      }}
+                      className="pm-inline-link"
                     >
                       Ir a Gestionar Parejas de {partido.categoria?.nombre || 'la Categoría'} →
                     </Link>
@@ -624,17 +511,12 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             </div>
           ) : (esPartidoEliminatoria || esSinParejasDefinidas) ? (
             /* Vista simplificada para Eliminatorias / Bracket o Partidos sin parejas confirmadas: lista plana directa sin Hero ficticio */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.15rem' }}>
+            <div className="pm-stack">
+              <div className="pm-day-label">
                 Turnos con cancha libre para este partido ({slotsValidos.length}):
               </div>
               <div
-                style={{
-                  padding: '0.55rem 0.75rem',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--color-border)',
-                }}
+                className="pm-slot-group"
               >
                 {esPartidoZona && viernesNormales.length > 0 && renderDiaBloques('Viernes', viernesNormales)}
                 {esPartidoZona && viernesMadrugada.length > 0 && renderDiaBloques('Sábado (madrugada)', viernesMadrugada)}
@@ -647,23 +529,13 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
             </div>
           ) : (
             /* Vista clásica para Partidos de Zona con ranking de cercanía y disponibilidad */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <div className="pm-stack pm-schedule-options">
               {/* Sugerencia Óptima (Hero) */}
-              <div>
+              <div className="pm-recommendation">
                 <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    fontSize: '10.5px',
-                    fontWeight: 700,
-                    color: '#eab308',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    marginBottom: '0.3rem',
-                  }}
+                  className="pm-recommendation-label"
                 >
-                  <Star size={11} style={{ fill: '#eab308' }} /> MEJOR OPCIÓN
+                  <Star size={11} className="pm-brand-icon" /> Mejor opción
                 </div>
                 {renderOptionRow(heroOption, true)}
               </div>
@@ -673,15 +545,8 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                 <div>
                   <button
                     type="button"
-                    className="btn-link-action"
-                    style={{
-                      padding: '0.2rem 0',
-                      fontSize: '11px',
-                      color: 'var(--color-text-secondary)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.25rem',
-                    }}
+
+                    className="pm-text-button"
                     onClick={() => setShowAlternativas((prev) => !prev)}
                   >
                     {showAlternativas ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -693,7 +558,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                   </button>
 
                   {showAlternativas && (
-                    <div style={{ marginTop: '0.35rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <div className="pm-stack">
                       {alternativas.map((opt) => renderOptionRow(opt, false))}
                     </div>
                   )}
@@ -701,19 +566,11 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
               )}
 
               {/* Salida de último recurso: Grilla completa del club (Accionable en 1-click) */}
-              <div style={{ marginTop: '0.4rem', borderTop: '1px solid var(--color-border)', paddingTop: '0.6rem' }}>
+              <div className="pm-other-slots">
                 <button
                   type="button"
-                  className="btn-link-action"
-                  style={{
-                    padding: 0,
-                    fontSize: '11px',
-                    color: 'var(--color-text-secondary)',
-                    textDecoration: 'underline',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                  }}
+
+                  className="pm-text-button"
                   onClick={() => setShowTodosViables((prev) => !prev)}
                 >
                   {showTodosViables
@@ -723,13 +580,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
 
                 {showTodosViables && (
                   <div
-                    style={{
-                      marginTop: '0.4rem',
-                      padding: '0.5rem',
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      borderRadius: 'var(--radius-sm)',
-                      border: '1px solid var(--color-border)',
-                    }}
+                    className="pm-slot-group"
                   >
                     {viernesNormales.length > 0 && renderDiaBloques('Viernes', viernesNormales)}
                     {viernesMadrugada.length > 0 && renderDiaBloques('Sábado (madrugada)', viernesMadrugada)}
@@ -744,14 +595,15 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
           </div>
         )}
 
+        </div>
         {/* Footer */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '0.65rem', borderTop: '1px solid var(--color-border)', marginTop: '0.4rem' }}>
+        <div className="pm-footer">
           {advertenciasAsignacion ? (
-            <button type="button" className="btn-primary" onClick={handleCerrarModal}>
+            <button type="button" className="pm-button pm-primary" onClick={handleCerrarModal}>
               Entendido
             </button>
           ) : (
-            <button type="button" className="btn-secondary" onClick={handleCerrarModal} disabled={Boolean(guardandoSlotId)}>
+            <button type="button" className="pm-button" onClick={handleCerrarModal} disabled={Boolean(guardandoSlotId)}>
               Cerrar
             </button>
           )}
