@@ -28,23 +28,23 @@ export default function ZonaDropdownFilter({ zonas = [], selectedZonaId = 'todas
   const isFiltered = Boolean(selectedZonaId && selectedZonaId !== 'todas');
 
   return (
-    <div ref={containerRef} className="zona-filter-container">
+    <div ref={containerRef} className="pa-zone-filter">
       <button
         type="button"
-        className={`zona-filter-trigger ${isFiltered ? 'active' : ''}`}
+        className={`pa-zone-trigger ${isFiltered ? 'active' : ''}`}
         onClick={() => setIsOpen((prev) => !prev)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
         <span>{label}</span>
-        <ChevronDown size={14} className={`zona-filter-icon ${isOpen ? 'open' : ''}`} />
+        <ChevronDown size={14} className={`pa-zone-chevron ${isOpen ? 'open' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="zona-filter-dropdown" role="listbox">
+        <div className="pa-zone-menu" role="listbox">
           <button
             type="button"
-            className={`zona-filter-option ${selectedZonaId === 'todas' || !selectedZonaId ? 'selected' : ''}`}
+            className={`pa-zone-option ${selectedZonaId === 'todas' || !selectedZonaId ? 'selected' : ''}`}
             onClick={() => {
               onSelectZona('todas');
               setIsOpen(false);
@@ -54,7 +54,7 @@ export default function ZonaDropdownFilter({ zonas = [], selectedZonaId = 'todas
           >
             <span>Todas las zonas</span>
             {(selectedZonaId === 'todas' || !selectedZonaId) && (
-              <Check size={14} className="zona-filter-check" />
+              <Check size={14} className="pa-zone-check" />
             )}
           </button>
           {zonas.map((z) => {
@@ -63,7 +63,7 @@ export default function ZonaDropdownFilter({ zonas = [], selectedZonaId = 'todas
               <button
                 key={z.id}
                 type="button"
-                className={`zona-filter-option ${isSelected ? 'selected' : ''}`}
+                className={`pa-zone-option ${isSelected ? 'selected' : ''}`}
                 onClick={() => {
                   onSelectZona(z.id);
                   setIsOpen(false);
@@ -72,7 +72,7 @@ export default function ZonaDropdownFilter({ zonas = [], selectedZonaId = 'todas
                 aria-selected={isSelected}
               >
                 <span>{z.nombre}</span>
-                {isSelected && <Check size={14} className="zona-filter-check" />}
+                {isSelected && <Check size={14} className="pa-zone-check" />}
               </button>
             );
           })}

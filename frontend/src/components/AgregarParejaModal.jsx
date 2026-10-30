@@ -218,7 +218,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
                   Disponibilidad horaria
                 </span>
               </div>
-              <div className="pm-availability">
+              <div className="pa-availability">
                 <DisponibilidadEditor
                   value={slotIds}
                   onChange={setSlotIds}
