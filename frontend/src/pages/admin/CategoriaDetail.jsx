@@ -267,7 +267,7 @@ export default function CategoriaDetail() {
           <Users size={44} className="cd-empty-icon" />
           <h3 className="cd-empty-title">Categoría en borrador</h3>
           <p className="cd-empty-copy">
-            Cargá al menos 2 parejas con su disponibilidad. El torneo se inicia desde su pantalla.
+            Cargá al menos 2 parejas con su disponibilidad.
           </p>
         </div>
       )}
