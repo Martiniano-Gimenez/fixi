@@ -311,9 +311,9 @@ export default function ParejasManager() {
               textoDisponibilidad = 'Cualquier horario';
               titleDisponibilidad = 'La pareja marcó "Puedo en cualquier horario" al inscribirse (clic para configurar)';
             } else if (cantSlots === 0) {
-              textoDisponibilidad = isBorrador ? 'Sin cargar' : 'Libre';
+              textoDisponibilidad = isBorrador ? 'Sin horarios' : 'Libre';
               titleDisponibilidad = isBorrador
-                ? 'Sin disponibilidad cargada (clic para configurar)'
+                ? 'Sin horarios cargados: puede jugar en cualquiera (clic para configurar)'
                 : 'Sin restricción de horario (disponible para todo el torneo)';
             } else {
               textoDisponibilidad = formatHorasDisponibles(cantSlots);
