@@ -705,7 +705,7 @@ export default function TorneoDetail() {
       <div className="td-back-row">
         <Link
           to="/admin"
-          className="td-back"
+          className="panel-back"
         >
           <ChevronLeft size={16} /> Volver a mis torneos
         </Link>

@@ -351,8 +351,7 @@ export default function EliminatoriaView() {
         <div className="cb-navigation">
           <Link
             to={backUrl}
-
-            className="pm-button"
+            className="panel-back"
           >
             <ChevronLeft size={16} strokeWidth={2} />
             Volver a categoría {categoria.nombre}

@@ -446,9 +446,9 @@ export default function ParejasManager() {
         <div>
           <Link
             to={backUrl}
-            className="pa-back"
+            className="panel-back"
           >
-            <ChevronLeft size={14} strokeWidth={2} />
+            <ChevronLeft size={16} strokeWidth={2} />
             Volver a categoría {categoria.nombre}
           </Link>
           <h1 className="pa-title">

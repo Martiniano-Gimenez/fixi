@@ -159,7 +159,7 @@ export default function CategoriaDetail() {
       <div className="cd-back-row">
         <Link
           to={`/admin/torneos/${torneoId || categoria.torneoId}`}
-          className="cd-back-link"
+          className="panel-back"
         >
           <ChevronLeft size={16} /> Volver a {categoria.torneo?.nombre || 'Torneo'}
         </Link>
@@ -207,12 +207,14 @@ export default function CategoriaDetail() {
               <Users size={16} /> Parejas ({parejas.length})
             </Link>
 
-            <Link
-              to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/eliminatoria`}
-              className="pm-button"
-            >
-              <GitBranch size={16} /> Cuadro
-            </Link>
+            {categoria.estado !== 'BORRADOR' && (
+              <Link
+                to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/eliminatoria`}
+                className="pm-button"
+              >
+                <GitBranch size={16} /> Cuadro
+              </Link>
+            )}
 
             {categoria.estado !== 'BORRADOR' && (
               <ActionsMenu>
@@ -265,26 +267,8 @@ export default function CategoriaDetail() {
           <Users size={44} className="cd-empty-icon" />
           <h3 className="cd-empty-title">Categoría en borrador</h3>
           <p className="cd-empty-copy">
-            {parejas.length < 2
-              ? 'Cargá al menos 2 parejas con su disponibilidad para que esta categoría esté lista para el inicio del torneo.'
-              : `Hay ${parejas.length} parejas inscriptas listas. El armado de zonas y la asignación global de turnos se realiza para todas las categorías juntas desde la pantalla principal del torneo.`}
+            Cargá al menos 2 parejas con su disponibilidad. El torneo se inicia desde su pantalla.
           </p>
-          <div className="cd-empty-actions">
-            <Link
-              to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/parejas`}
-
-              className="pm-button"
-            >
-              <Users size={16} /> Cargar parejas y disponibilidad
-            </Link>
-            <Link
-              to={`/admin/torneos/${torneoId || categoria.torneoId}`}
-
-              className="pm-button"
-            >
-              <ChevronLeft size={16} /> Volver al torneo para iniciar
-            </Link>
-          </div>
         </div>
       )}
 
