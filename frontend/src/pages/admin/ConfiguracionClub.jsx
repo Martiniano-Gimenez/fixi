@@ -10,13 +10,13 @@ const DIAS = [
   { key: 'domingo', label: 'Domingo', inicio: 'domingoInicio', fin: 'domingoFin' },
 ];
 
-const HORARIOS_INICIO = Array.from({ length: 29 }, (_, indice) => {
+const HORARIOS_INICIO = Array.from({ length: 17 }, (_, indice) => {
   const hora = 6 + Math.floor(indice / 2);
   return `${String(hora).padStart(2, '0')}:${indice % 2 === 0 ? '00' : '30'}`;
 });
 
-const HORARIOS_FIN = Array.from({ length: 25 }, (_, indice) => {
-  const hora = (16 + Math.floor(indice / 2)) % 24;
+const HORARIOS_FIN = Array.from({ length: 17 }, (_, indice) => {
+  const hora = (20 + Math.floor(indice / 2)) % 24;
   return `${String(hora).padStart(2, '0')}:${indice % 2 === 0 ? '00' : '30'}`;
 });
 
