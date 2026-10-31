@@ -296,24 +296,6 @@ export function minutosCronologicosJornada(hora) {
 }
 
 /**
- * Formatea una cantidad de turnos (slots de 15 minutos) a formato amigable en horas/minutos
- * @param {number} cantSlots
- * @returns {string}
- */
-export function formatHorasDisponibles(cantSlots) {
-  const totalMin = (cantSlots || 0) * 15;
-  if (totalMin < 60) {
-    return `${totalMin}m`;
-  }
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (m === 0) {
-    return `${h}h`;
-  }
-  return `${h}h ${m}m`;
-}
-
-/**
  * Determina si una fecha en formato civil "YYYY-MM-DD" o Date corresponde a un viernes (día 5).
  * Interpreta la fecha civil de forma determinista e inmune a la zona horaria del navegador.
  *

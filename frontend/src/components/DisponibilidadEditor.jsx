@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
 import { AlertTriangle, Check, Loader2, Info } from 'lucide-react';
 import RangeSliderGroup from './RangeSliderGroup';
-import { formatHorasDisponibles } from '../utils/dateUtils';
 import {
   reconstruirRangos,
   rangosASlots,
   areSlotArraysEqual,
   agruparSlotsEnRangos,
+  minutosDeJuego,
+  formatearMinutos,
 } from '../utils/disponibilidadUtils';
 
 export default function DisponibilidadEditor({
@@ -126,7 +127,7 @@ export default function DisponibilidadEditor({
       setRawSlots(saved || []);
       setSavedSuccess(true);
       if (onChanged) onChanged(saved.length);
-      if (onSlotsChanged) onSlotsChanged(saved.length);
+      if (onSlotsChanged) onSlotsChanged(saved.length, saved);
     } catch (err) {
       setError(err.message || 'Error al guardar disponibilidad.');
     } finally {
@@ -316,7 +317,7 @@ export default function DisponibilidadEditor({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <Check size={14} style={{ color: 'var(--color-primary)' }} />
-                  <span><strong>{formatHorasDisponibles(totalSlotsSeleccionados)}</strong> disponibles</span>
+                  <span><strong>{formatearMinutos(minutosDeJuego(rawSlots))}</strong> disponibles</span>
                 </div>
                 <button
                   type="button"

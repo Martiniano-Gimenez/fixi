@@ -6,7 +6,7 @@ import DisponibilidadEditor from '../../components/DisponibilidadEditor';
 import AgregarParejaModal from '../../components/AgregarParejaModal';
 import ZonaDropdownFilter from '../../components/ZonaDropdownFilter';
 import { estadoLabel } from '../../utils/estadoLabels';
-import { formatHorasDisponibles } from '../../utils/dateUtils';
+import { minutosDeJuego, formatearMinutos } from '../../utils/disponibilidadUtils';
 import { normalizeText } from '../../utils/textUtils';
 import { ChevronLeft, Plus, Clock, Trash2, Users, Info, AlertTriangle, Search, X, Link2, Phone } from 'lucide-react';
 
@@ -15,9 +15,6 @@ function hrefTelefono(digitos) {
   return digitos.startsWith('54') && digitos.length >= 12 ? `tel:+${digitos}` : `tel:${digitos}`;
 }
 
-const DURACION_PARTIDO_MIN = 75;
-const MINUTOS_POR_SLOT = 15;
-const SLOTS_MINIMOS_PARTIDO = Math.ceil(DURACION_PARTIDO_MIN / MINUTOS_POR_SLOT); // 5 turnos de 15m
 const UMBRAL_BUSCADOR_PAREJAS = 8;
 
 export default function ParejasManager() {
@@ -73,9 +70,9 @@ export default function ParejasManager() {
         parejasData.map(async (p) => {
           try {
             const slots = await api.get(`/parejas/${p.id}/disponibilidad`);
-            return { ...p, _cantSlots: slots.length };
+            return { ...p, _cantSlots: slots.length, _slotIds: slots };
           } catch {
-            return { ...p, _cantSlots: 0 };
+            return { ...p, _cantSlots: 0, _slotIds: [] };
           }
         })
       );
@@ -129,9 +126,9 @@ export default function ParejasManager() {
     setExpandedParejaId((prev) => (prev === parejaId ? null : parejaId));
   };
 
-  const handleSlotsChanged = (parejaId, cantSlots) => {
+  const handleSlotsChanged = (parejaId, cantSlots, slotIds) => {
     setParejas((prev) =>
-      prev.map((p) => (p.id === parejaId ? { ...p, _cantSlots: cantSlots } : p))
+      prev.map((p) => (p.id === parejaId ? { ...p, _cantSlots: cantSlots, _slotIds: slotIds } : p))
     );
   };
 
@@ -300,7 +297,6 @@ export default function ParejasManager() {
           {parejasFiltradas.map((pareja, index) => {
             const isExpanded = expandedParejaId === pareja.id;
             const cantSlots = pareja._cantSlots || 0;
-            const isCritico = cantSlots > 0 && cantSlots < SLOTS_MINIMOS_PARTIDO;
 
             let textoDisponibilidad = '';
             let titleDisponibilidad = '';
@@ -316,10 +312,8 @@ export default function ParejasManager() {
                 ? 'Sin horarios cargados: puede jugar en cualquiera (clic para configurar)'
                 : 'Sin restricción de horario (disponible para todo el torneo)';
             } else {
-              textoDisponibilidad = formatHorasDisponibles(cantSlots);
-              titleDisponibilidad = isCritico
-                ? `${textoDisponibilidad} disponibles · Disponibilidad insuficiente para un partido (mínimo 75 min)`
-                : `${textoDisponibilidad} disponibles (${isBorrador ? 'clic para configurar' : 'clic para ver'})`;
+              textoDisponibilidad = formatearMinutos(minutosDeJuego(pareja._slotIds));
+              titleDisponibilidad = `${textoDisponibilidad} disponibles (${isBorrador ? 'clic para configurar' : 'clic para ver'})`;
             }
 
             const zp = pareja.zonaParejas?.[0];
@@ -383,11 +377,11 @@ export default function ParejasManager() {
                       <button
                         type="button"
                         onClick={() => toggleDisponibilidad(pareja.id)}
-                        className={`pa-button pa-hours${isExpanded ? ' is-expanded' : ''}${isCritico ? ' is-critical' : ''}`}
+                        className={`pa-button pa-hours${isExpanded ? ' is-expanded' : ''}`}
                         title={titleDisponibilidad}
                         aria-expanded={isExpanded}
                       >
-                        {isCritico ? <AlertTriangle size={12} strokeWidth={2} /> : <Clock size={12} strokeWidth={2} />}
+                        <Clock size={12} strokeWidth={2} />
                         <span>{textoDisponibilidad}</span>
                       </button>
 
@@ -428,7 +422,7 @@ export default function ParejasManager() {
                     <DisponibilidadEditor
                       parejaId={pareja.id}
                       categoriaEstado={categoria.estado}
-                      onSlotsChanged={(count) => handleSlotsChanged(pareja.id, count)}
+                      onSlotsChanged={(count, slots) => handleSlotsChanged(pareja.id, count, slots)}
                     />
                   </div>
                 )}

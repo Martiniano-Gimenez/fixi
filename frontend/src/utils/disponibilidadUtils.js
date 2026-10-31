@@ -1,3 +1,5 @@
+import { minutosCronologicosJornada } from './dateUtils.js';
+
 /**
  * disponibilidadUtils.js
  * Funciones puras para manipulación y conversión entre rangos de slider y listas de slots.
@@ -5,6 +7,41 @@
 
 // Los slots son horarios de inicio; el rango se muestra hasta el fin del último partido
 export const DURACION_PARTIDO_MIN = 75;
+
+export function horaFinPartido(horaInicio) {
+  if (!horaInicio) return '--:--';
+  const [hora, minuto] = horaInicio.split(':').map(Number);
+  const finMinutos = (hora * 60 + minuto + DURACION_PARTIDO_MIN) % (24 * 60);
+  return `${String(Math.floor(finMinutos / 60)).padStart(2, '0')}:${String(finMinutos % 60).padStart(2, '0')}`;
+}
+
+// Cada grupo consecutivo aporta sus inicios separados por 15 minutos y un partido completo.
+export function minutosDeJuego(slotIds = []) {
+  const porDia = new Map();
+  for (const slotId of slotIds) {
+    const [dia, hora] = slotId.split('-');
+    if (!porDia.has(dia)) porDia.set(dia, new Set());
+    porDia.get(dia).add(minutosCronologicosJornada(hora));
+  }
+
+  let total = 0;
+  for (const minutos of porDia.values()) {
+    const ordenados = [...minutos].sort((a, b) => a - b);
+    total += DURACION_PARTIDO_MIN;
+    for (let i = 1; i < ordenados.length; i++) {
+      total += ordenados[i] - ordenados[i - 1] === 15 ? 15 : DURACION_PARTIDO_MIN;
+    }
+  }
+  return total;
+}
+
+export function formatearMinutos(minutos) {
+  const totalMin = minutos || 0;
+  if (totalMin < 60) return `${totalMin}m`;
+  const horas = Math.floor(totalMin / 60);
+  const resto = totalMin % 60;
+  return resto === 0 ? `${horas}h` : `${horas}h ${resto}m`;
+}
 
 /**
  * Reconstruye rangos { id, startIdx, endIdx } a partir de una lista de slotIds para un día dado.
@@ -203,8 +240,7 @@ export function agruparSlotsEnRangos(slotIdsDelDia, grillaDelDia = []) {
   return rangos
     .map((r) => {
       const hStart = r.start.split('-')[1] || '';
-      const finMinutos = (parseMin(r.end) + DURACION_PARTIDO_MIN) % (24 * 60);
-      const hEnd = `${String(Math.floor(finMinutos / 60)).padStart(2, '0')}:${String(finMinutos % 60).padStart(2, '0')}`;
+      const hEnd = horaFinPartido(r.end.split('-')[1]);
       return `${hStart} a ${hEnd}`;
     })
     .join(', ');

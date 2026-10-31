@@ -905,8 +905,6 @@ body:has(.panel) {
 .panel .pa-zone-chip { font-weight: 600; }
 .panel .pa-hours { font-size: var(--t-13); }
 .panel .pa-hours.is-expanded { color: var(--marca-hover); background: var(--marca-suave); box-shadow: none; }
-.panel .pa-hours.is-critical { color: var(--alerta-texto); background: var(--alerta-suave); box-shadow: none; }
-.panel .pa-hours.is-critical:hover { color: var(--alerta-texto); background: var(--alerta-suave); }
 .panel .pa-delete { color: var(--alerta-texto); padding: var(--e-2); background: none; box-shadow: none; }
 .panel .pa-delete:hover { color: var(--alerta-texto); background: var(--alerta-suave); }
 .panel .pa-contact { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2) var(--e-3); padding: 0 var(--e-4) var(--e-3); min-width: 0; }
