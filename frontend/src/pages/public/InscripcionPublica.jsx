@@ -369,9 +369,8 @@ export default function InscripcionPublica() {
               value={form.telefono}
               onChange={set('telefono')}
               aria-invalid={Boolean(errores.telefono)}
-              aria-describedby={errores.telefono ? 'insc-tel-ayuda insc-tel-error' : 'insc-tel-ayuda'}
+              aria-describedby={errores.telefono ? 'insc-tel-error' : undefined}
             />
-            <p id="insc-tel-ayuda" className="pv-ayuda">Con código de área. Solo lo ve el organizador.</p>
             {errores.telefono && <p id="insc-tel-error" className="pv-error">{errores.telefono}</p>}
           </div>
 
@@ -385,7 +384,6 @@ export default function InscripcionPublica() {
             <legend>
               <Clock size={16} aria-hidden="true" /> ¿Cuándo pueden jugar la fase de grupos?
             </legend>
-            <p className="pv-ayuda">Viernes y sábado. Los domingos son para las eliminatorias.</p>
             <div className="pv-insc-editor">
               <DisponibilidadEditor
                 value={form.slotIds}
