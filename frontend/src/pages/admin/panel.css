@@ -952,10 +952,11 @@ body:has(.panel) {
   .panel .pa-list-card { padding: var(--e-3); }
   .panel .pa-pair-row { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--e-2); padding: var(--e-2); }
   .panel .pa-pair-info { display: contents; }
-  .panel .pa-pair-number { grid-column: 1; grid-row: 1; }
+  .panel .pa-pair-number { grid-column: 1; grid-row: 1; padding-top: 0; }
   .panel .pa-pair-names { grid-column: 2; grid-row: 1; }
-  .panel .pa-delete { align-self: start; margin: 0; }
+  .panel .pa-delete { grid-row: 1 / 3; align-self: start; margin: 0; }
   .panel .pa-pair-meta { grid-column: 2 / -1; grid-row: 2; display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); min-width: 0; }
+  .panel .pa-pair-row:has(> .pa-delete) .pa-pair-meta { grid-column: 2; }
   .panel .pa-pair-actions, .panel .pa-pair-chips, .panel .pa-contact { display: contents; }
   .panel .pa-indicaciones { grid-column: 2 / -1; padding: 0; }
 }
