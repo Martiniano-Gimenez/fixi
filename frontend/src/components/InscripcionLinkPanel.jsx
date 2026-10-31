@@ -54,7 +54,7 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
 
       <p className="td-inscription-copy">
         {abierta
-          ? 'Las parejas se anotan solas con este link y quedan inscriptas al enviarlo. Al iniciar el torneo se cierra sola.'
+          ? 'Las parejas se anotan con este link, sin aprobación. Se cierra sola al iniciar el torneo.'
           : 'Abrila para que las parejas se anoten solas, con su teléfono y su disponibilidad.'}
       </p>
 
@@ -86,7 +86,7 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <MessageCircle size={16} aria-hidden="true" /> Compartir por WhatsApp
+              <MessageCircle size={16} aria-hidden="true" /> WhatsApp
             </a>
           </>
         )}

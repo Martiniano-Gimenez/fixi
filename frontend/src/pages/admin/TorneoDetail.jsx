@@ -1002,13 +1002,15 @@ export default function TorneoDetail() {
                     <Settings size={15} /> Administrar
                   </Link>
 
-                  <Link
-                    to={`/admin/torneos/${torneo.id}/categorias/${cat.id}/eliminatoria`}
-                    className="td-button td-category-action"
-                    title="Ver cuadro eliminatorio"
-                  >
-                    <GitBranch size={15} /> Cuadro
-                  </Link>
+                  {cat.estado !== 'BORRADOR' && (
+                    <Link
+                      to={`/admin/torneos/${torneo.id}/categorias/${cat.id}/eliminatoria`}
+                      className="td-button td-category-action"
+                      title="Ver cuadro eliminatorio"
+                    >
+                      <GitBranch size={15} /> Cuadro
+                    </Link>
+                  )}
 
                   <button
                     type="button"

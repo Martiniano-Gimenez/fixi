@@ -1044,6 +1044,11 @@ body:has(.panel) {
   .panel .td-inscription-actions > * { flex: 1 1 100%; }
   .panel .td-empty { padding-block: var(--e-8); }
 }
+@media (max-width: 599px) {
+  .panel .td-inscription-link { display: none; }
+  .panel .td-inscription-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+  .panel .td-inscription-actions > .td-brand-button { grid-column: 1 / -1; }
+}
 @media (pointer: coarse) {
   .panel .td-input { font-size: max(16px, 1em); }
   .panel .td-name-input { font-size: var(--t-20); }
