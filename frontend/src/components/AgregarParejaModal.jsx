@@ -225,7 +225,7 @@ export default function AgregarParejaModal({ isOpen, onClose, categoriaId, zonas
                 />
               </div>
               <div className="pm-availability-note">
-                Marcá al menos un horario. Si puede jugar cualquier día y hora, usá «Día completo».
+                Marcá al menos un horario. Si puede jugar cualquier día y hora, usá «Todo el día».
               </div>
             </div>
 
