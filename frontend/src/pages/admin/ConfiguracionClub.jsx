@@ -10,15 +10,20 @@ const DIAS = [
   { key: 'domingo', label: 'Domingo', inicio: 'domingoInicio', fin: 'domingoFin' },
 ];
 
-const HORARIOS_APERTURA = Array.from({ length: 48 }, (_, indice) => {
-  const hora = (6 + Math.floor(indice / 2)) % 24;
+const HORARIOS_INICIO = Array.from({ length: 29 }, (_, indice) => {
+  const hora = 6 + Math.floor(indice / 2);
   return `${String(hora).padStart(2, '0')}:${indice % 2 === 0 ? '00' : '30'}`;
 });
 
-function horariosParaSelector(valorActual) {
-  if (!valorActual || HORARIOS_APERTURA.includes(valorActual)) return HORARIOS_APERTURA;
+const HORARIOS_FIN = Array.from({ length: 25 }, (_, indice) => {
+  const hora = (16 + Math.floor(indice / 2)) % 24;
+  return `${String(hora).padStart(2, '0')}:${indice % 2 === 0 ? '00' : '30'}`;
+});
 
-  return [...HORARIOS_APERTURA, valorActual].sort((a, b) => {
+function horariosParaSelector(horarios, valorActual) {
+  if (!valorActual || horarios.includes(valorActual)) return horarios;
+
+  return [...horarios, valorActual].sort((a, b) => {
     const ordenA = `${a < '06:00' ? '1' : '0'}${a}`;
     const ordenB = `${b < '06:00' ? '1' : '0'}${b}`;
     return ordenA.localeCompare(ordenB);
@@ -263,7 +268,7 @@ export default function ConfiguracionClub() {
                               aria-label={`Horario de inicio para el ${dia.label.toLowerCase()}`}
                             >
                               <option value="">Elegí</option>
-                              {horariosParaSelector(horaInicio).map((hora) => (
+                              {horariosParaSelector(HORARIOS_INICIO, horaInicio).map((hora) => (
                                 <option key={hora} value={hora}>{hora}</option>
                               ))}
                             </select>
@@ -278,7 +283,7 @@ export default function ConfiguracionClub() {
                               aria-label={`Horario de fin para el ${dia.label.toLowerCase()}`}
                             >
                               <option value="">Elegí</option>
-                              {horariosParaSelector(horaFin).map((hora) => (
+                              {horariosParaSelector(HORARIOS_FIN, horaFin).map((hora) => (
                                 <option key={hora} value={hora}>{hora}</option>
                               ))}
                             </select>
