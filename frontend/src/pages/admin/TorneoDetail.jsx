@@ -440,7 +440,7 @@ export default function TorneoDetail() {
       return;
     }
     if (!isViernes(editFecha)) {
-      setEditTorneoError('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
+      setEditTorneoError('La fecha de inicio debe ser un viernes.');
       return;
     }
     setGuardandoTorneo(true);

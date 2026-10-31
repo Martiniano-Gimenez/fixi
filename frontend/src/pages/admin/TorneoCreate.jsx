@@ -20,7 +20,7 @@ export default function TorneoCreate() {
     }
 
     if (!isViernes(fecha)) {
-      setError('La fecha de inicio debe ser un viernes (el torneo se juega de viernes a domingo).');
+      setError('La fecha de inicio debe ser un viernes.');
       return;
     }
 
