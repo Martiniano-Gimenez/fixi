@@ -36,6 +36,7 @@ import PartidosPendientesSection from '../../components/PartidosPendientesSectio
 import { estadoLabel } from '../../utils/estadoLabels';
 import { armarAvisoDestrabe } from '../../utils/precheckDestrabe';
 import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
+import { formatearMinutos, minutosDeJuego } from '../../utils/disponibilidadUtils';
 
 function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -1399,7 +1400,7 @@ export default function TorneoDetail() {
                                           className="pc-manual-pair"
                                         >
                                           <div className="pc-manual-name">
-                                            <strong>{pm.nombre}</strong> ({pm.slotsCount} {pm.slotsCount === 1 ? 'turno cargado' : 'turnos cargados'})
+                                            <strong>{pm.nombre}</strong> ({pm.slotIds?.length ? `${formatearMinutos(minutosDeJuego(pm.slotIds))} disponibles` : 'sin horarios'})
                                           </div>
                                           <InlineDisponibilidadEditor
                                             parejaId={pm.id}
