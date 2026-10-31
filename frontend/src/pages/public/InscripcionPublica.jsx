@@ -381,7 +381,7 @@ export default function InscripcionPublica() {
 
           <fieldset className="pv-insc-disponibilidad">
             <legend>
-              <Clock size={16} aria-hidden="true" /> ¿Cuándo pueden jugar la fase de grupos?
+              <Clock size={16} aria-hidden="true" /> ¿Cuándo pueden jugar la zona?
             </legend>
             <div className="pv-insc-editor">
               <DisponibilidadEditor
