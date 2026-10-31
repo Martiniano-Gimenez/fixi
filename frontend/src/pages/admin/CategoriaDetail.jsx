@@ -268,8 +268,8 @@ export default function CategoriaDetail() {
           <h3 className="cd-empty-title">Categoría en borrador</h3>
           <p className="cd-empty-copy">
             {parejas.length < 2
-              ? 'Cargá al menos 2 parejas con su disponibilidad. El torneo se inicia desde su pantalla.'
-              : `${parejas.length} parejas listas. El torneo se inicia desde su pantalla.`}
+              ? 'Cargá al menos 2 parejas con su disponibilidad.'
+              : `${parejas.length} parejas listas.`}
           </p>
         </div>
       )}
