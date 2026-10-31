@@ -1,8 +1,7 @@
 import { Fragment, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
-import { Building2, Calendar, Save, ChevronLeft, Minus, Plus } from 'lucide-react';
+import { Building2, Clock, Save, Minus, Plus } from 'lucide-react';
 
 const DIAS = [
   { key: 'viernes', label: 'Viernes', inicio: 'viernesInicio', fin: 'viernesFin' },
@@ -144,16 +143,10 @@ export default function ConfiguracionClub() {
   return (
     <div className="cc-page">
       <div className="cc-header">
-        <div>
-          <Link to="/admin" className="cc-back">
-            <ChevronLeft size={16} strokeWidth={2} />
-            Volver a mis torneos
-          </Link>
-          <h1 className="cc-title">
-            <Building2 size={24} strokeWidth={2} />
-            <span>Configuración del club</span>
-          </h1>
-        </div>
+        <h1 className="cc-title">
+          <Building2 size={24} strokeWidth={2} />
+          <span>Mi club</span>
+        </h1>
       </div>
 
       <div className="cc-card">
@@ -234,7 +227,7 @@ export default function ConfiguracionClub() {
           {/* Columna Derecha: Horarios de apertura compactos */}
           <div className="cc-schedule">
             <div className="cc-schedule-heading">
-              <Calendar size={18} strokeWidth={2} />
+              <Clock size={18} strokeWidth={2} />
               <h3>Horarios de apertura</h3>
             </div>
 

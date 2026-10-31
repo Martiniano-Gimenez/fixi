@@ -53,24 +53,21 @@ export default function TorneosList() {
   return (
     <div className="tl-screen">
       <div className="tl-header">
-        <div>
-          <h1 className="tl-title">
-            <Trophy size={26} strokeWidth={2} className="tl-trophy" />
-            Mis torneos
-          </h1>
-          <p className="tl-intro">
-            Gestioná los eventos de tu club y sus respectivas categorías.
-          </p>
-        </div>
-        <div className="tl-header-actions">
-          <Link
-            to="/admin/torneos/nuevo"
-            className="tl-button tl-primary"
-          >
-            <Plus size={16} strokeWidth={2} />
-            Nuevo torneo
-          </Link>
-        </div>
+        <h1 className="tl-title">
+          <Trophy size={26} strokeWidth={2} className="tl-trophy" />
+          Mis torneos
+        </h1>
+        {(torneos.length > 0 || error) && (
+          <div className="tl-header-actions">
+            <Link
+              to="/admin/torneos/nuevo"
+              className="tl-button tl-primary"
+            >
+              <Plus size={16} strokeWidth={2} />
+              Nuevo torneo
+            </Link>
+          </div>
+        )}
       </div>
 
       {error && <div className="tl-error">{error}</div>}
@@ -80,9 +77,9 @@ export default function TorneosList() {
           <Trophy size={48} strokeWidth={1.5} className="tl-empty-icon" />
           <h3 className="tl-empty-title">No tenés torneos creados</h3>
           <p className="tl-empty-copy">
-            Creá tu primer torneo (ej. "Pares Agosto") y comenzá a cargar sus categorías.
+            Creá tu primer torneo y cargá sus categorías.
           </p>
-          <Link to="/admin/torneos/nuevo" className="tl-button">
+          <Link to="/admin/torneos/nuevo" className="tl-button tl-primary">
             <Plus size={16} /> Crear torneo
           </Link>
         </div>
