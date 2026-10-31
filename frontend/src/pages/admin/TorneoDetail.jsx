@@ -1100,7 +1100,6 @@ export default function TorneoDetail() {
                     id="td-new-category"
                     type="text"
                     required
-                    placeholder="Ej.: 4ta, 6ta, 8va, Damas 5ta…"
                     value={nombreNuevaCat}
                     onChange={(e) => setNombreNuevaCat(e.target.value)}
                     autoFocus
