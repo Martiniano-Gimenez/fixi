@@ -54,7 +54,7 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
 
       <p className="td-inscription-copy">
         {abierta
-          ? 'Las parejas se anotan con este link, sin aprobación. Se cierra sola al iniciar el torneo.'
+          ? 'Las parejas se anotan con este link. Se cierra sola al iniciar el torneo.'
           : 'Abrila para que las parejas se anoten solas.'}
       </p>
 
