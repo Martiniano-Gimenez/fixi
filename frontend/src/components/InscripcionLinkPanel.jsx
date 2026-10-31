@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Check, Copy, Link2, Loader2, Lock, MessageCircle, Unlock } from 'lucide-react';
 import { api } from '../api/client';
+import { copiarTexto } from '../utils/portapapeles';
 
 /**
  * Abrir/cerrar la inscripción por link y compartirlo (TorneoDetail, solo en BORRADOR).
@@ -10,6 +12,7 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [copiado, setCopiado] = useState(false);
+  const [mostrarLinkManual, setMostrarLinkManual] = useState(false);
   const inputRef = useRef(null);
 
   const abierta = Boolean(torneo.inscripcionAbierta);
@@ -30,14 +33,18 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
   };
 
   const copiar = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
+    setCopiado(false);
+    if (await copiarTexto(url)) {
+      setError('');
+      setMostrarLinkManual(false);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
-    } catch {
-      // Sin permiso de portapapeles (o sin HTTPS): se selecciona para copiar a mano
-      inputRef.current?.select();
-      setError('No se pudo copiar automáticamente: el link quedó seleccionado para copiarlo.');
+    } else {
+      // Mostrá el campo antes de enfocarlo y seleccionarlo, también en el celular.
+      flushSync(() => setMostrarLinkManual(true));
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(0, url.length);
+      setError('No se pudo copiar. Mantené apretado el link para copiarlo.');
     }
   };
 
@@ -59,7 +66,7 @@ export default function InscripcionLinkPanel({ torneo, onCambio }) {
       </p>
 
       {abierta && (
-        <div className="td-inscription-link">
+        <div className={`td-inscription-link${mostrarLinkManual ? ' td-inscription-link-manual' : ''}`}>
           <input
             ref={inputRef}
             className="td-input"

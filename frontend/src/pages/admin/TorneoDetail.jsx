@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../api/client';
+import { copiarTexto } from '../../utils/portapapeles';
 import ConfirmModal from '../../components/ConfirmModal';
 import ActionsMenu from '../../components/ActionsMenu';
 import {
@@ -268,6 +269,8 @@ export default function TorneoDetail() {
 
   // Modales y estados
   const [copiado, setCopiado] = useState(false);
+  const [errorCopia, setErrorCopia] = useState(false);
+  const copiaTimeoutRef = useRef(null);
   const [nuevaCatModalOpen, setNuevaCatModalOpen] = useState(false);
   const [nombreNuevaCat, setNombreNuevaCat] = useState('');
   const [creandoCat, setCreandoCat] = useState(false);
@@ -355,12 +358,17 @@ export default function TorneoDetail() {
     fetchData();
   }, [fetchData]);
 
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     if (!torneo?.slug) return;
     const url = `${window.location.origin}/torneo/${torneo.slug}`;
-    navigator.clipboard.writeText(url);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 2000);
+    const resultado = await copiarTexto(url);
+    setCopiado(resultado);
+    setErrorCopia(!resultado);
+    clearTimeout(copiaTimeoutRef.current);
+    copiaTimeoutRef.current = setTimeout(() => {
+      setCopiado(false);
+      setErrorCopia(false);
+    }, 2000);
   };
 
   useEffect(() => {
@@ -819,7 +827,7 @@ export default function TorneoDetail() {
               title="Copiar link público para compartir con jugadores"
             >
               {copiado ? <Check size={16} className="td-brand-icon" /> : <Copy size={16} />}
-              {copiado ? 'Link copiado' : 'Copiar link público'}
+              {copiado ? 'Link copiado' : errorCopia ? 'No se pudo copiar' : 'Copiar link público'}
             </button>
 
             <Link

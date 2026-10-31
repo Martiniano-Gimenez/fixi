@@ -1046,6 +1046,7 @@ body:has(.panel) {
 }
 @media (max-width: 599px) {
   .panel .td-inscription-link { display: none; }
+  .panel .td-inscription-link-manual { display: block; }
   .panel .td-inscription-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
   .panel .td-inscription-actions > .td-brand-button { grid-column: 1 / -1; }
 }
