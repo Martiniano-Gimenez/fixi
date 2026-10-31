@@ -416,6 +416,8 @@ export default function ParejasManager() {
                   </div>
                 )}
 
+                {pareja.indicaciones && <p className="pa-indicaciones">{pareja.indicaciones}</p>}
+
                 {/* Editor desplegable de disponibilidad */}
                 {isExpanded && (
                   <div className="pa-availability pa-pair-availability">

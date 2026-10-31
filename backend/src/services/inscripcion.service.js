@@ -67,6 +67,14 @@ function normalizarTelefono(valor) {
   return digitos;
 }
 
+function normalizarIndicaciones(valor) {
+  if (valor === undefined || valor === null) return null;
+  if (typeof valor !== 'string') throw errores.datos('Las indicaciones deben ser un texto.');
+  const texto = valor.trim();
+  if (texto.length > 300) throw errores.datos('Las indicaciones pueden tener hasta 300 caracteres.');
+  return texto || null;
+}
+
 function validarDisponibilidad(organizador, slotIds, cualquierHorario) {
   if (slotIds !== undefined && slotIds !== null && !Array.isArray(slotIds)) {
     throw errores.datos('Los horarios elegidos no son válidos.');
@@ -118,7 +126,7 @@ async function getInscripcionPublica(slug) {
 
 /**
  * POST /api/public/:slug/inscripcion
- * { categoriaId, jugador1, jugador2, telefono, slotIds, cualquierHorario, website }
+ * { categoriaId, jugador1, jugador2, telefono, indicaciones, slotIds, cualquierHorario, website }
  */
 // Esperas de la base que no son culpa del pedido: P1008 (SQLite no respondió dentro del
 // busy_timeout, por ejemplo mientras corre la transacción de inicio del torneo) y P2028 (la
@@ -138,7 +146,7 @@ async function crearInscripcion(slug, body = {}) {
 }
 
 async function crearInscripcionSinMapear(slug, body) {
-  const { categoriaId, jugador1, jugador2, telefono, slotIds, cualquierHorario, website } = body || {};
+  const { categoriaId, jugador1, jugador2, telefono, indicaciones, slotIds, cualquierHorario, website } = body || {};
 
   // Honeypot: un humano no ve el campo. Se responde como si se hubiera guardado.
   if (typeof website === 'string' ? website.trim() !== '' : website) {
@@ -162,6 +170,7 @@ async function crearInscripcionSinMapear(slug, body) {
   const nombre1 = validarNombre(jugador1, 'jugador 1');
   const nombre2 = validarNombre(jugador2, 'jugador 2');
   const telefonoDigitos = normalizarTelefono(telefono);
+  const indicacionesTexto = normalizarIndicaciones(indicaciones);
   const slots = validarDisponibilidad(torneo.organizador, slotIds, cualquierHorario);
 
   const categoria = typeof categoriaId === 'string'
@@ -202,6 +211,7 @@ async function crearInscripcionSinMapear(slug, body) {
         jugador1: nombre1,
         jugador2: nombre2,
         telefono: telefonoDigitos,
+        indicaciones: indicacionesTexto,
         origen: 'INSCRIPCION',
         orden: (_max.orden ?? 0) + 1,
       },

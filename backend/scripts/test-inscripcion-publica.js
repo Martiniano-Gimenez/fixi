@@ -543,6 +543,60 @@ async function main() {
     assert((await contar(cat.id)) === 6, `se coló una inscripción: ${await contar(cat.id)} parejas`);
   });
 
+  console.log('\n▶ Indicaciones opcionales y privadas');
+  const t9 = await crearTorneo(orgA, 'Indicaciones', { inscripcionAbierta: true });
+  const catIndicaciones = await crearCategoria(t9.id, '5ta');
+  const indicaciones = 'Necesitamos llegar juntos.\nConsultar antes de cambiar el horario.';
+  let parejaIndicaciones;
+  let respuestaIndicaciones;
+
+  await caso('I28 indicaciones: se recortan los extremos, se conservan los saltos y se aceptan 300 caracteres', async () => {
+    const body = cuerpo(catIndicaciones.id, { indicaciones: `  ${indicaciones}  ` });
+    respuestaIndicaciones = await inscribir(t9.slug, body);
+    esperar(respuestaIndicaciones, 201);
+    parejaIndicaciones = await prisma.pareja.findFirst({ where: { categoriaId: catIndicaciones.id, jugador1: body.jugador1 } });
+    assert(parejaIndicaciones?.indicaciones === indicaciones, 'no se guardaron las indicaciones normalizadas');
+    const limite = cuerpo(catIndicaciones.id, { indicaciones: ` ${'x'.repeat(300)} ` });
+    esperar(await inscribir(t9.slug, limite), 201);
+    const p = await prisma.pareja.findFirst({ where: { categoriaId: catIndicaciones.id, jugador1: limite.jugador1 } });
+    assert(p?.indicaciones === 'x'.repeat(300), 'no se aceptó el límite de 300 después de recortar');
+  });
+
+  await caso('I29 indicaciones vacías, ausentes o null quedan en null', async () => {
+    for (const valor of ['', '  \n  ', undefined, null]) {
+      const body = cuerpo(catIndicaciones.id, { indicaciones: valor });
+      esperar(await inscribir(t9.slug, body), 201);
+      const p = await prisma.pareja.findFirst({ where: { categoriaId: catIndicaciones.id, jugador1: body.jugador1 } });
+      assert(p && p.indicaciones === null, `indicaciones vacías: ${JSON.stringify(p?.indicaciones)}`);
+    }
+  });
+
+  await caso('I30 más de 300 caracteres → 400 con el mensaje previsto, sin crear la pareja', async () => {
+    const antes = await contar(catIndicaciones.id);
+    const r = await inscribir(t9.slug, cuerpo(catIndicaciones.id, { indicaciones: 'x'.repeat(301) }));
+    esperar(r, 400, 'DATOS_INVALIDOS');
+    assert(r.json?.error === 'Las indicaciones pueden tener hasta 300 caracteres.', `mensaje: ${r.texto}`);
+    for (const valor of [42, {}, []]) {
+      esperar(await inscribir(t9.slug, cuerpo(catIndicaciones.id, { indicaciones: valor })), 400, 'DATOS_INVALIDOS');
+    }
+    assert((await contar(catIndicaciones.id)) === antes, 'se guardaron indicaciones inválidas');
+  });
+
+  await caso('I31 las indicaciones no salen por /api/public/* y sí por el endpoint admin', async () => {
+    assert(parejaIndicaciones && respuestaIndicaciones, 'depende de I28');
+    const vista = await http('GET', `/public/${t9.slug}`);
+    const insc = await http('GET', `/public/${t9.slug}/inscripcion`);
+    esperar(vista, 200);
+    esperar(insc, 200);
+    assert(vista.texto.includes(parejaIndicaciones.jugador1), 'la vista no incluye la pareja de prueba');
+    for (const r of [vista, insc, respuestaIndicaciones]) {
+      assert(!/"indicaciones"\s*:/i.test(r.texto) && !r.texto.includes('Necesitamos llegar juntos'), `se expusieron indicaciones: ${r.texto}`);
+    }
+    const admin = await http('GET', `/categorias/${catIndicaciones.id}/parejas`, { token: tokenA });
+    esperar(admin, 200);
+    assert(admin.json.find((p) => p.id === parejaIndicaciones.id)?.indicaciones === indicaciones, 'el panel no recibe indicaciones');
+  });
+
   server.close();
   const fallidos = resultados.filter((r) => !r.ok);
   console.log(`\n${resultados.length - fallidos.length}/${resultados.length} casos OK`);

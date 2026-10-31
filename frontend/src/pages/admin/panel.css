@@ -908,6 +908,7 @@ body:has(.panel) {
 .panel .pa-delete { color: var(--alerta-texto); padding: var(--e-2); background: none; box-shadow: none; }
 .panel .pa-delete:hover { color: var(--alerta-texto); background: var(--alerta-suave); }
 .panel .pa-contact { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2) var(--e-3); padding: 0 var(--e-4) var(--e-3); min-width: 0; }
+.panel .pa-indicaciones { margin: 0; padding: 0 var(--e-4) var(--e-3); color: var(--gris); font-size: var(--t-13); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .panel .pa-origin-chip { color: var(--marca-hover); background: var(--marca-suave); }
 .panel .pa-phone { display: inline-flex; align-items: center; gap: var(--e-2); min-height: 44px; max-width: 100%; color: var(--gris); font-size: var(--t-13); font-weight: 400; text-decoration: underline; text-underline-offset: 3px; text-shadow: none; overflow-wrap: anywhere; }
 .panel .pa-phone:hover { color: var(--marca-hover); text-shadow: none; }
@@ -942,7 +943,7 @@ body:has(.panel) {
   .panel .pa-card { padding: var(--e-4); }
   .panel .pa-pair-row { padding: var(--e-3); }
   .panel .pa-pair-meta { width: 100%; justify-content: space-between; }
-  .panel .pa-contact { padding-inline: var(--e-3); }
+  .panel .pa-contact, .panel .pa-indicaciones { padding-inline: var(--e-3); }
   .panel .pa-pair-availability { padding: var(--e-3); }
   .panel .pa-search, .panel .pa-zone-filter { flex-basis: 100%; }
   .panel .pa-toast { right: var(--e-3); bottom: var(--e-3); }

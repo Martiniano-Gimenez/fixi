@@ -32,7 +32,7 @@ function validar({ categoriaId, jugador1, jugador2, telefono, slotIds, cualquier
   return errores;
 }
 
-const FORM_VACIO = { categoriaId: '', jugador1: '', jugador2: '', telefono: '', slotIds: [], cualquierHorario: false, website: '' };
+const FORM_VACIO = { categoriaId: '', jugador1: '', jugador2: '', telefono: '', indicaciones: '', slotIds: [], cualquierHorario: false, website: '' };
 
 // Pantallas que se eligen por el `codigo` del backend
 const PANTALLA_POR_CODIGO = {
@@ -49,7 +49,7 @@ export default function InscripcionPublica() {
   const [errores, setErrores] = useState({});
   const [errorEnvio, setErrorEnvio] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [confirmada, setConfirmada] = useState(null); // { respuesta, telefono }
+  const [confirmada, setConfirmada] = useState(null); // { respuesta, telefono, indicaciones }
 
   const cargar = useCallback(async () => {
     try {
@@ -104,11 +104,12 @@ export default function InscripcionPublica() {
         jugador1: form.jugador1,
         jugador2: form.jugador2,
         telefono: form.telefono,
+        indicaciones: form.indicaciones,
         slotIds: form.cualquierHorario ? [] : form.slotIds,
         cualquierHorario: form.cualquierHorario,
         website: form.website,
       });
-      setConfirmada({ respuesta: respuesta.inscripcion, telefono: form.telefono.trim() });
+      setConfirmada({ respuesta: respuesta.inscripcion, telefono: form.telefono.trim(), indicaciones: form.indicaciones.trim() });
       setPantalla('confirmacion');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -267,6 +268,9 @@ export default function InscripcionPublica() {
               <div><dt>Categoría</dt><dd>{r.categoria?.nombre}</dd></div>
               <div><dt>Pareja</dt><dd translate="no">{r.jugador1} / {r.jugador2}</dd></div>
               <div><dt>Teléfono</dt><dd className="num">{confirmada.telefono}</dd></div>
+              {confirmada.indicaciones && (
+                <div><dt>Indicaciones</dt><dd className="pv-indicaciones-texto">{confirmada.indicaciones}</dd></div>
+              )}
               <div>
                 <dt>Disponibilidad</dt>
                 <dd>
@@ -371,6 +375,19 @@ export default function InscripcionPublica() {
               aria-describedby={errores.telefono ? 'insc-tel-error' : undefined}
             />
             {errores.telefono && <p id="insc-tel-error" className="pv-error">{errores.telefono}</p>}
+          </div>
+
+          <div className="pv-campo-form">
+            <label htmlFor="insc-indicaciones">Indicaciones para el organizador (opcional)</label>
+            <textarea
+              id="insc-indicaciones"
+              name="indicaciones"
+              className="pv-input pv-indicaciones"
+              rows={3}
+              maxLength={300}
+              value={form.indicaciones}
+              onChange={set('indicaciones')}
+            />
           </div>
 
           {/* Honeypot: invisible para las personas; si viene lleno, el backend no guarda nada */}

@@ -602,6 +602,8 @@ body:has(.publico) {
 .publico .pv-input::placeholder { color: var(--gris); }
 .publico .pv-input:focus-visible { outline: none; border-color: var(--marca); box-shadow: 0 0 0 3px var(--marca-suave); }
 .publico .pv-input[aria-invalid="true"] { border-color: var(--alerta-texto); }
+.publico.pv-insc textarea.pv-indicaciones { height: auto; min-height: 44px; padding-block: var(--e-3); font-family: inherit; line-height: 1.5; resize: vertical; }
+.publico.pv-insc .pv-indicaciones-texto { white-space: pre-wrap; }
 .pv-ayuda { margin-top: 6px; font-size: var(--t-13); color: var(--gris); }
 .pv-error { margin-top: 6px; font-size: var(--t-13); font-weight: 500; color: var(--alerta-texto); }
 .pv-hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }

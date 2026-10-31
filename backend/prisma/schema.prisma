@@ -97,6 +97,7 @@ model Pareja {
   orden            Int    @default(0)
   resolucionManual Boolean @default(false)
   telefono         String? // solo dígitos; nunca sale por /api/public/*
+  indicaciones     String? // opcional, máx. 300; nunca sale por /api/public/*
   origen           String  @default("ORGANIZADOR") // "ORGANIZADOR" | "INSCRIPCION"
 
   categoria          Categoria    @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
