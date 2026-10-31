@@ -10,6 +10,21 @@ const DIAS = [
   { key: 'domingo', label: 'Domingo', inicio: 'domingoInicio', fin: 'domingoFin' },
 ];
 
+const HORARIOS_APERTURA = Array.from({ length: 48 }, (_, indice) => {
+  const hora = (6 + Math.floor(indice / 2)) % 24;
+  return `${String(hora).padStart(2, '0')}:${indice % 2 === 0 ? '00' : '30'}`;
+});
+
+function horariosParaSelector(valorActual) {
+  if (!valorActual || HORARIOS_APERTURA.includes(valorActual)) return HORARIOS_APERTURA;
+
+  return [...HORARIOS_APERTURA, valorActual].sort((a, b) => {
+    const ordenA = `${a < '06:00' ? '1' : '0'}${a}`;
+    const ordenB = `${b < '06:00' ? '1' : '0'}${b}`;
+    return ordenA.localeCompare(ordenB);
+  });
+}
+
 export default function ConfiguracionClub() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -240,25 +255,33 @@ export default function ConfiguracionClub() {
                           </td>
                           <td className="cc-time-cell">
                             <label className="cc-time-label" htmlFor={`time-${dia.inicio}`}>Inicio</label>
-                            <input
+                            <select
                               id={`time-${dia.inicio}`}
-                              type="time"
-                              className="cc-time-input"
+                              className="cc-time-select"
                               value={horaInicio}
                               onChange={(e) => setForm({ ...form, [dia.inicio]: e.target.value })}
                               aria-label={`Horario de inicio para el ${dia.label.toLowerCase()}`}
-                            />
+                            >
+                              <option value="">Elegí</option>
+                              {horariosParaSelector(horaInicio).map((hora) => (
+                                <option key={hora} value={hora}>{hora}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="cc-time-cell">
                             <label className="cc-time-label" htmlFor={`time-${dia.fin}`}>Fin</label>
-                            <input
+                            <select
                               id={`time-${dia.fin}`}
-                              type="time"
-                              className="cc-time-input"
+                              className="cc-time-select"
                               value={horaFin}
                               onChange={(e) => setForm({ ...form, [dia.fin]: e.target.value })}
                               aria-label={`Horario de fin para el ${dia.label.toLowerCase()}`}
-                            />
+                            >
+                              <option value="">Elegí</option>
+                              {horariosParaSelector(horaFin).map((hora) => (
+                                <option key={hora} value={hora}>{hora}</option>
+                              ))}
+                            </select>
                           </td>
                         </tr>
                         {!horaInicio && !horaFin && (
