@@ -328,11 +328,13 @@ export default function DisponibilidadEditor({
                 </button>
               </div>
             ) : null
-          ) : (
+          ) : (totalSlotsSeleccionados === 0 || saving || savedSuccess) ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)', margin: 0 }}>
-                Sin horarios cargados, la pareja puede jugar en cualquiera.
-              </p>
+              {totalSlotsSeleccionados === 0 && (
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)', margin: 0 }}>
+                  Sin horarios cargados, la pareja puede jugar en cualquiera.
+                </p>
+              )}
               {saving ? (
                 <span style={{ fontSize: '11px', color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
                   <Loader2 size={11} className="spin" /> Guardando...
@@ -343,7 +345,7 @@ export default function DisponibilidadEditor({
                 </span>
               ) : null}
             </div>
-          )}
+          ) : null}
 
           {/* Grilla Viernes */}
           {grilla.viernes && grilla.viernes.length > 0 && (
