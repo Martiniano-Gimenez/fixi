@@ -1056,9 +1056,6 @@ export default function TorneoDetail() {
                     required
                     className="td-input"
                   />
-                  <p className="pm-muted td-field-help">
-                    Seleccioná el día viernes en que inicia el torneo. Los partidos de viernes y sábado se programarán de acuerdo a esta fecha.
-                  </p>
                 </div>
               </div>
               <div className="pm-footer">
