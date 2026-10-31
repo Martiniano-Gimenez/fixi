@@ -1177,7 +1177,7 @@ body:has(.panel) {
 .panel :is(.tc-button, .au-button):disabled { opacity: .6; cursor: not-allowed; transform: none; }
 .panel :is(.tl-primary, .tc-primary, .au-primary) { color: var(--superficie); background: var(--marca); box-shadow: none; }
 .panel :is(.tl-primary, .tc-primary, .au-primary):hover { color: var(--superficie); background: var(--marca-hover); }
-.panel :is(.tl-button, .tl-card-link, .tl-delete, .tc-button, .tc-input, .au-button, .au-input):focus-visible, .panel .au-links a:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+.panel :is(.tl-button, .tl-card-link, .tl-delete, .tc-button, .au-button):focus-visible, .panel .au-links a:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
 .panel .tl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--e-4); }
 .panel .tl-card { position: relative; min-width: 0; background: var(--superficie); border-radius: var(--r-tarjeta); box-shadow: var(--sombra-1); }
 .panel .tl-card-link { display: flex; flex-direction: column; justify-content: space-between; gap: var(--e-5); min-width: 0; min-height: 44px; height: 100%; padding: var(--e-5); color: var(--tinta); border-radius: var(--r-tarjeta); text-decoration: none; text-shadow: none; }
@@ -1207,16 +1207,15 @@ body:has(.panel) {
 /* Crear torneo: formulario claro independiente de las clases auth-* v1. */
 .panel .tc-page { max-width: 1180px; margin: 0 auto; padding: var(--e-8) var(--e-5) var(--e-10); min-width: 0; }
 .panel .tc-card { max-width: 560px; min-width: 0; margin: 0 auto; padding: var(--e-6); background: var(--superficie); color: var(--tinta); border-radius: var(--r-panel); box-shadow: var(--sombra-2); font: var(--t-14)/1.5 var(--f); }
-.panel .tc-title { margin: 0; color: var(--tinta); font: 700 var(--t-28)/1.2 var(--f); letter-spacing: -.025em; }
-.panel .tc-intro { margin: var(--e-3) 0 var(--e-5); color: var(--gris); }
+.panel .tc-title { margin: 0 0 var(--e-5); color: var(--tinta); font: 700 var(--t-28)/1.2 var(--f); letter-spacing: -.025em; }
 .panel :is(.tc-form, .au-form) { display: flex; flex-direction: column; gap: var(--e-5); }
 .panel :is(.tc-field, .au-field) { display: flex; flex-direction: column; gap: var(--e-2); min-width: 0; }
 .panel :is(.tc-field, .au-field) label { color: var(--tinta-2); font: 600 var(--t-14)/1.4 var(--f); }
 .panel :is(.tc-input, .au-input) { width: 100%; min-width: 0; max-width: 100%; min-height: 48px; padding: var(--e-3); border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); color: var(--tinta); font: var(--t-15)/1.4 var(--f); color-scheme: light; }
+.panel :is(.tc-input, .au-input):focus { border-color: var(--marca); outline: 2px solid var(--marca); outline-offset: 0; }
 .panel :is(.tc-input, .au-input)::placeholder { color: var(--gris); }
 .panel .tc-input { font-variant-numeric: tabular-nums; }
 .panel .tc-error { margin-bottom: var(--e-5); }
-.panel .tc-help { margin: 0; color: var(--gris); font-size: var(--t-13); }
 .panel .tc-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--e-3); margin-top: var(--e-1); }
 
 /* Autenticación fuera de AdminLayout: el contenedor raíz también define .panel. */

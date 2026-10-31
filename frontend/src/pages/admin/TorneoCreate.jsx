@@ -40,7 +40,6 @@ export default function TorneoCreate() {
     <div className="tc-page">
       <div className="tc-card">
         <h1 className="tc-title">Crear torneo</h1>
-        <p className="tc-intro">Elegí el nombre y la fecha de inicio para organizar el fin de semana.</p>
         {error && <div className="tc-error" role="alert">{error}</div>}
 
         <form onSubmit={handleSubmit} className="tc-form">
@@ -54,7 +53,6 @@ export default function TorneoCreate() {
               onChange={(e) => setNombre(e.target.value)}
               required
               autoFocus
-              placeholder="Ej.: Copa Verano 2026"
             />
           </div>
           <div className="tc-field">
@@ -67,9 +65,6 @@ export default function TorneoCreate() {
               onChange={(e) => setFecha(e.target.value)}
               required
             />
-            <p className="tc-help">
-              Seleccioná la fecha de inicio del torneo. Es requerida para calcular los horarios y programar los partidos del fin de semana.
-            </p>
           </div>
           <div className="tc-actions">
             <button
