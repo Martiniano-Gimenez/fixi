@@ -170,7 +170,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
         <div className="pv-envolver">
           <div className="pv-preparacion">
             <Users size={36} aria-hidden="true" />
-            <h2>{cat.nombre}: en preparación</h2>
+            <h2>En preparación</h2>
             <p>El organizador está cargando las parejas y armando las zonas. El fixture aparece acá cuando arranque.</p>
           </div>
         </div>

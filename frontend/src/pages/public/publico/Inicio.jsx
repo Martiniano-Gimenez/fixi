@@ -33,6 +33,11 @@ export default function Inicio({ torneo, categorias, fechas, seguidas, hrefCateg
           {torneo.organizador && <p {...c('pv-club', 0)}>{torneo.organizador}</p>}
           <h1 {...c('', 1)}>{torneo.nombre}</h1>
           {(fechas || torneo.fecha) && <p {...c('pv-fechas', 1)}>{fechas || formatFechaTorneo(torneo.fecha)}</p>}
+          {torneo.inscripcionAbierta && (
+            <a href={`/torneo/${torneo.slug}/inscripcion`} className="pv-btn pv-btn-primario pv-inscribite">
+              Inscribite
+            </a>
+          )}
           {actualizacion}
         </div>
       </section>

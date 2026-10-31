@@ -219,6 +219,7 @@ async function getTorneoPublico(req, res, next) {
         nombre: torneo.nombre,
         slug: torneo.slug,
         estado: torneo.estado,
+        inscripcionAbierta: torneo.estado === 'BORRADOR' && torneo.inscripcionAbierta,
         fecha: torneo.fecha,
         organizador: torneo.organizador.nombre,
         totalCategorias: torneo.categorias.length,
