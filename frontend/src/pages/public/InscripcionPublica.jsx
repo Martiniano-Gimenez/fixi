@@ -27,7 +27,7 @@ function validar({ categoriaId, jugador1, jugador2, telefono, slotIds, cualquier
   }
   if (!validarTelefono(telefono)) errores.telefono = 'Ingresá un teléfono con código de área (entre 8 y 15 números).';
   if (!cualquierHorario && slotIds.length === 0) {
-    errores.disponibilidad = 'Elegí al menos un horario o marcá "Puedo en cualquier horario".';
+    errores.disponibilidad = 'Elegí al menos un horario.';
   }
   return errores;
 }
@@ -365,13 +365,13 @@ export default function InscripcionPublica() {
               type="tel"
               inputMode="tel"
               autoComplete="tel"
-              placeholder="Por ejemplo, 351 555 1234…"
+              placeholder="351 555 1234"
               value={form.telefono}
               onChange={set('telefono')}
               aria-invalid={Boolean(errores.telefono)}
               aria-describedby={errores.telefono ? 'insc-tel-ayuda insc-tel-error' : 'insc-tel-ayuda'}
             />
-            <p id="insc-tel-ayuda" className="pv-ayuda">Solo lo ve el organizador.</p>
+            <p id="insc-tel-ayuda" className="pv-ayuda">Con código de área. Solo lo ve el organizador.</p>
             {errores.telefono && <p id="insc-tel-error" className="pv-error">{errores.telefono}</p>}
           </div>
 
@@ -386,16 +386,11 @@ export default function InscripcionPublica() {
               <Clock size={16} aria-hidden="true" /> ¿Cuándo pueden jugar la fase de grupos?
             </legend>
             <p className="pv-ayuda">Viernes y sábado. Los domingos son para las eliminatorias.</p>
-            <label className="pv-check">
-              <input type="checkbox" checked={form.cualquierHorario} onChange={set('cualquierHorario')} />
-              Puedo en cualquier horario
-            </label>
-            <div className={`pv-insc-editor ${form.cualquierHorario ? 'apagado' : ''}`}>
+            <div className="pv-insc-editor">
               <DisponibilidadEditor
                 value={form.slotIds}
                 onChange={onSlotsChange}
                 grillaProp={datos.grilla}
-                disabled={form.cualquierHorario}
               />
             </div>
             {errores.disponibilidad && <p className="pv-error">{errores.disponibilidad}</p>}

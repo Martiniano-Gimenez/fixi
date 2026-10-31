@@ -106,7 +106,7 @@ export default function RangeSliderGroup({
                   onClick={handleSelectFullDay}
                   disabled={disabled}
                 >
-                  Día completo
+                  Todo el día
                 </button>
               )}
               <button
@@ -125,7 +125,7 @@ export default function RangeSliderGroup({
               onClick={handleSelectFullDay}
               disabled={disabled}
             >
-              Seleccionar día completo
+              Todo el día
             </button>
           )}
         </div>
@@ -133,17 +133,16 @@ export default function RangeSliderGroup({
 
       {rangos.length === 0 ? (
         <div className="dia-empty-ranges">
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-            No tiene horarios seleccionados para el {dia.toLowerCase()}.
+          <span className="dia-empty-copy">
+            Sin horarios el {dia.toLowerCase()}.
           </span>
           <button
             type="button"
-            className="btn-secondary btn-sm"
+            className="btn-secondary btn-sm dia-add-range"
             onClick={handleAddRange}
             disabled={disabled}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', alignSelf: 'flex-start' }}
           >
-            <Plus size={12} /> Agregar rango horario en {dia.toLowerCase()}
+            <Plus size={12} /> Agregar horario
           </button>
         </div>
       ) : (

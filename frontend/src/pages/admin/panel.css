@@ -813,6 +813,8 @@ body:has(.panel) {
 .panel .pa-availability .dia-slots-header > div { flex-wrap: wrap; min-width: 0; }
 .panel .pa-availability div:has(> .btn-link-action) { flex-wrap: wrap; gap: var(--e-2); min-width: 0; }
 .panel .pa-availability .dia-titulo { color: var(--tinta); font-size: var(--t-15); }
+.panel .pa-availability .dia-empty-copy { color: var(--gris); font-size: var(--t-13); font-style: normal; }
+.panel .pa-availability .dia-add-range { display: inline-flex; align-items: center; justify-content: center; gap: var(--e-1); width: 100%; }
 .panel .pa-availability :is(.btn-link-action, .btn-secondary) { min-height: 44px; max-width: 100%; white-space: normal; font: 600 var(--t-13)/1.4 var(--f); color: var(--marca-hover); border-radius: var(--r-control); box-shadow: none; text-shadow: none; transition: transform .2s var(--curva), opacity .2s var(--curva); }
 .panel .pa-availability button.btn-link-action { font-size: var(--t-13); }
 .panel .pa-availability .btn-link-action:hover { color: var(--marca-hover); background: var(--marca-suave); }
