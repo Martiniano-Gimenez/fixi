@@ -3,6 +3,9 @@
  * Funciones puras para manipulación y conversión entre rangos de slider y listas de slots.
  */
 
+// Los slots son horarios de inicio; el rango se muestra hasta el fin del último partido
+export const DURACION_PARTIDO_MIN = 75;
+
 /**
  * Reconstruye rangos { id, startIdx, endIdx } a partir de una lista de slotIds para un día dado.
  *
@@ -200,8 +203,9 @@ export function agruparSlotsEnRangos(slotIdsDelDia, grillaDelDia = []) {
   return rangos
     .map((r) => {
       const hStart = r.start.split('-')[1] || '';
-      const hEnd = r.end.split('-')[1] || '';
-      return hStart === hEnd ? hStart : `${hStart} a ${hEnd}`;
+      const finMinutos = (parseMin(r.end) + DURACION_PARTIDO_MIN) % (24 * 60);
+      const hEnd = `${String(Math.floor(finMinutos / 60)).padStart(2, '0')}:${String(finMinutos % 60).padStart(2, '0')}`;
+      return `${hStart} a ${hEnd}`;
     })
     .join(', ');
 }

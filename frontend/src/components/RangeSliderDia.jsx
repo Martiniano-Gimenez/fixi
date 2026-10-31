@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Clock, Trash2 } from 'lucide-react';
+import { DURACION_PARTIDO_MIN } from '../utils/disponibilidadUtils';
 
 export default function RangeSliderDia({
   dia,
@@ -49,7 +50,11 @@ export default function RangeSliderDia({
   const endSlotId = slotsDisponibles[localEnd] || slotsDisponibles[maxIdx];
 
   const startHora = startSlotId ? startSlotId.split('-')[1] : '--:--';
-  const endHora = endSlotId ? endSlotId.split('-')[1] : '--:--';
+  const [endHour, endMinute] = (endSlotId?.split('-')[1] || '00:00').split(':').map(Number);
+  const finMinutos = (endHour * 60 + endMinute + DURACION_PARTIDO_MIN) % (24 * 60);
+  const endHora = endSlotId
+    ? `${String(Math.floor(finMinutos / 60)).padStart(2, '0')}:${String(finMinutos % 60).padStart(2, '0')}`
+    : '--:--';
 
   const leftPercent = maxIdx > 0 ? (localStart / maxIdx) * 100 : 0;
   const rightPercent = maxIdx > 0 ? ((maxIdx - localEnd) / maxIdx) * 100 : 0;
