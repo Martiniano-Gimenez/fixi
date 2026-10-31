@@ -377,19 +377,6 @@ export default function InscripcionPublica() {
             {errores.telefono && <p id="insc-tel-error" className="pv-error">{errores.telefono}</p>}
           </div>
 
-          <div className="pv-campo-form">
-            <label htmlFor="insc-indicaciones">Indicaciones para el organizador (opcional)</label>
-            <textarea
-              id="insc-indicaciones"
-              name="indicaciones"
-              className="pv-input pv-indicaciones"
-              rows={3}
-              maxLength={300}
-              value={form.indicaciones}
-              onChange={set('indicaciones')}
-            />
-          </div>
-
           {/* Honeypot: invisible para las personas; si viene lleno, el backend no guarda nada */}
           <div className="pv-hp" aria-hidden="true">
             <label htmlFor="insc-website">Sitio web</label>
@@ -409,6 +396,19 @@ export default function InscripcionPublica() {
             </div>
             {errores.disponibilidad && <p className="pv-error">{errores.disponibilidad}</p>}
           </fieldset>
+
+          <div className="pv-campo-form">
+            <label htmlFor="insc-indicaciones">Indicaciones para el organizador (opcional)</label>
+            <textarea
+              id="insc-indicaciones"
+              name="indicaciones"
+              className="pv-input pv-indicaciones"
+              rows={3}
+              maxLength={300}
+              value={form.indicaciones}
+              onChange={set('indicaciones')}
+            />
+          </div>
 
           {errorEnvio && <div className="pv-alerta" role="alert">{errorEnvio}</div>}
 
