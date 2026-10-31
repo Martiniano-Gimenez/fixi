@@ -807,10 +807,6 @@ export default function TorneoDetail() {
                   </span>
                 </span>
               )}
-              <span className="td-meta-item">
-                <Layers size={15} />
-                {torneo.categorias?.length || 0} {torneo.categorias?.length === 1 ? 'categoría' : 'categorías'}
-              </span>
             </div>
           </div>
 
@@ -905,6 +901,9 @@ export default function TorneoDetail() {
           <h2 className="td-section-title">
             <Layers size={22} className="td-brand-icon" />
             Categorías
+            {torneo.categorias?.length > 0 && (
+              <span className="td-category-count">{torneo.categorias.length}</span>
+            )}
           </h2>
         </div>
 
