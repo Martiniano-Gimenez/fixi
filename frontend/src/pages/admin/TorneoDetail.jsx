@@ -823,7 +823,7 @@ export default function TorneoDetail() {
               title="Copiar link público para compartir con jugadores"
             >
               {copiado ? <Check size={16} className="td-brand-icon" /> : <Copy size={16} />}
-              {copiado ? 'Link copiado' : 'Copiar link'}
+              {copiado ? 'Link copiado' : 'Copiar link público'}
             </button>
 
             <Link
@@ -883,7 +883,7 @@ export default function TorneoDetail() {
 
 
       {/* Inscripción de parejas por link (solo en borrador) */}
-      {torneo.estado === 'BORRADOR' && (
+      {torneo.estado === 'BORRADOR' && (torneo.categorias?.length > 0 || torneo.inscripcionAbierta) && (
         <InscripcionLinkPanel
           torneo={torneo}
           onCambio={(inscripcionAbierta) => setTorneo((prev) => ({ ...prev, inscripcionAbierta }))}
@@ -908,15 +908,17 @@ export default function TorneoDetail() {
           </h2>
         </div>
 
-        <div className="td-category-tools">
-          <button
-            type="button"
-            className="td-button"
-            onClick={() => setNuevaCatModalOpen(true)}
-          >
-            <Plus size={16} /> Nueva categoría
-          </button>
-        </div>
+        {torneo.categorias?.length > 0 && (
+          <div className="td-category-tools">
+            <button
+              type="button"
+              className="td-button"
+              onClick={() => setNuevaCatModalOpen(true)}
+            >
+              <Plus size={16} /> Nueva categoría
+            </button>
+          </div>
+        )}
       </div>
 
       {(!torneo.categorias || torneo.categorias.length === 0) ? (
@@ -924,12 +926,12 @@ export default function TorneoDetail() {
           <Layers size={44} className="td-empty-icon" />
           <h3 className="td-empty-title">No hay categorías cargadas</h3>
           <p className="td-empty-copy">
-            Comenzá agregando las categorías que participarán en este torneo (ej. 4ta, 6ta, 8va, Damas 5ta).
+            Agregá las categorías que se juegan en este torneo.
           </p>
           <button
             type="button"
             onClick={() => setNuevaCatModalOpen(true)}
-            className="td-button"
+            className="td-button td-primary"
           >
             <Plus size={16} /> Agregar categoría
           </button>
