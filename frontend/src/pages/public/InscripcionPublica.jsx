@@ -365,7 +365,6 @@ export default function InscripcionPublica() {
               type="tel"
               inputMode="tel"
               autoComplete="tel"
-              placeholder="351 555 1234"
               value={form.telefono}
               onChange={set('telefono')}
               aria-invalid={Boolean(errores.telefono)}
