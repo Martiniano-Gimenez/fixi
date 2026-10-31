@@ -15,7 +15,7 @@ export function horaFinPartido(horaInicio) {
   return `${String(Math.floor(finMinutos / 60)).padStart(2, '0')}:${String(finMinutos % 60).padStart(2, '0')}`;
 }
 
-// Cada grupo consecutivo aporta sus inicios separados por 15 minutos y un partido completo.
+// Sarmiento la unión de los partidos de cada día, sin contar dos veces los minutos superpuestos.
 export function minutosDeJuego(slotIds = []) {
   const porDia = new Map();
   for (const slotId of slotIds) {
@@ -29,7 +29,7 @@ export function minutosDeJuego(slotIds = []) {
     const ordenados = [...minutos].sort((a, b) => a - b);
     total += DURACION_PARTIDO_MIN;
     for (let i = 1; i < ordenados.length; i++) {
-      total += ordenados[i] - ordenados[i - 1] === 15 ? 15 : DURACION_PARTIDO_MIN;
+      total += Math.min(ordenados[i] - ordenados[i - 1], DURACION_PARTIDO_MIN);
     }
   }
   return total;
