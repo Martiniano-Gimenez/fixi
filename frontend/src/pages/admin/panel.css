@@ -9,6 +9,21 @@ body:has(.panel) {
   background: var(--fondo);
 }
 
+/* WebKit: los controles nativos de hora y fecha deben caber en su contenedor. */
+.panel input:is([type="time"], [type="date"]) {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.panel input:is([type="time"], [type="date"])::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 .panel .admin-header {
   flex-wrap: nowrap;
   height: auto;
@@ -1281,6 +1296,8 @@ body:has(.panel) {
 .panel .cc-day-name { color: var(--tinta); font-size: var(--t-14); font-weight: 600; }
 .panel .cc-time-label { display: none; }
 .panel .cc-time-input { width: 100%; font-variant-numeric: tabular-nums; }
+.panel .cc-table tr:has(+ .cc-no-hours-row) td { border-bottom: 0; }
+.panel .cc-table .cc-no-hours { grid-column: 1 / -1; padding-top: 0; color: var(--gris); font-size: var(--t-13); }
 .panel .cc-error { padding: var(--e-3); margin-bottom: var(--e-5); border-radius: var(--r-control); color: var(--alerta-texto); background: var(--alerta-suave); font-size: var(--t-13); overflow-wrap: anywhere; }
 .panel .cc-toast-container { position: fixed; z-index: 1000; right: var(--e-5); bottom: var(--e-5); max-width: min(420px, calc(100vw - 24px)); }
 .panel .cc-toast { padding: var(--e-4); color: var(--marca-hover); background: var(--marca-suave); border-radius: var(--r-tarjeta); box-shadow: var(--sombra-2); font-size: var(--t-14); font-weight: 600; overflow-wrap: anywhere; animation: cc-aviso .2s var(--curva); }
@@ -1303,6 +1320,8 @@ body:has(.panel) {
   .panel .cc-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--e-3); padding: var(--e-3); margin-bottom: var(--e-3); background: var(--fondo); border-radius: var(--r-control); }
   .panel .cc-table tbody tr:hover { background: var(--fondo); }
   .panel .cc-table tbody tr:last-child { margin-bottom: 0; }
+  .panel .cc-table tbody tr:has(+ .cc-no-hours-row) { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .panel .cc-table tbody tr.cc-no-hours-row { display: block; padding-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
   .panel .cc-table td { display: block; min-width: 0; padding: 0; border: 0; }
   .panel .cc-day-cell { grid-column: 1 / -1; }
   .panel .cc-time-label { display: block; margin-bottom: var(--e-2); color: var(--gris); font-size: var(--t-13); font-weight: 600; }

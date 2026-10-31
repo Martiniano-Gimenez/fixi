@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
@@ -233,33 +233,42 @@ export default function ConfiguracionClub() {
                     const horaFin = form[dia.fin];
 
                     return (
-                      <tr key={dia.key}>
-                        <td className="cc-day-cell">
-                          <span className="cc-day-name">{dia.label}</span>
-                        </td>
-                        <td className="cc-time-cell">
-                          <label className="cc-time-label" htmlFor={`time-${dia.inicio}`}>Inicio</label>
-                          <input
-                            id={`time-${dia.inicio}`}
-                            type="time"
-                            className="cc-time-input"
-                            value={horaInicio}
-                            onChange={(e) => setForm({ ...form, [dia.inicio]: e.target.value })}
-                            aria-label={`Horario de inicio para el ${dia.label.toLowerCase()}`}
-                          />
-                        </td>
-                        <td className="cc-time-cell">
-                          <label className="cc-time-label" htmlFor={`time-${dia.fin}`}>Fin</label>
-                          <input
-                            id={`time-${dia.fin}`}
-                            type="time"
-                            className="cc-time-input"
-                            value={horaFin}
-                            onChange={(e) => setForm({ ...form, [dia.fin]: e.target.value })}
-                            aria-label={`Horario de fin para el ${dia.label.toLowerCase()}`}
-                          />
-                        </td>
-                      </tr>
+                      <Fragment key={dia.key}>
+                        <tr>
+                          <td className="cc-day-cell">
+                            <span className="cc-day-name">{dia.label}</span>
+                          </td>
+                          <td className="cc-time-cell">
+                            <label className="cc-time-label" htmlFor={`time-${dia.inicio}`}>Inicio</label>
+                            <input
+                              id={`time-${dia.inicio}`}
+                              type="time"
+                              className="cc-time-input"
+                              value={horaInicio}
+                              onChange={(e) => setForm({ ...form, [dia.inicio]: e.target.value })}
+                              aria-label={`Horario de inicio para el ${dia.label.toLowerCase()}`}
+                            />
+                          </td>
+                          <td className="cc-time-cell">
+                            <label className="cc-time-label" htmlFor={`time-${dia.fin}`}>Fin</label>
+                            <input
+                              id={`time-${dia.fin}`}
+                              type="time"
+                              className="cc-time-input"
+                              value={horaFin}
+                              onChange={(e) => setForm({ ...form, [dia.fin]: e.target.value })}
+                              aria-label={`Horario de fin para el ${dia.label.toLowerCase()}`}
+                            />
+                          </td>
+                        </tr>
+                        {!horaInicio && !horaFin && (
+                          <tr className="cc-no-hours-row">
+                            <td className="cc-no-hours" colSpan={3}>
+                              Sin horario: ese día no se juega
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
