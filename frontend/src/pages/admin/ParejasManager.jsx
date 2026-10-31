@@ -339,7 +339,7 @@ export default function ParejasManager() {
                 key={pareja.id}
                 className={`pa-pair${isExpanded ? ' is-expanded' : ''}`}
               >
-                {/* Fila principal de la pareja */}
+                {/* Datos de la pareja y acciones */}
                 <div className="pa-pair-row">
                   <div className="pa-pair-info">
                     <span className="pa-pair-number">
@@ -349,30 +349,12 @@ export default function ParejasManager() {
                       className="pa-pair-names"
                       title={`${pareja.jugador1} / ${pareja.jugador2}`}
                     >
-                      <span>{pareja.jugador1}</span>
-                      <span>{pareja.jugador2}</span>
+                      {pareja.jugador1} / {pareja.jugador2}
                     </span>
                   </div>
 
                   {/* Botones y chips de información */}
                   <div className="pa-pair-meta">
-                    {!isBorrador && zonaNombre && (
-                      <div className="pa-pair-chips">
-                        <span className="pa-zone-chip">
-                          {zonaNombre}
-                        </span>
-
-                        {partidosTotales > 0 && (
-                          <span
-                            className="pa-played-chip"
-                            title={`${partidosJugados} de ${partidosTotales} partidos de zona disputados`}
-                          >
-                            {partidosJugados}/{partidosTotales} jugados
-                          </span>
-                        )}
-                      </div>
-                    )}
-
                     <div className="pa-pair-actions">
                       <button
                         type="button"
@@ -385,38 +367,55 @@ export default function ParejasManager() {
                         <span>{textoDisponibilidad}</span>
                       </button>
 
-                      {isBorrador && (
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(pareja.id)}
-                          className="pa-button pa-delete"
-                          title="Eliminar pareja"
-                          aria-label={`Eliminar pareja ${pareja.jugador1} / ${pareja.jugador2}`}
-                        >
-                          <Trash2 size={14} strokeWidth={2} className="pa-icon" />
-                        </button>
+                      {!isBorrador && zonaNombre && (
+                        <div className="pa-pair-chips">
+                          <span className="pa-zone-chip">
+                            {zonaNombre}
+                          </span>
+
+                          {partidosTotales > 0 && (
+                            <span
+                              className="pa-played-chip"
+                              title={`${partidosJugados} de ${partidosTotales} partidos de zona disputados`}
+                            >
+                              {partidosJugados}/{partidosTotales} jugados
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
+
+                    {/* Origen y teléfono (inscripción por link) */}
+                    {(porLink || pareja.telefono) && (
+                      <div className="pa-contact">
+                        {porLink && (
+                          <span className="pa-origin-chip" title="Se inscribió con el link público">
+                            <Link2 size={11} aria-hidden="true" /> Por link
+                          </span>
+                        )}
+                        {pareja.telefono && (
+                          <a className="pa-phone" href={hrefTelefono(pareja.telefono)} title="Llamar">
+                            <Phone size={11} aria-hidden="true" /> {pareja.telefono}
+                          </a>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {isBorrador && (
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(pareja.id)}
+                      className="pa-button pa-delete"
+                      title="Eliminar pareja"
+                      aria-label={`Eliminar pareja ${pareja.jugador1} / ${pareja.jugador2}`}
+                    >
+                      <Trash2 size={14} strokeWidth={2} className="pa-icon" />
+                    </button>
+                  )}
+
+                  {pareja.indicaciones && <p className="pa-indicaciones">{pareja.indicaciones}</p>}
                 </div>
-
-                {/* Origen y teléfono (inscripción por link) */}
-                {(porLink || pareja.telefono) && (
-                  <div className="pa-contact">
-                    {porLink && (
-                      <span className="pa-origin-chip" title="Se inscribió con el link público">
-                        <Link2 size={11} aria-hidden="true" /> Por link
-                      </span>
-                    )}
-                    {pareja.telefono && (
-                      <a className="pa-phone" href={hrefTelefono(pareja.telefono)} title="Llamar">
-                        <Phone size={11} aria-hidden="true" /> {pareja.telefono}
-                      </a>
-                    )}
-                  </div>
-                )}
-
-                {pareja.indicaciones && <p className="pa-indicaciones">{pareja.indicaciones}</p>}
 
                 {/* Editor desplegable de disponibilidad */}
                 {isExpanded && (
