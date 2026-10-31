@@ -50,6 +50,8 @@ export default function Register() {
                 className="au-input"
                 type="text"
                 id="nombre"
+                name="nombre"
+                autoComplete="organization"
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
                 required
@@ -61,6 +63,9 @@ export default function Register() {
                 className="au-input"
                 type="email"
                 id="email"
+                name="email"
+                autoComplete="email"
+                inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -72,6 +77,8 @@ export default function Register() {
                 className="au-input"
                 type="password"
                 id="password"
+                name="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

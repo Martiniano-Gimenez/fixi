@@ -1228,6 +1228,9 @@ body:has(.panel) {
   .panel .tc-card, .panel .au-card { padding: var(--e-5); }
   .panel .tc-actions > .tc-button { flex: 1; }
 }
+@media (max-width: 599px) {
+  .panel.au-page { align-items: flex-start; }
+}
 @media (pointer: coarse) {
   .panel :is(.tc-input, .au-input) { font-size: 16px; }
 }
