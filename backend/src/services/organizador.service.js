@@ -234,7 +234,68 @@ function buildTimelinesFromPlan({ categoriasPlan, cantCanchas, DURACION_MS }) {
  * garantizando que ningún partido previamente asignado sea modificado.
  * Operación 100% síncrona en memoria (cero riesgo de race conditions).
  */
-function evaluarAsignacionesIncrementales({
+function evaluarAsignacionesIncrementales(args) {
+  const compararNombre = (a, b) => a.nombre < b.nombre ? -1 : a.nombre > b.nombre ? 1 : 0;
+  // Orden de trabajo por clave natural; se conserva el orden de presentación del plan.
+  const categoriasPlan = [...args.categoriasPlan].sort(compararNombre)
+    .map((c) => ({ ...c, zonas: [...c.zonas].sort(compararNombre) }));
+  const fijados = new Map();
+  for (const c of categoriasPlan) for (const z of c.zonas) for (const p of z.partidos) {
+    if (!p.sinHorarioAsignado && p.fechaHora && p.canchaNumero) fijados.set(p, { ...p });
+  }
+  const entrada = { ...args, categoriasPlan };
+  const verificadas = new Set();
+  const grilla = generarGrillaOrganizador(args.organizador);
+  const ventanasClub = fusionarSlotsEnVentanas([...grilla.viernes, ...grilla.sabado], args.refFecha);
+  for (const c of categoriasPlan) for (const z of c.zonas) {
+    // Terminar el intento y eventual fallback de una zona antes de reservar para la siguiente.
+    evaluarAsignacionesIncrementalesBase({ ...entrada, zonaIntento: z });
+    if (z.parejaIds.length < 2 || z.parejaIds.length > 4) continue;
+    if (!z.requiereArmadoManual && !z.partidos.some((p) => p.sinHorarioAsignado)) continue;
+    const ajenos = categoriasPlan.map((cat) => ({ ...cat, zonas: cat.zonas.filter((zona) => zona !== z) }));
+    const ocupacion = buildTimelinesFromPlan({
+      categoriasPlan: ajenos, cantCanchas: args.cantidadCanchas, DURACION_MS: args.DURACION_MS,
+    });
+    const resultado = verificarProgramacionZona({
+      formato: z.formato,
+      // Solo quedan fijas las asignaciones anteriores al intento incremental.
+      partidos: z.partidos.map((p) => fijados.get(p) || {
+        ...p, fechaHora: null, canchaNumero: null, sinHorarioAsignado: true,
+      }),
+      parejas: z.parejaIds.map((id) => {
+        const pareja = args.parejasMap.get(id);
+        return { id, orden: pareja.orden, ventanas: fusionarSlotsEnVentanas(
+          pareja.slotsSeleccionados.map((s) => s.slotId), args.refFecha,
+        ) };
+      }),
+      ventanasClub, cantidadCanchas: args.cantidadCanchas, ...ocupacion,
+    });
+    if (resultado.estado !== 'FACTIBLE') continue;
+    const porPosicion = new Map(resultado.programacion.map((p) => [p.posicionEnRonda, p]));
+    for (const p of z.partidos) {
+      const horario = porPosicion.get(p.posicionEnRonda);
+      p.fechaHora = new Date(horario.fechaHora);
+      p.canchaNumero = horario.canchaNumero;
+      p.sinHorarioAsignado = false;
+    }
+    z.requiereArmadoManual = false;
+    verificadas.add(z);
+    // La siguiente zona consulta el plan ya actualizado. Sin reservas del intento descartado.
+    const timelines = buildTimelinesFromPlan({
+      categoriasPlan, cantCanchas: args.cantidadCanchas, DURACION_MS: args.DURACION_MS,
+    });
+    for (const clave of ['courtTimelines', 'parejaAssignments']) {
+      args[clave].clear();
+      for (const [id, intervalos] of timelines[clave]) args[clave].set(id, intervalos);
+    }
+  }
+  // Recalcular respuesta/contadores sobre el testigo, sin otro intento greedy.
+  return evaluarAsignacionesIncrementalesBase({
+    ...entrada, soloConflictos: true, zonasVerificadas: verificadas,
+  });
+}
+
+function evaluarAsignacionesIncrementalesBase({
   categoriasPlan,
   courtTimelines: inputCourtTimelines,
   parejaAssignments: inputParejaAssignments,
@@ -243,6 +304,9 @@ function evaluarAsignacionesIncrementales({
   refFecha,
   organizador,
   DURACION_MS,
+  soloConflictos = false,
+  zonasVerificadas = new Set(),
+  zonaIntento = null,
 }) {
   // Reconstrucción limpia de timelines a partir del estado actual de los partidos del plan
   const freshTimelines = buildTimelinesFromPlan({ categoriasPlan, cantCanchas: cantidadCanchas, DURACION_MS });
@@ -286,8 +350,10 @@ function evaluarAsignacionesIncrementales({
   }
 
   // 1. Intentar asignar partidos que estaban sin horario
+  if (!soloConflictos) {
   for (const cPlan of categoriasPlan) {
     for (const zona of cPlan.zonas) {
+      if (zonaIntento && zona !== zonaIntento) continue;
       for (const partido of zona.partidos) {
         if (!partido.sinHorarioAsignado) continue;
 
@@ -392,6 +458,7 @@ function evaluarAsignacionesIncrementales({
   // 1b. Intentar asignar partidos MINI_BRACKET de ronda 2 (P3 y P4) que estaban sin horario
   for (const cPlan of categoriasPlan) {
     for (const zona of cPlan.zonas) {
+      if (zonaIntento && zona !== zonaIntento) continue;
       if (zona.formato !== 'MINI_BRACKET') continue;
 
       const p1 = zona.partidos.find((p) => p.posicionEnRonda === 1);
@@ -503,6 +570,8 @@ function evaluarAsignacionesIncrementales({
     }
   }
 
+  }
+
   // 2. Construir slotsEvaluadosMap a partir de los timelines actuales
   const grilla = generarGrillaOrganizador(organizador);
   const allSlotIds = [...grilla.viernes, ...grilla.sabado];
@@ -603,7 +672,8 @@ function evaluarAsignacionesIncrementales({
     const cId = cPlan.categoriaId;
 
     for (const z of cPlan.zonas) {
-      if (z.requiereArmadoManual || z.esZonaManualOriginal) {
+      if (zonaIntento && z !== zonaIntento) continue;
+      if ((z.requiereArmadoManual || z.esZonaManualOriginal) && !zonasVerificadas.has(z)) {
         // Re-evaluar compatibilidad pairwise con disponibilidad actualizada de parejasMap
         const rawZonaParejas = z.parejaIds.map((pId) => {
           const p = parejasMap.get(pId);
@@ -638,6 +708,7 @@ function evaluarAsignacionesIncrementales({
           z.requiereArmadoManual = false;
           // Procesar partidos sin horario de esta zona en el loop normal
           for (const partido of z.partidos) {
+            if (soloConflictos) break;
             if (!partido.sinHorarioAsignado) continue;
 
             const par1 = parejasMap.get(partido.pareja1Id);
@@ -741,6 +812,7 @@ function evaluarAsignacionesIncrementales({
             p.canchaNumero = null;
             p.sinHorarioAsignado = true;
           }
+          if (zonaIntento) continue;
 
           totalZonasManuales++;
           if (!conflictosMap.has(cId)) {
@@ -814,6 +886,7 @@ function evaluarAsignacionesIncrementales({
         }
       }
 
+      if (zonaIntento) continue;
       for (const p of z.partidos) {
         if (!p.sinHorarioAsignado) continue;
         totalPartidosSinHorario++;

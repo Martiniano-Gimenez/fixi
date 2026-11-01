@@ -192,11 +192,16 @@ async function testIntegracion() {
   const zona = antes.conflictos[0].partidosSinHorario.find((p) => p.motivo === 'ZONA_MANUAL_INCOMPLETA');
   const sugeridos = zona.parejasManuales.find((p) => p.id === positivo.parejas[0].id);
   assert.ok(sugeridos.slotsQueDestraban.includes('Viernes-20:30'));
+  const testigoTres = verificarProgramacionZona(entrada([
+    ['Viernes-18:00', 'Viernes-20:30'], ['Viernes-18:00', 'Viernes-19:15'], ['Viernes-19:15', 'Viernes-20:30'],
+  ]));
   await disponibilidadService.setDisponibilidad(positivo.org.id, positivo.parejas[0].id, ['Viernes-18:00', 'Viernes-20:30']);
   const despues = await organizadorService.preCheckInicioTorneo(positivo.org.id, positivo.torneo.id, { isReCheck: true });
   assert.equal(despues.bloqueado, false, 'El re-check resuelve los tres partidos');
   const plan = organizadorService.preCheckSessions.get(positivo.torneo.id).categoriasPlan[0].zonas[0];
   assert.ok(plan.partidos.every((p) => p.fechaHora && p.canchaNumero && !p.sinHorarioAsignado));
+  assert.equal(plan.requiereArmadoManual, false);
+  assert.deepEqual(horarios(plan), testigoTres.programacion, 'La zona manual de tres queda igual al testigo');
 
   const miniCaso = await crearCaso('mini-sugerido', [
     ['Viernes-18:00'], ['Viernes-18:00', 'Viernes-20:30'],
@@ -216,8 +221,7 @@ async function testIntegracion() {
 }
 
 async function testDesacopleIncremental() {
-  // Caso documentado para el commit 2: existe solución, pero el greedy incremental
-  // elige cancha 1 para P1 a las 19 y le quita a P2 su única cancha de las 18.
+  // El intento greedy elige cancha 1 para P1; el fallback debe adoptar el testigo.
   const caso = await crearCaso('desacople-incremental', [
     ['Viernes-19:00'], ['Viernes-19:00', 'Viernes-20:30'],
     ['Viernes-18:00', 'Viernes-20:30'], ['Viernes-18:00', 'Viernes-20:30'],
@@ -227,6 +231,13 @@ async function testDesacopleIncremental() {
     await prisma.pareja.create({ data: {
       categoriaId: externa.id, orden, jugador1: `Externa ${orden}`, jugador2: 'Test',
       slotsSeleccionados: { create: [{ slotId: 'Viernes-17:45' }] },
+    } });
+  }
+  const pendiente = await prisma.categoria.create({ data: { nombre: 'Pendientes', torneoId: caso.torneo.id } });
+  for (let orden = 1; orden <= 3; orden++) {
+    await prisma.pareja.create({ data: {
+      categoriaId: pendiente.id, orden, jugador1: `Pendiente ${orden}`, jugador2: 'Test',
+      slotsSeleccionados: { create: [{ slotId: 'Viernes-23:00' }] },
     } });
   }
   await organizadorService.preCheckInicioTorneo(caso.org.id, caso.torneo.id);
@@ -249,10 +260,115 @@ async function testDesacopleIncremental() {
   assert.equal(testigo.programacion[0].canchaNumero, 2, 'La solución necesita P1 en cancha 2');
   await disponibilidadService.setDisponibilidad(caso.org.id, caso.parejas[0].id, ['Viernes-19:00', 'Viernes-20:30']);
   const despues = await organizadorService.preCheckInicioTorneo(caso.org.id, caso.torneo.id, { isReCheck: true });
-  const pendientes = despues.conflictos.find((c) => c.nombreCategoria === '7ma Damas').partidosSinHorario;
-  assert.equal(pendientes.length, 2, 'Limitación conocida: el incremental deja P3/P4 pendientes');
-  assert.ok(pendientes.every((p) => p.motivo !== 'ZONA_MANUAL_INCOMPLETA'));
-  console.log('DOCUMENTADO: testigo completo mini (P1 cancha 2); incremental elige cancha 1 y deja P3/P4 pendientes. Pendiente commit 2.');
+  assert.ok(!despues.conflictos.some((c) => c.nombreCategoria === '7ma Damas'));
+  const zonaResuelta = sesion.categoriasPlan.find((c) => c.nombre === '7ma Damas').zonas[0];
+  assert.equal(zonaResuelta.requiereArmadoManual, false);
+  assert.deepEqual(horarios(zonaResuelta), testigo.programacion);
+  assert.equal(zonaResuelta.partidos[0].canchaNumero, 2);
+  assert.ok(zonaResuelta.partidos.every((p) => !p.sinHorarioAsignado));
+  assert.equal(despues.permiteInicioEmergencia, true);
+  assert.ok(despues.conflictos.some((c) => c.nombreCategoria === 'Pendientes'));
+  await comprobarInicioConPendientes(caso, despues.planEmergenciaId, sesion.categoriasPlan);
+  console.log('PASS: fallback mini adopta el testigo y el inicio con greedy conserva todos los partidos fijados');
+}
+
+function horarios(zona) {
+  return [...zona.partidos].sort((a, b) => a.posicionEnRonda - b.posicionEnRonda).map((p) => ({
+    posicionEnRonda: p.posicionEnRonda, fechaHora: new Date(p.fechaHora).toISOString(), canchaNumero: p.canchaNumero,
+  }));
+}
+
+async function comprobarInicioConPendientes(caso, planId, categoriasPlan) {
+  const plan = structuredClone(categoriasPlan);
+  const transaction = prisma.$transaction.bind(prisma);
+  const creados = new Map();
+  const actualizados = [];
+  // Observa las escrituras reales del greedy dentro de la transacción de inicio.
+  prisma.$transaction = (callback, opciones) => transaction(async (tx) => {
+    const create = tx.partido.create.bind(tx.partido), update = tx.partido.update.bind(tx.partido);
+    tx.partido.create = async (q) => {
+      const p = await create(q);
+      if (p.zonaId) creados.set(p.id, p.sinHorarioAsignado);
+      return p;
+    };
+    tx.partido.update = async (q) => {
+      if (creados.has(q.where.id)) {
+        assert.equal(creados.get(q.where.id), true, 'FRENAR: el greedy intentó modificar un partido del plan ya agendado');
+        actualizados.push(q.where.id);
+      }
+      return update(q);
+    };
+    return callback(tx);
+  }, opciones);
+  try {
+    await organizadorService.iniciarTorneoMultiCategoria(caso.org.id, caso.torneo.id, planId);
+  } finally { prisma.$transaction = transaction; }
+  assert.ok(actualizados.length > 0, 'El greedy realmente procesó pendientes al iniciar');
+  const db = await prisma.partido.findMany({
+    where: { categoria: { torneoId: caso.torneo.id }, zonaId: { not: null } },
+    include: { zona: true },
+  });
+  let comparados = 0;
+  for (const c of plan) for (const z of c.zonas) for (const p of z.partidos) {
+    if (p.sinHorarioAsignado) continue;
+    const persistido = db.find((q) => q.categoriaId === c.categoriaId && q.zona.nombre === z.nombre && q.posicionEnRonda === p.posicionEnRonda);
+    assert.ok(persistido);
+    assert.equal(+persistido.fechaHora, +new Date(p.fechaHora), 'FRENAR: el inicio cambió la fecha del testigo/fijado');
+    assert.equal(persistido.canchaNumero, p.canchaNumero, 'FRENAR: el inicio cambió la cancha del testigo/fijado');
+    assert.equal(persistido.sinHorarioAsignado, false);
+    comparados++;
+  }
+  assert.ok(comparados >= 4);
+}
+
+async function testZonasCompiten() {
+  const slots = [['Viernes-19:00'], ['Viernes-19:00', 'Viernes-20:30'],
+    ['Viernes-18:00', 'Viernes-20:30'], ['Viernes-18:00', 'Viernes-20:30']];
+  const caso = await crearCaso('zonas-compiten', slots);
+  const primera = await prisma.categoria.create({ data: { nombre: '5ta', torneoId: caso.torneo.id } });
+  const primeraParejas = [];
+  for (let i = 0; i < 4; i++) {
+    primeraParejas.push(await prisma.pareja.create({ data: {
+      categoriaId: primera.id, orden: i + 1, jugador1: `Primera ${i}`, jugador2: 'Test',
+      slotsSeleccionados: { create: slots[i].map((slotId) => ({ slotId })) },
+    } }));
+  }
+  const externa = await prisma.categoria.create({ data: { nombre: 'Ocupación fija', torneoId: caso.torneo.id } });
+  for (let orden = 1; orden <= 2; orden++) await prisma.pareja.create({ data: {
+    categoriaId: externa.id, orden, jugador1: `Fija ${orden}`, jugador2: 'Test',
+    slotsSeleccionados: { create: [{ slotId: 'Viernes-17:45' }] },
+  } });
+  await organizadorService.preCheckInicioTorneo(caso.org.id, caso.torneo.id);
+  const sesion = organizadorService.preCheckSessions.get(caso.torneo.id);
+  const fija = sesion.categoriasPlan.find((c) => c.categoriaId === externa.id).zonas[0].partidos[0];
+  fija.canchaNumero = 2;
+  const primeraZona = sesion.categoriasPlan.find((c) => c.nombre === '5ta').zonas[0];
+  const segundaZona = sesion.categoriasPlan.find((c) => c.nombre === '7ma Damas').zonas[0];
+  primeraZona.nombre = 'Zona B'; segundaZona.nombre = 'Zona A';
+  // Ni la inserción de categorías ni el nombre de la zona antes que la categoría definen prioridad.
+  sesion.categoriasPlan.reverse();
+  await disponibilidadService.setDisponibilidadDoble(caso.org.id,
+    primeraParejas[0].id, ['Viernes-20:30'], caso.parejas[0].id, ['Viernes-20:30']);
+  const pre = await organizadorService.preCheckInicioTorneo(caso.org.id, caso.torneo.id, { isReCheck: true });
+  assert.equal(primeraZona.requiereArmadoManual, false);
+  assert.equal(primeraZona.partidos[0].canchaNumero, 2);
+  assert.ok(primeraZona.partidos.every((p) => !p.sinHorarioAsignado));
+  assert.ok(segundaZona.partidos.some((p) => p.sinHorarioAsignado), 'La segunda no puede usar las canchas reservadas por la primera');
+  assert.ok(!pre.conflictos.some((c) => c.nombreCategoria === '5ta'));
+  assert.ok(pre.conflictos.some((c) => c.nombreCategoria === '7ma Damas'));
+  assert.equal(fija.canchaNumero, 2);
+  const asignados = sesion.categoriasPlan.flatMap((c) => c.zonas.flatMap((z) => z.partidos.filter((p) => !p.sinHorarioAsignado)));
+  for (let i = 0; i < asignados.length; i++) for (let j = i + 1; j < asignados.length; j++) {
+    const a = asignados[i], b = asignados[j];
+    if (a.canchaNumero === b.canchaNumero) assert.ok(
+      +new Date(a.fechaHora) + DURACION <= +new Date(b.fechaHora) || +new Date(b.fechaHora) + DURACION <= +new Date(a.fechaHora),
+      'Sin solapamientos entre zonas tras adoptar el testigo',
+    );
+  }
+  const horariosPrimera = horarios(primeraZona);
+  await organizadorService.preCheckInicioTorneo(caso.org.id, caso.torneo.id, { isReCheck: true });
+  assert.deepEqual(horarios(primeraZona), horariosPrimera, 'Un re-check posterior conserva el testigo');
+  console.log('PASS: zonas compiten en orden natural, ocupación actualizada y testigo conservado');
 }
 
 function medir() {
@@ -280,6 +396,7 @@ async function main() {
   testPuros();
   await testIntegracion();
   await testDesacopleIncremental();
+  await testZonasCompiten();
   medir();
 }
 

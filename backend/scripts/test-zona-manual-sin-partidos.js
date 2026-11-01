@@ -410,8 +410,9 @@ async function test5_cicloDestrabeReaperturaIdempotencia() {
   const pre2 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id, { isReCheck: true });
   assert.strictEqual(pre2.bloqueado, false, 'Pre-check 2 debe estar desbloqueado');
 
-  // 3. Reapertura / Quitar slots a P3 dejando uno disjunto (21:45)
-  await disponibilidadService.setDisponibilidad(org.id, p3.id, ['Viernes-21:45']);
+  // 3. Reapertura: dejar un inicio válido y disjunto. Viernes-21:45 no entra antes
+  // del cierre de las 22 y se filtraba: dejaba a P3 libre, no incompatible.
+  await disponibilidadService.setDisponibilidad(org.id, p3.id, ['Sabado-09:00']);
   const pre3 = await organizadorService.preCheckInicioTorneo(org.id, torneo.id, { isReCheck: true });
   assert.strictEqual(pre3.bloqueado, true, 'Pre-check 3 debe volver a bloquearse');
   assert.strictEqual(pre3.permiteInicioEmergencia, false);
