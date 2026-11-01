@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { api } from '../api/client';
-import { Star, Users, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { formatAjusteTiempo } from '../utils/dateUtils';
+import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { formatearMinutos } from '../utils/disponibilidadUtils';
+
+function detalleCambio(nombre, distancia) {
+  return `${nombre}, ${formatearMinutos(Math.abs(distancia))} ${distancia > 0 ? 'más tarde' : 'antes'}`;
+}
 
 export default function CruceResolver({
   opcionesResolucion = [],
@@ -18,7 +22,7 @@ export default function CruceResolver({
   if (!Array.isArray(opcionesResolucion) || opcionesResolucion.length === 0) {
     return (
       <div className="pc-muted pc-spaced">
-        Sin opciones automáticas — abrí Gestionar Parejas para coordinar manualmente
+        No hay horarios automáticos. Elegí uno a mano o hablá con las parejas.
       </div>
     );
   }
@@ -71,11 +75,11 @@ export default function CruceResolver({
     if (isCasiEstrellaDoble) {
       const p1 = pareja1Nombre || 'Pareja 1';
       const p2 = pareja2Nombre || 'Pareja 2';
-      textDetails = `— ${p1} ${formatAjusteTiempo(opt.distP1)}, ${p2} ${formatAjusteTiempo(opt.distP2)}`;
+      textDetails = `${detalleCambio(p1, opt.distP1)} · ${detalleCambio(p2, opt.distP2)}`;
     } else if (isEstrellaClasica) {
       const parejaQueEstira = opt.addToP1 ? (pareja1Nombre || 'Pareja 1') : (pareja2Nombre || 'Pareja 2');
       const distQueEstira = opt.addToP1 ? opt.distP1 : opt.distP2;
-      textDetails = `— ${parejaQueEstira} ${formatAjusteTiempo(distQueEstira)}`;
+      textDetails = detalleCambio(parejaQueEstira, distQueEstira);
     }
 
     return (
@@ -84,19 +88,6 @@ export default function CruceResolver({
         className={`pc-option${isHero ? ' is-hero' : ''}`}
       >
         <div className="pc-option-info">
-          {isCasiEstrellaDoble ? (
-            <Users
-              size={13}
-              className="pc-brand"
-              title="Ambas parejas deben estirar disponibilidad"
-            />
-          ) : (
-            <Star
-              size={13}
-              className="pc-star"
-              title={isEstrellaMutua ? 'Horario mutuo coincidente' : '1 pareja confirmada'}
-            />
-          )}
           <span className="pc-option-time">
             {opt.dia} {opt.hora}
           </span>

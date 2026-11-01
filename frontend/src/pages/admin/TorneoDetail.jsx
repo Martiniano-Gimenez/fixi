@@ -38,9 +38,9 @@ import { armarAvisoDestrabe } from '../../utils/precheckDestrabe';
 import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
 import { formatearMinutos, minutosDeJuego } from '../../utils/disponibilidadUtils';
 
-function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
+function CruceDetalles({ partido, categoriaId, categoriaNombre, torneoId, onApplied }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [showOtrosViables, setShowOtrosViables] = useState(false);
+  const [selectedSlotId, setSelectedSlotId] = useState('');
   const [applyingSlotId, setApplyingSlotId] = useState(null);
   const [error, setError] = useState('');
   const p = partido;
@@ -48,6 +48,11 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
   const slotsViables = p.slotsViables || [];
   const viernesViables = slotsViables.filter((s) => s.startsWith('Viernes'));
   const sabadoViables = slotsViables.filter((s) => s.startsWith('Sabado'));
+  const slotsParejaRestringida = p.parejaMasRestringidaId && p.parejaMasRestringidaId === p.pareja1Id
+    ? p.pareja1SlotIds
+    : p.parejaMasRestringidaId && p.parejaMasRestringidaId === p.pareja2Id
+      ? p.pareja2SlotIds
+      : null;
 
   const handleApplySlot = async (slotId) => {
     if (!p.pareja1Id || !p.pareja2Id || applyingSlotId) return;
@@ -88,29 +93,6 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
     }
   };
 
-  const renderSlotChip = (slotId) => {
-    const isThisApplying = applyingSlotId === slotId;
-    const hora = slotId.split('-')[1];
-    return (
-      <button
-        key={slotId}
-        type="button"
-        disabled={Boolean(applyingSlotId)}
-        className="pc-slot"
-        onClick={() => handleApplySlot(slotId)}
-        title={`Asignar ${slotId} a ambas parejas y resolver cruce (1 click)`}
-      >
-        {isThisApplying ? (
-          <>
-            <Loader2 size={10} className="pc-spin" /> {hora}
-          </>
-        ) : (
-          hora
-        )}
-      </button>
-    );
-  };
-
   return (
     <div className="pc-details-content">
       <button
@@ -119,7 +101,7 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <Info size={12} />
-        <span>{isOpen ? 'Ocultar detalles' : 'Detalles y opciones manuales'}</span>
+        <span>{isOpen ? 'Ocultar' : 'Elegir otro horario'}</span>
         {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
       </button>
 
@@ -133,64 +115,50 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
 
           {p.parejaMasRestringidaNombre && (
             <div className="pc-restricted-pair">
-              <span className="pc-muted">Pareja más restringida a contactar: </span>
+              <span className="pc-muted">Pareja más restringida: </span>
               <strong className="pc-details-name">{p.parejaMasRestringidaNombre}</strong>{' '}
-              <span className="pc-muted">
-                ({p.parejaMasRestringidaSlots} turnos, {p.parejaMasRestringidaOpciones}{' '}
-                {p.parejaMasRestringidaOpciones === 1 ? 'franja' : 'franjas'})
-              </span>
-            </div>
-          )}
-
-          {slotsViables.length > 0 && (
-            <div className="pc-spaced">
-              <button
-                type="button"
-                className="pc-link"
-                onClick={() => setShowOtrosViables((prev) => !prev)}
-              >
-                {showOtrosViables
-                  ? 'Ocultar otros turnos viables del club'
-                  : `+ Ver otros turnos viables con cancha libre (${slotsViables.length})`}
-              </button>
-
-              {showOtrosViables && (
-                <div className="pc-other-body">
-                  <div className="pc-muted pc-spaced">
-                    Hacé clic en cualquier turno para asignarlo a ambas parejas y resolver el cruce:
-                  </div>
-
-                  {error && (
-                    <div className="pc-notice pc-danger-notice">
-                      {error}
-                    </div>
-                  )}
-
-                  {viernesViables.length > 0 && (
-                    <div className="pc-day">
-                      <div className="pc-day-title">
-                        Viernes:
-                      </div>
-                      <div className="pc-slots">
-                        {viernesViables.map(renderSlotChip)}
-                      </div>
-                    </div>
-                  )}
-
-                  {sabadoViables.length > 0 && (
-                    <div>
-                      <div className="pc-day-title">
-                        Sábado:
-                      </div>
-                      <div className="pc-slots">
-                        {sabadoViables.map(renderSlotChip)}
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {Array.isArray(slotsParejaRestringida) && (
+                <span className="pc-muted">
+                  ({formatearMinutos(minutosDeJuego(slotsParejaRestringida))} disponibles)
+                </span>
               )}
             </div>
           )}
+
+          <div className="pc-time-picker">
+            <label className="pc-time-field">
+              <span className="pc-muted">Horario</span>
+              <select
+                className="pc-time-select"
+                aria-label="Horario"
+                value={selectedSlotId}
+                onChange={(e) => setSelectedSlotId(e.target.value)}
+                disabled={Boolean(applyingSlotId) || slotsViables.length === 0}
+              >
+                <option value="">Elegí un horario</option>
+                {viernesViables.length > 0 && (
+                  <optgroup label="Viernes">
+                    {viernesViables.map((slotId) => <option key={slotId} value={slotId}>{slotId.split('-')[1]}</option>)}
+                  </optgroup>
+                )}
+                {sabadoViables.length > 0 && (
+                  <optgroup label="Sábado">
+                    {sabadoViables.map((slotId) => <option key={slotId} value={slotId}>{slotId.split('-')[1]}</option>)}
+                  </optgroup>
+                )}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="pc-button"
+              onClick={() => handleApplySlot(selectedSlotId)}
+              disabled={!slotsViables.includes(selectedSlotId) || Boolean(applyingSlotId)}
+            >
+              {applyingSlotId ? <><Loader2 size={11} className="pc-spin" /> Asignando…</> : 'Asignar'}
+            </button>
+          </div>
+
+          {error && <div className="pc-notice pc-danger-notice">{error}</div>}
 
           {p.parejaMasRestringidaId && (
             <div className="pc-spaced">
@@ -198,7 +166,7 @@ function CruceDetalles({ partido, categoriaId, torneoId, onApplied }) {
                 to={`/admin/torneos/${torneoId}/categorias/${categoriaId}/parejas?parejaId=${p.parejaMasRestringidaId}`}
                 className="pc-manage-link"
               >
-                Ver disponibilidad completa en Gestionar Parejas →
+                Ver parejas de {categoriaNombre}
               </Link>
             </div>
           )}
@@ -1434,6 +1402,7 @@ export default function TorneoDetail() {
                                       <CruceDetalles
                                         partido={p}
                                         categoriaId={c.categoriaId}
+                                      categoriaNombre={c.nombreCategoria}
                                         torneoId={id}
                                         onApplied={handleCasiEstrellaApplied}
                                       />
