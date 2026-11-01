@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import { Phone, Check, AlertTriangle, ChevronDown, ChevronUp, Star, Loader2 } from 'lucide-react';
+import { Clock, Check, AlertTriangle, ChevronDown, ChevronUp, Star, Loader2 } from 'lucide-react';
 
 export default function InlineDisponibilidadEditor({
   parejaId,
@@ -157,7 +157,7 @@ export default function InlineDisponibilidadEditor({
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <div className="pc-inline-label">
-          <Phone size={13} />
+          <Clock size={13} />
           <span>Ampliar horarios</span>
           {estrellaSlots.length > 0 && (
             <span className="pc-badge pc-blue-badge">
@@ -183,21 +183,15 @@ export default function InlineDisponibilidadEditor({
       {isOpen && (
         <div className="pc-inline-body">
           {/* Mensaje contextual */}
-          <div className="pc-muted pc-spaced">
-            {estrellaSlots.length > 0 ? (
-              <span className="pc-quick-copy">
-                <Star size={13} className="pc-star" /> Tocá cualquier turno para resolver el cruce en 1 clic:
-              </span>
-            ) : esZonaManual ? (
-              <span>
-                Ningún turno libre garantiza compatibilidad para todo el grupo. Podés proponer turnos con cancha libre de abajo o reestructurar la zona.
-              </span>
-            ) : (
-              <span>
-                El rival no tiene más horarios cargados con cancha libre. Podés proponerle a esta pareja alguno de los turnos viables del club:
-              </span>
-            )}
-          </div>
+          {(estrellaSlots.length > 0 || !esZonaManual) && (
+            <div className="pc-muted pc-spaced">
+              {estrellaSlots.length > 0 ? (
+                <span className="pc-quick-copy">Horarios que resuelven el conflicto:</span>
+              ) : (
+                <span>El rival no tiene más horarios con cancha libre.</span>
+              )}
+            </div>
+          )}
 
           {/* Turnos con Estrella (Prioridad 1) */}
           {estrellaSlots.length > 0 && (
@@ -205,7 +199,7 @@ export default function InlineDisponibilidadEditor({
               {viernesEstrella.length > 0 && (
                 <div className="pc-day">
                   <div className="pc-day-title">
-                    Viernes que destraba:
+                    Viernes
                   </div>
                   <div className="pc-slots">
                     {viernesEstrella.map((slotId) => {
@@ -218,12 +212,12 @@ export default function InlineDisponibilidadEditor({
                           disabled={isBusy}
                           className={`pc-slot pc-suggested-slot${isThisApplying ? ' is-applying' : ''}`}
                           onClick={() => handleQuickSaveEstrella(slotId)}
-                          title="¡Tocá para resolver el cruce con este turno!"
+                          title="Guardar este horario y resolver"
                         >
                           {isThisApplying ? (
                             <><Loader2 size={11} className="pc-spin" /> {hora}</>
                           ) : (
-                            <>{hora}<span className="pc-star">★</span></>
+                            hora
                           )}
                         </button>
                       );
@@ -235,7 +229,7 @@ export default function InlineDisponibilidadEditor({
               {sabadoEstrella.length > 0 && (
                 <div className="pc-day">
                   <div className="pc-day-title">
-                    Sábado que destraba:
+                    Sábado
                   </div>
                   <div className="pc-slots">
                     {sabadoEstrella.map((slotId) => {
@@ -248,12 +242,12 @@ export default function InlineDisponibilidadEditor({
                           disabled={isBusy}
                           className={`pc-slot pc-suggested-slot${isThisApplying ? ' is-applying' : ''}`}
                           onClick={() => handleQuickSaveEstrella(slotId)}
-                          title="¡Tocá para resolver el cruce con este turno!"
+                          title="Guardar este horario y resolver"
                         >
                           {isThisApplying ? (
                             <><Loader2 size={11} className="pc-spin" /> {hora}</>
                           ) : (
-                            <>{hora}<span className="pc-star">★</span></>
+                            hora
                           )}
                         </button>
                       );
@@ -273,14 +267,14 @@ export default function InlineDisponibilidadEditor({
                 onClick={() => setShowOtrosViables((prev) => !prev)}
               >
                 {showOtrosViables
-                  ? 'Ocultar otros turnos viables del club'
-                  : `+ Ver otros turnos viables con cancha libre (${otrosViablesSlots.length})`}
+                  ? 'Ocultar'
+                  : 'Elegir otros horarios'}
               </button>
 
               {showOtrosViables && (
                 <div className="pc-other-body">
                   <div className="pc-muted pc-spaced">
-                    Turnos con cancha libre en el club (requiere que el rival o grupo también confirme disponibilidad en este horario):
+                    Horarios de inicio con cancha libre. Podés elegir varios:
                   </div>
 
                   {viernesOtros.length > 0 && (
@@ -365,7 +359,7 @@ export default function InlineDisponibilidadEditor({
                 ? 'Guardando turno…'
                 : isSyncing
                 ? 'Verificando compatibilidad…'
-                : `Guardar ${selectedNewSlots.size} ${selectedNewSlots.size === 1 ? 'turno' : 'turnos'}`}
+                : `Guardar ${selectedNewSlots.size} ${selectedNewSlots.size === 1 ? 'horario' : 'horarios'}`}
             </button>
           </div>
         </div>
