@@ -36,7 +36,7 @@ import PartidosPendientesSection from '../../components/PartidosPendientesSectio
 import { estadoLabel } from '../../utils/estadoLabels';
 import { armarAvisoDestrabe } from '../../utils/precheckDestrabe';
 import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
-import { formatearMinutos, minutosDeJuego } from '../../utils/disponibilidadUtils';
+import { agruparSlotsEnRangos, formatearMinutos, minutosDeJuego } from '../../utils/disponibilidadUtils';
 
 function CruceDetalles({ partido, categoriaId, categoriaNombre, torneoId, onApplied }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -1351,8 +1351,18 @@ export default function TorneoDetail() {
                                           key={pm.id}
                                           className="pc-manual-pair"
                                         >
-                                          <div className="pc-manual-name">
-                                            <strong>{pm.nombre}</strong> ({pm.slotIds?.length ? `${formatearMinutos(minutosDeJuego(pm.slotIds))} disponibles` : 'sin horarios'})
+                                          <div className="pc-manual-name pc-option-info">
+                                            <strong>{pm.nombre}</strong>
+                                            <span className="pc-muted">
+                                              · {pm.slotIds?.length
+                                                ? [
+                                                  { key: 'Viernes', label: 'Vie', grilla: grillaOrganizador.viernes || [] },
+                                                  { key: 'Sabado', label: 'Sáb', grilla: grillaOrganizador.sabado || [] },
+                                                ].filter((dia) => pm.slotIds.some((slotId) => slotId.startsWith(`${dia.key}-`)))
+                                                  .map((dia) => `${dia.label} ${agruparSlotsEnRangos(pm.slotIds.filter((slotId) => slotId.startsWith(`${dia.key}-`)), dia.grilla)}`)
+                                                  .join(' · ')
+                                                : 'Sin horarios cargados'}
+                                            </span>
                                           </div>
                                           <InlineDisponibilidadEditor
                                             parejaId={pm.id}

@@ -183,10 +183,12 @@ export default function InlineDisponibilidadEditor({
       {isOpen && (
         <div className="pc-inline-body">
           {/* Mensaje contextual */}
-          {(estrellaSlots.length > 0 || !esZonaManual) && (
+          {(estrellaSlots.length > 0 || !esZonaManual || totalDisponiblesParaAgregar > 0) && (
             <div className="pc-muted pc-spaced">
               {estrellaSlots.length > 0 ? (
                 <span className="pc-quick-copy">Horarios que resuelven el conflicto:</span>
+              ) : esZonaManual ? (
+                <span>Ningún horario resuelve la zona si lo agregás solo a esta pareja. Ampliá también a otra pareja de la zona.</span>
               ) : (
                 <span>El rival no tiene más horarios con cancha libre.</span>
               )}
