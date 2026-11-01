@@ -1261,7 +1261,8 @@ export default function TorneoDetail() {
                   {conteoInicialConflictos !== null &&
                     conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) < conteoInicialConflictos && (
                       <span className="pc-resolved">
-                        ✓ ¡Resolviste {conteoInicialConflictos - conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)} {conteoInicialConflictos - conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'conflicto' : 'conflictos'}!
+                        <CheckCircle size={15} className="pc-brand" aria-hidden="true" />
+                        <span>Resolviste {conteoInicialConflictos - conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)} {conteoInicialConflictos - conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'conflicto' : 'conflictos'}</span>
                       </span>
                     )}
                 </div>
@@ -1278,7 +1279,7 @@ export default function TorneoDetail() {
                   )}
                   <span className="pc-badge pc-danger-badge">
                     {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
-                    {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'pendiente' : 'pendientes'}
+                    {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1 ? 'conflicto' : 'conflictos'}
                   </span>
                 </div>
               </div>
@@ -1333,12 +1334,6 @@ export default function TorneoDetail() {
                             <span className="pc-badge pc-danger-badge">
                               {c.partidosSinHorario.length} {c.partidosSinHorario.length === 1 ? 'conflicto' : 'conflictos'}
                             </span>
-
-                            {c.tieneCriticos && (
-                              <span className="pc-badge pc-danger-badge">
-                                <AlertTriangle size={11} /> Muy restringido
-                              </span>
-                            )}
                           </div>
 
                           <div className="pc-expand-label">
@@ -1365,33 +1360,22 @@ export default function TorneoDetail() {
                                     {p.motivo === 'SIN_FRANJA_COMUN'
                                       ? 'Sin franja común'
                                       : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                      ? 'Armado manual requerido'
+                                      ? 'Sin horarios en común'
                                       : 'Canchas saturadas'}
                                   </span>
                                 </div>
 
                                 {p.motivo === 'ZONA_MANUAL_INCOMPLETA' ? (
                                   <div>
-                                    <div className="pc-copy">
-                                      <strong>Incompatibilidad para formar grupo:</strong> Las parejas de la zona no tienen horarios comunes para completar el fixture.
-                                    </div>
-
                                     {p.crucesIncompatibles && p.crucesIncompatibles.length > 0 && (
-                                      <div className="pc-notice pc-danger-notice">
-                                        <div className="pc-notice-title">
-                                          Incompatibilidad directa en el grupo:
-                                        </div>
+                                      <ul className="pc-incompatible-list">
                                         {p.crucesIncompatibles.map((ci, idx) => (
-                                          <div key={idx} className="pc-conflict-copy">
-                                            • <strong>{ci.p1}</strong> no coincide en ningún turno con <strong>{ci.p2}</strong>.
-                                          </div>
+                                          <li key={idx}>
+                                            <strong>{ci.p1}</strong> y <strong>{ci.p2}</strong> no coinciden en ningún horario.
+                                          </li>
                                         ))}
-                                      </div>
+                                      </ul>
                                     )}
-
-                                    <div className="pc-muted pc-spaced">
-                                      Podés ampliar la disponibilidad de alguna de estas parejas con turnos libres o reestructurar la zona:
-                                    </div>
 
                                     <div className="pc-manual-pairs">
                                       {(p.parejasManuales || []).map((pm) => (
@@ -1424,7 +1408,7 @@ export default function TorneoDetail() {
                                         to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas`}
                                         className="pc-manage-link"
                                       >
-                                        Ir a Gestionar Parejas de {c.nombreCategoria} →
+                                        Ver parejas de {c.nombreCategoria}
                                       </Link>
                                     </div>
                                   </div>

@@ -158,7 +158,7 @@ export default function InlineDisponibilidadEditor({
       >
         <div className="pc-inline-label">
           <Phone size={13} />
-          <span>Llamar / Ampliar disponibilidad de {parejaNombre}</span>
+          <span>Ampliar horarios</span>
           {estrellaSlots.length > 0 && (
             <span className="pc-badge pc-blue-badge">
               <Star size={10} fill="currentColor" />

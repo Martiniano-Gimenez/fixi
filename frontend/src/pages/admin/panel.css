@@ -1116,14 +1116,13 @@ body:has(.panel) {
 .panel .pc-danger { color: var(--alerta-texto); }
 .panel .pc-copy { margin: 0 0 var(--e-3); color: var(--tinta-2); font-size: var(--t-14); overflow-wrap: anywhere; }
 .panel .pc-success-note { margin-bottom: var(--e-4); padding: var(--e-4); background: var(--marca-suave); color: var(--tinta); border-radius: var(--r-control); }
-.panel .pc-resolved { display: block; margin-top: var(--e-2); color: var(--marca-hover); font-size: var(--t-13); font-weight: 600; }
+.panel .pc-resolved { display: flex; align-items: center; gap: var(--e-1); margin-top: var(--e-2); color: var(--marca-hover); font-size: var(--t-13); font-weight: 600; }
 .panel .pc-notice { display: flex; align-items: flex-start; gap: var(--e-2); padding: var(--e-3); margin: var(--e-3) 0; border-radius: var(--r-control); font-size: var(--t-13); min-width: 0; overflow-wrap: anywhere; }
 .panel .pc-notice svg { flex-shrink: 0; margin-top: var(--e-1); }
 .panel .pc-notice-lines { min-width: 0; }
 .panel .pc-notice-line { margin: 0; }
 .panel .pc-session-notice { margin-top: 0; background: var(--marca-suave); color: var(--marca-hover); }
 .panel .pc-danger-notice { color: var(--alerta-texto); background: var(--alerta-suave); }
-.panel .pc-notice-title { margin-bottom: var(--e-2); font-weight: 600; }
 .panel .pc-badge { display: inline-flex; align-items: center; gap: var(--e-1); max-width: 100%; padding: var(--e-1) var(--e-2); border-radius: var(--r-dato); font-size: var(--t-12); font-weight: 600; overflow-wrap: anywhere; }
 .panel .pc-danger-badge { color: var(--alerta-texto); background: var(--alerta-suave); }
 .panel .pc-blue-badge { color: var(--marca-hover); background: var(--marca-suave); }
@@ -1145,7 +1144,7 @@ body:has(.panel) {
 .panel .pc-conflict { padding: var(--e-3); background: var(--fondo); border-radius: var(--r-control); min-width: 0; }
 .panel .pc-conflict-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--e-2); margin-bottom: var(--e-3); }
 .panel .pc-zone-label { color: var(--gris); font-size: var(--t-13); font-weight: 600; overflow-wrap: anywhere; }
-.panel .pc-conflict-copy { margin-bottom: var(--e-1); color: inherit; }
+.panel .pc-incompatible-list { display: grid; gap: var(--e-2); margin: 0 0 var(--e-3); padding-left: var(--e-4); color: var(--tinta-2); font-size: var(--t-13); overflow-wrap: anywhere; }
 .panel .pc-manual-pairs { display: flex; flex-direction: column; gap: var(--e-3); margin-bottom: var(--e-3); min-width: 0; }
 .panel .pc-manual-pair { padding: var(--e-3); background: var(--superficie); border-radius: var(--r-control); border: 1px solid var(--linea); min-width: 0; }
 .panel .pc-manual-name { color: var(--tinta-2); font-size: var(--t-13); overflow-wrap: anywhere; }
