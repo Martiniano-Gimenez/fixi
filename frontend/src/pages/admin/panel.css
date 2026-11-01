@@ -1100,6 +1100,8 @@ body:has(.panel) {
 .panel .pc-conflicts { max-width: 760px; }
 .panel .pc-emergency { max-width: 540px; }
 .panel .pc-redraw-modal { max-width: 480px; }
+.panel .pc-redraw-modal .pm-header { justify-content: flex-start; align-items: center; }
+.panel .pc-redraw-modal .pc-copy { margin: 0; }
 .panel .pc-header { flex-wrap: wrap; align-items: center; gap: var(--e-3); }
 .panel .pc-title { display: flex; align-items: center; gap: var(--e-2); min-width: 0; }
 .panel .pc-success-header, .panel .pc-danger-header { align-items: flex-start; gap: var(--e-3); }
