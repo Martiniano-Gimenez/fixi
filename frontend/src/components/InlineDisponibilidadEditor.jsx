@@ -143,7 +143,7 @@ export default function InlineDisponibilidadEditor({
   if (totalDisponiblesParaAgregar === 0 && !savedSuccess) {
     return (
       <div className="pc-muted pc-spaced">
-        No hay turnos con canchas libres disponibles en el club para ofrecerle a esta pareja.
+        No hay horarios con cancha libre.
       </div>
     );
   }
@@ -259,19 +259,21 @@ export default function InlineDisponibilidadEditor({
           )}
 
           {/* Toggle para otros turnos viables sin coincidencia */}
-          {otrosViablesSlots.length > 0 && (
+          {otrosViablesSlots.length > 0 ? (
             <div className="pc-other-slots">
-              <button
-                type="button"
-                className="pc-link"
-                onClick={() => setShowOtrosViables((prev) => !prev)}
-              >
-                {showOtrosViables
-                  ? 'Ocultar'
-                  : 'Elegir otros horarios'}
-              </button>
+              {estrellaSlots.length > 0 && (
+                <button
+                  type="button"
+                  className="pc-link"
+                  onClick={() => setShowOtrosViables((prev) => !prev)}
+                >
+                  {showOtrosViables
+                    ? 'Ocultar'
+                    : 'Elegir otros horarios'}
+                </button>
+              )}
 
-              {showOtrosViables && (
+              {(estrellaSlots.length === 0 || showOtrosViables) && (
                 <div className="pc-other-body">
                   <div className="pc-muted pc-spaced">
                     Horarios de inicio con cancha libre. Podés elegir varios:
@@ -331,6 +333,8 @@ export default function InlineDisponibilidadEditor({
                 </div>
               )}
             </div>
+          ) : estrellaSlots.length === 0 && (
+            <div className="pc-muted pc-spaced">No hay horarios con cancha libre.</div>
           )}
 
           {error && <div className="pc-notice pc-danger-notice">{error}</div>}
@@ -340,28 +344,32 @@ export default function InlineDisponibilidadEditor({
             </div>
           )}
 
-          <div className="pc-save-row">
-            <div>
-              {savedSuccess && !warning && (
-                <span className="pc-saved">
-                  <Check size={13} /> Turno guardado exitosamente.
-                </span>
+          {((savedSuccess && !warning) || selectedNewSlots.size > 0 || saving || isSyncing) && (
+            <div className="pc-save-row">
+              <div>
+                {savedSuccess && !warning && (
+                  <span className="pc-saved">
+                    <Check size={13} /> Turno guardado exitosamente.
+                  </span>
+                )}
+              </div>
+              {(selectedNewSlots.size > 0 || saving || isSyncing) && (
+                <button
+                  type="button"
+                  className="pc-button"
+                  onClick={handleSave}
+                  disabled={isBusy || selectedNewSlots.size === 0}
+                >
+                  {isBusy && <Loader2 size={13} className="pc-spin" />}
+                  {saving
+                    ? 'Guardando turno…'
+                    : isSyncing
+                    ? 'Verificando compatibilidad…'
+                    : `Guardar ${selectedNewSlots.size} ${selectedNewSlots.size === 1 ? 'horario' : 'horarios'}`}
+                </button>
               )}
             </div>
-            <button
-              type="button"
-              className="pc-button"
-              onClick={handleSave}
-              disabled={isBusy || selectedNewSlots.size === 0}
-            >
-              {isBusy && <Loader2 size={13} className="pc-spin" />}
-              {saving
-                ? 'Guardando turno…'
-                : isSyncing
-                ? 'Verificando compatibilidad…'
-                : `Guardar ${selectedNewSlots.size} ${selectedNewSlots.size === 1 ? 'horario' : 'horarios'}`}
-            </button>
-          </div>
+          )}
         </div>
       )}
     </div>
