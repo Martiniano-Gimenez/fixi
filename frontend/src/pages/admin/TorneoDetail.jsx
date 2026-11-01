@@ -1514,7 +1514,7 @@ export default function TorneoDetail() {
                     onClick={() => setConfirmarResorteoModalOpen(true)}
                     disabled={verificandoInicio || iniciandoTorneo}
                   >
-                    Re-sortear zonas desde cero
+                    Rearmar zonas desde cero
                   </button>
                 </div>
 
@@ -1621,19 +1621,19 @@ export default function TorneoDetail() {
           </div>
         </div>
       )}
-      {/* Modal de confirmación de Re-sorteo de Zonas desde cero */}
+      {/* Modal de confirmación para rearmar zonas desde cero */}
       {confirmarResorteoModalOpen && (
         <div className="pm-overlay pm-confirm-overlay">
           <div className="pm-modal pc-modal pc-redraw-modal" role="dialog" aria-modal="true" aria-labelledby="pc-redraw-title">
             <div className="pm-header pc-danger-header">
               <AlertTriangle size={24} />
               <h3 id="pc-redraw-title" className="pm-title pc-title">
-                ¿Re-sortear y mezclar todas las zonas?
+                ¿Rearmar todas las zonas?
               </h3>
             </div>
             <div className="pm-body">
               <p className="pc-copy">
-                Esta acción descartará la distribución actual de parejas y volverá a sortear todas las zonas de las categorías desde cero en base a las disponibilidades actuales. Se reiniciará el avance de los cruces resueltos en esta sesión.
+                Se descartan las zonas actuales y se vuelven a armar con las parejas y los horarios cargados ahora. Si no cambiaste nada, vas a obtener las mismas zonas.
               </p>
             </div>
             <div className="pm-footer">
@@ -1643,7 +1643,7 @@ export default function TorneoDetail() {
                 onClick={() => setConfirmarResorteoModalOpen(false)}
                 disabled={verificandoInicio}
               >
-                Cancelar, mantener zonas
+                Cancelar
               </button>
               <button
                 type="button"
@@ -1654,7 +1654,7 @@ export default function TorneoDetail() {
                 }}
                 disabled={verificandoInicio}
               >
-                {verificandoInicio ? 'Re-sorteando…' : 'Sí, re-sortear todo'}
+                {verificandoInicio ? 'Rearmando…' : 'Rearmar'}
               </button>
             </div>
           </div>
