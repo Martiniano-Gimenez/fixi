@@ -10,6 +10,7 @@ const {
 } = require('./slots.service');
 const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal, clavesJornadasTorneo } = require('../utils/dateUtils');
 const { minutosDespuesDelCierre } = require('../utils/horarioClub');
+const { verificarProgramacionZona } = require('../utils/programacionZona');
 const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -539,6 +540,47 @@ function evaluarAsignacionesIncrementales({
     });
   }
 
+  // La ocupación ajena se reconstruye del plan, no del mapa de conteos de slots:
+  // el verificador reserva intervalos concretos y conserva los partidos propios ya fijados.
+  const contextosVerificacion = new Map();
+  function calcularSugeridosZona(zona, parejaId, slotsViables) {
+    if (zona.parejaIds.length < 2 || zona.parejaIds.length > 4) {
+      return { slotsQueDestraban: [], slotsBusquedaIncompleta: [] };
+    }
+    if (!contextosVerificacion.has(zona)) {
+      const ajenos = categoriasPlan.map((c) => ({ ...c, zonas: c.zonas.filter((z) => z !== zona) }));
+      const ocupacion = buildTimelinesFromPlan({ categoriasPlan: ajenos, cantCanchas: cantidadCanchas, DURACION_MS });
+      contextosVerificacion.set(zona, {
+        formato: zona.formato,
+        partidos: zona.partidos.map((p) => ({ ...p })),
+        cantidadCanchas,
+        ...ocupacion,
+        ventanasClub: [
+          ...(organizador.viernesInicio && organizador.viernesFin
+            ? [{ dia: 'Viernes', startMs: friDayStartMs, endMs: friDayEndMs }] : []),
+          ...(organizador.sabadoInicio && organizador.sabadoFin
+            ? [{ dia: 'Sabado', startMs: satDayStartMs, endMs: satDayEndMs }] : []),
+        ],
+      });
+    }
+    const slotsQueDestraban = [];
+    const slotsBusquedaIncompleta = [];
+    for (const slotId of slotsViables) {
+      const parejas = zona.parejaIds.map((id) => {
+        const pareja = parejasMap.get(id);
+        const slots = (pareja?.slotsSeleccionados || []).map((s) => s.slotId);
+        return {
+          id, orden: pareja.orden,
+          ventanas: fusionarSlotsEnVentanas(id === parejaId ? [...new Set([...slots, slotId])] : slots, refFecha),
+        };
+      });
+      const resultado = verificarProgramacionZona({ ...contextosVerificacion.get(zona), parejas });
+      if (resultado.estado === 'FACTIBLE') slotsQueDestraban.push(slotId);
+      if (resultado.estado === 'BUSQUEDA_INCOMPLETA') slotsBusquedaIncompleta.push(slotId);
+    }
+    return { slotsQueDestraban, slotsBusquedaIncompleta };
+  }
+
   // 3. Recalcular mapa de conflictos para los partidos y zonas que sigan sin horario
   const conflictosMap = new Map();
   const parejaFreqMap = new Map();
@@ -720,25 +762,7 @@ function evaluarAsignacionesIncrementales({
               return true;
             });
 
-            const slotsQueDestraban = (rawZonaParejas.length <= 1 || rawZonaParejas.length >= 5)
-              ? []
-              : slotsViables.filter((sId) => {
-                  const simulated = rawZonaParejas.map((item) => {
-                    if (item.id === p.id) {
-                      return Array.from(new Set([...item.slotIds, sId]));
-                    }
-                    return item.slotIds;
-                  });
-                  for (let i = 0; i < simulated.length; i++) {
-                    for (let j = i + 1; j < simulated.length; j++) {
-                      const s1 = simulated[i];
-                      const s2 = simulated[j];
-                      const shared = s1.filter((slot) => s2.includes(slot));
-                      if (shared.length === 0) return false;
-                    }
-                  }
-                  return true;
-                });
+            const { slotsQueDestraban, slotsBusquedaIncompleta } = calcularSugeridosZona(z, p.id, slotsViables);
 
             return {
               id: p.id,
@@ -747,6 +771,7 @@ function evaluarAsignacionesIncrementales({
               slotIds: mySlots,
               slotsViables,
               slotsQueDestraban,
+              slotsBusquedaIncompleta,
             };
           });
 
@@ -820,23 +845,7 @@ function evaluarAsignacionesIncrementales({
               return true;
             });
 
-            const slotsQueDestraban = slotsViables.filter((sId) => {
-              const simulated = rawZonaParejas.map((item) => {
-                if (item.id === par.id) {
-                  return Array.from(new Set([...item.slotIds, sId]));
-                }
-                return item.slotIds;
-              });
-              for (let i = 0; i < simulated.length; i++) {
-                for (let j = i + 1; j < simulated.length; j++) {
-                  const s1 = simulated[i];
-                  const s2 = simulated[j];
-                  const shared = s1.filter((slot) => s2.includes(slot));
-                  if (shared.length === 0) return false;
-                }
-              }
-              return true;
-            });
+            const { slotsQueDestraban, slotsBusquedaIncompleta } = calcularSugeridosZona(z, par.id, slotsViables);
 
             return {
               id: par.id,
@@ -845,6 +854,7 @@ function evaluarAsignacionesIncrementales({
               slotIds: mySlots,
               slotsViables,
               slotsQueDestraban,
+              slotsBusquedaIncompleta,
             };
           });
 
