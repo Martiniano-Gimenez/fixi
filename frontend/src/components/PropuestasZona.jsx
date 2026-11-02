@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
-import { formatHora, formatPartidoHorario, formatSlotCorto, getDiaCalendarioConTrasnoche } from '../utils/dateUtils';
+import { formatHora, formatSlotCorto, getDiaCalendarioConTrasnoche } from '../utils/dateUtils';
+import { FilaPartidoZona } from './PartidosZonaManual';
 
 function formatearInicios(slots) {
   const inicios = slots.map(formatSlotCorto);
@@ -87,15 +88,7 @@ export default function PropuestasZona({ torneoId, categoriaId, zonaId, revision
           <ul className="pc-propuesta-partidos-list">
             {[...propuesta.partidosPropuestos].sort((a, b) => +new Date(a.fechaHora) - +new Date(b.fechaHora) || a.posicionEnRonda - b.posicionEnRonda).map((partido) => (
               <li key={partido.posicionEnRonda} className="pc-propuesta-partido">
-                <span className="pc-propuesta-rivales">
-                  {partido.pareja1Id && partido.pareja2Id
-                    ? `${nombres.get(partido.pareja1Id) || 'Pareja 1'} vs ${nombres.get(partido.pareja2Id) || 'Pareja 2'}`
-                    : partido.origen}
-                </span>
-                <span className="pc-propuesta-partido-datos">
-                  · <time dateTime={partido.fechaHora}>{formatPartidoHorario(partido.fechaHora).toLowerCase().replace(' · ', ' ')}</time> · Cancha {partido.canchaNumero}
-                </span>
-                {esHorarioPedido(partido, propuesta) && <span className="pc-propuesta-nuevo">nuevo</span>}
+                <FilaPartidoZona partido={partido} nombres={nombres} badge={esHorarioPedido(partido, propuesta) ? 'nuevo' : null} />
               </li>
             ))}
           </ul>
@@ -136,7 +129,7 @@ export default function PropuestasZona({ torneoId, categoriaId, zonaId, revision
       ) : resultado.error ? (
         <p className="pc-propuesta-card pc-propuesta-error" role="alert">{resultado.error}</p>
       ) : resultado.propuestas.length === 0 ? (
-        <p className="pc-propuesta-card pc-propuesta-copy">No encontramos una forma de destrabar la zona cambiando hasta dos parejas. Ampliá horarios a mano.</p>
+        <p className="pc-propuesta-card pc-propuesta-copy">No encontramos una forma de destrabar la zona cambiando hasta dos parejas. Elegí el horario de cada partido abajo.</p>
       ) : (
         <>
           {tarjeta(resultado.propuestas[0], true)}
@@ -160,7 +153,7 @@ export default function PropuestasZona({ torneoId, categoriaId, zonaId, revision
               )}
             </div>
           )}
-          <p className="pc-propuesta-manual">Si no les sirve, ampliá los horarios a mano.</p>
+          <p className="pc-propuesta-manual">Si no les sirve, elegí el horario de cada partido abajo.</p>
         </>
       )}
     </div>

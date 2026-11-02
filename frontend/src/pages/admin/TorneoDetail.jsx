@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
 import PropuestasZona from '../../components/PropuestasZona';
+import PartidosZonaManual from '../../components/PartidosZonaManual';
 import InscripcionLinkPanel from '../../components/InscripcionLinkPanel';
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
@@ -277,6 +278,7 @@ export default function TorneoDetail() {
   const [grillaOrganizador, setGrillaOrganizador] = useState({ viernes: [], sabado: [] });
   const [preCheckAprobado, setPreCheckAprobado] = useState(false);
   const [revisionPreCheck, setRevisionPreCheck] = useState(null);
+  const [partidoManualAbierto, setPartidoManualAbierto] = useState(null);
   const [hayCambiosGuardados, setHayCambiosGuardados] = useState(false);
   const [resultadoInicio, setResultadoInicio] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
@@ -1363,6 +1365,22 @@ export default function TorneoDetail() {
                                       />
                                     )}
 
+                                    <PartidosZonaManual
+                                      key={`${c.categoriaId}:${p.zonaId}`}
+                                      torneoId={id}
+                                      categoriaId={c.categoriaId}
+                                      zonaId={p.zonaId}
+                                      revision={revisionPreCheck}
+                                      partidos={p.partidosZona || []}
+                                      parejas={p.parejasManuales || []}
+                                      abierto={partidoManualAbierto}
+                                      onAbiertoChange={setPartidoManualAbierto}
+                                      onSaved={async () => {
+                                        setHayCambiosGuardados(true);
+                                        await handlePreCheckInicio(true);
+                                      }}
+                                      onRecheck={() => handlePreCheckInicio(true)}
+                                    >
                                     <div className="pc-manual-pairs">
                                       {(p.parejasManuales || []).map((pm) => (
                                         <div
@@ -1398,6 +1416,7 @@ export default function TorneoDetail() {
                                         </div>
                                       ))}
                                     </div>
+                                    </PartidosZonaManual>
 
                                     <div className="pc-manage-row">
                                       <Link
