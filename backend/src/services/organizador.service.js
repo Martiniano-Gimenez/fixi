@@ -2610,6 +2610,7 @@ module.exports = {
   getSlotsGrilla,
   preCheckInicioTorneo,
   getPropuestasZona: servicioPropuestas.solicitar,
+  getOpcionesPartidoZona: servicioPropuestas.opcionesPartido,
   aplicarPropuestaZona: servicioPropuestas.aplicar,
   iniciarTorneoMultiCategoria,
   getPartidosSinHorarioTorneo,

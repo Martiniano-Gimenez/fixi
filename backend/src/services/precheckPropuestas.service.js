@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { generarPropuestasZona } = require('../utils/propuestasZona');
 const { verificarProgramacionZona } = require('../utils/programacionZona');
+const { obtenerOpcionesPartidoZona, listarPartidosZona } = require('../utils/opcionesPartidoZona');
 const { generarGrillaOrganizador } = require('./slots.service');
 const { fusionarSlotsEnVentanas, slotIdToMsWindow } = require('./zona.service');
 const { requireTorneoFecha } = require('../utils/dateUtils');
@@ -83,6 +84,15 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
       sesion.propuestasFirma = actual;
       sesion.propuestasCache = new Map();
       sesion.propuestasPorZona = new Map();
+      sesion.opcionesPorPartido = new Map();
+    }
+    for (const conflicto of respuesta.conflictos || []) {
+      const categoria = sesion.categoriasPlan.find((c) => c.categoriaId === conflicto.categoriaId);
+      for (const pendiente of conflicto.partidosSinHorario || []) {
+        if (pendiente.motivo !== 'ZONA_MANUAL_INCOMPLETA') continue;
+        const zona = categoria?.zonas.find((z) => z.id === pendiente.zonaId);
+        if (zona) pendiente.partidosZona = listarPartidosZona(zona);
+      }
     }
     respuesta.revision = sesion.revision;
     return respuesta;
@@ -199,10 +209,39 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     for (const [key, plan] of planesCache) if (plan.torneoId === id) planesCache.delete(key);
     return obtener(org, id, { isReCheck: true });
   }
+  async function opcionesPartido(org, id, data = {}) {
+    const { categoriaId, zonaId, posicionEnRonda, revision, cursor = null } = data || {};
+    if (![categoriaId, zonaId, revision].every((v) => typeof v === 'string' && v) ||
+        !Number.isSafeInteger(posicionEnRonda) || posicionEnRonda < 1 ||
+        (cursor !== null && (typeof cursor !== 'string' || !cursor || cursor.length > 512))) {
+      throw error(400, 'Indicá la categoría, la zona, el partido y la revisión del pre-check; el cursor debe ser válido.', 'OPCIONES_PARTIDO_INVALIDAS');
+    }
+    const estado = await leerEstado(prisma, org, id);
+    const sesion = preCheckSessions.get(id);
+    if (!sesion || sesion.expiresAt <= Date.now() || sesion.revision !== revision) {
+      return rechazar(org, id, 'El pre-check cambió o venció. Volvé a pedir los horarios del partido.', 'REVISION_PRECHECK_VIEJA');
+    }
+    if (firma(estado, sesion) !== sesion.propuestasFirma) {
+      return rechazar(org, id, 'Los horarios o el plan cambiaron. Volvé a pedir los horarios del partido.', 'ESTADO_PRECHECK_CAMBIO');
+    }
+    const categoria = sesion.categoriasPlan.find((c) => c.categoriaId === categoriaId);
+    const zona = categoria?.zonas.find((z) => z.id === zonaId);
+    if (!zona) throw error(404, 'La zona no pertenece a este pre-check.', 'ZONA_PRECHECK_NO_ENCONTRADA');
+    if (!zona.partidos.some((p) => p.posicionEnRonda === posicionEnRonda)) {
+      throw error(404, 'El partido no pertenece a esta zona.', 'PARTIDO_PRECHECK_NO_ENCONTRADO');
+    }
+    const key = JSON.stringify([categoriaId, zonaId, posicionEnRonda, cursor]);
+    if (!sesion.opcionesPorPartido.has(key)) sesion.opcionesPorPartido.set(key,
+      obtenerOpcionesPartidoZona({ ...contexto(estado, sesion, zona), claveZona: claveNaturalZona(estado, categoria, zona) },
+        posicionEnRonda, { cursor }));
+    sesion.expiresAt = Date.now() + 60 * 60_000;
+    return { revision: sesion.revision, ...structuredClone(sesion.opcionesPorPartido.get(key)) };
+  }
   return {
     preCheck: (org, id, opciones) => encolar(id, () => obtener(org, id, opciones)),
     solicitar: (org, id, data) => encolar(id, () => solicitar(org, id, data)),
     aplicar: (org, id, data) => encolar(id, () => aplicar(org, id, data)),
+    opcionesPartido: (org, id, data) => encolar(id, () => opcionesPartido(org, id, data)),
   };
 }
 
