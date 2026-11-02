@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { Clock, Check, AlertTriangle, ChevronDown, ChevronUp, Star, Loader2 } from 'lucide-react';
+import { formatSlotCorto, getSlotCalendario } from '../utils/dateUtils';
 
 export default function InlineDisponibilidadEditor({
   parejaId,
@@ -206,7 +207,7 @@ export default function InlineDisponibilidadEditor({
                   <div className="pc-slots">
                     {viernesEstrella.map((slotId) => {
                       const isThisApplying = applyingEstrellaSlot === slotId;
-                      const hora = slotId.split('-')[1];
+                      const hora = getSlotCalendario(slotId)?.esMadrugada ? formatSlotCorto(slotId) : slotId.split('-')[1];
                       return (
                         <button
                           key={slotId}
@@ -236,7 +237,7 @@ export default function InlineDisponibilidadEditor({
                   <div className="pc-slots">
                     {sabadoEstrella.map((slotId) => {
                       const isThisApplying = applyingEstrellaSlot === slotId;
-                      const hora = slotId.split('-')[1];
+                      const hora = getSlotCalendario(slotId)?.esMadrugada ? formatSlotCorto(slotId) : slotId.split('-')[1];
                       return (
                         <button
                           key={slotId}
@@ -289,7 +290,7 @@ export default function InlineDisponibilidadEditor({
                       <div className="pc-slots">
                         {viernesOtros.map((slotId) => {
                           const isChecked = selectedNewSlots.has(slotId);
-                          const hora = slotId.split('-')[1];
+                          const hora = getSlotCalendario(slotId)?.esMadrugada ? formatSlotCorto(slotId) : slotId.split('-')[1];
                           return (
                             <button
                               key={slotId}
@@ -315,7 +316,7 @@ export default function InlineDisponibilidadEditor({
                       <div className="pc-slots">
                         {sabadoOtros.map((slotId) => {
                           const isChecked = selectedNewSlots.has(slotId);
-                          const hora = slotId.split('-')[1];
+                          const hora = getSlotCalendario(slotId)?.esMadrugada ? formatSlotCorto(slotId) : slotId.split('-')[1];
                           return (
                             <button
                               key={slotId}

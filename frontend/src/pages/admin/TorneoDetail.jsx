@@ -36,7 +36,7 @@ import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { estadoLabel } from '../../utils/estadoLabels';
 import { armarAvisoDestrabe } from '../../utils/precheckDestrabe';
-import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
+import { formatFechaTorneo, formatSlotCalendario, formatSlotCorto, getSlotCalendario, getZonedParts, isViernes } from '../../utils/dateUtils';
 import { agruparSlotsEnRangos, formatearMinutos, minutosDeJuego } from '../../utils/disponibilidadUtils';
 
 function CruceDetalles({ partido, categoriaId, categoriaNombre, torneoId, onApplied }) {
@@ -60,7 +60,6 @@ function CruceDetalles({ partido, categoriaId, categoriaNombre, torneoId, onAppl
     setApplyingSlotId(slotId);
     setError('');
 
-    const [dia, hora] = slotId.split('-');
     const p1AlreadyHas = (p.pareja1SlotIds || []).includes(slotId);
     const p2AlreadyHas = (p.pareja2SlotIds || []).includes(slotId);
 
@@ -84,7 +83,7 @@ function CruceDetalles({ partido, categoriaId, categoriaNombre, torneoId, onAppl
           distP2: p2AlreadyHas ? 0 : 999,
           addToP1: !p1AlreadyHas,
           addToP2: !p2AlreadyHas,
-          label: `${dia} ${hora}`,
+          label: formatSlotCalendario(slotId),
         });
       }
     } catch (err) {
@@ -139,12 +138,12 @@ function CruceDetalles({ partido, categoriaId, categoriaNombre, torneoId, onAppl
                 <option value="">Elegí un horario</option>
                 {viernesViables.length > 0 && (
                   <optgroup label="Viernes">
-                    {viernesViables.map((slotId) => <option key={slotId} value={slotId}>{slotId.split('-')[1]}</option>)}
+                    {viernesViables.map((slotId) => <option key={slotId} value={slotId}>{getSlotCalendario(slotId)?.esMadrugada ? formatSlotCorto(slotId) : slotId.split('-')[1]}</option>)}
                   </optgroup>
                 )}
                 {sabadoViables.length > 0 && (
                   <optgroup label="Sábado">
-                    {sabadoViables.map((slotId) => <option key={slotId} value={slotId}>{slotId.split('-')[1]}</option>)}
+                    {sabadoViables.map((slotId) => <option key={slotId} value={slotId}>{getSlotCalendario(slotId)?.esMadrugada ? formatSlotCorto(slotId) : slotId.split('-')[1]}</option>)}
                   </optgroup>
                 )}
               </select>

@@ -1161,6 +1161,7 @@ body:has(.panel) {
 .panel .pc-propuesta-otras { min-width: 0; }
 .panel .pc-propuesta-opciones { display: grid; gap: var(--e-2); min-width: 0; animation: pc-propuesta-abrir .2s cubic-bezier(.16, 1, .3, 1); }
 .panel .pc-propuesta-status { display: flex; align-items: center; gap: var(--e-2); min-width: 0; padding-block: var(--e-3); color: var(--gris); font-size: var(--t-13); overflow-wrap: anywhere; }
+.panel .pc-propuesta-manual { margin: 0; color: var(--gris); font-size: var(--t-13); overflow-wrap: anywhere; }
 .panel .pc-propuesta-error { margin: 0 0 var(--e-3); color: var(--alerta-texto); font-size: var(--t-13); overflow-wrap: anywhere; }
 .panel .pc-propuesta-spinner { animation: pm-girar 1s linear infinite; }
 @keyframes pc-propuesta-abrir { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }

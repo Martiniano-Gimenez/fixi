@@ -369,4 +369,10 @@ export function formatSlotCalendario(slotId) {
   return info ? info.texto : '';
 }
 
+/** Día calendario abreviado y hora de inicio, por ejemplo "sáb 00:30". */
+export function formatSlotCorto(slotId) {
+  const info = getSlotCalendario(slotId);
+  return info ? `${info.dia.slice(0, 3).toLowerCase()} ${info.hora}` : '';
+}
+
 

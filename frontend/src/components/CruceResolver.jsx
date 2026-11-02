@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../api/client';
 import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { formatearMinutos } from '../utils/disponibilidadUtils';
+import { formatSlotCalendario } from '../utils/dateUtils';
 
 function detalleCambio(nombre, distancia) {
   return `${nombre}, ${formatearMinutos(Math.abs(distancia))} ${distancia > 0 ? 'más tarde' : 'antes'}`;
@@ -55,7 +56,7 @@ export default function CruceResolver({
           distP2: opt.distP2,
           addToP1: opt.addToP1,
           addToP2: opt.addToP2,
-          label: `${opt.dia} ${opt.hora}`,
+          label: formatSlotCalendario(opt.slotId),
         });
       }
     } catch (err) {
@@ -89,7 +90,7 @@ export default function CruceResolver({
       >
         <div className="pc-option-info">
           <span className="pc-option-time">
-            {opt.dia} {opt.hora}
+            {formatSlotCalendario(opt.slotId)}
           </span>
           {textDetails && (
             <span className="pc-option-detail">
@@ -103,7 +104,7 @@ export default function CruceResolver({
           disabled={Boolean(applyingSlotId)}
           className="pc-button"
           onClick={() => handleResolver(opt)}
-          title={`Resolver cruce asignando ${opt.slotId}`}
+          title={`Resolver cruce asignando ${formatSlotCalendario(opt.slotId)}`}
         >
           {isThisApplying ? (
             <>

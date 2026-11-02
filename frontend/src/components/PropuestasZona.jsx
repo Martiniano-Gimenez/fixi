@@ -1,13 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
+import { formatSlotCorto } from '../utils/dateUtils';
 
 function formatearInicios(slots) {
-  const dias = { Viernes: 'vie', Sabado: 'sáb' };
-  const inicios = slots.map((slot) => {
-    const [dia, hora] = slot.split('-');
-    return `${dias[dia] || dia.toLowerCase()} ${hora}`;
-  });
+  const inicios = slots.map(formatSlotCorto);
   return inicios.length > 1
     ? `${inicios.slice(0, -1).join(', ')} y ${inicios.at(-1)}`
     : inicios[0];
@@ -79,7 +76,11 @@ export default function PropuestasZona({ torneoId, categoriaId, zonaId, revision
       )}
       {confirmando === propuesta.clave ? (
         <div className="pc-propuesta-confirmacion">
-          <p className="pc-propuesta-copy">Se agregan estos horarios a las parejas. Confirmalo solo si ya lo hablaste con ellas.</p>
+          <p className="pc-propuesta-copy">
+            {propuesta.cambios.length === 1
+              ? 'Se agregan estos horarios a la pareja. Confirmalo solo si ya lo hablaste con ella.'
+              : 'Se agregan estos horarios a las parejas. Confirmalo solo si ya lo hablaste con ellas.'}
+          </p>
           <div className="pc-propuesta-actions">
             <button type="button" className="pc-propuesta-button" disabled={!!aplicando} onClick={() => aplicar(propuesta)}>
               {aplicando === propuesta.clave && <Loader2 size={16} className="pc-propuesta-spinner" aria-hidden="true" />}
@@ -129,6 +130,7 @@ export default function PropuestasZona({ torneoId, categoriaId, zonaId, revision
               )}
             </div>
           )}
+          <p className="pc-propuesta-manual">Si no les sirve, ampliá los horarios a mano.</p>
         </>
       )}
     </div>
