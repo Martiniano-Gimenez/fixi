@@ -2,7 +2,6 @@
 
 const crypto = require('crypto');
 const { prepararProblemaZona, compatibleConAsignaciones, verificarProgramacionZona } = require('./programacionZona');
-const { minutosCronologicosJornada } = require('../services/slots.service');
 const MAX_NODOS_PROPUESTAS = 20_000;
 const DURACION_MS = 75 * 60_000;
 const solapan = (a, b) => a.startMs < b.endMs && b.startMs < a.endMs;
@@ -30,18 +29,16 @@ function compararCosto(a, b) {
   return 0;
 }
 
-// En una dimensión, emparejar los inicios ordenados de cada jornada da el matching
-// uno a uno con menor diferencia máxima. La trasnoche sigue perteneciendo a su jornada.
+// Los slotId ya expresan la jornada lógica, incluida la trasnoche del sábado.
+function diasAgregados(slots) {
+  return [...new Set(slots.map((s) => s.split('-')[0]))].sort(compararTexto);
+}
+
 function sonPropuestasEquivalentes(a, b) {
   if (a.cambios.length !== b.cambios.length) return false;
   return a.cambios.every((c) => {
     const otra = b.cambios.find((p) => p.parejaId === c.parejaId);
-    if (!otra || c.slotsToAdd.length !== otra.slotsToAdd.length) return false;
-    const ordenar = (slots) => slots.map((s) => {
-      const [dia, hora] = s.split('-'); return { dia, min: minutosCronologicosJornada(hora) };
-    }).sort((x, y) => compararTexto(x.dia, y.dia) || x.min - y.min);
-    const uno = ordenar(c.slotsToAdd), dos = ordenar(otra.slotsToAdd);
-    return uno.every((s, i) => s.dia === dos[i].dia && Math.abs(s.min - dos[i].min) < 75);
+    return !!otra && JSON.stringify(diasAgregados(c.slotsToAdd)) === JSON.stringify(diasAgregados(otra.slotsToAdd));
   });
 }
 
@@ -54,19 +51,18 @@ function compararSoluciones(a, b) {
   return a.inicios.length - b.inicios.length || compararTexto(a.natural, b.natural);
 }
 
-// El umbral no es transitivo. Se eligen representantes por costo, sin unir cadenas
-// de vecinos: cada propuesta descartada debe ser equivalente a un representante mejor.
+// Cada clave exacta conserva su mejor programación; las variantes no llenan el top.
 function seleccionarGrupos(soluciones) {
-  const top = [];
-  for (const s of [...soluciones].sort(compararSoluciones)) {
-    if (!top.some((t) => sonPropuestasEquivalentes(t.propuesta, s.propuesta))) top.push(s);
-    if (top.length === 3) break;
+  const grupos = new Map();
+  for (const s of soluciones) {
+    const anterior = grupos.get(s.grupo);
+    if (!anterior || compararSoluciones(s, anterior) < 0) grupos.set(s.grupo, s);
   }
-  return top;
+  return [...grupos.values()].sort(compararSoluciones).slice(0, 3);
 }
 
 /** Busca grupos distintos, hasta dos parejas. Las variantes cubiertas por un grupo
- * no consumen nodos; sí se conservan para reelegir representantes sin encadenar vecinos.
+ * no consumen nodos; se conserva únicamente la mejor solución de cada clave exacta.
  * El resto de las opciones examinadas (incluso podadas) consume el presupuesto de MRV. */
 function generarPropuestasZona(entrada) {
   const { pares, mini, tareas, courtTimelines, parejaAssignments, cantidadCanchas } = prepararProblemaZona(entrada);
@@ -100,7 +96,7 @@ function generarPropuestasZona(entrada) {
     }
     return opciones;
   });
-  const asignaciones = new Map(), soluciones = new Map(), patrones = new Map();
+  const asignaciones = new Map(), soluciones = new Map();
   let top = [], cota = null;
   let nodos = 0, incompleta = false;
   function costo(cambios) {
@@ -113,32 +109,29 @@ function generarPropuestasZona(entrada) {
     for (const i of op.faltan) if (!siguientes[i].some((s) => s.slotId === op.slotId)) siguientes[i].push(op);
     return siguientes;
   }
+  function claveGrupo(cambios) {
+    return JSON.stringify(cambios.flatMap((slots, i) => slots.length
+      ? [[pares[i].orden, diasAgregados(slots.map((s) => s.slotId))]] : []));
+  }
   function registrar(cambios) {
-      const c = costo(cambios);
-      if (!c.parejas || cota && compararCosto(c, cota) > 0) return;
-      const delta = cambios.flatMap((s, i) => s.length ? [{ i, slots: [...s].sort((a, b) => a.startMs - b.startMs) }] : []);
-      const natural = JSON.stringify(delta.map(({ i, slots }) => [String(pares[i].orden).padStart(8, '0'), slots.map((s) => s.startMs)]));
-      const programacion = tareas.map((t, i) => ({ posicionEnRonda: t.posicionEnRonda,
-        fechaHora: new Date(asignaciones.get(i).startMs).toISOString(), canchaNumero: asignaciones.get(i).canchaNumero }));
-      const anterior = soluciones.get(natural);
-      if (anterior && compararTexto(JSON.stringify(programacion), JSON.stringify(anterior.propuesta.partidosPropuestos)) >= 0) return;
-      const clave = crypto.createHash('sha256').update(JSON.stringify([entrada.claveZona || '', natural])).digest('hex').slice(0, 32);
-      const nueva = { natural, costo: c, inicios: delta.flatMap(({ slots }) => slots.map((s) => s.startMs)).sort((a, b) => a - b), propuesta: { clave,
-        cambios: delta.map(({ i, slots }) => ({ parejaId: pares[i].id, slotsToAdd: slots.map((s) => s.slotId) })),
-        minutosAgregados: c.minutos, partidosPropuestos: programacion } };
-      // Guardar variantes evita perder alternativas al desplazarse un representante.
-      // Se acota también el archivo: nunca más de 20.000 cambios completos distintos.
-      if (!anterior && soluciones.size >= MAX_NODOS_PROPUESTAS) { incompleta = true; return; }
-      soluciones.set(natural, nueva);
-      const cubierta = top.some((s) => compararSoluciones(s, nueva) <= 0 && sonPropuestasEquivalentes(s.propuesta, nueva.propuesta));
-      if (!cubierta || anterior && top.includes(anterior)) top = seleccionarGrupos(soluciones.values());
-      // Tres patrones (parejas + cantidades por jornada) nunca pueden ser equivalentes.
-      // Esta cota sigue siendo válida aunque se desplacen representantes cercanos.
-      const patron = JSON.stringify(delta.map(({ i, slots }) => [pares[i].orden, ['Viernes', 'Sabado'].map((d) => slots.filter((s) => s.dia === d).length)]));
-      if (!patrones.has(patron) || compararCosto(c, patrones.get(patron)) < 0) {
-        patrones.set(patron, c);
-        cota = patrones.size >= 3 ? [...patrones.values()].sort(compararCosto)[2] : null;
-      }
+    const c = costo(cambios);
+    if (!c.parejas || cota && compararCosto(c, cota) > 0) return;
+    const delta = cambios.flatMap((s, i) => s.length ? [{ i, slots: [...s].sort((a, b) => a.startMs - b.startMs) }] : []);
+    const natural = JSON.stringify(delta.map(({ i, slots }) => [String(pares[i].orden).padStart(8, '0'), slots.map((s) => s.startMs)]));
+    const programacion = tareas.map((t, i) => ({ posicionEnRonda: t.posicionEnRonda,
+      fechaHora: new Date(asignaciones.get(i).startMs).toISOString(), canchaNumero: asignaciones.get(i).canchaNumero }));
+    const grupo = claveGrupo(cambios), anterior = soluciones.get(grupo);
+    const clave = crypto.createHash('sha256').update(JSON.stringify([entrada.claveZona || '', natural])).digest('hex').slice(0, 32);
+    const nueva = { grupo, natural, costo: c, inicios: delta.flatMap(({ slots }) => slots.map((s) => s.startMs)).sort((a, b) => a - b), propuesta: { clave,
+      cambios: delta.map(({ i, slots }) => ({ parejaId: pares[i].id, slotsToAdd: slots.map((s) => s.slotId) })),
+      minutosAgregados: c.minutos, partidosPropuestos: programacion } };
+    if (anterior) {
+      const comparacion = compararSoluciones(nueva, anterior);
+      if (comparacion > 0 || comparacion === 0 && compararTexto(JSON.stringify(programacion), JSON.stringify(anterior.propuesta.partidosPropuestos)) >= 0) return;
+    }
+    soluciones.set(grupo, nueva);
+    top = seleccionarGrupos(soluciones.values());
+    cota = top.length === 3 ? top[2].costo : null;
   }
   function buscar(cambios) {
     if (asignaciones.size === tareas.length) { registrar(cambios); return; }
@@ -147,13 +140,13 @@ function generarPropuestasZona(entrada) {
       if (asignaciones.has(i)) continue;
       const opciones = [];
       for (const op of dominios[i]) {
-        // En la última decisión ya conocemos todos los cambios: archivar las variantes
+        // En la última decisión ya conocemos todos los cambios: evaluar las variantes
         // equivalentes sin gastar presupuesto en otra rama/otra cancha del mismo grupo.
         if (asignaciones.size === tareas.length - 1 && compatibleConAsignaciones(tareas[i], op, tareas, asignaciones, mini)) {
           const siguientes = extender(cambios, op), c = costo(siguientes);
           if (c.parejas <= 2 && (!cota || compararCosto(c, cota) <= 0)) {
-            const propuesta = { cambios: siguientes.flatMap((s, j) => s.length ? [{ parejaId: pares[j].id, slotsToAdd: s.map((w) => w.slotId) }] : []) };
-            const cubierta = top.some((s) => sonPropuestasEquivalentes(s.propuesta, propuesta));
+            const grupo = claveGrupo(siguientes);
+            const cubierta = top.some((s) => s.grupo === grupo);
             if (cubierta) {
               asignaciones.set(i, op); registrar(siguientes); asignaciones.delete(i);
               if (incompleta) return;

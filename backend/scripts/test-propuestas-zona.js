@@ -48,15 +48,20 @@ function verificarPropuestas(e, resultado) {
 function testGenerador() {
   const propuesta = (id, slots) => ({ cambios: [{ parejaId: id, slotsToAdd: slots }] });
   assert.ok(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('a', ['Viernes-10:00'])));
-  assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('a', ['Viernes-10:15'])), false, '75 exactos ya son otra alternativa');
+  assert.ok(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('a', ['Viernes-22:45'])), 'Cualquier inicio del mismo día pertenece al mismo grupo');
   assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('b', ['Viernes-09:00'])), false);
   assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('a', ['Sabado-09:00'])), false);
-  assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00', 'Viernes-10:00']), propuesta('a', ['Viernes-09:15', 'Viernes-11:30'])), false, 'No reutiliza un inicio para dos emparejamientos');
-  assert.ok(sonPropuestasEquivalentes(propuesta('a', ['Viernes-23:45']), propuesta('a', ['Viernes-00:15'])), 'La trasnoche pertenece a la misma jornada');
+  assert.ok(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00', 'Viernes-10:00']), propuesta('a', ['Viernes-15:00'])), 'El grupo usa el conjunto de días, sin contar inicios');
+  assert.ok(sonPropuestasEquivalentes(propuesta('a', ['Sabado-23:45']), propuesta('a', ['Sabado-00:15'])), 'La trasnoche del sábado sigue siendo sábado lógico');
+  assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00', 'Sabado-10:00']), propuesta('a', ['Viernes-09:15'])), false, 'Un día adicional cambia el grupo');
+  const dosParejas = { cambios: [propuesta('a', ['Viernes-09:00']).cambios[0], propuesta('b', ['Sabado-10:00']).cambios[0]] };
+  assert.ok(sonPropuestasEquivalentes(dosParejas, { cambios: [propuesta('b', ['Sabado-00:15']).cambios[0], propuesta('a', ['Viernes-15:00']).cambios[0]] }), 'No depende del orden de parejas ni de horarios');
+  assert.equal(sonPropuestasEquivalentes(dosParejas, { cambios: [propuesta('a', ['Sabado-10:00']).cambios[0], propuesta('b', ['Viernes-09:00']).cambios[0]] }), false, 'Conserva los días asociados a cada pareja');
   const representadas = ['09:15', '10:15', '09:00', '09:30', '11:30'].map((h) => ({
-    costo: { parejas: 1, minutos: 75, horas: [1] }, natural: h, inicios: [ventana(`Viernes-${h}`).startMs], propuesta: propuesta('a', [`Viernes-${h}`]),
+    grupo: 'a-viernes', costo: { parejas: 1, minutos: 75, horas: [1] }, natural: h, inicios: [ventana(`Viernes-${h}`).startMs], propuesta: propuesta('a', [`Viernes-${h}`]),
   }));
-  assert.deepEqual(seleccionarGrupos(representadas).map((s) => s.natural), ['09:00', '10:15', '11:30'], 'No encadena vecinos ni ocupa el top con saltos de 15 minutos');
+  assert.deepEqual(seleccionarGrupos(representadas).map((s) => s.natural), ['09:00'], 'Las variantes del mismo día ocupan un solo lugar y queda el inicio más temprano');
+  assert.deepEqual(seleccionarGrupos([...representadas].reverse()), seleccionarGrupos(representadas), 'Agrupar por clave no depende de la inserción');
   const mejor = { ...representadas[0], costo: { parejas: 1, minutos: 15, horas: [1] } };
   assert.equal(seleccionarGrupos([...representadas, mejor])[0], mejor, 'El representante es el de menor costo antes que el más temprano');
   assert.equal(minutosFuera([ventana('Viernes-10:00'), ventana('Viernes-10:15')], [ventana('Viernes-09:00')]), 75);
@@ -207,7 +212,9 @@ async function testZonaE() {
   await prisma.partido.createMany({ data: agenda });
   const pre = await svc.preCheckInicioTorneo(caso.org.id, caso.torneo.id);
   const ps = propuestas(pre); assert.ok(ps.length, 'Zona E trae al menos una propuesta');
-  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) assert.equal(sonPropuestasEquivalentes(ps[i], ps[j]), false, 'Zona E no repite la misma llamada con otro cuarto de hora');
+  assert.equal(ps.length, 3, 'La zona E reproducida conserva tres grupos distintos de parejas y días');
+  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) assert.equal(sonPropuestasEquivalentes(ps[i], ps[j]), false, 'Zona E no repite las mismas parejas y días');
+  console.log(`Zona E reproducida: ${ps.length} propuestas agrupadas por día`);
   assert.ok(ps.every((p) => p.cambios.length <= 2));
   assert.equal(ps[0].cambios.length, 2, 'El caso E con canchas ocupadas requiere dos parejas');
   const antes = await leerParejas(caso), agendaAntes = await prisma.partido.findMany({ where: { categoriaId: cat.id }, orderBy: { posicionEnRonda: 'asc' } });
