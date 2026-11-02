@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
-import { formatSlotCorto } from '../utils/dateUtils';
+import { formatHora, formatPartidoHorario, formatSlotCorto, getDiaCalendarioConTrasnoche } from '../utils/dateUtils';
 
 function formatearInicios(slots) {
   const inicios = slots.map(formatSlotCorto);
@@ -43,6 +43,16 @@ export default function PropuestasZona({ torneoId, categoriaId, zonaId, revision
   const errorSinTarjeta = errorAplicacion && (!vigente || !resultado.propuestas.some((p) => p.clave === errorAplicacion.clave));
   const nombres = new Map(parejas.map((pareja) => [pareja.id, pareja.nombre]));
 
+  const esHorarioPedido = (partido, propuesta) => {
+    const jornada = getDiaCalendarioConTrasnoche(partido.fechaHora);
+    if (!jornada) return false;
+    const dia = jornada.diaNombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const slotId = `${dia}-${formatHora(partido.fechaHora)}`;
+    const participantes = [partido.pareja1Id, partido.pareja2Id].filter(Boolean);
+    return propuesta.cambios.some((c) =>
+      (participantes.length ? participantes.includes(c.parejaId) : partido.origen && nombres.has(c.parejaId)) && c.slotsToAdd.includes(slotId));
+  };
+
   const aplicar = async (propuesta) => {
     if (bloqueoAplicar.current) return;
     bloqueoAplicar.current = true;
@@ -71,6 +81,26 @@ export default function PropuestasZona({ torneoId, categoriaId, zonaId, revision
           </p>
         ))}
       </div>
+      {propuesta.partidosPropuestos?.length > 0 && (
+        <section className="pc-propuesta-partidos" aria-label="Partidos de la zona">
+          <h5 className="pc-propuesta-partidos-title">Partidos de la zona</h5>
+          <ul className="pc-propuesta-partidos-list">
+            {[...propuesta.partidosPropuestos].sort((a, b) => +new Date(a.fechaHora) - +new Date(b.fechaHora) || a.posicionEnRonda - b.posicionEnRonda).map((partido) => (
+              <li key={partido.posicionEnRonda} className="pc-propuesta-partido">
+                <span className="pc-propuesta-rivales">
+                  {partido.pareja1Id && partido.pareja2Id
+                    ? `${nombres.get(partido.pareja1Id) || 'Pareja 1'} vs ${nombres.get(partido.pareja2Id) || 'Pareja 2'}`
+                    : partido.origen}
+                </span>
+                <span className="pc-propuesta-partido-datos">
+                  · <time dateTime={partido.fechaHora}>{formatPartidoHorario(partido.fechaHora).toLowerCase().replace(' · ', ' ')}</time> · Cancha {partido.canchaNumero}
+                </span>
+                {esHorarioPedido(partido, propuesta) && <span className="pc-propuesta-nuevo">nuevo</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {errorAplicacion?.clave === propuesta.clave && (
         <p className="pc-propuesta-error" role="alert">{errorAplicacion.mensaje}</p>
       )}

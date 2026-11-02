@@ -234,7 +234,14 @@ function generarPropuestasZona(entrada) {
       ...grilla.filter((s) => p.cambios.find((c) => c.parejaId === par.id)?.slotsToAdd.includes(s.slotId))]) }));
     return verificarProgramacionZona({ ...entrada, parejas, partidos: tareas.map((t, i) => ({ ...t.partido,
       ...p.partidosPropuestos[i], sinHorarioAsignado: false })) }).estado === 'FACTIBLE';
-  });
+  }).map((propuesta) => ({ ...propuesta, partidosPropuestos: propuesta.partidosPropuestos.map((p) => {
+    const t = tareas.find((t) => t.posicionEnRonda === p.posicionEnRonda);
+    return { ...p, pareja1Id: t.derivado ? null : t.partido.pareja1Id ?? null,
+      pareja2Id: t.derivado ? null : t.partido.pareja2Id ?? null,
+      ...(t.derivado ? { origen: t.partido.origen || (t.partido.origenPareja1 && t.partido.origenPareja2
+        ? `${t.partido.origenPareja1} vs ${t.partido.origenPareja2}`
+        : t.posicionEnRonda === 3 ? 'Ganador P1 vs Ganador P2' : 'Perdedor P1 vs Perdedor P2') } : {}) };
+  }) }));
   return { propuestas, busquedaIncompleta: resultados.some((r) => r.busquedaIncompleta),
     nodos: resultados.reduce((n, r) => n + r.nodos, 0),
     combinaciones: resultados.map((r, i) => ({ ordenes: combinaciones[i].map((j) => pares[j].orden), nodos: r.nodos, busquedaIncompleta: r.busquedaIncompleta })) };

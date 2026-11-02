@@ -26,6 +26,11 @@ function entrada(slots, { formato = 'ROUND_ROBIN', club = viernes('09:00', '23:0
   return { formato, parejas, grilla: club.map(ventana), ventanasClub: fusionarSlotsEnVentanas(club, FECHA), cantidadCanchas: canchas,
     partidos: cruces.map(([a, b], i) => ({ posicionEnRonda: i + 1, pareja1Id: parejas[a]?.id, pareja2Id: parejas[b]?.id, sinHorarioAsignado: true })) };
 }
+function traducirIdsPropuesta(propuesta, ids) {
+  return { ...propuesta, cambios: propuesta.cambios.map((c) => ({ ...c, parejaId: ids.get(c.parejaId) || c.parejaId })),
+    partidosPropuestos: propuesta.partidosPropuestos.map((p) => ({ ...p,
+      pareja1Id: ids.get(p.pareja1Id) || p.pareja1Id, pareja2Id: ids.get(p.pareja2Id) || p.pareja2Id })) };
+}
 function verificarPropuestas(e, resultado) {
   assert.ok(resultado.propuestas.length <= 3);
   const firmas = new Set();
@@ -46,6 +51,16 @@ function verificarPropuestas(e, resultado) {
     assert.equal(p.minutosAgregados, minutos);
     assert.equal(p.minutosAmpliacion, ampliacion);
     assert.equal(p.diasNuevos, dias);
+    for (const partido of p.partidosPropuestos) {
+      const original = e.partidos.find((q) => q.posicionEnRonda === partido.posicionEnRonda);
+      if (e.formato === 'MINI_BRACKET' && partido.posicionEnRonda >= 3) {
+        assert.equal(partido.pareja1Id, null); assert.equal(partido.pareja2Id, null);
+        assert.equal(typeof partido.origen, 'string'); assert.ok(partido.origen.length);
+      } else {
+        assert.equal(partido.pareja1Id, original.pareja1Id, 'Conserva pareja 1 para mostrarla a la izquierda');
+        assert.equal(partido.pareja2Id, original.pareja2Id);
+      }
+    }
     assert.equal(verificarProgramacionZona({ ...e, parejas, partidos: e.partidos.map((q, i) => ({
       ...q, ...p.partidosPropuestos[i], sinHorarioAsignado: false,
     })) }).estado, 'FACTIBLE');
@@ -134,7 +149,8 @@ function testGenerador() {
   const rp = generarPropuestasZona(permutado);
   assert.deepEqual(rp.combinaciones, r.combinaciones, 'Presupuestos y recorridos por combinación no dependen de UUID ni del orden de inserción');
   assert.deepEqual(rp.propuestas.map((p) => p.clave), r.propuestas.map((p) => p.clave));
-  assert.deepEqual(rp.propuestas.map((p) => p.partidosPropuestos), r.propuestas.map((p) => p.partidosPropuestos));
+  const idsAntes = new Map([...ids].map(([antes, despues]) => [despues, antes]));
+  assert.deepEqual(rp.propuestas.map((p) => traducirIdsPropuesta(p, idsAntes).partidosPropuestos), r.propuestas.map((p) => p.partidosPropuestos));
   assert.deepEqual(rp.propuestas.map((p) => p.cambios.map((c) => c.slotsToAdd)), r.propuestas.map((p) => p.cambios.map((c) => c.slotsToAdd)));
 
   const dos = entrada([['Viernes-09:00'], ['Viernes-12:00']]);
@@ -150,7 +166,7 @@ function testGenerador() {
   mezcla.partidos.reverse().forEach((p) => { p.pareja1Id = nuevosIds.get(p.pareja1Id); p.pareja2Id = nuevosIds.get(p.pareja2Id); });
   mezcla.grilla.reverse();
   const rMezcla = generarPropuestasZona(mezcla), idsOriginales = new Map([...nuevosIds].map(([antes, despues]) => [despues, antes]));
-  assert.deepEqual({ ...rMezcla, propuestas: rMezcla.propuestas.map((p) => ({ ...p, cambios: p.cambios.map((c) => ({ ...c, parejaId: idsOriginales.get(c.parejaId) })) })) }, rv,
+  assert.deepEqual({ ...rMezcla, propuestas: rMezcla.propuestas.map((p) => traducirIdsPropuesta(p, idsOriginales)) }, rv,
     'Representantes, variantes, testigos y presupuestos idénticos con varios conjuntos, UUID permutados y entradas invertidas');
   const acotada = generarPropuestasZona({ ...dos, maxNodos: 1 });
   assert.ok(acotada.busquedaIncompleta);
@@ -161,8 +177,14 @@ function testGenerador() {
   const mini = entrada([['Viernes-18:00'], ['Viernes-18:00', 'Viernes-20:30'], ['Viernes-18:00', 'Viernes-20:30'], ['Viernes-18:00', 'Viernes-20:30']], { formato: 'MINI_BRACKET', club: viernes('18:00', '23:00') });
   mini.partidos[0] = { ...mini.partidos[0], fechaHora: new Date(ventana('Viernes-18:00').startMs), canchaNumero: 1, sinHorarioAsignado: false };
   mini.partidos[1] = { ...mini.partidos[1], fechaHora: new Date(ventana('Viernes-18:00').startMs), canchaNumero: 2, sinHorarioAsignado: false };
+  mini.partidos[2] = { ...mini.partidos[2], origenPareja1: 'Ganador Partido 1', origenPareja2: 'Ganador Partido 2' };
   const rm = generarPropuestasZona(mini); assert.ok(rm.propuestas.length); verificarPropuestas(mini, rm);
-  for (const p of rm.propuestas) assert.deepEqual(p.partidosPropuestos.slice(0, 2), [1, 2].map((canchaNumero, i) => ({ posicionEnRonda: i + 1, fechaHora: '2026-11-06T21:00:00.000Z', canchaNumero })));
+  for (const p of rm.propuestas) {
+    assert.deepEqual(p.partidosPropuestos.slice(0, 2), [1, 2].map((canchaNumero, i) => ({ posicionEnRonda: i + 1,
+      fechaHora: '2026-11-06T21:00:00.000Z', canchaNumero, pareja1Id: `id-${i * 2}`, pareja2Id: `id-${i * 2 + 1}` })));
+    assert.equal(p.partidosPropuestos[2].origen, 'Ganador Partido 1 vs Ganador Partido 2', 'Reutiliza los orígenes existentes del panel');
+    assert.equal(p.partidosPropuestos[3].origen, 'Perdedor P1 vs Perdedor P2', 'Sin textos previos usa el criterio P1/P2 del pre-check');
+  }
   const imposible = entrada(Array.from({ length: 4 }, () => ['Sabado-09:00']), { formato: 'MINI_BRACKET', club: viernes('18:00', '23:00') });
   assert.deepEqual(generarPropuestasZona(imposible).propuestas, [], 'Cuatro parejas a modificar exceden el límite');
   assert.equal(generarPropuestasZona({ ...dos, maxNodos: 0 }).busquedaIncompleta, true);
@@ -259,7 +281,8 @@ async function testApi(baseUrl) {
     }
   }
   const plan = svc.preCheckSessions.get(caso.torneo.id).categoriasPlan[0].zonas[0];
-  assert.deepEqual(plan.partidos.map((q) => ({ posicionEnRonda: q.posicionEnRonda, fechaHora: new Date(q.fechaHora).toISOString(), canchaNumero: q.canchaNumero })), p.partidosPropuestos);
+  assert.deepEqual(plan.partidos.map((q) => ({ posicionEnRonda: q.posicionEnRonda, fechaHora: new Date(q.fechaHora).toISOString(), canchaNumero: q.canchaNumero })),
+    p.partidosPropuestos.map(({ posicionEnRonda, fechaHora, canchaNumero }) => ({ posicionEnRonda, fechaHora, canchaNumero })));
   const vieja = await post(caso, '/propuestas/aplicar', { clave: p.clave, revision: pre.revision });
   assert.equal(vieja.status, 409); assert.equal(vieja.body.codigo, 'REVISION_PRECHECK_VIEJA'); assert.ok(vieja.body.preCheck.revision);
   assert.deepEqual(await leerParejas(caso), despues);
