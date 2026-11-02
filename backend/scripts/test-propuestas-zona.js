@@ -7,7 +7,7 @@ const prisma = require('../src/lib/prisma');
 const { JWT_SECRET } = require('../src/config/env');
 const { startTestServer } = require('./utils/testServer');
 const svc = require('../src/services/organizador.service');
-const { generarPropuestasZona, minutosFuera, compararCosto } = require('../src/utils/propuestasZona');
+const { generarPropuestasZona, minutosFuera, compararCosto, sonPropuestasEquivalentes, seleccionarGrupos } = require('../src/utils/propuestasZona');
 const { verificarProgramacionZona } = require('../src/utils/programacionZona');
 const { fusionarSlotsEnVentanas, slotIdToMsWindow } = require('../src/services/zona.service');
 const { generarSlotsDia } = require('../src/services/slots.service');
@@ -28,6 +28,7 @@ function verificarPropuestas(e, resultado) {
   assert.ok(resultado.propuestas.length <= 3);
   const firmas = new Set();
   for (const p of resultado.propuestas) {
+    for (const q of resultado.propuestas) if (p !== q) assert.equal(sonPropuestasEquivalentes(p, q), false, 'El top no contiene dos variantes del mismo grupo');
     assert.ok(p.cambios.length >= 1 && p.cambios.length <= 2);
     const firma = JSON.stringify(p.cambios);
     assert.ok(!firmas.has(firma)); firmas.add(firma);
@@ -45,13 +46,30 @@ function verificarPropuestas(e, resultado) {
   }
 }
 function testGenerador() {
+  const propuesta = (id, slots) => ({ cambios: [{ parejaId: id, slotsToAdd: slots }] });
+  assert.ok(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('a', ['Viernes-10:00'])));
+  assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('a', ['Viernes-10:15'])), false, '75 exactos ya son otra alternativa');
+  assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('b', ['Viernes-09:00'])), false);
+  assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00']), propuesta('a', ['Sabado-09:00'])), false);
+  assert.equal(sonPropuestasEquivalentes(propuesta('a', ['Viernes-09:00', 'Viernes-10:00']), propuesta('a', ['Viernes-09:15', 'Viernes-11:30'])), false, 'No reutiliza un inicio para dos emparejamientos');
+  assert.ok(sonPropuestasEquivalentes(propuesta('a', ['Viernes-23:45']), propuesta('a', ['Viernes-00:15'])), 'La trasnoche pertenece a la misma jornada');
+  const representadas = ['09:15', '10:15', '09:00', '09:30', '11:30'].map((h) => ({
+    costo: { parejas: 1, minutos: 75, horas: [1] }, natural: h, inicios: [ventana(`Viernes-${h}`).startMs], propuesta: propuesta('a', [`Viernes-${h}`]),
+  }));
+  assert.deepEqual(seleccionarGrupos(representadas).map((s) => s.natural), ['09:00', '10:15', '11:30'], 'No encadena vecinos ni ocupa el top con saltos de 15 minutos');
+  const mejor = { ...representadas[0], costo: { parejas: 1, minutos: 15, horas: [1] } };
+  assert.equal(seleccionarGrupos([...representadas, mejor])[0], mejor, 'El representante es el de menor costo antes que el más temprano');
   assert.equal(minutosFuera([ventana('Viernes-10:00'), ventana('Viernes-10:15')], [ventana('Viernes-09:00')]), 75);
   assert.ok(compararCosto({ parejas: 1, minutos: 150, horas: [10] }, { parejas: 2, minutos: 15, horas: [1, 2] }) < 0);
   assert.ok(compararCosto({ parejas: 1, minutos: 15, horas: [10] }, { parejas: 1, minutos: 30, horas: [1] }) < 0);
-  const orden = entrada([viernes('09:00', '10:30'), ['Viernes-11:30']], { club: viernes('09:00', '14:00') });
+  const orden = entrada([viernes('09:00', '10:30'), ['Viernes-11:30']], { club: ['Viernes-09:00', 'Viernes-09:15', 'Viernes-11:30'] });
   const rOrden = generarPropuestasZona(orden);
   verificarPropuestas(orden, rOrden);
-  assert.deepEqual(rOrden.propuestas.map((p) => p.cambios[0].parejaId), ['id-1', 'id-1', 'id-0'], 'Menor disponibilidad original antes que clave natural');
+  assert.deepEqual(rOrden.propuestas.map((p) => p.cambios[0].parejaId), ['id-1', 'id-0'], 'Menor disponibilidad original primero; la variante 09:15 no ocupa un tercer lugar');
+  const dias = entrada([['Viernes-09:00'], ['Sabado-09:00']], { club: ['Viernes-09:00', 'Sabado-09:00'] });
+  const rd = generarPropuestasZona(dias); verificarPropuestas(dias, rd);
+  assert.equal(rd.propuestas.length, 2);
+  assert.deepEqual(new Set(rd.propuestas.map((p) => p.cambios[0].slotsToAdd[0].split('-')[0])), new Set(['Viernes', 'Sabado']), 'Salen las dos alternativas de verdad');
 
   const aislada = entrada([viernes('18:00', '23:00'), viernes('18:00', '23:00'), ['Sabado-09:00']], { club: viernes('18:00', '23:00') });
   const r = generarPropuestasZona(aislada);
@@ -189,6 +207,7 @@ async function testZonaE() {
   await prisma.partido.createMany({ data: agenda });
   const pre = await svc.preCheckInicioTorneo(caso.org.id, caso.torneo.id);
   const ps = propuestas(pre); assert.ok(ps.length, 'Zona E trae al menos una propuesta');
+  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) assert.equal(sonPropuestasEquivalentes(ps[i], ps[j]), false, 'Zona E no repite la misma llamada con otro cuarto de hora');
   assert.ok(ps.every((p) => p.cambios.length <= 2));
   assert.equal(ps[0].cambios.length, 2, 'El caso E con canchas ocupadas requiere dos parejas');
   const antes = await leerParejas(caso), agendaAntes = await prisma.partido.findMany({ where: { categoriaId: cat.id }, orderBy: { posicionEnRonda: 'asc' } });
