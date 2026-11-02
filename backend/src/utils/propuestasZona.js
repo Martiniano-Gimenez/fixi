@@ -22,9 +22,37 @@ function minutosFuera(nuevas, originales) {
     n + Math.max(0, Math.min(w.endMs, o.endMs) - Math.max(w.startMs, o.startMs)), 0), 0) / 60_000;
 }
 
+function calcularAmpliacion(nuevas, originales) {
+  let diasNuevos = 0, minutosAmpliacion = 0;
+  for (const dia of new Set(nuevas.map((w) => w.dia))) {
+    const bloques = unirVentanas(originales.filter((w) => w.dia === dia));
+    const requeridas = unirVentanas(nuevas.filter((w) => w.dia === dia));
+    if (!bloques.length) { diasNuevos++; continue; }
+    let ampliacionMs = Math.max(0, bloques[0].startMs - requeridas[0].startMs) +
+      Math.max(0, requeridas.at(-1).endMs - bloques.at(-1).endMs);
+    // Entre dos bloques se puede ampliar desde ambos lados. El mínimo deja sin
+    // cubrir el mayor hueco que no contiene ningún partido requerido.
+    for (let i = 1; i < bloques.length; i++) {
+      const inicio = bloques[i - 1].endMs, fin = bloques[i].startMs;
+      let cursor = inicio, huecoMayor = 0;
+      for (const w of requeridas) {
+        const desde = Math.max(inicio, w.startMs), hasta = Math.min(fin, w.endMs);
+        if (desde >= hasta) continue;
+        huecoMayor = Math.max(huecoMayor, desde - cursor);
+        cursor = hasta;
+      }
+      huecoMayor = Math.max(huecoMayor, fin - cursor);
+      ampliacionMs += fin - inicio - huecoMayor;
+    }
+    minutosAmpliacion += ampliacionMs / 60_000;
+  }
+  return { diasNuevos, minutosAmpliacion };
+}
+
 function compararCosto(a, b) {
   if (a.parejas !== b.parejas) return a.parejas - b.parejas;
-  if (a.minutos !== b.minutos) return a.minutos - b.minutos;
+  if (a.diasNuevos !== b.diasNuevos) return a.diasNuevos - b.diasNuevos;
+  if (a.minutosAmpliacion !== b.minutosAmpliacion) return a.minutosAmpliacion - b.minutosAmpliacion;
   for (let i = 0; i < a.horas.length; i++) if (a.horas[i] !== b.horas[i]) return a.horas[i] - b.horas[i];
   return 0;
 }
@@ -43,12 +71,7 @@ function sonPropuestasEquivalentes(a, b) {
 }
 
 function compararSoluciones(a, b) {
-  const costo = compararCosto(a.costo, b.costo);
-  if (costo) return costo;
-  for (let i = 0; i < Math.min(a.inicios.length, b.inicios.length); i++) {
-    if (a.inicios[i] !== b.inicios[i]) return a.inicios[i] - b.inicios[i];
-  }
-  return a.inicios.length - b.inicios.length || compararTexto(a.natural, b.natural);
+  return compararCosto(a.costo, b.costo) || compararTexto(a.natural, b.natural);
 }
 
 // Cada clave exacta conserva su mejor programación; las variantes no llenan el top.
@@ -98,7 +121,9 @@ function generarPropuestasZona(entrada) {
   });
   function costo(cambios) {
     const indices = cambios.flatMap((s, i) => s.length ? [i] : []);
-    return { parejas: indices.length, minutos: indices.reduce((n, i) => n + minutosFuera(cambios[i], originales[i]), 0),
+    const ampliaciones = indices.map((i) => calcularAmpliacion(cambios[i], originales[i]));
+    return { parejas: indices.length, diasNuevos: ampliaciones.reduce((n, c) => n + c.diasNuevos, 0),
+      minutosAmpliacion: ampliaciones.reduce((n, c) => n + c.minutosAmpliacion, 0),
       horas: indices.map((i) => horas[i]).sort((a, b) => a - b) };
   }
   function extender(cambios, op) {
@@ -127,9 +152,10 @@ function generarPropuestasZona(entrada) {
         fechaHora: new Date(asignaciones.get(i).startMs).toISOString(), canchaNumero: asignaciones.get(i).canchaNumero }));
       const grupo = claveGrupo(cambios), anterior = soluciones.get(grupo);
       const clave = crypto.createHash('sha256').update(JSON.stringify([entrada.claveZona || '', natural])).digest('hex').slice(0, 32);
-      const nueva = { grupo, natural, costo: c, inicios: delta.flatMap(({ slots }) => slots.map((s) => s.startMs)).sort((a, b) => a - b), propuesta: { clave,
+      const nueva = { grupo, natural, costo: c, propuesta: { clave,
         cambios: delta.map(({ i, slots }) => ({ parejaId: pares[i].id, slotsToAdd: slots.map((s) => s.slotId) })),
-        minutosAgregados: c.minutos, partidosPropuestos: programacion } };
+        minutosAgregados: delta.reduce((n, { i, slots }) => n + minutosFuera(slots, originales[i]), 0),
+        minutosAmpliacion: c.minutosAmpliacion, diasNuevos: c.diasNuevos, partidosPropuestos: programacion } };
       if (anterior) {
         const comparacion = compararSoluciones(nueva, anterior);
         if (comparacion > 0 || comparacion === 0 && compararTexto(JSON.stringify(programacion), JSON.stringify(anterior.propuesta.partidosPropuestos)) >= 0) return;
@@ -164,6 +190,8 @@ function generarPropuestasZona(entrada) {
           if (!compatibleConAsignaciones(tareas[i], op, tareas, asignaciones, mini)) continue;
           const siguientes = extender(cambios, op), c = costo(siguientes);
           if (c.parejas > 2) continue;
+          // La ampliación mínima es monótona: cubrir más partidos restringe las
+          // extensiones posibles. Parejas y días nuevos tampoco pueden disminuir.
           if (cota && compararCosto(c, cota) > 0) continue;
           opciones.push({ op, siguientes, costo: c });
         }
@@ -193,4 +221,4 @@ function generarPropuestasZona(entrada) {
     combinaciones: resultados.map((r, i) => ({ ordenes: combinaciones[i].map((j) => pares[j].orden), nodos: r.nodos, busquedaIncompleta: r.busquedaIncompleta })) };
 }
 
-module.exports = { generarPropuestasZona, minutosFuera, compararCosto, MAX_NODOS_PROPUESTAS, sonPropuestasEquivalentes, seleccionarGrupos };
+module.exports = { generarPropuestasZona, minutosFuera, calcularAmpliacion, compararCosto, MAX_NODOS_PROPUESTAS, sonPropuestasEquivalentes, seleccionarGrupos };

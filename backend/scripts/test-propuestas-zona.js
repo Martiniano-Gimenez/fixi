@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
 const prisma = require('../src/lib/prisma');
 const { JWT_SECRET } = require('../src/config/env');
-const { generarPropuestasZona, minutosFuera, compararCosto, sonPropuestasEquivalentes, seleccionarGrupos } = require('../src/utils/propuestasZona');
+const { generarPropuestasZona, minutosFuera, calcularAmpliacion, compararCosto, sonPropuestasEquivalentes, seleccionarGrupos } = require('../src/utils/propuestasZona');
 let generaciones = 0;
 require('../src/utils/propuestasZona').generarPropuestasZona = (...args) => { generaciones++; return generarPropuestasZona(...args); };
 const { startTestServer } = require('./utils/testServer');
@@ -34,14 +34,18 @@ function verificarPropuestas(e, resultado) {
     assert.ok(p.cambios.length >= 1 && p.cambios.length <= 2);
     const firma = JSON.stringify(p.cambios);
     assert.ok(!firmas.has(firma)); firmas.add(firma);
-    let minutos = 0;
+    let minutos = 0, ampliacion = 0, dias = 0;
     const parejas = e.parejas.map((par) => {
       const nuevos = p.cambios.find((c) => c.parejaId === par.id)?.slotsToAdd || [];
       const ws = nuevos.map((s) => { assert.ok(e.grilla.some((g) => g.slotId === s)); return ventana(s); });
       minutos += minutosFuera(ws, par.ventanas);
+      const costo = calcularAmpliacion(ws, par.ventanas);
+      ampliacion += costo.minutosAmpliacion; dias += costo.diasNuevos;
       return { ...par, ventanas: [...par.ventanas, ...ws] };
     });
     assert.equal(p.minutosAgregados, minutos);
+    assert.equal(p.minutosAmpliacion, ampliacion);
+    assert.equal(p.diasNuevos, dias);
     assert.equal(verificarProgramacionZona({ ...e, parejas, partidos: e.partidos.map((q, i) => ({
       ...q, ...p.partidosPropuestos[i], sinHorarioAsignado: false,
     })) }).estado, 'FACTIBLE');
@@ -60,15 +64,45 @@ function testGenerador() {
   assert.ok(sonPropuestasEquivalentes(dosParejas, { cambios: [propuesta('b', ['Sabado-00:15']).cambios[0], propuesta('a', ['Viernes-15:00']).cambios[0]] }), 'No depende del orden de parejas ni de horarios');
   assert.equal(sonPropuestasEquivalentes(dosParejas, { cambios: [propuesta('a', ['Sabado-10:00']).cambios[0], propuesta('b', ['Viernes-09:00']).cambios[0]] }), false, 'Conserva los días asociados a cada pareja');
   const representadas = ['09:15', '10:15', '09:00', '09:30', '11:30'].map((h) => ({
-    grupo: 'a-viernes', costo: { parejas: 1, minutos: 75, horas: [1] }, natural: h, inicios: [ventana(`Viernes-${h}`).startMs], propuesta: propuesta('a', [`Viernes-${h}`]),
+    grupo: 'a-viernes', costo: { parejas: 1, diasNuevos: 0, minutosAmpliacion: 75, horas: [1] }, natural: h, propuesta: propuesta('a', [`Viernes-${h}`]),
   }));
   assert.deepEqual(seleccionarGrupos(representadas).map((s) => s.natural), ['09:00'], 'Las variantes del mismo día ocupan un solo lugar y queda el inicio más temprano');
   assert.deepEqual(seleccionarGrupos([...representadas].reverse()), seleccionarGrupos(representadas), 'Agrupar por clave no depende de la inserción');
-  const mejor = { ...representadas[0], costo: { parejas: 1, minutos: 15, horas: [1] } };
+  const mejor = { ...representadas[0], costo: { parejas: 1, diasNuevos: 0, minutosAmpliacion: 15, horas: [1] } };
   assert.equal(seleccionarGrupos([...representadas, mejor])[0], mejor, 'El representante es el de menor costo antes que el más temprano');
   assert.equal(minutosFuera([ventana('Viernes-10:00'), ventana('Viernes-10:15')], [ventana('Viernes-09:00')]), 75);
-  assert.ok(compararCosto({ parejas: 1, minutos: 150, horas: [10] }, { parejas: 2, minutos: 15, horas: [1, 2] }) < 0);
-  assert.ok(compararCosto({ parejas: 1, minutos: 15, horas: [10] }, { parejas: 1, minutos: 30, horas: [1] }) < 0);
+  assert.ok(compararCosto({ parejas: 1, diasNuevos: 1, minutosAmpliacion: 150, horas: [10] }, { parejas: 2, diasNuevos: 0, minutosAmpliacion: 15, horas: [1, 2] }) < 0);
+  assert.ok(compararCosto({ parejas: 1, diasNuevos: 0, minutosAmpliacion: 15, horas: [10] }, { parejas: 1, diasNuevos: 0, minutosAmpliacion: 30, horas: [1] }) < 0);
+  assert.ok(compararCosto({ parejas: 1, diasNuevos: 0, minutosAmpliacion: 600, horas: [10] }, { parejas: 1, diasNuevos: 1, minutosAmpliacion: 0, horas: [1] }) < 0, 'Una ampliación larga sale antes que un día nuevo');
+  const bloques = (dia, desde, hasta) => fusionarSlotsEnVentanas(generarSlotsDia(dia, desde, hasta), FECHA);
+  const originales = bloques('Viernes', '13:00', '17:00');
+  assert.deepEqual(calcularAmpliacion([ventana('Viernes-17:15')], originales), { diasNuevos: 0, minutosAmpliacion: 90 });
+  assert.deepEqual(calcularAmpliacion([ventana('Viernes-22:45')], originales), { diasNuevos: 0, minutosAmpliacion: 420 });
+  assert.equal(calcularAmpliacion([ventana('Viernes-17:15'), ventana('Viernes-18:30')], originales).minutosAmpliacion, 165, 'Dos partidos del mismo día amplían una sola vez hasta el extremo final');
+  assert.equal(calcularAmpliacion([ventana('Viernes-18:30')], originales).minutosAmpliacion, 165);
+  assert.equal(calcularAmpliacion([ventana('Viernes-12:30')], originales).minutosAmpliacion, 30, 'Ampliación hacia atrás hasta el comienzo del partido');
+  assert.equal(calcularAmpliacion([ventana('Viernes-22:45')], bloques('Viernes', '18:00', '03:00')).minutosAmpliacion, 0, 'La madrugada forma un único bloque continuo con el viernes');
+  assert.equal(calcularAmpliacion([ventana('Viernes-02:30')], bloques('Viernes', '18:00', '03:00')).minutosAmpliacion, 45);
+  assert.deepEqual(calcularAmpliacion([ventana('Sabado-01:00'), ventana('Sabado-02:15')], originales), { diasNuevos: 1, minutosAmpliacion: 0 }, 'La trasnoche del sábado es otra jornada lógica, contada una sola vez');
+  const separados = [...bloques('Viernes', '13:00', '17:00'), ...bloques('Viernes', '22:00', '03:00')];
+  assert.equal(calcularAmpliacion([ventana('Viernes-20:00')], separados).minutosAmpliacion, 120, 'Entre bloques elige ampliar hacia atrás el más cercano');
+  assert.equal(calcularAmpliacion([ventana('Viernes-18:00'), ventana('Viernes-20:00')], separados).minutosAmpliacion, 240, 'Optimiza la ampliación conjunta entre dos bloques sin duplicar tramos');
+  const candidatos = ['Viernes-12:30', 'Viernes-18:00', 'Viernes-20:00', 'Viernes-02:30', 'Sabado-14:00'].map(ventana);
+  for (let mask = 0; mask < 1 << candidatos.length; mask++) {
+    const elegidas = candidatos.filter((_, i) => mask & 1 << i);
+    const parcial = calcularAmpliacion(elegidas, separados);
+    for (let i = 0; i < candidatos.length; i++) if (!(mask & 1 << i)) {
+      const completo = calcularAmpliacion([...elegidas, candidatos[i]], separados);
+      assert.ok(completo.diasNuevos >= parcial.diasNuevos && completo.minutosAmpliacion >= parcial.minutosAmpliacion, 'La cota parcial nunca baja al agregar partidos, incluso entre bloques o en días nuevos');
+    }
+  }
+  const ampliacion = entrada([viernes('13:00', '17:00'), ['Viernes-17:15', 'Viernes-22:45']], { club: ['Viernes-17:15', 'Viernes-22:45'] });
+  const ra = generarPropuestasZona(ampliacion); verificarPropuestas(ampliacion, ra);
+  assert.deepEqual(ra.propuestas[0].cambios, [{ parejaId: 'id-0', slotsToAdd: ['Viernes-17:15'] }], 'Elige 17:15 antes que 22:45 dentro del mismo grupo');
+  assert.equal(ra.propuestas[0].minutosAmpliacion, 90);
+  const diaNuevo = entrada([viernes('13:00', '17:00'), ['Viernes-22:45', 'Sabado-09:00']], { club: ['Viernes-22:45', 'Sabado-09:00'] });
+  const rn = generarPropuestasZona(diaNuevo); verificarPropuestas(diaNuevo, rn);
+  assert.deepEqual(rn.propuestas.map((p) => [p.diasNuevos, p.minutosAmpliacion]), [[0, 420], [1, 0]], 'Un día nuevo queda detrás aun con menos minutos de ampliación');
   const orden = entrada([viernes('09:00', '10:30'), ['Viernes-11:30']], { club: ['Viernes-09:00', 'Viernes-09:15', 'Viernes-11:30'] });
   const rOrden = generarPropuestasZona(orden);
   verificarPropuestas(orden, rOrden);
@@ -287,12 +321,12 @@ async function testZonaE() {
   console.log(`Zona E reproducida: ${ps.length} propuestas agrupadas por día`);
   assert.ok(ps.every((p) => p.cambios.length <= 2));
   assert.equal(ps[0].cambios.length, 2, 'El caso E con canchas ocupadas requiere dos parejas');
-  const alternativa = ps.find((p) => p.cambios.some((c) => c.parejaId === caso.parejas[0].id && c.slotsToAdd.includes('Viernes-13:00')) &&
-    p.cambios.some((c) => c.parejaId === caso.parejas[2].id && c.slotsToAdd.includes('Viernes-14:15') && c.slotsToAdd.includes('Sabado-19:00')));
+  const alternativa = ps.find((p) => p.cambios.some((c) => c.parejaId === caso.parejas[0].id) &&
+    p.cambios.some((c) => c.parejaId === caso.parejas[2].id && c.slotsToAdd.includes('Sabado-19:00')));
   assert.ok(alternativa, 'Devuelve la alternativa factible Caruso + Medrano, sin ampliar a Dávila');
   assert.equal(alternativa.minutosAgregados, 165);
-  assert.equal(ps[0].minutosAgregados, 165);
-  assert.equal(ps[1], alternativa, 'A igual costo sale segunda por las horas originales de las parejas');
+  assert.equal(ps[0], alternativa, 'Caruso + Medrano sale primero por menor ampliación, aun con más horas originales');
+  assert.deepEqual(ps.map((p) => [p.diasNuevos, p.minutosAmpliacion]), [[0, 420], [0, 435], [0, 525]], 'Los tres grupos del reproductor aislado se ordenan por ampliación, no por minutos de partido agregados');
   const antes = await leerParejas(caso), agendaAntes = await prisma.partido.findMany({ where: { categoriaId: cat.id }, orderBy: { posicionEnRonda: 'asc' } });
   const snapshotAntes = structuredClone(svc.preCheckSessions.get(caso.torneo.id).categoriasPlan);
   const transaction = prisma.$transaction;
