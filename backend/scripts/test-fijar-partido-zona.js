@@ -332,10 +332,54 @@ async function testInicioConPlanInvalidadoDuranteEspera() {
   console.log('PASS: inicio rechaza un plan invalidado mientras esperaba el bloqueo');
 }
 
+async function testZonaNoManual() {
+  const c = await crearCaso('fijacion-zona-no-manual', [
+    ['Viernes-18:00', 'Viernes-19:15'], ['Viernes-18:00'], ['Viernes-18:00', 'Viernes-19:15'],
+  ]);
+  const pre = await precheck(c);
+  assert.equal(zona(c).requiereArmadoManual, false); assert.equal(zona(c).esZonaManualOriginal, false);
+  const pendientes = pre.conflictos.find((cat) => cat.categoriaId === c.cat.id).partidosSinHorario;
+  assert.equal(pendientes.length, 1); assert.equal(pendientes[0].motivo, 'SIN_CANCHA_DISPONIBLE');
+  const conflicto = pendientes[0]; assert.ok(Number.isInteger(conflicto.posicionEnRonda));
+  const previos = zona(c).partidos.filter((p) => !p.sinHorarioAsignado);
+  assert.equal(previos.length, 2);
+  const horariosPrevios = previos.map((p) => [p.posicionEnRonda, horario(p)]);
+  const body = { categoriaId: c.cat.id, zonaId: conflicto.zonaId, posicionEnRonda: conflicto.posicionEnRonda, revision: pre.revision };
+  const opciones = await post(c, '/partidos/opciones', body); assert.equal(opciones.status, 200);
+  assert.ok(opciones.body.opciones.length);
+  for (const o of opciones.body.opciones) {
+    const inicio = +new Date(o.fechaHora), fin = inicio + 75 * 60_000;
+    for (const p of previos) assert.ok(fin <= +p.fechaHora || inicio >= +p.fechaHora + 75 * 60_000,
+      'En RR de tres, los otros dos partidos se conservan fijos y no se superponen');
+  }
+  const despues = await fijar(c, { body: { ...body, clave: opciones.body.opciones[0].clave } });
+  assert.equal(hayConflicto(c, despues), false);
+  assert.deepEqual(previos.map((p) => [p.posicionEnRonda, horario(p)]), horariosPrevios);
+  const fijado = partido(c, conflicto.posicionEnRonda), guardado = horario(fijado);
+  assert.equal(fijado.fijadoManual, true);
+  assert.equal(guardado.fechaHora, +new Date(opciones.body.opciones[0].fechaHora));
+  const recheck = await precheck(c);
+  assert.equal(hayConflicto(c, recheck), false); assert.deepEqual(horario(fijado), guardado);
+  assert.deepEqual(previos.map((p) => [p.posicionEnRonda, horario(p)]), horariosPrevios);
+
+  const mini = await crearCaso('fijacion-mini-no-manual', Array.from({ length: 4 }, () => ['Viernes-18:00']));
+  const miniPre = await precheck(mini);
+  assert.equal(zona(mini).requiereArmadoManual, false); assert.equal(zona(mini).esZonaManualOriginal, false);
+  const definiciones = miniPre.conflictos.find((cat) => cat.categoriaId === mini.cat.id).partidosSinHorario;
+  assert.deepEqual(definiciones.map((p) => [p.motivo, p.posicionEnRonda]), [['PARTIDO_SIN_HORARIO', 3], ['PARTIDO_SIN_HORARIO', 4]]);
+  const bases = zona(mini).partidos.filter((p) => p.posicionEnRonda <= 2).map((p) => [p.posicionEnRonda, horario(p)]);
+  const miniDespues = await fijar(mini, await elegir(mini, miniPre, definiciones[0].posicionEnRonda));
+  assert.equal(hayConflicto(mini, miniDespues), false);
+  const miniRecheck = await precheck(mini); assert.equal(hayConflicto(mini, miniRecheck), false);
+  assert.deepEqual(zona(mini).partidos.filter((p) => p.posicionEnRonda <= 2).map((p) => [p.posicionEnRonda, horario(p)]), bases);
+  assert.equal(partido(mini, 3).fijadoManual, true);
+  console.log('PASS: RR y MINI no manuales exponen posición, fijan por HTTP sin mover agendados y retiran el conflicto tras re-check');
+}
+
 async function main() {
   await ensureTestDb();
   const { server, baseUrl: url } = await startTestServer(); baseUrl = url;
-  try { await testFijacion(); await testConflictos(); await testMini(); await testIncompleta(); await testPropuestaEInicio(); await testDeterminismo(); await testInicioConPlanInvalidadoDuranteEspera(); }
+  try { await testFijacion(); await testConflictos(); await testMini(); await testIncompleta(); await testPropuestaEInicio(); await testDeterminismo(); await testInicioConPlanInvalidadoDuranteEspera(); await testZonaNoManual(); }
   finally { await new Promise((r) => server.close(r)); await prisma.$disconnect(); }
 }
 main().then(() => process.exit(0)).catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1); });

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatHora, formatSlotCorto, getDiaCalendarioConTrasnoche } from '../utils/dateUtils';
-import { FilaPartidoZona } from './PartidosZonaManual';
+import { FilaPartidoZona } from './ElegirHorarioPartido';
 
 function formatearInicios(slots) {
   const inicios = slots.map(formatSlotCorto);

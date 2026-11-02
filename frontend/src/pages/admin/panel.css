@@ -1186,13 +1186,14 @@ body:has(.panel) {
 .panel .pc-manual-title { margin: 0 0 var(--e-3); color: var(--tinta); font-size: var(--t-14); font-weight: 600; }
 .panel .pc-manual-partidos { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-3); min-width: 0; margin: 0; padding: 0; list-style: none; }
 .panel .pc-manual-partido { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--e-3); min-width: 0; padding: var(--e-3); border-radius: var(--r-control); background: var(--superficie); box-shadow: var(--sombra-1); }
+.panel .pc-horario-partido { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--e-3); width: 100%; min-width: 0; }
 .panel .pc-manual-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--e-2); min-height: 44px; min-width: 44px; max-width: 100%; padding: var(--e-2) var(--e-3); border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); color: var(--tinta-2); font: 600 var(--t-13)/1.4 var(--f); text-align: center; overflow-wrap: anywhere; cursor: pointer; transition: transform .2s var(--curva), opacity .2s var(--curva); }
 .panel .pc-manual-button svg { flex-shrink: 0; }
 .panel .pc-manual-button:disabled { opacity: .6; cursor: not-allowed; transform: none; }
 .panel .pc-manual-button:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
 .panel .pc-manual-button:active:not(:disabled) { transform: scale(.97); }
 .panel .pc-manual-opciones { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-2); width: 100%; min-width: 0; animation: pc-manual-abrir .2s cubic-bezier(.16, 1, .3, 1); }
-.panel .pc-manual-opcion { display: grid; justify-items: start; gap: var(--e-1); width: 100%; text-align: left; }
+.panel .pc-manual-opcion { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: start; justify-items: start; gap: var(--e-1); width: 100%; text-align: left; }
 .panel .pc-manual-opcion.is-selected { background: var(--superficie-2); border-color: var(--tinta-2); }
 .panel .pc-manual-horario { font-variant-numeric: tabular-nums; }
 .panel .pc-manual-pedido { min-width: 0; font-weight: 400; }
@@ -1221,28 +1222,18 @@ body:has(.panel) {
 .panel .pc-manage-row { display: flex; justify-content: flex-end; min-width: 0; }
 .panel .pc-manage-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--marca-hover); font-size: var(--t-13); font-weight: 600; text-decoration: none; text-shadow: none; overflow-wrap: anywhere; }
 .panel .pc-match-names { color: var(--tinta); font-size: var(--t-14); margin-bottom: var(--e-2); overflow-wrap: anywhere; }
-.panel .pc-undo { position: sticky; bottom: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--e-2); margin-top: var(--e-3); padding: var(--e-3); background: var(--superficie); color: var(--tinta); border-radius: var(--r-control); box-shadow: var(--sombra-2); }
-.panel .pc-undo-copy { display: flex; align-items: flex-start; gap: var(--e-2); min-width: 0; font-size: var(--t-13); overflow-wrap: anywhere; }
-.panel .pc-undo-actions { display: flex; align-items: center; gap: var(--e-2); margin-left: auto; }
 .panel .pc-footer { display: flex; flex-direction: column; align-items: stretch; gap: var(--e-2); }
 .panel .pc-footer > div:first-child { display: flex; min-width: 0; }
 .panel .pc-footer-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--e-2); min-width: 0; }
 .panel .pc-compact { font-size: var(--t-13); }
 .panel .pc-summary-list { display: flex; flex-direction: column; gap: var(--e-2); padding-left: var(--e-5); margin: 0; }
 
-/* Sugerencias y selección manual: ninguna acción secundaria toma el principal del modal. */
-.panel .pc-resolver { display: flex; flex-direction: column; gap: var(--e-2); margin: var(--e-2) 0; min-width: 0; }
-.panel .pc-option { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--e-2); padding: var(--e-2) 0; min-width: 0; }
-.panel .pc-option.is-hero { padding: var(--e-3); background: var(--superficie); border-radius: var(--r-control); }
+/* Editor de disponibilidad por pareja: acciones secundarias dentro del modal. */
 .panel .pc-option-info { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); flex: 1 1 220px; min-width: 0; }
-.panel .pc-option-time { color: var(--tinta); font-size: var(--t-13); font-weight: 600; }
-.panel .pc-option-detail { color: var(--gris); font-size: var(--t-13); overflow-wrap: anywhere; }
 .panel .pc-button, .panel .pc-link, .panel .pc-slot { display: inline-flex; align-items: center; justify-content: center; gap: var(--e-2); min-height: 44px; min-width: 44px; max-width: 100%; padding: var(--e-2) var(--e-3); border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); color: var(--tinta-2); font: 600 var(--t-13)/1.4 var(--f); text-align: center; cursor: pointer; transition: transform .2s var(--curva), opacity .2s var(--curva); }
 .panel .pc-button:active, .panel .pc-slot:active { transform: scale(.97); }
 .panel .pc-button:disabled, .panel .pc-slot:disabled { opacity: .6; cursor: not-allowed; transform: none; }
 .panel .pc-link { justify-content: flex-start; padding-inline: 0; background: none; border: 0; color: var(--marca-hover); text-align: left; }
-.panel .pc-alternatives { min-width: 0; }
-.panel .pc-alternative-list { display: flex; flex-direction: column; gap: var(--e-2); margin-top: var(--e-2); padding-top: var(--e-2); border-top: 1px solid var(--linea); }
 .panel .pc-inline { min-width: 0; margin-top: var(--e-3); padding: var(--e-3); background: var(--fondo); border: 1px solid var(--linea); border-radius: var(--r-control); }
 .panel .pc-inline-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--e-2); min-width: 0; cursor: pointer; }
 .panel .pc-inline-label { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); min-height: 44px; min-width: 0; color: var(--marca-hover); font-size: var(--t-13); font-weight: 600; overflow-wrap: anywhere; }
@@ -1262,29 +1253,15 @@ body:has(.panel) {
 .panel .pc-spin { animation: pm-girar 1s linear infinite; }
 .panel :is(.pc-category-toggle, .pc-button, .pc-link, .pc-slot, .pc-manage-link):focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
 
-/* Detalles del cruce: clases propias y tokens v3, sin parches sobre clases globales. */
-.panel .pc-details { min-width: 0; color: var(--tinta-2); font-size: var(--t-13); overflow-wrap: anywhere; }
-.panel .pc-details-content { margin-top: var(--e-2); }
-.panel .pc-details-body { display: flex; flex-direction: column; gap: var(--e-2); margin-top: var(--e-2); padding: var(--e-3); border: 1px solid var(--linea); border-radius: var(--r-control); background: var(--superficie); min-width: 0; }
-.panel .pc-details-name { color: var(--tinta); font-weight: 600; }
-.panel .pc-time-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--e-2); min-width: 0; }
-.panel .pc-time-field { display: grid; gap: var(--e-1); min-width: 0; }
-.panel .pc-time-select { width: 100%; min-width: 0; min-height: 44px; padding: var(--e-2) var(--e-3); border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); color: var(--tinta); color-scheme: light; font: var(--t-13)/1.4 var(--f); }
-.panel .pc-time-select :is(option, optgroup) { background: var(--superficie); color: var(--tinta); }
-.panel .pc-time-select:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
 @media (max-width: 600px) {
   .panel .pc-header, .panel .pc-conflicts > .pc-body { padding: var(--e-3); }
   .panel .pc-category-body, .panel .pc-conflict, .panel .pc-manual-pair, .panel .pc-inline, .panel .pc-other-body { padding: var(--e-2); }
   .panel .pc-emergency-action { flex-basis: 100%; }
   .panel .pc-footer-actions > .pm-button:not(.pc-emergency-action) { flex: 1; }
   .panel .pc-compact, .panel .pc-footer .pm-button { font-size: var(--t-13); }
-  .panel .pc-time-picker { grid-template-columns: minmax(0, 1fr); }
-}
-@media (pointer: coarse) {
-  .panel .pc-time-picker :is(select, button) { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .panel :is(.pc-button, .pc-link, .pc-slot, .pc-spin), .panel .pc-details * { animation: none; transition: none; }
+  .panel :is(.pc-button, .pc-link, .pc-slot, .pc-spin) { animation: none; transition: none; }
   .panel .pc-button:active, .panel .pc-slot:active { transform: none; }
 }
 

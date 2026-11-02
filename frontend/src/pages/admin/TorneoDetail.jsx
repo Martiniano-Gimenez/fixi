@@ -23,7 +23,6 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
-  Loader2,
   Activity,
   Edit2,
   X,
@@ -33,149 +32,12 @@ import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEdi
 import PropuestasZona from '../../components/PropuestasZona';
 import PartidosZonaManual from '../../components/PartidosZonaManual';
 import InscripcionLinkPanel from '../../components/InscripcionLinkPanel';
-import CruceResolver from '../../components/CruceResolver';
+import ElegirHorarioPartido from '../../components/ElegirHorarioPartido';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { estadoLabel } from '../../utils/estadoLabels';
 import { armarAvisoDestrabe } from '../../utils/precheckDestrabe';
-import { formatFechaTorneo, formatSlotCalendario, formatSlotCorto, getSlotCalendario, getZonedParts, isViernes } from '../../utils/dateUtils';
-import { agruparSlotsEnRangos, formatearMinutos, minutosDeJuego } from '../../utils/disponibilidadUtils';
-
-function CruceDetalles({ partido, categoriaId, categoriaNombre, torneoId, onApplied }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedSlotId, setSelectedSlotId] = useState('');
-  const [applyingSlotId, setApplyingSlotId] = useState(null);
-  const [error, setError] = useState('');
-  const p = partido;
-
-  const slotsViables = p.slotsViables || [];
-  const viernesViables = slotsViables.filter((s) => s.startsWith('Viernes'));
-  const sabadoViables = slotsViables.filter((s) => s.startsWith('Sabado'));
-  const slotsParejaRestringida = p.parejaMasRestringidaId && p.parejaMasRestringidaId === p.pareja1Id
-    ? p.pareja1SlotIds
-    : p.parejaMasRestringidaId && p.parejaMasRestringidaId === p.pareja2Id
-      ? p.pareja2SlotIds
-      : null;
-
-  const handleApplySlot = async (slotId) => {
-    if (!p.pareja1Id || !p.pareja2Id || applyingSlotId) return;
-    setApplyingSlotId(slotId);
-    setError('');
-
-    const p1AlreadyHas = (p.pareja1SlotIds || []).includes(slotId);
-    const p2AlreadyHas = (p.pareja2SlotIds || []).includes(slotId);
-
-    const slotsToAdd1 = p1AlreadyHas ? [] : [slotId];
-    const slotsToAdd2 = p2AlreadyHas ? [] : [slotId];
-
-    try {
-      await api.put('/parejas/disponibilidad-doble', {
-        parejaId1: p.pareja1Id,
-        slotsToAdd1,
-        parejaId2: p.pareja2Id,
-        slotsToAdd2,
-      });
-
-      if (onApplied) {
-        await onApplied({
-          pareja1Id: p.pareja1Id,
-          pareja2Id: p.pareja2Id,
-          slotId,
-          distP1: p1AlreadyHas ? 0 : 999,
-          distP2: p2AlreadyHas ? 0 : 999,
-          addToP1: !p1AlreadyHas,
-          addToP2: !p2AlreadyHas,
-          label: formatSlotCalendario(slotId),
-        });
-      }
-    } catch (err) {
-      setError(err.message || 'Error al asignar horario.');
-    } finally {
-      setApplyingSlotId(null);
-    }
-  };
-
-  return (
-    <div className="pc-details-content">
-      <button
-        type="button"
-        className="pc-link"
-        onClick={() => setIsOpen((prev) => !prev)}
-      >
-        <Info size={12} />
-        <span>{isOpen ? 'Ocultar' : 'Elegir otro horario'}</span>
-        {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-      </button>
-
-      {isOpen && (
-        <div className="pc-details-body">
-          <div className="pc-muted">
-            {p.motivo === 'SIN_FRANJA_COMUN'
-              ? 'Ambas parejas no tienen ninguna ventana horaria en común.'
-              : 'Coinciden en disponibilidad pero las canchas están 100% ocupadas en esa franja.'}
-          </div>
-
-          {p.parejaMasRestringidaNombre && (
-            <div className="pc-restricted-pair">
-              <span className="pc-muted">Pareja más restringida: </span>
-              <strong className="pc-details-name">{p.parejaMasRestringidaNombre}</strong>{' '}
-              {Array.isArray(slotsParejaRestringida) && (
-                <span className="pc-muted">
-                  ({formatearMinutos(minutosDeJuego(slotsParejaRestringida))} disponibles)
-                </span>
-              )}
-            </div>
-          )}
-
-          <div className="pc-time-picker">
-            <label className="pc-time-field">
-              <span className="pc-muted">Horario</span>
-              <select
-                className="pc-time-select"
-                aria-label="Horario"
-                value={selectedSlotId}
-                onChange={(e) => setSelectedSlotId(e.target.value)}
-                disabled={Boolean(applyingSlotId) || slotsViables.length === 0}
-              >
-                <option value="">Elegí un horario</option>
-                {viernesViables.length > 0 && (
-                  <optgroup label="Viernes">
-                    {viernesViables.map((slotId) => <option key={slotId} value={slotId}>{getSlotCalendario(slotId)?.esMadrugada ? formatSlotCorto(slotId) : slotId.split('-')[1]}</option>)}
-                  </optgroup>
-                )}
-                {sabadoViables.length > 0 && (
-                  <optgroup label="Sábado">
-                    {sabadoViables.map((slotId) => <option key={slotId} value={slotId}>{getSlotCalendario(slotId)?.esMadrugada ? formatSlotCorto(slotId) : slotId.split('-')[1]}</option>)}
-                  </optgroup>
-                )}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="pc-button"
-              onClick={() => handleApplySlot(selectedSlotId)}
-              disabled={!slotsViables.includes(selectedSlotId) || Boolean(applyingSlotId)}
-            >
-              {applyingSlotId ? <><Loader2 size={11} className="pc-spin" /> Asignando…</> : 'Asignar'}
-            </button>
-          </div>
-
-          {error && <div className="pc-notice pc-danger-notice">{error}</div>}
-
-          {p.parejaMasRestringidaId && (
-            <div className="pc-spaced">
-              <Link
-                to={`/admin/torneos/${torneoId}/categorias/${categoriaId}/parejas?parejaId=${p.parejaMasRestringidaId}`}
-                className="pc-manage-link"
-              >
-                Ver parejas de {categoriaNombre}
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
+import { agruparSlotsEnRangos } from '../../utils/disponibilidadUtils';
 
 function calcularMetricasCategoria(c) {
   const partidos = c.partidosSinHorario || [];
@@ -281,7 +143,6 @@ export default function TorneoDetail() {
   const [partidoManualAbierto, setPartidoManualAbierto] = useState(null);
   const [hayCambiosGuardados, setHayCambiosGuardados] = useState(false);
   const [resultadoInicio, setResultadoInicio] = useState(null);
-  const [undoAction, setUndoAction] = useState(null);
   const [confirmarResorteoModalOpen, setConfirmarResorteoModalOpen] = useState(false);
   const [avisoSesionReiniciada, setAvisoSesionReiniciada] = useState(false);
   const [avisoDestrabe, setAvisoDestrabe] = useState(null);
@@ -559,52 +420,6 @@ export default function TorneoDetail() {
 
     // Re-verificación reactiva automática en background
     await handlePreCheckInicio(true);
-  };
-
-  const handleCasiEstrellaApplied = async ({ pareja1Id, pareja2Id, slotId, distP1, distP2, addToP1, addToP2, label }) => {
-    setHayCambiosGuardados(true);
-
-    const slotsToRemove1 = addToP1 ? [slotId] : (Math.abs(distP1 || 0) > 0 ? [slotId] : []);
-    const slotsToRemove2 = addToP2 ? [slotId] : (Math.abs(distP2 || 0) > 0 ? [slotId] : []);
-
-    if (undoAction?.timeoutId) {
-      clearTimeout(undoAction.timeoutId);
-    }
-
-    const timeoutId = setTimeout(() => {
-      setUndoAction(null);
-    }, 7000);
-
-    setUndoAction({
-      pareja1Id,
-      pareja2Id,
-      slotsToRemove1,
-      slotsToRemove2,
-      label,
-      timeoutId,
-    });
-
-    // Re-verificación reactiva automática en background
-    await handlePreCheckInicio(true);
-  };
-
-  const handleUndo = async () => {
-    if (!undoAction) return;
-    const { pareja1Id, pareja2Id, slotsToRemove1, slotsToRemove2, timeoutId } = undoAction;
-    if (timeoutId) clearTimeout(timeoutId);
-    setUndoAction(null);
-
-    try {
-      await api.post('/parejas/disponibilidad-doble/remover', {
-        parejaId1: pareja1Id,
-        slotsToRemove1,
-        parejaId2: pareja2Id,
-        slotsToRemove2,
-      });
-      await handlePreCheckInicio(true);
-    } catch (err) {
-      alert(err.message || 'Error al deshacer la acción.');
-    }
   };
 
   const executeIniciarTorneo = async () => {
@@ -1366,7 +1181,7 @@ export default function TorneoDetail() {
                                     )}
 
                                     <PartidosZonaManual
-                                      key={`${c.categoriaId}:${p.zonaId}`}
+                                      key={`manual:${c.categoriaId}:${p.zonaId}`}
                                       torneoId={id}
                                       categoriaId={c.categoriaId}
                                       zonaId={p.zonaId}
@@ -1429,30 +1244,40 @@ export default function TorneoDetail() {
                                   </div>
                                 ) : (
                                   <div>
-                                    {/* Título del cruce */}
                                     <div className="pc-match-names">
-                                      <strong>{p.pareja1}</strong> vs <strong>{p.pareja2}</strong>
+                                      {p.motivo === 'PARTIDO_SIN_HORARIO' ? <strong>{p.pareja1}</strong> : (
+                                        <><strong>{p.pareja1}</strong> vs <strong>{p.pareja2}</strong></>
+                                      )}
                                     </div>
-
-                                    {/* Opción hero con [Resolver] y toggle de alternativas */}
-                                    <CruceResolver
-                                      opcionesResolucion={p.opcionesResolucion || []}
-                                      pareja1Id={p.pareja1Id}
-                                      pareja2Id={p.pareja2Id}
-                                      pareja1Nombre={p.pareja1}
-                                      pareja2Nombre={p.pareja2}
-                                      onApplied={handleCasiEstrellaApplied}
+                                    <ElegirHorarioPartido
+                                      key={`${c.categoriaId}:${p.zonaId}:${p.posicionEnRonda}`}
+                                      torneoId={id}
+                                      categoriaId={c.categoriaId}
+                                      zonaId={p.zonaId}
+                                      revision={revisionPreCheck}
+                                      partido={{ ...p, estado: 'PENDIENTE', origen: p.motivo === 'PARTIDO_SIN_HORARIO' ? p.pareja1 : undefined }}
+                                      parejas={p.parejasManuales || [
+                                        { id: p.pareja1Id, nombre: p.pareja1, slotIds: p.pareja1SlotIds || [] },
+                                        { id: p.pareja2Id, nombre: p.pareja2, slotIds: p.pareja2SlotIds || [] },
+                                      ]}
+                                      mostrarPartido={false}
+                                      esperaBases={p.motivo === 'PARTIDO_SIN_HORARIO' && c.partidosSinHorario.some((otro) =>
+                                        otro.zonaId === p.zonaId && [1, 2].includes(otro.posicionEnRonda))}
+                                      abierto={partidoManualAbierto}
+                                      onAbiertoChange={setPartidoManualAbierto}
+                                      onSaved={async () => {
+                                        setHayCambiosGuardados(true);
+                                        await handlePreCheckInicio(true);
+                                      }}
+                                      onRecheck={() => handlePreCheckInicio(true)}
                                     />
-
-                                    {/* Toggle: Detalles y opciones manuales */}
-                                    <div className="pc-details">
-                                      <CruceDetalles
-                                        partido={p}
-                                        categoriaId={c.categoriaId}
-                                      categoriaNombre={c.nombreCategoria}
-                                        torneoId={id}
-                                        onApplied={handleCasiEstrellaApplied}
-                                      />
+                                    <div className="pc-manage-row">
+                                      <Link
+                                        to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas${p.parejaMasRestringidaId ? `?parejaId=${p.parejaMasRestringidaId}` : ''}`}
+                                        className="pc-manage-link"
+                                      >
+                                        Ver parejas de {c.nombreCategoria}
+                                      </Link>
                                     </div>
                                   </div>
                                 )}
@@ -1471,40 +1296,6 @@ export default function TorneoDetail() {
                     Hay cambios guardados. Hacé clic en "Volver a verificar".
                   </span>
                 )}
-
-                {/* Toast flotante de Deshacer (Undo) */}
-                {undoAction && (
-                  <div className="pc-undo">
-                    <div className="pc-undo-copy">
-                      <CheckCircle size={15} className="pc-brand" />
-                      <span>
-                        Se aplicó <strong>{undoAction.label}</strong> a ambas parejas.
-                      </span>
-                    </div>
-                    <div className="pc-undo-actions">
-                      <button
-                        type="button"
-                        className="pm-button pc-compact"
-                        onClick={handleUndo}
-                      >
-                        <RotateCcw size={12} /> Deshacer
-                      </button>
-                      <button
-                        type="button"
-                        className="pm-button pm-close"
-                        onClick={() => {
-                          if (undoAction.timeoutId) clearTimeout(undoAction.timeoutId);
-                          setUndoAction(null);
-                        }}
-                        title="Cerrar aviso"
-                        aria-label="Cerrar aviso"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
               </div>
               <div className="pm-footer pc-footer">
                 <div>
