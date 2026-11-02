@@ -24,6 +24,7 @@ router.post('/:id/pre-check-inicio', torneoController.preCheckInicioTorneo);
 router.post('/:id/pre-check-inicio/propuestas', torneoController.getPropuestasZona);
 router.post('/:id/pre-check-inicio/propuestas/aplicar', torneoController.aplicarPropuestaZona);
 router.post('/:id/pre-check-inicio/partidos/opciones', torneoController.getOpcionesPartidoZona);
+router.post('/:id/pre-check-inicio/partidos/fijar', torneoController.fijarPartidoZona);
 router.post('/:id/iniciar', torneoController.iniciarTorneo);
 router.post('/:id/reiniciar', torneoController.reiniciarTorneo);
 router.patch('/:id/inscripcion', torneoController.setInscripcion);

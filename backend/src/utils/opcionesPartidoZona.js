@@ -43,17 +43,16 @@ function leerCursor(cursor, clavePartido) {
  * La viabilidad es estructural: todas las disponibilidades se pueden ampliar,
  * pero se conservan la ocupación ajena, los fijos propios y las dependencias mini.
  * El presupuesto se comparte por página, sin depender del tiempo de ejecución. */
-function obtenerOpcionesPartidoZona(entrada, posicionEnRonda, { cursor = null } = {}) {
+function prepararCandidatosPartidoZona(entrada, posicionEnRonda) {
   const { pares, mini, tareas, courtTimelines, parejaAssignments, cantidadCanchas } = prepararProblemaZona(entrada);
   const indice = tareas.findIndex((t) => t.posicionEnRonda === posicionEnRonda);
   if (indice < 0) throw Object.assign(new Error('El partido no pertenece a esta zona.'), {
     statusCode: 404, codigo: 'PARTIDO_PRECHECK_NO_ENCONTRADO',
   });
   const clavePartido = hash([entrada.claveZona || pares.map((p) => p.orden), posicionEnRonda]);
-  const offset = leerCursor(cursor, clavePartido);
   const tarea = tareas[indice];
   if (tieneHorario(tarea.partido) || (tarea.derivado && tareas.slice(0, 2).some((t) => !tieneHorario(t.partido)))) {
-    return { opciones: [], siguienteCursor: null };
+    return { pares, tareas, indice, clavePartido, candidatos: [] };
   }
   const fijos = new Map(tareas.flatMap((t, i) => tieneHorario(t.partido) ? [[i, {
     startMs: +new Date(t.partido.fechaHora), endMs: +new Date(t.partido.fechaHora) + DURACION_MS,
@@ -66,7 +65,7 @@ function obtenerOpcionesPartidoZona(entrada, posicionEnRonda, { cursor = null } 
         !entrada.ventanasClub.some((w) => w.dia === s.dia && s.startMs >= w.startMs && s.endMs <= w.endMs)) continue;
     inicios.add(s.startMs);
     if (tarea.participantes.some((i) => (parejaAssignments.get(pares[i].id) || []).some((o) => solapan(s, o)))) continue;
-    // La fijación futura debe elegir esta misma regla: primera cancha libre compatible.
+    // Compartido con fijar: primera cancha libre compatible, recalculada en la transacción.
     let canchaNumero;
     for (let cancha = 1; cancha <= cantidadCanchas; cancha++) {
       if (!(courtTimelines.get(cancha) || []).some((o) => solapan(s, o)) &&
@@ -87,6 +86,32 @@ function obtenerOpcionesPartidoZona(entrada, posicionEnRonda, { cursor = null } 
   }
   candidatos.sort((a, b) => Number(Boolean(a.opcion.parejasAAmpliar.length)) - Number(Boolean(b.opcion.parejasAAmpliar.length)) ||
     a.opcion.diasNuevos - b.opcion.diasNuevos || a.opcion.minutosAmpliacion - b.opcion.minutosAmpliacion || a.slot.startMs - b.slot.startMs);
+  return { pares, tareas, indice, clavePartido, candidatos };
+}
+
+function verificarCandidato(entrada, { pares, tareas, indice }, candidato, maxNodos) {
+  return verificarProgramacionZona({ ...entrada, maxNodos,
+    parejas: pares.map((p) => ({ ...p, ventanas: [] })),
+    partidos: tareas.map((t, i) => i === indice ? { ...t.partido,
+      fechaHora: candidato.opcion.fechaHora, canchaNumero: candidato.canchaNumero, sinHorarioAsignado: false,
+    } : t.partido),
+  });
+}
+
+// No usa datos derivados del caché: vuelve a calcular disponibilidad, cancha y viabilidad.
+function recalcularOpcionPartidoZona(entrada, posicionEnRonda, slotId) {
+  const problema = prepararCandidatosPartidoZona(entrada, posicionEnRonda);
+  const candidato = problema.candidatos.find((c) => c.opcion.slotId === slotId);
+  if (!candidato) return null;
+  const resultado = verificarCandidato(entrada, problema, candidato, entrada.maxNodosOpcion ?? MAX_NODOS_OPCION);
+  if (resultado.estado === 'NO_FACTIBLE') return null;
+  return { ...candidato.opcion, canchaNumero: candidato.canchaNumero, verificada: resultado.estado === 'FACTIBLE' };
+}
+
+function obtenerOpcionesPartidoZona(entrada, posicionEnRonda, { cursor = null } = {}) {
+  const problema = prepararCandidatosPartidoZona(entrada, posicionEnRonda);
+  const { candidatos, clavePartido } = problema;
+  const offset = leerCursor(cursor, clavePartido);
   if (offset > candidatos.length) throw Object.assign(new Error('El cursor excede los horarios del partido.'), {
     statusCode: 400, codigo: 'CURSOR_HORARIOS_INVALIDO',
   });
@@ -94,13 +119,8 @@ function obtenerOpcionesPartidoZona(entrada, posicionEnRonda, { cursor = null } 
   let siguiente = offset, presupuesto = entrada.maxNodosPagina ?? MAX_NODOS_PAGINA;
   while (siguiente < candidatos.length && opciones.length < TAMANO_PAGINA) {
     const candidato = candidatos[siguiente++];
-    const resultado = verificarProgramacionZona({ ...entrada,
-      maxNodos: Math.min(presupuesto, entrada.maxNodosOpcion ?? MAX_NODOS_OPCION),
-      parejas: pares.map((p) => ({ ...p, ventanas: [] })),
-      partidos: tareas.map((t, i) => i === indice ? { ...t.partido,
-        fechaHora: candidato.opcion.fechaHora, canchaNumero: candidato.canchaNumero, sinHorarioAsignado: false,
-      } : t.partido),
-    });
+    const resultado = verificarCandidato(entrada, problema, candidato,
+      Math.min(presupuesto, entrada.maxNodosOpcion ?? MAX_NODOS_OPCION));
     presupuesto -= resultado.nodos;
     if (resultado.estado !== 'NO_FACTIBLE') opciones.push({ ...candidato.opcion, verificada: resultado.estado === 'FACTIBLE' });
   }
@@ -108,4 +128,5 @@ function obtenerOpcionesPartidoZona(entrada, posicionEnRonda, { cursor = null } 
     ? Buffer.from(JSON.stringify([clavePartido, siguiente])).toString('base64url') : null };
 }
 
-module.exports = { obtenerOpcionesPartidoZona, listarPartidosZona, TAMANO_PAGINA, MAX_NODOS_PAGINA, MAX_NODOS_OPCION };
+module.exports = { obtenerOpcionesPartidoZona, recalcularOpcionPartidoZona, listarPartidosZona,
+  TAMANO_PAGINA, MAX_NODOS_PAGINA, MAX_NODOS_OPCION };

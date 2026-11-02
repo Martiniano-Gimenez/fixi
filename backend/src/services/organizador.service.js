@@ -673,7 +673,10 @@ function evaluarAsignacionesIncrementalesBase({
 
     for (const z of cPlan.zonas) {
       if (zonaIntento && z !== zonaIntento) continue;
-      if ((z.requiereArmadoManual || z.esZonaManualOriginal) && !zonasVerificadas.has(z)) {
+      const completaConFijos = z.partidos.some((p) => p.fijadoManual) && z.partidos.every((p) =>
+        !p.sinHorarioAsignado && p.fechaHora && p.canchaNumero);
+      if (completaConFijos) z.requiereArmadoManual = false;
+      if ((z.requiereArmadoManual || z.esZonaManualOriginal) && !zonasVerificadas.has(z) && !completaConFijos) {
         // Re-evaluar compatibilidad pairwise con disponibilidad actualizada de parejasMap
         const rawZonaParejas = z.parejaIds.map((pId) => {
           const p = parejasMap.get(pId);
@@ -805,9 +808,10 @@ function evaluarAsignacionesIncrementalesBase({
             }
           }
         } else {
-          // La zona es incompatible — marcar como manual y limpiar horarios de TODOS sus partidos
+          // La incompatibilidad restante nunca revoca un horario confirmado a mano.
           z.requiereArmadoManual = true;
           for (const p of z.partidos) {
+            if (p.fijadoManual) continue;
             p.fechaHora = null;
             p.canchaNumero = null;
             p.sinHorarioAsignado = true;
@@ -1441,6 +1445,13 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
         where: { id: torneoId },
         data: { inscripcionAbierta: false },
       });
+      // Una fijación sin ampliación también invalida el plan: su fingerprint de
+      // disponibilidad no cambia. Revalidar el caché después de tomar el bloqueo.
+      if (planesCache.get(planId) !== cached) {
+        const error = new Error('El plan cambió desde la última verificación. Volvé a verificar antes de iniciar.');
+        error.statusCode = 409;
+        throw error;
+      }
       const organizadorTx = await tx.organizador.findUnique({ where: { id: organizadorId } });
       const categoriasTx = await tx.categoria.findMany({
         where: { torneoId, estado: 'BORRADOR' },
@@ -2600,6 +2611,9 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
 
 const servicioPropuestas = require('./precheckPropuestas.service').crearServicioPropuestas({
   prisma, preCheckSessions, planesCache, preCheckBase: preCheckInicioTorneoBase,
+  reconstruirOcupacion: (sesion, cantCanchas) => Object.assign(sesion, buildTimelinesFromPlan({
+    categoriasPlan: sesion.categoriasPlan, cantCanchas, DURACION_MS: DURACION_PARTIDO_MIN * 60_000,
+  })),
 });
 function preCheckInicioTorneo(...args) { return servicioPropuestas.preCheck(...args); }
 
@@ -2611,6 +2625,7 @@ module.exports = {
   preCheckInicioTorneo,
   getPropuestasZona: servicioPropuestas.solicitar,
   getOpcionesPartidoZona: servicioPropuestas.opcionesPartido,
+  fijarPartidoZona: servicioPropuestas.fijarPartido,
   aplicarPropuestaZona: servicioPropuestas.aplicar,
   iniciarTorneoMultiCategoria,
   getPartidosSinHorarioTorneo,

@@ -3,13 +3,13 @@
 const crypto = require('crypto');
 const { generarPropuestasZona } = require('../utils/propuestasZona');
 const { verificarProgramacionZona } = require('../utils/programacionZona');
-const { obtenerOpcionesPartidoZona, listarPartidosZona } = require('../utils/opcionesPartidoZona');
+const { obtenerOpcionesPartidoZona, recalcularOpcionPartidoZona, listarPartidosZona } = require('../utils/opcionesPartidoZona');
 const { generarGrillaOrganizador } = require('./slots.service');
 const { fusionarSlotsEnVentanas, slotIdToMsWindow } = require('./zona.service');
 const { requireTorneoFecha } = require('../utils/dateUtils');
 const DURACION_MS = 75 * 60_000;
 
-function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preCheckBase }) {
+function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preCheckBase, reconstruirOcupacion }) {
   const colas = new Map();
   function encolar(id, fn) {
     const siguiente = (colas.get(id) || Promise.resolve()).catch(() => {}).then(fn);
@@ -42,7 +42,7 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
       estado.torneo.categorias.map((c) => [c.id, c.nombre, c.estado, c.parejas.map((p) => [p.id, p.orden, p.jugador1, p.jugador2, p.resolucionManual,
         p.slotsSeleccionados.map((s) => s.slotId)])]), estado.externos,
       sesion.categoriasPlan.map((c) => [c.categoriaId, c.zonas.map((z) => [z.id, z.nombre, z.formato, z.requiereArmadoManual,
-        z.parejaIds, z.partidos.map((p) => [p.posicionEnRonda, p.pareja1Id, p.pareja2Id, p.fechaHora, p.canchaNumero, p.sinHorarioAsignado])])]),
+        z.parejaIds, z.partidos.map((p) => [p.posicionEnRonda, p.pareja1Id, p.pareja2Id, p.fechaHora, p.canchaNumero, p.sinHorarioAsignado, Boolean(p.fijadoManual)])])]),
     ])).digest('hex');
   }
   function contexto(estado, sesion, zona) {
@@ -85,6 +85,7 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
       sesion.propuestasCache = new Map();
       sesion.propuestasPorZona = new Map();
       sesion.opcionesPorPartido = new Map();
+      sesion.opcionesCache = new Map();
     }
     for (const conflicto of respuesta.conflictos || []) {
       const categoria = sesion.categoriasPlan.find((c) => c.categoriaId === conflicto.categoriaId);
@@ -234,14 +235,81 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     if (!sesion.opcionesPorPartido.has(key)) sesion.opcionesPorPartido.set(key,
       obtenerOpcionesPartidoZona({ ...contexto(estado, sesion, zona), claveZona: claveNaturalZona(estado, categoria, zona) },
         posicionEnRonda, { cursor }));
+    for (const opcion of sesion.opcionesPorPartido.get(key).opciones) {
+      sesion.opcionesCache.set(JSON.stringify([categoriaId, zonaId, posicionEnRonda, opcion.clave]), opcion.slotId);
+    }
     sesion.expiresAt = Date.now() + 60 * 60_000;
     return { revision: sesion.revision, ...structuredClone(sesion.opcionesPorPartido.get(key)) };
+  }
+  async function fijarPartido(org, id, data = {}) {
+    const { categoriaId, zonaId, posicionEnRonda, clave, revision } = data || {};
+    if (![categoriaId, zonaId, clave, revision].every((v) => typeof v === 'string' && v) ||
+        !Number.isSafeInteger(posicionEnRonda) || posicionEnRonda < 1) {
+      throw error(400, 'Indicá la categoría, la zona, el partido, la clave y la revisión del pre-check.', 'FIJACION_PARTIDO_INVALIDA');
+    }
+    const estado = await leerEstado(prisma, org, id);
+    const sesion = preCheckSessions.get(id);
+    if (!sesion || sesion.expiresAt <= Date.now() || sesion.revision !== revision) {
+      return rechazar(org, id, 'El pre-check cambió o venció. Volvé a pedir los horarios del partido.', 'REVISION_PRECHECK_VIEJA');
+    }
+    const categoria = sesion.categoriasPlan.find((c) => c.categoriaId === categoriaId);
+    const zona = categoria?.zonas.find((z) => z.id === zonaId);
+    if (!zona) throw error(404, 'La zona no pertenece a este pre-check.', 'ZONA_PRECHECK_NO_ENCONTRADA');
+    const partido = zona.partidos.find((p) => p.posicionEnRonda === posicionEnRonda);
+    if (!partido) throw error(404, 'El partido no pertenece a esta zona.', 'PARTIDO_PRECHECK_NO_ENCONTRADO');
+    const slotId = sesion.opcionesCache?.get(JSON.stringify([categoriaId, zonaId, posicionEnRonda, clave]));
+    if (!slotId) return rechazar(org, id, 'La opción ya no está disponible. Volvé a pedir los horarios del partido.', 'OPCION_VENCIDA');
+    let recalculada;
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Toma el bloqueo sin copiar un valor leído fuera de la transacción ni cambiar updatedAt.
+        await tx.$executeRaw`UPDATE "Torneo" SET "inscripcionAbierta" = "inscripcionAbierta" WHERE "id" = ${id}`;
+        const actual = await leerEstado(tx, org, id);
+        const categoriaActual = actual.torneo.categorias.find((c) => c.id === categoriaId);
+        if (preCheckSessions.get(id) !== sesion || sesion.expiresAt <= Date.now() || sesion.revision !== revision ||
+            categoriaActual?.estado !== 'BORRADOR' || !zona.parejaIds.every((pId) => categoriaActual.parejas.some((p) => p.id === pId))) {
+          throw error(409, 'El pre-check cambió o venció. Volvé a pedir los horarios del partido.', 'REVISION_PRECHECK_VIEJA');
+        }
+        if (firma(actual, sesion) !== sesion.propuestasFirma) {
+          throw error(409, 'Los horarios o el plan cambiaron. Volvé a pedir los horarios del partido.', 'ESTADO_PRECHECK_CAMBIO');
+        }
+        if (partido.fijadoManual || (!partido.sinHorarioAsignado && partido.fechaHora)) {
+          throw error(409, 'El partido ya tiene un horario fijo. Revisá el pre-check actualizado.', 'PARTIDO_YA_FIJADO');
+        }
+        recalculada = recalcularOpcionPartidoZona({ ...contexto(actual, sesion, zona),
+          claveZona: claveNaturalZona(actual, categoria, zona) }, posicionEnRonda, slotId);
+        if (!recalculada || recalculada.clave !== clave) {
+          throw error(409, 'Ese horario ya no permite programar el partido y el resto de la zona. Elegí otra opción.', 'OPCION_NO_FACTIBLE');
+        }
+        // Una acción válida renueva el TTL antes de los awaits de escritura/commit:
+        // el recolector no debe borrar la sesión mientras se confirma la fijación.
+        sesion.expiresAt = Date.now() + 60 * 60_000;
+        // parejasAAmpliar sale del estado ACTUAL, nunca de la página guardada.
+        const involucradas = recalculada.parejasAAmpliar;
+        if (involucradas.length) {
+          const pares = new Map(categoriaActual.parejas.map((p) => [p.id, p]));
+          const nuevos = involucradas.filter((pId) => !pares.get(pId).slotsSeleccionados.some((s) => s.slotId === slotId));
+          if (nuevos.length) await tx.slotPareja.createMany({ data: nuevos.map((parejaId) => ({ parejaId, slotId })) });
+          await tx.pareja.updateMany({ where: { id: { in: involucradas } }, data: { resolucionManual: true } });
+        }
+      }, { timeout: 10_000 });
+    } catch (e) {
+      if (e.statusCode === 409) return rechazar(org, id, e.message, e.codigo);
+      throw e;
+    }
+    // La memoria se actualiza únicamente tras confirmar las altas aditivas en la base.
+    Object.assign(partido, { fechaHora: new Date(recalculada.fechaHora), canchaNumero: recalculada.canchaNumero,
+      sinHorarioAsignado: false, fijadoManual: true });
+    reconstruirOcupacion(sesion, estado.club.cantidadCanchas);
+    for (const [key, plan] of planesCache) if (plan.torneoId === id) planesCache.delete(key);
+    return obtener(org, id, { isReCheck: true });
   }
   return {
     preCheck: (org, id, opciones) => encolar(id, () => obtener(org, id, opciones)),
     solicitar: (org, id, data) => encolar(id, () => solicitar(org, id, data)),
     aplicar: (org, id, data) => encolar(id, () => aplicar(org, id, data)),
     opcionesPartido: (org, id, data) => encolar(id, () => opcionesPartido(org, id, data)),
+    fijarPartido: (org, id, data) => encolar(id, () => fijarPartido(org, id, data)),
   };
 }
 
