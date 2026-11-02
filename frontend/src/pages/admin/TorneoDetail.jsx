@@ -39,6 +39,13 @@ import { armarAvisoDestrabe } from '../../utils/precheckDestrabe';
 import { formatFechaTorneo, getZonedParts, isViernes } from '../../utils/dateUtils';
 import { agruparSlotsEnRangos } from '../../utils/disponibilidadUtils';
 
+const BADGE_POR_MOTIVO = {
+  SIN_FRANJA_COMUN: 'Sin horarios en común',
+  ZONA_MANUAL_INCOMPLETA: 'Sin horarios en común',
+  PARTIDO_SIN_HORARIO: 'Sin horario',
+  SIN_CANCHA_DISPONIBLE: 'Canchas saturadas',
+};
+
 function calcularMetricasCategoria(c) {
   const partidos = c.partidosSinHorario || [];
   let minOpciones = 999;
@@ -1144,11 +1151,7 @@ export default function TorneoDetail() {
                                     {p.zona}
                                   </span>
                                   <span className="pc-badge pc-danger-badge">
-                                    {p.motivo === 'SIN_FRANJA_COMUN'
-                                      ? 'Sin franja común'
-                                      : p.motivo === 'ZONA_MANUAL_INCOMPLETA'
-                                      ? 'Sin horarios en común'
-                                      : 'Canchas saturadas'}
+                                    {BADGE_POR_MOTIVO[p.motivo] || 'Sin horario'}
                                   </span>
                                 </div>
 
@@ -1232,15 +1235,6 @@ export default function TorneoDetail() {
                                       ))}
                                     </div>
                                     </PartidosZonaManual>
-
-                                    <div className="pc-manage-row">
-                                      <Link
-                                        to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas`}
-                                        className="pc-manage-link"
-                                      >
-                                        Ver parejas de {c.nombreCategoria}
-                                      </Link>
-                                    </div>
                                   </div>
                                 ) : (
                                   <div>
@@ -1271,18 +1265,18 @@ export default function TorneoDetail() {
                                       }}
                                       onRecheck={() => handlePreCheckInicio(true)}
                                     />
-                                    <div className="pc-manage-row">
-                                      <Link
-                                        to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas${p.parejaMasRestringidaId ? `?parejaId=${p.parejaMasRestringidaId}` : ''}`}
-                                        className="pc-manage-link"
-                                      >
-                                        Ver parejas de {c.nombreCategoria}
-                                      </Link>
-                                    </div>
                                   </div>
                                 )}
                               </div>
                             ))}
+                            <div className="pc-manage-row">
+                              <Link
+                                to={`/admin/torneos/${id}/categorias/${c.categoriaId}/parejas`}
+                                className="pc-manage-link"
+                              >
+                                Ver parejas de {c.nombreCategoria}
+                              </Link>
+                            </div>
                           </div>
                         )}
                       </div>
