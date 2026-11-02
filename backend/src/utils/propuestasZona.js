@@ -74,14 +74,26 @@ function compararSoluciones(a, b) {
   return compararCosto(a.costo, b.costo) || compararTexto(a.natural, b.natural);
 }
 
-// Cada clave exacta conserva su mejor programación; las variantes no llenan el top.
+// Primero una opción por conjunto de parejas; después variantes por parejas/días.
 function seleccionarGrupos(soluciones) {
   const grupos = new Map();
   for (const s of soluciones) {
     const anterior = grupos.get(s.grupo);
     if (!anterior || compararSoluciones(s, anterior) < 0) grupos.set(s.grupo, s);
   }
-  return [...grupos.values()].sort(compararSoluciones).slice(0, 3);
+  const ordenadas = [...grupos.values()].sort(compararSoluciones);
+  const top = [], conjuntos = new Set(), elegidos = new Set();
+  for (const s of ordenadas) {
+    if (conjuntos.has(s.conjunto)) continue;
+    conjuntos.add(s.conjunto); elegidos.add(s.grupo); top.push(s);
+    if (top.length === 3) return top;
+  }
+  for (const s of ordenadas) {
+    if (elegidos.has(s.grupo)) continue;
+    top.push(s);
+    if (top.length === 3) break;
+  }
+  return top;
 }
 
 /** Busca cada combinación de una o dos parejas con su propio presupuesto de MRV.
@@ -137,22 +149,25 @@ function generarPropuestasZona(entrada) {
   }
   function buscarCombinacion(indices) {
     const permitidas = new Set(indices);
+    const conjuntoPermitido = JSON.stringify(indices.map((i) => pares[i].orden));
     const dominiosCombinacion = dominios.map((opciones) => opciones.filter((op) => op.faltan.every((i) => permitidas.has(i))));
     // Un dominio vacío prueba esta combinación imposible sin gastar el presupuesto.
     if (dominiosCombinacion.some((d) => !d.length)) return { soluciones: [], nodos: 0, busquedaIncompleta: false };
-    const asignaciones = new Map(), soluciones = new Map();
-    let top = [], cota = null;
+    const asignaciones = new Map(), soluciones = new Map(), cotas = new Map();
+    let top = [];
     let nodos = 0, incompleta = false;
     function registrar(cambios) {
       const c = costo(cambios);
-      if (!c.parejas || cota && compararCosto(c, cota) > 0) return;
+      if (!c.parejas) return;
       const delta = cambios.flatMap((s, i) => s.length ? [{ i, slots: [...s].sort((a, b) => a.startMs - b.startMs) }] : []);
+      const conjunto = JSON.stringify(delta.map(({ i }) => pares[i].orden)), cota = cotas.get(conjunto);
+      if (cota && compararCosto(c, cota) > 0) return;
       const natural = JSON.stringify(delta.map(({ i, slots }) => [String(pares[i].orden).padStart(8, '0'), slots.map((s) => s.startMs)]));
       const programacion = tareas.map((t, i) => ({ posicionEnRonda: t.posicionEnRonda,
         fechaHora: new Date(asignaciones.get(i).startMs).toISOString(), canchaNumero: asignaciones.get(i).canchaNumero }));
       const grupo = claveGrupo(cambios), anterior = soluciones.get(grupo);
       const clave = crypto.createHash('sha256').update(JSON.stringify([entrada.claveZona || '', natural])).digest('hex').slice(0, 32);
-      const nueva = { grupo, natural, costo: c, propuesta: { clave,
+      const nueva = { grupo, conjunto, natural, costo: c, propuesta: { clave,
         cambios: delta.map(({ i, slots }) => ({ parejaId: pares[i].id, slotsToAdd: slots.map((s) => s.slotId) })),
         minutosAgregados: delta.reduce((n, { i, slots }) => n + minutosFuera(slots, originales[i]), 0),
         minutosAmpliacion: c.minutosAmpliacion, diasNuevos: c.diasNuevos, partidosPropuestos: programacion } };
@@ -162,7 +177,8 @@ function generarPropuestasZona(entrada) {
       }
       soluciones.set(grupo, nueva);
       top = seleccionarGrupos(soluciones.values());
-      cota = top.length === 3 ? top[2].costo : null;
+      const mejoresDelConjunto = [...soluciones.values()].filter((s) => s.conjunto === conjunto).sort(compararSoluciones);
+      if (mejoresDelConjunto.length >= 3) cotas.set(conjunto, mejoresDelConjunto[2].costo);
     }
     function buscar(cambios) {
       if (asignaciones.size === tareas.length) { registrar(cambios); return; }
@@ -175,6 +191,7 @@ function generarPropuestasZona(entrada) {
           // equivalentes sin gastar presupuesto en otra rama/otra cancha del mismo grupo.
           if (asignaciones.size === tareas.length - 1 && compatibleConAsignaciones(tareas[i], op, tareas, asignaciones, mini)) {
             const siguientes = extender(cambios, op), c = costo(siguientes);
+            const cota = c.parejas === indices.length ? cotas.get(conjuntoPermitido) : null;
             if (c.parejas <= 2 && (!cota || compararCosto(c, cota) <= 0)) {
               const grupo = claveGrupo(siguientes);
               const cubierta = top.some((s) => s.grupo === grupo);
@@ -192,6 +209,8 @@ function generarPropuestasZona(entrada) {
           if (c.parejas > 2) continue;
           // La ampliación mínima es monótona: cubrir más partidos restringe las
           // extensiones posibles. Parejas y días nuevos tampoco pueden disminuir.
+          // Solo podar con el conjunto definitivo: otro conjunto tiene su propio cupo.
+          const cota = c.parejas === indices.length ? cotas.get(conjuntoPermitido) : null;
           if (cota && compararCosto(c, cota) > 0) continue;
           opciones.push({ op, siguientes, costo: c });
         }

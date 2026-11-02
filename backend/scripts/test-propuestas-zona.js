@@ -64,12 +64,19 @@ function testGenerador() {
   assert.ok(sonPropuestasEquivalentes(dosParejas, { cambios: [propuesta('b', ['Sabado-00:15']).cambios[0], propuesta('a', ['Viernes-15:00']).cambios[0]] }), 'No depende del orden de parejas ni de horarios');
   assert.equal(sonPropuestasEquivalentes(dosParejas, { cambios: [propuesta('a', ['Sabado-10:00']).cambios[0], propuesta('b', ['Viernes-09:00']).cambios[0]] }), false, 'Conserva los días asociados a cada pareja');
   const representadas = ['09:15', '10:15', '09:00', '09:30', '11:30'].map((h) => ({
-    grupo: 'a-viernes', costo: { parejas: 1, diasNuevos: 0, minutosAmpliacion: 75, horas: [1] }, natural: h, propuesta: propuesta('a', [`Viernes-${h}`]),
+    grupo: 'a-viernes', conjunto: '[1]', costo: { parejas: 1, diasNuevos: 0, minutosAmpliacion: 75, horas: [1] }, natural: h, propuesta: propuesta('a', [`Viernes-${h}`]),
   }));
   assert.deepEqual(seleccionarGrupos(representadas).map((s) => s.natural), ['09:00'], 'Las variantes del mismo día ocupan un solo lugar y queda el inicio más temprano');
   assert.deepEqual(seleccionarGrupos([...representadas].reverse()), seleccionarGrupos(representadas), 'Agrupar por clave no depende de la inserción');
   const mejor = { ...representadas[0], costo: { parejas: 1, diasNuevos: 0, minutosAmpliacion: 15, horas: [1] } };
   assert.equal(seleccionarGrupos([...representadas, mejor])[0], mejor, 'El representante es el de menor costo antes que el más temprano');
+  const opcion = (conjunto, grupo, minutos, natural = grupo) => ({ conjunto, grupo, natural,
+    costo: { parejas: 2, diasNuevos: 0, minutosAmpliacion: minutos, horas: [1, 2] }, propuesta: {} });
+  const diversidad = [opcion('[1,3]', 'a-vie-sab', 420), opcion('[1,3]', 'a-vie', 525), opcion('[1,3]', 'a-sab', 555), opcion('[2,3]', 'b-vie-sab', 630)];
+  assert.deepEqual(seleccionarGrupos(diversidad).map((s) => s.grupo), ['a-vie-sab', 'b-vie-sab', 'a-vie'], 'Un segundo conjunto precede a variantes más baratas del primero');
+  assert.deepEqual(seleccionarGrupos(diversidad.slice(0, 3)).map((s) => s.grupo), ['a-vie-sab', 'a-vie', 'a-sab'], 'Un solo conjunto completa el top con variantes');
+  assert.deepEqual(seleccionarGrupos([...diversidad].reverse()), seleccionarGrupos(diversidad), 'La diversidad no depende del orden de entrada');
+  assert.deepEqual(seleccionarGrupos([...diversidad, opcion('[1,2]', 'c-vie', 700)]).map((s) => s.grupo), ['a-vie-sab', 'b-vie-sab', 'c-vie'], 'Tres conjuntos distintos desplazan todas las variantes');
   assert.equal(minutosFuera([ventana('Viernes-10:00'), ventana('Viernes-10:15')], [ventana('Viernes-09:00')]), 75);
   assert.ok(compararCosto({ parejas: 1, diasNuevos: 1, minutosAmpliacion: 150, horas: [10] }, { parejas: 2, diasNuevos: 0, minutosAmpliacion: 15, horas: [1, 2] }) < 0);
   assert.ok(compararCosto({ parejas: 1, diasNuevos: 0, minutosAmpliacion: 15, horas: [10] }, { parejas: 1, diasNuevos: 0, minutosAmpliacion: 30, horas: [1] }) < 0);
@@ -133,6 +140,18 @@ function testGenerador() {
   const dos = entrada([['Viernes-09:00'], ['Viernes-12:00']]);
   const rDos = generarPropuestasZona(dos); assert.ok(rDos.propuestas.length); verificarPropuestas(dos, rDos);
   assert.deepEqual(rDos.propuestas.map((p) => p.cambios.length), [1, 1, 2], 'Busca también las dobles aun después de resolver con una sola pareja, y las ordena después');
+  const variosDias = entrada([['Viernes-09:00', 'Sabado-09:00'], ['Viernes-12:00', 'Sabado-12:00']], {
+    club: ['Viernes-09:00', 'Viernes-10:30', 'Viernes-12:00', 'Sabado-09:00', 'Sabado-12:00'],
+  });
+  const rv = generarPropuestasZona(variosDias); verificarPropuestas(variosDias, rv);
+  assert.deepEqual(rv.propuestas.map((p) => p.cambios.map((c) => c.parejaId)), [['id-0'], ['id-1'], ['id-0', 'id-1']], 'Las cotas de variantes individuales no podan el conjunto doble, aunque ya haya tres grupos baratos');
+  const mezcla = structuredClone(variosDias), nuevosIds = new Map(mezcla.parejas.map((p, i) => [p.id, `uuid-diverso-${9 - i}`]));
+  mezcla.parejas = mezcla.parejas.reverse().map((p) => ({ ...p, id: nuevosIds.get(p.id) }));
+  mezcla.partidos.reverse().forEach((p) => { p.pareja1Id = nuevosIds.get(p.pareja1Id); p.pareja2Id = nuevosIds.get(p.pareja2Id); });
+  mezcla.grilla.reverse();
+  const rMezcla = generarPropuestasZona(mezcla), idsOriginales = new Map([...nuevosIds].map(([antes, despues]) => [despues, antes]));
+  assert.deepEqual({ ...rMezcla, propuestas: rMezcla.propuestas.map((p) => ({ ...p, cambios: p.cambios.map((c) => ({ ...c, parejaId: idsOriginales.get(c.parejaId) })) })) }, rv,
+    'Representantes, variantes, testigos y presupuestos idénticos con varios conjuntos, UUID permutados y entradas invertidas');
   const acotada = generarPropuestasZona({ ...dos, maxNodos: 1 });
   assert.ok(acotada.busquedaIncompleta);
   assert.ok(acotada.combinaciones.every((c) => c.nodos === 1 && c.busquedaIncompleta), 'Agotar una combinación no consume el presupuesto de las otras');
@@ -326,7 +345,8 @@ async function testZonaE() {
   assert.ok(alternativa, 'Devuelve la alternativa factible Caruso + Medrano, sin ampliar a Dávila');
   assert.equal(alternativa.minutosAgregados, 165);
   assert.equal(ps[0], alternativa, 'Caruso + Medrano sale primero por menor ampliación, aun con más horas originales');
-  assert.deepEqual(ps.map((p) => [p.diasNuevos, p.minutosAmpliacion]), [[0, 420], [0, 435], [0, 525]], 'Los tres grupos del reproductor aislado se ordenan por ampliación, no por minutos de partido agregados');
+  assert.deepEqual(ps[1].cambios.map((c) => c.parejaId), [caso.parejas[1].id, caso.parejas[2].id], 'La segunda propone Dávila + Medrano como alternativa a Caruso + Medrano');
+  assert.deepEqual(ps.map((p) => [p.diasNuevos, p.minutosAmpliacion]), [[0, 420], [0, 570], [0, 435]], 'Los conjuntos distintos van antes que las variantes más baratas');
   const antes = await leerParejas(caso), agendaAntes = await prisma.partido.findMany({ where: { categoriaId: cat.id }, orderBy: { posicionEnRonda: 'asc' } });
   const snapshotAntes = structuredClone(svc.preCheckSessions.get(caso.torneo.id).categoriasPlan);
   const transaction = prisma.$transaction;
