@@ -1048,7 +1048,7 @@ function evaluarAsignacionesIncrementalesBase({
  * Utiliza un Snapshot Estable en memoria para garantizar que durante la sesión de resolución de cruces
  * las zonas se mantengan congeladas y los partidos asignados permanezcan inmutables.
  */
-async function preCheckInicioTorneo(organizadorId, torneoId, { forceReset = false, isReCheck = false } = {}) {
+async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = false, isReCheck = false } = {}) {
   const organizador = await getOrganizador(organizadorId);
 
   const torneo = await prisma.torneo.findUnique({
@@ -2598,12 +2598,18 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   };
 }
 
+const servicioPropuestas = require('./precheckPropuestas.service').crearServicioPropuestas({
+  prisma, preCheckSessions, planesCache, preCheckBase: preCheckInicioTorneoBase,
+});
+function preCheckInicioTorneo(...args) { return servicioPropuestas.preCheck(...args); }
+
 module.exports = {
   getOrganizador,
   updateOrganizador,
   simularCambioJornadaOrganizador,
   getSlotsGrilla,
   preCheckInicioTorneo,
+  aplicarPropuestaZona: servicioPropuestas.aplicar,
   iniciarTorneoMultiCategoria,
   getPartidosSinHorarioTorneo,
   getCanchasDisponiblesTorneo,

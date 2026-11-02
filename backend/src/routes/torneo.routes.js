@@ -21,6 +21,7 @@ router.get('/:torneoId/categorias', categoriaController.getCategorias);
 
 // Acciones a nivel Torneo (Multi-categoría)
 router.post('/:id/pre-check-inicio', torneoController.preCheckInicioTorneo);
+router.post('/:id/pre-check-inicio/propuestas/aplicar', torneoController.aplicarPropuestaZona);
 router.post('/:id/iniciar', torneoController.iniciarTorneo);
 router.post('/:id/reiniciar', torneoController.reiniciarTorneo);
 router.patch('/:id/inscripcion', torneoController.setInscripcion);

@@ -13,7 +13,7 @@ const solapan = (a, b) => a.startMs < b.endMs && b.startMs < a.endMs;
  * No consulta Prisma, no modifica entradas ni usa reloj/azar/UUID para ordenar.
  * Devuelve FACTIBLE con testigo, NO_FACTIBLE o BUSQUEDA_INCOMPLETA (nunca un falso imposible).
  */
-function verificarProgramacionZona({
+function prepararProblemaZona({
   formato, parejas, partidos, ventanasClub, cantidadCanchas,
   courtTimelines = new Map(), parejaAssignments = new Map(), maxNodos = MAX_NODOS_ZONA,
 }) {
@@ -48,6 +48,28 @@ function verificarProgramacionZona({
       (mini && new Set(tareas.slice(0, 2).flatMap((t) => t.participantes)).size !== 4)) {
     throw new Error('Los cruces no cubren el formato de la zona.');
   }
+  return { pares, mini, tareas, ventanasClub, cantidadCanchas, courtTimelines, parejaAssignments, maxNodos };
+}
+
+function compatibleConAsignaciones(t, candidato, tareas, asignaciones, mini) {
+  for (const [i, ocupado] of asignaciones) {
+    const otra = tareas[i];
+    if (mini && t.derivado !== otra.derivado) {
+      const base = t.derivado ? ocupado : candidato;
+      const definicion = t.derivado ? candidato : ocupado;
+      if (definicion.startMs < base.endMs) return false;
+    }
+    if (!solapan(candidato, ocupado)) continue;
+    if (candidato.canchaNumero === ocupado.canchaNumero) return false;
+    // P3 y P4 tienen participantes disjuntos en TODOS los resultados posibles.
+    if (mini && t.derivado && otra.derivado) continue;
+    if (t.participantes.some((p) => otra.participantes.includes(p))) return false;
+  }
+  return true;
+}
+
+function verificarProgramacionZona(entrada) {
+  const { pares, mini, tareas, ventanasClub, cantidadCanchas, courtTimelines, parejaAssignments, maxNodos } = prepararProblemaZona(entrada);
 
   // El domingo lógico se excluye; Sabado incluye su trasnoche del domingo civil.
   const club = ventanasClub.filter((w) => w.dia === 'Viernes' || w.dia === 'Sabado')
@@ -87,20 +109,7 @@ function verificarProgramacionZona({
   let nodos = 0;
   let incompleta = false;
   function compatible(t, candidato) {
-    for (const [i, ocupado] of asignaciones) {
-      const otra = tareas[i];
-      if (mini && t.derivado !== otra.derivado) {
-        const base = t.derivado ? ocupado : candidato;
-        const definicion = t.derivado ? candidato : ocupado;
-        if (definicion.startMs < base.endMs) return false;
-      }
-      if (!solapan(candidato, ocupado)) continue;
-      if (candidato.canchaNumero === ocupado.canchaNumero) return false;
-      // P3 y P4 tienen participantes disjuntos en TODOS los resultados posibles.
-      if (mini && t.derivado && otra.derivado) continue;
-      if (t.participantes.some((p) => otra.participantes.includes(p))) return false;
-    }
-    return true;
+    return compatibleConAsignaciones(t, candidato, tareas, asignaciones, mini);
   }
   function buscar() {
     if (asignaciones.size === tareas.length) return true;
@@ -134,4 +143,4 @@ function verificarProgramacionZona({
   };
 }
 
-module.exports = { verificarProgramacionZona, MAX_NODOS_ZONA };
+module.exports = { verificarProgramacionZona, MAX_NODOS_ZONA, prepararProblemaZona, compatibleConAsignaciones };
