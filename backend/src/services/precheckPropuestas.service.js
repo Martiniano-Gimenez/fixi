@@ -79,38 +79,12 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     }
     const actual = firma(estado, sesion);
     if (sesion.propuestasFirma !== actual) {
-      const propuestasCache = new Map(), propuestasPorZona = new Map(), ambiguas = new Set();
-      for (const c of sesion.categoriasPlan) for (const z of c.zonas) {
-        if (!z.requiereArmadoManual && !z.partidos.some((p) => p.sinHorarioAsignado)) continue;
-        const resultado = z.parejaIds.length >= 2 && z.parejaIds.length <= 4
-          ? generarPropuestasZona({ ...contexto(estado, sesion, z), claveZona: JSON.stringify([c.nombre, z.nombre,
-            z.parejaIds.map((id) => {
-              const p = estado.torneo.categorias.flatMap((c) => c.parejas).find((p) => p.id === id);
-              return [p.orden, p.jugador1, p.jugador2];
-            }).sort((a, b) => a[0] - b[0])]) })
-          : { propuestas: [], busquedaIncompleta: false, nodos: 0 };
-        propuestasPorZona.set(`${c.categoriaId}:${z.id}`, resultado);
-        for (const propuesta of resultado.propuestas) {
-          if (propuestasCache.has(propuesta.clave)) ambiguas.add(propuesta.clave);
-          propuestasCache.set(propuesta.clave, { propuesta, zona: z, categoriaId: c.categoriaId });
-        }
-      }
-      // Categorías duplicadas con las mismas claves naturales no pueden compartir una acción.
-      for (const clave of ambiguas) propuestasCache.delete(clave);
-      for (const r of propuestasPorZona.values()) if (r.propuestas.some((p) => ambiguas.has(p.clave))) {
-        r.propuestas = r.propuestas.filter((p) => !ambiguas.has(p.clave)); r.busquedaIncompleta = true;
-      }
       sesion.revision = crypto.randomUUID();
       sesion.propuestasFirma = actual;
-      sesion.propuestasCache = propuestasCache;
-      sesion.propuestasPorZona = propuestasPorZona;
+      sesion.propuestasCache = new Map();
+      sesion.propuestasPorZona = new Map();
     }
     respuesta.revision = sesion.revision;
-    for (const c of respuesta.conflictos || []) for (const p of c.partidosSinHorario) {
-      const r = sesion.propuestasPorZona.get(`${c.categoriaId}:${p.zonaId}`);
-      p.propuestasZona = structuredClone(r?.propuestas || []);
-      p.busquedaPropuestasIncompleta = r?.busquedaIncompleta || false;
-    }
     return respuesta;
   }
   async function obtener(org, id, opciones) { return anexar(org, id, await preCheckBase(org, id, opciones)); }
@@ -122,6 +96,49 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
       preCheck = e.preCheck || { bloqueado: true, revision: null, conflictos: [], motivo: e.message };
     }
     throw Object.assign(error(409, mensaje, codigo), { preCheck });
+  }
+  function claveNaturalZona(estado, categoria, zona) {
+    const parejas = new Map(estado.torneo.categorias.flatMap((c) => c.parejas.map((p) => [p.id, p])));
+    return JSON.stringify([categoria.nombre, zona.nombre, zona.parejaIds.map((id) => {
+      const p = parejas.get(id); return [p.orden, p.jugador1, p.jugador2];
+    }).sort((a, b) => a[0] - b[0])]);
+  }
+  function zonaTrabada(zona) {
+    return zona.requiereArmadoManual || zona.partidos.some((p) => p.sinHorarioAsignado || !p.fechaHora);
+  }
+  async function solicitar(org, id, { categoriaId, zonaId, revision } = {}) {
+    if (![categoriaId, zonaId, revision].every((v) => typeof v === 'string' && v)) {
+      throw error(400, 'Indicá la categoría, la zona y la revisión del pre-check.', 'PROPUESTA_INVALIDA');
+    }
+    const estado = await leerEstado(prisma, org, id);
+    const sesion = preCheckSessions.get(id);
+    if (!sesion || sesion.expiresAt <= Date.now() || sesion.revision !== revision) {
+      return rechazar(org, id, 'El pre-check cambió o venció. Volvé a pedir las propuestas de la zona.', 'REVISION_PRECHECK_VIEJA');
+    }
+    if (firma(estado, sesion) !== sesion.propuestasFirma) {
+      return rechazar(org, id, 'Los horarios o el plan cambiaron. Volvé a pedir las propuestas de la zona.', 'ESTADO_PRECHECK_CAMBIO');
+    }
+    const categoria = sesion.categoriasPlan.find((c) => c.categoriaId === categoriaId);
+    const zona = categoria?.zonas.find((z) => z.id === zonaId);
+    if (!zona) throw error(404, 'La zona no pertenece a este pre-check.', 'ZONA_PRECHECK_NO_ENCONTRADA');
+    const key = `${categoriaId}:${zonaId}`;
+    if (!sesion.propuestasPorZona.has(key)) {
+      let resultado = { propuestas: [], busquedaIncompleta: false, nodos: 0 };
+      if (zonaTrabada(zona)) {
+        const claveZona = claveNaturalZona(estado, categoria, zona);
+        // Detectar ambigüedad sin generar las propuestas de las otras zonas.
+        const coincidencias = sesion.categoriasPlan.flatMap((c) => c.zonas.filter(zonaTrabada).map((z) => claveNaturalZona(estado, c, z)))
+          .filter((clave) => clave === claveZona).length;
+        if (coincidencias > 1) resultado.busquedaIncompleta = true;
+        else if (zona.parejaIds.length >= 2 && zona.parejaIds.length <= 4) {
+          resultado = generarPropuestasZona({ ...contexto(estado, sesion, zona), claveZona });
+        }
+      }
+      sesion.propuestasPorZona.set(key, resultado);
+      for (const propuesta of resultado.propuestas) sesion.propuestasCache.set(propuesta.clave, { propuesta, zona, categoriaId });
+    }
+    const resultado = sesion.propuestasPorZona.get(key);
+    return { revision: sesion.revision, propuestasZona: structuredClone(resultado.propuestas), busquedaIncompleta: resultado.busquedaIncompleta };
   }
   async function aplicar(org, id, { clave, revision } = {}) {
     if (typeof clave !== 'string' || typeof revision !== 'string' || !clave || !revision) {
@@ -184,6 +201,7 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
   }
   return {
     preCheck: (org, id, opciones) => encolar(id, () => obtener(org, id, opciones)),
+    solicitar: (org, id, data) => encolar(id, () => solicitar(org, id, data)),
     aplicar: (org, id, data) => encolar(id, () => aplicar(org, id, data)),
   };
 }

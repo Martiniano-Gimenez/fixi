@@ -2609,6 +2609,7 @@ module.exports = {
   simularCambioJornadaOrganizador,
   getSlotsGrilla,
   preCheckInicioTorneo,
+  getPropuestasZona: servicioPropuestas.solicitar,
   aplicarPropuestaZona: servicioPropuestas.aplicar,
   iniciarTorneoMultiCategoria,
   getPartidosSinHorarioTorneo,

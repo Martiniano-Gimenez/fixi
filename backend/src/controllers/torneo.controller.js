@@ -76,6 +76,17 @@ async function iniciarTorneo(req, res, next) {
   }
 }
 
+async function getPropuestasZona(req, res, next) {
+  try {
+    res.json(await organizadorService.getPropuestasZona(getOrgId(req), req.params.id, req.body));
+  } catch (error) {
+    if (error.statusCode === 409 && error.preCheck) {
+      return res.status(409).json({ error: error.message, codigo: error.codigo, preCheck: error.preCheck });
+    }
+    next(error);
+  }
+}
+
 async function aplicarPropuestaZona(req, res, next) {
   try {
     res.json(await organizadorService.aplicarPropuestaZona(getOrgId(req), req.params.id, req.body));
@@ -165,6 +176,7 @@ module.exports = {
   setInscripcion,
   deleteTorneo,
   preCheckInicioTorneo,
+  getPropuestasZona,
   aplicarPropuestaZona,
   iniciarTorneo,
   reiniciarTorneo,

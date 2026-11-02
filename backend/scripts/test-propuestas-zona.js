@@ -5,9 +5,11 @@ const assert = require('node:assert/strict');
 const jwt = require('jsonwebtoken');
 const prisma = require('../src/lib/prisma');
 const { JWT_SECRET } = require('../src/config/env');
+const { generarPropuestasZona, minutosFuera, compararCosto, sonPropuestasEquivalentes, seleccionarGrupos } = require('../src/utils/propuestasZona');
+let generaciones = 0;
+require('../src/utils/propuestasZona').generarPropuestasZona = (...args) => { generaciones++; return generarPropuestasZona(...args); };
 const { startTestServer } = require('./utils/testServer');
 const svc = require('../src/services/organizador.service');
-const { generarPropuestasZona, minutosFuera, compararCosto, sonPropuestasEquivalentes, seleccionarGrupos } = require('../src/utils/propuestasZona');
 const { verificarProgramacionZona } = require('../src/utils/programacionZona');
 const { fusionarSlotsEnVentanas, slotIdToMsWindow } = require('../src/services/zona.service');
 const { generarSlotsDia } = require('../src/services/slots.service');
@@ -123,7 +125,20 @@ async function leerParejas(caso) {
   return prisma.pareja.findMany({ where: { categoriaId: caso.cat.id }, orderBy: { orden: 'asc' },
     select: { id: true, resolucionManual: true, slotsSeleccionados: { orderBy: { slotId: 'asc' }, select: { slotId: true } } } });
 }
-function propuestas(pre) { return pre.conflictos.flatMap((c) => c.partidosSinHorario).find((p) => p.propuestasZona?.length)?.propuestasZona || []; }
+function sinPropuestas(pre) {
+  assert.equal(Object.hasOwn(pre, 'propuestasZona'), false);
+  for (const c of pre.conflictos || []) for (const p of c.partidosSinHorario) {
+    assert.equal(Object.hasOwn(p, 'propuestasZona'), false);
+    assert.equal(Object.hasOwn(p, 'busquedaPropuestasIncompleta'), false);
+  }
+}
+function zonaPendiente(pre) {
+  const categoria = pre.conflictos.find((c) => c.partidosSinHorario.length);
+  return { categoriaId: categoria.categoriaId, zonaId: categoria.partidosSinHorario[0].zonaId, revision: pre.revision };
+}
+async function pedirPropuestas(caso, pre) {
+  return svc.getPropuestasZona(caso.org.id, caso.torneo.id, zonaPendiente(pre));
+}
 
 async function testApi(baseUrl) {
   async function post(caso, action, data = {}, token = jwt.sign({ id: caso.org.id, email: caso.org.email }, JWT_SECRET)) {
@@ -133,15 +148,43 @@ async function testApi(baseUrl) {
     return { status: response.status, body: await response.json() };
   }
   const caso = await crearCaso('api-propuesta', [viernes('18:00', '23:00'), viernes('18:00', '23:00'), ['Sabado-09:00']]);
+  const generacionesAntes = generaciones;
   const first = await post(caso, ''); assert.equal(first.status, 200);
-  const pre = first.body, p = propuestas(pre).find((p) => p.cambios.length === 1 && p.cambios[0].slotsToAdd.length === 2);
+  const pre = first.body; sinPropuestas(pre); assert.ok(pre.revision);
+  const sesion = svc.preCheckSessions.get(caso.torneo.id);
+  assert.equal(sesion.propuestasPorZona.size, 0, 'El pre-check no genera propuestas');
+  assert.equal(sesion.propuestasCache.size, 0);
+  const sinPedir = await post(caso, '/propuestas/aplicar', { clave: 'no-pedida', revision: pre.revision });
+  assert.equal(sinPedir.status, 409); assert.equal(sinPedir.body.codigo, 'PROPUESTA_VENCIDA');
+  sinPropuestas(sinPedir.body.preCheck);
+  const request = zonaPendiente(pre);
+  const pedido = await post(caso, '/propuestas', request); assert.equal(pedido.status, 200);
+  assert.equal(generaciones, generacionesAntes + 1, 'Solo se genera la zona pedida; ni pre-check ni el 409 generan propuestas');
+  assert.deepEqual(Object.keys(pedido.body).sort(), ['busquedaIncompleta', 'propuestasZona', 'revision']);
+  const p = pedido.body.propuestasZona.find((p) => p.cambios.length === 1 && p.cambios[0].slotsToAdd.length === 2);
   assert.ok(p); assert.ok(pre.revision);
+  const cache = sesion.propuestasPorZona.get(`${request.categoriaId}:${request.zonaId}`);
+  const pedidoDos = await post(caso, '/propuestas', request);
+  assert.deepEqual(pedidoDos.body, pedido.body);
+  assert.equal(generaciones, generacionesAntes + 1, 'Dos pedidos iguales ejecutan el generador una sola vez');
+  assert.equal(sesion.propuestasPorZona.get(`${request.categoriaId}:${request.zonaId}`), cache, 'Reutiliza el mismo resultado sin regenerar');
   const again = await post(caso, '', { isReCheck: true });
   assert.equal(again.body.revision, pre.revision, 'Lectura idéntica conserva revisión');
-  assert.deepEqual(propuestas(again.body), propuestas(pre));
+  sinPropuestas(again.body);
+  assert.equal(sesion.propuestasPorZona.get(`${request.categoriaId}:${request.zonaId}`), cache, 'Un re-check sin cambios conserva el caché');
+  assert.equal(generaciones, generacionesAntes + 1, 'El re-check no genera propuestas');
   const antes = await leerParejas(caso);
   const applied = await post(caso, '/propuestas/aplicar', { clave: p.clave, revision: pre.revision });
   assert.equal(applied.status, 200); assert.equal(applied.body.bloqueado, false);
+  assert.equal(generaciones, generacionesAntes + 1, 'Aplicar no genera propuestas');
+  sinPropuestas(applied.body);
+  assert.equal(sesion.propuestasPorZona.size, 0, 'Aplicar invalida el caché sin generar otras propuestas');
+  const resuelta = await post(caso, '/propuestas', { ...request, revision: applied.body.revision });
+  assert.deepEqual(resuelta.body, { revision: applied.body.revision, propuestasZona: [], busquedaIncompleta: false });
+  assert.equal(generaciones, generacionesAntes + 1, 'Una zona resuelta no ejecuta el generador');
+  const pedidoViejo = await post(caso, '/propuestas', request);
+  assert.equal(pedidoViejo.status, 409); assert.equal(pedidoViejo.body.codigo, 'REVISION_PRECHECK_VIEJA');
+  sinPropuestas(pedidoViejo.body.preCheck);
   const despues = await leerParejas(caso);
   for (let i = 0; i < antes.length; i++) {
     const cambio = p.cambios.find((c) => c.parejaId === antes[i].id);
@@ -157,11 +200,13 @@ async function testApi(baseUrl) {
   assert.equal(vieja.status, 409); assert.equal(vieja.body.codigo, 'REVISION_PRECHECK_VIEJA'); assert.ok(vieja.body.preCheck.revision);
   assert.deepEqual(await leerParejas(caso), despues);
   assert.equal((await post(caso, '/propuestas/aplicar', {})).status, 400);
+  assert.equal((await post(caso, '/propuestas', {})).status, 400);
   const otro = await crearCaso('otro-club', [['Viernes-18:00'], ['Sabado-09:00']]);
   assert.equal((await post(caso, '/propuestas/aplicar', { clave: p.clave, revision: applied.body.revision }, jwt.sign({ id: otro.org.id }, JWT_SECRET))).status, 403);
+  assert.equal((await post(caso, '/propuestas', { ...request, revision: applied.body.revision }, jwt.sign({ id: otro.org.id }, JWT_SECRET))).status, 403);
 
   const noFactible = await crearCaso('estado-no-factible', [['Viernes-09:00'], ['Viernes-12:00']]);
-  const noPre = (await post(noFactible, '')).body, noProp = propuestas(noPre)[0]; assert.ok(noProp);
+  const noPre = (await post(noFactible, '')).body, noProp = (await post(noFactible, '/propuestas', zonaPendiente(noPre))).body.propuestasZona[0]; assert.ok(noProp);
   const catAjena = await prisma.categoria.create({ data: { nombre: 'Ocupación', torneoId: noFactible.torneo.id } });
   // Se ocupan ambas canchas en el único inicio común de esta propuesta, sin re-check intermedio.
   await prisma.partido.createMany({ data: [1, 2].map((canchaNumero) => ({ categoriaId: catAjena.id, posicionEnRonda: canchaNumero,
@@ -172,14 +217,14 @@ async function testApi(baseUrl) {
   assert.deepEqual(await leerParejas(noFactible), prev, '409 no agrega disponibilidad');
 
   const concurrente = await crearCaso('aplicar-dos-veces', [['Viernes-09:00'], ['Viernes-12:00']]);
-  const cp = (await post(concurrente, '')).body, propuesta = propuestas(cp)[0]; assert.ok(propuesta);
+  const cp = (await post(concurrente, '')).body, propuesta = (await post(concurrente, '/propuestas', zonaPendiente(cp))).body.propuestasZona[0]; assert.ok(propuesta);
   const respuestas = await Promise.all([post(concurrente, '/propuestas/aplicar', { clave: propuesta.clave, revision: cp.revision }),
     post(concurrente, '/propuestas/aplicar', { clave: propuesta.clave, revision: cp.revision })]);
   assert.deepEqual(respuestas.map((r) => r.status).sort(), [200, 409]);
 
   const mini = await crearCaso('api-mini', [['Viernes-18:00'], ['Viernes-18:00', 'Viernes-20:30'],
     ['Viernes-18:00', 'Viernes-20:30'], ['Viernes-18:00', 'Viernes-20:30']]);
-  const mp = (await post(mini, '')).body, opt = propuestas(mp)[0]; assert.ok(opt);
+  const mp = (await post(mini, '')).body, opt = (await post(mini, '/propuestas', zonaPendiente(mp))).body.propuestasZona[0]; assert.ok(opt);
   const miniPlan = svc.preCheckSessions.get(mini.torneo.id).categoriasPlan[0].zonas[0];
   const fijos = miniPlan.partidos.slice(0, 2).map((p) => [p.fechaHora.getTime(), p.canchaNumero]);
   const miniAplicado = await post(mini, '/propuestas/aplicar', { clave: opt.clave, revision: mp.revision });
@@ -193,10 +238,23 @@ async function testApi(baseUrl) {
     slotsSeleccionados: { create: (i === 2 ? ['Sabado-09:00'] : viernes('18:00', '23:00')).map((slotId) => ({ slotId })) } } });
   const ambigua = (await post(duplicado, '')).body;
   assert.ok(ambigua.conflictos.length === 2);
-  for (const c of ambigua.conflictos) for (const p of c.partidosSinHorario) {
-    assert.deepEqual(p.propuestasZona, [], 'Una clave ambigua nunca aplica en otra categoría');
-    assert.equal(p.busquedaPropuestasIncompleta, true);
+  for (const c of ambigua.conflictos) {
+    const r = await post(duplicado, '/propuestas', { categoriaId: c.categoriaId, zonaId: c.partidosSinHorario[0].zonaId, revision: ambigua.revision });
+    assert.deepEqual(r.body.propuestasZona, [], 'Una clave ambigua nunca aplica en otra categoría, aunque se pida una sola zona');
+    assert.equal(r.body.busquedaIncompleta, true);
   }
+  const vencida = await crearCaso('sesion-vencida', [['Viernes-09:00'], ['Viernes-12:00']]);
+  const vp = (await post(vencida, '')).body;
+  svc.preCheckSessions.get(vencida.torneo.id).expiresAt = Date.now() - 1;
+  const vencio = await post(vencida, '/propuestas', zonaPendiente(vp));
+  assert.equal(vencio.status, 409); assert.equal(vencio.body.codigo, 'REVISION_PRECHECK_VIEJA');
+  assert.notEqual(vencio.body.preCheck.revision, vp.revision); sinPropuestas(vencio.body.preCheck);
+  const cambio = await crearCaso('pedido-estado-cambio', [['Viernes-09:00'], ['Viernes-12:00']]);
+  const cambioPre = (await post(cambio, '')).body;
+  await prisma.slotPareja.create({ data: { parejaId: cambio.parejas[0].id, slotId: 'Viernes-15:00' } });
+  const cambioRes = await post(cambio, '/propuestas', zonaPendiente(cambioPre));
+  assert.equal(cambioRes.status, 409); assert.equal(cambioRes.body.codigo, 'ESTADO_PRECHECK_CAMBIO');
+  assert.notEqual(cambioRes.body.preCheck.revision, cambioPre.revision); sinPropuestas(cambioRes.body.preCheck);
   console.log('PASS: API aplica testigo, atomicidad visible, revisión vieja, estado no factible, permisos y concurrencia');
 }
 
@@ -211,7 +269,8 @@ async function testZonaE() {
   }
   await prisma.partido.createMany({ data: agenda });
   const pre = await svc.preCheckInicioTorneo(caso.org.id, caso.torneo.id);
-  const ps = propuestas(pre); assert.ok(ps.length, 'Zona E trae al menos una propuesta');
+  sinPropuestas(pre);
+  const ps = (await pedirPropuestas(caso, pre)).propuestasZona; assert.ok(ps.length, 'Zona E trae al menos una propuesta');
   assert.equal(ps.length, 3, 'La zona E reproducida conserva tres grupos distintos de parejas y días');
   for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) assert.equal(sonPropuestasEquivalentes(ps[i], ps[j]), false, 'Zona E no repite las mismas parejas y días');
   console.log(`Zona E reproducida: ${ps.length} propuestas agrupadas por día`);
