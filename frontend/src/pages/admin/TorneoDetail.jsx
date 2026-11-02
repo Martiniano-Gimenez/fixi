@@ -30,6 +30,7 @@ import {
   GitBranch,
 } from 'lucide-react';
 import InlineDisponibilidadEditor from '../../components/InlineDisponibilidadEditor';
+import PropuestasZona from '../../components/PropuestasZona';
 import InscripcionLinkPanel from '../../components/InscripcionLinkPanel';
 import CruceResolver from '../../components/CruceResolver';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
@@ -276,6 +277,7 @@ export default function TorneoDetail() {
   const [expandedCategoriasConflictos, setExpandedCategoriasConflictos] = useState(new Set());
   const [grillaOrganizador, setGrillaOrganizador] = useState({ viernes: [], sabado: [] });
   const [preCheckAprobado, setPreCheckAprobado] = useState(false);
+  const [revisionPreCheck, setRevisionPreCheck] = useState(null);
   const [hayCambiosGuardados, setHayCambiosGuardados] = useState(false);
   const [resultadoInicio, setResultadoInicio] = useState(null);
   const [undoAction, setUndoAction] = useState(null);
@@ -475,6 +477,7 @@ export default function TorneoDetail() {
         isReCheck: isReCheckBool,
         forceReset: forceResetBool,
       });
+      setRevisionPreCheck(res.revision || null);
       setAvisoSesionReiniciada(Boolean(res.sesionReiniciada));
 
       if (res.grillaOrganizador) {
@@ -1343,6 +1346,22 @@ export default function TorneoDetail() {
                                           </li>
                                         ))}
                                       </ul>
+                                    )}
+
+                                    {revisionPreCheck && (
+                                      <PropuestasZona
+                                        key={`${c.categoriaId}:${p.zonaId}`}
+                                        torneoId={id}
+                                        categoriaId={c.categoriaId}
+                                        zonaId={p.zonaId}
+                                        revision={revisionPreCheck}
+                                        parejas={p.parejasManuales || []}
+                                        onApplied={async () => {
+                                          setHayCambiosGuardados(true);
+                                          await handlePreCheckInicio(true);
+                                        }}
+                                        onRecheck={() => handlePreCheckInicio(true)}
+                                      />
                                     )}
 
                                     <div className="pc-manual-pairs">
