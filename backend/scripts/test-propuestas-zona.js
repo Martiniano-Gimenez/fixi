@@ -81,6 +81,9 @@ function testGenerador() {
   const aislada = entrada([viernes('18:00', '23:00'), viernes('18:00', '23:00'), ['Sabado-09:00']], { club: viernes('18:00', '23:00') });
   const r = generarPropuestasZona(aislada);
   verificarPropuestas(aislada, r);
+  assert.deepEqual(r.combinaciones.map((c) => c.ordenes), [[1], [2], [3], [1, 2], [1, 3], [2, 3]], 'Recorre las seis combinaciones por orden natural, primero las individuales');
+  assert.equal(r.busquedaIncompleta, r.combinaciones.some((c) => c.busquedaIncompleta));
+  assert.equal(r.nodos, r.combinaciones.reduce((n, c) => n + c.nodos, 0));
   assert.ok(r.propuestas.some((p) => p.cambios.length === 1 && p.cambios[0].parejaId === 'id-2' && p.cambios[0].slotsToAdd.length === 2), 'La aislada necesita dos inicios distintos');
   assert.deepEqual(generarPropuestasZona(aislada), r, 'Dos corridas idénticas');
   const permutado = structuredClone(aislada), ids = new Map(permutado.parejas.map((p, i) => [p.id, `uuid-${3 - i}`]));
@@ -88,14 +91,20 @@ function testGenerador() {
   permutado.partidos = permutado.partidos.reverse().map((p) => ({ ...p, pareja1Id: ids.get(p.pareja1Id), pareja2Id: ids.get(p.pareja2Id) }));
   permutado.grilla.reverse();
   const rp = generarPropuestasZona(permutado);
+  assert.deepEqual(rp.combinaciones, r.combinaciones, 'Presupuestos y recorridos por combinación no dependen de UUID ni del orden de inserción');
   assert.deepEqual(rp.propuestas.map((p) => p.clave), r.propuestas.map((p) => p.clave));
   assert.deepEqual(rp.propuestas.map((p) => p.partidosPropuestos), r.propuestas.map((p) => p.partidosPropuestos));
   assert.deepEqual(rp.propuestas.map((p) => p.cambios.map((c) => c.slotsToAdd)), r.propuestas.map((p) => p.cambios.map((c) => c.slotsToAdd)));
 
   const dos = entrada([['Viernes-09:00'], ['Viernes-12:00']]);
   const rDos = generarPropuestasZona(dos); assert.ok(rDos.propuestas.length); verificarPropuestas(dos, rDos);
+  assert.deepEqual(rDos.propuestas.map((p) => p.cambios.length), [1, 1, 2], 'Busca también las dobles aun después de resolver con una sola pareja, y las ordena después');
+  const acotada = generarPropuestasZona({ ...dos, maxNodos: 1 });
+  assert.ok(acotada.busquedaIncompleta);
+  assert.ok(acotada.combinaciones.every((c) => c.nodos === 1 && c.busquedaIncompleta), 'Agotar una combinación no consume el presupuesto de las otras');
   const rr4 = entrada([viernes('18:00', '23:00'), viernes('18:00', '23:00'), viernes('18:00', '23:00'), ['Sabado-09:00']], { club: viernes('18:00', '23:00'), canchas: 2 });
   const r4 = generarPropuestasZona(rr4); assert.ok(r4.propuestas.length); verificarPropuestas(rr4, r4);
+  assert.deepEqual(r4.combinaciones.map((c) => c.ordenes), [[1], [2], [3], [4], [1, 2], [1, 3], [1, 4], [2, 3], [2, 4], [3, 4]], 'Diez combinaciones en zonas de cuatro');
   const mini = entrada([['Viernes-18:00'], ['Viernes-18:00', 'Viernes-20:30'], ['Viernes-18:00', 'Viernes-20:30'], ['Viernes-18:00', 'Viernes-20:30']], { formato: 'MINI_BRACKET', club: viernes('18:00', '23:00') });
   mini.partidos[0] = { ...mini.partidos[0], fechaHora: new Date(ventana('Viernes-18:00').startMs), canchaNumero: 1, sinHorarioAsignado: false };
   mini.partidos[1] = { ...mini.partidos[1], fechaHora: new Date(ventana('Viernes-18:00').startMs), canchaNumero: 2, sinHorarioAsignado: false };
@@ -107,7 +116,9 @@ function testGenerador() {
   const noche = entrada([['Viernes-09:00'], ['Sabado-00:00']], { club: sabado('23:45', '02:00') });
   verificarPropuestas(noche, generarPropuestasZona(noche));
   const domingo = entrada([['Viernes-09:00'], ['Viernes-10:00']], { club: generarSlotsDia('Domingo', '09:00', '12:00') });
-  assert.deepEqual(generarPropuestasZona(domingo).propuestas, []);
+  const sinDominio = generarPropuestasZona({ ...domingo, maxNodos: 0 });
+  assert.deepEqual(sinDominio.propuestas, []);
+  assert.equal(sinDominio.busquedaIncompleta, false, 'Dominios vacíos prueban imposibilidad sin agotar ningún límite');
   console.log('PASS: generador RR2/3/4, mini, costo/unión, límite, trasnoche, domingo y determinismo sin UUID');
 }
 
@@ -276,6 +287,12 @@ async function testZonaE() {
   console.log(`Zona E reproducida: ${ps.length} propuestas agrupadas por día`);
   assert.ok(ps.every((p) => p.cambios.length <= 2));
   assert.equal(ps[0].cambios.length, 2, 'El caso E con canchas ocupadas requiere dos parejas');
+  const alternativa = ps.find((p) => p.cambios.some((c) => c.parejaId === caso.parejas[0].id && c.slotsToAdd.includes('Viernes-13:00')) &&
+    p.cambios.some((c) => c.parejaId === caso.parejas[2].id && c.slotsToAdd.includes('Viernes-14:15') && c.slotsToAdd.includes('Sabado-19:00')));
+  assert.ok(alternativa, 'Devuelve la alternativa factible Caruso + Medrano, sin ampliar a Dávila');
+  assert.equal(alternativa.minutosAgregados, 165);
+  assert.equal(ps[0].minutosAgregados, 165);
+  assert.equal(ps[1], alternativa, 'A igual costo sale segunda por las horas originales de las parejas');
   const antes = await leerParejas(caso), agendaAntes = await prisma.partido.findMany({ where: { categoriaId: cat.id }, orderBy: { posicionEnRonda: 'asc' } });
   const snapshotAntes = structuredClone(svc.preCheckSessions.get(caso.torneo.id).categoriasPlan);
   const transaction = prisma.$transaction;
@@ -284,15 +301,15 @@ async function testZonaE() {
     tx.slotPareja.createMany = (q) => { if (++escrituras === 2) throw new Error('Fallo simulado en segunda pareja'); return create(q); };
     return fn(tx);
   }, opts);
-  try { await assert.rejects(svc.aplicarPropuestaZona(caso.org.id, caso.torneo.id, { clave: ps[0].clave, revision: pre.revision }), /Fallo simulado/); }
+  try { await assert.rejects(svc.aplicarPropuestaZona(caso.org.id, caso.torneo.id, { clave: alternativa.clave, revision: pre.revision }), /Fallo simulado/); }
   finally { prisma.$transaction = transaction; }
   assert.deepEqual(await leerParejas(caso), antes, 'Rollback de ambas disponibilidades');
   assert.deepEqual(svc.preCheckSessions.get(caso.torneo.id).categoriasPlan, snapshotAntes, 'El testigo no se adopta antes del commit');
-  const after = await svc.aplicarPropuestaZona(caso.org.id, caso.torneo.id, { clave: ps[0].clave, revision: pre.revision });
+  const after = await svc.aplicarPropuestaZona(caso.org.id, caso.torneo.id, { clave: alternativa.clave, revision: pre.revision });
   assert.equal(after.bloqueado, false);
   assert.deepEqual(await prisma.partido.findMany({ where: { categoriaId: cat.id }, orderBy: { posicionEnRonda: 'asc' } }), agendaAntes);
   const despues = await leerParejas(caso);
-  for (let i = 0; i < antes.length; i++) if (!ps[0].cambios.some((c) => c.parejaId === antes[i].id)) assert.deepEqual(antes[i], despues[i]);
+  for (let i = 0; i < antes.length; i++) if (!alternativa.cambios.some((c) => c.parejaId === antes[i].id)) assert.deepEqual(antes[i], despues[i]);
   const recheck = await svc.preCheckInicioTorneo(caso.org.id, caso.torneo.id, { isReCheck: true }); assert.equal(recheck.bloqueado, false);
   console.log('PASS: zona E, ocupación de seis canchas, propuesta aplicada y re-check resuelto');
 }
