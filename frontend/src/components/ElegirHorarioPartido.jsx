@@ -138,16 +138,6 @@ export default function ElegirHorarioPartido({
     }))}`;
   };
 
-  const describir = (opcion) => {
-    if (opcion.estado !== 'NO_DISPONIBLE') return pedido(opcion);
-    if (opcion.motivo === 'ESPERA_BASES') return 'Primero tienen que tener horario los dos partidos iniciales';
-    if (opcion.motivo === 'ZONA_SIN_SALIDA') return 'Con ese horario la zona queda sin salida';
-    if (opcion.motivo === 'PAREJA_OCUPADA') {
-      const ocupadas = opcion.parejasOcupadas.map((id) => nombres.get(id) || 'Una pareja');
-      return `${ocupadas.join(' y ')} ${ocupadas.length === 1 ? 'ya juega' : 'ya juegan'} a esa hora`;
-    }
-    return 'No hay cancha libre a esa hora';
-  };
   const cancelar = () => {
     const clave = seleccion?.clave;
     setSeleccion(null);
@@ -180,35 +170,30 @@ export default function ElegirHorarioPartido({
       {estaAbierto && (
         <div ref={seccionRef} id={`${seccionId}-partido-${partido.posicionEnRonda}`}
           className={`pc-manual-opciones${mostrarFeedback ? ' has-feedback' : ''}`} aria-busy={cargando}>
-          {vigente && resultado.opciones.length > 0 && (
+          {vigente && !cargando && !resultado.error && (
             <Suspense fallback={<p className="pc-manual-status" role="status">Abriendo la grilla…</p>}>
               <GrillaHorariosPartido opciones={resultado.opciones} seleccion={seleccion} onSeleccion={setSeleccion}
-                describir={describir} fijando={fijando} onCambioDia={() => setSeleccion(null)} />
+                describir={pedido} nombres={nombres} esDefinicion={esDefinicion} fijando={fijando} onCambioDia={() => setSeleccion(null)} />
             </Suspense>
           )}
           {(!vigente || cargando) && (
             <div className="pc-manual-status" role="status"><Loader2 size={16} className="pc-propuesta-spinner" aria-hidden="true" />Buscando horarios…</div>
           )}
           {vigente && resultado.error && errorFijacion?.mensaje !== resultado.error && <p className="pc-manual-error" role="alert">{resultado.error}</p>}
-          {vigente && !cargando && !resultado.error && resultado.opciones.length === 0 && (
-            <p className="pc-manual-copy">El club no tiene inicios para este partido.</p>
-          )}
           {vigente && resultado.error && (
             <button type="button" className="pc-manual-button" disabled={cargando || fijando} onClick={cargarHorarios}>Volver a buscar horarios</button>
           )}
           {mostrarFeedback && (
             <div ref={feedbackRef} className="pc-horarios-feedback">
-              <p className="pc-manual-copy" role="status" aria-atomic="true">{formatSlotCorto(seleccion.slotId)} · {describir(seleccion)}</p>
-              {seleccion.estado !== 'NO_DISPONIBLE' && seleccion.parejasAAmpliar.length > 0 && (
+              <p className="pc-manual-copy" role="status" aria-atomic="true">{formatSlotCorto(seleccion.slotId)} · {pedido(seleccion)}</p>
+              {seleccion.parejasAAmpliar.length > 0 && (
                 <p className="pc-manual-copy">Al confirmar, {formatSlotCorto(seleccion.slotId)} se agrega a la disponibilidad de {enumerarParejas(seleccion.parejasAAmpliar.map((id) => nombres.get(id) || 'la pareja'))}. Hacelo solo si ya lo hablaste con ellas.</p>
               )}
               <div className="pc-manual-actions">
-                {seleccion.estado !== 'NO_DISPONIBLE' && (
-                  <button type="button" className="pc-manual-button" disabled={fijando} onClick={confirmar}>
-                    {fijando && <Loader2 size={16} className="pc-propuesta-spinner" aria-hidden="true" />}
-                    {fijando ? 'Fijando…' : 'Confirmar'}
-                  </button>
-                )}
+                <button type="button" className="pc-manual-button" disabled={fijando} onClick={confirmar}>
+                  {fijando && <Loader2 size={16} className="pc-propuesta-spinner" aria-hidden="true" />}
+                  {fijando ? 'Fijando…' : 'Confirmar'}
+                </button>
                 <button type="button" className="pc-manual-button" disabled={fijando} onClick={cancelar}>Cancelar</button>
               </div>
             </div>

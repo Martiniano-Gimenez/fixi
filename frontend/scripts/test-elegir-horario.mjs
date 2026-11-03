@@ -24,24 +24,84 @@ const cell=k=>document.querySelector(`[data-clave="${k}"]`);
 const confirmar=()=>[...document.querySelectorAll('.pc-horarios-feedback button')].find(b=>b.textContent==='Confirmar');
 const cancelar=()=>[...document.querySelectorAll('.pc-horarios-feedback button')].find(b=>b.textContent==='Cancelar');
 await act(async()=>root.render(React.createElement(App)));
-for (let i = 0; i < 50 && !cell('k3'); i++) {
+for (let i = 0; i < 50 && !cell('k1'); i++) {
   await act(async () => new Promise((r) => setTimeout(r, 20)));
 }
 assert.equal(document.querySelectorAll('[role="grid"]').length,2);
-assert.deepEqual([...document.querySelectorAll('.pc-horarios-leyenda li')].map(e=>e.textContent),['Entra (2)','Pedirle a 1 pareja (1)','Pedirle a 2 o m\u00e1s (1)','No disponible (2)']);
+assert.deepEqual([...document.querySelectorAll('.pc-horarios-leyenda li')].map(e=>e.textContent),['Entra (2)','Pedirle a 1 pareja (1)','Pedirle a 2 o m\u00e1s (1)']);
 assert.ok(!document.body.textContent.includes('Viabilidad por verificar'));
-await click(cell('k3'));assert.match(document.querySelector('[role="status"]').textContent,/Caruso \/ Vallejos ya juega/);assert.ok(!confirmar());assert.equal(cell('k3').getAttribute('aria-disabled'),'true');
-await click(cell('k4'));assert.match(document.querySelector('[role="status"]').textContent,/Primero tienen que tener horario/);assert.ok(!confirmar());
+assert.equal(cell('k3'), null); assert.equal(cell('k4'), null);
+assert.ok([...document.querySelectorAll('.pc-horarios-hueco')].every(e=>e.getAttribute('aria-hidden')==='true' && e.textContent===''));
 await click(cell('k1'));assert.match(document.querySelector('[role="status"]').textContent,/vie 15:15 \u00b7 Pedile a Caruso/);assert.ok(confirmar());
 assert.match(document.querySelector('.pc-horarios-feedback').textContent,/Al confirmar, vie 15:15 se agrega a la disponibilidad de Caruso \/ Vallejos\. Hacelo solo si ya lo hablaste con ellas\./);
 assert.ok(!document.querySelector('.pc-horarios-feedback').textContent.includes('Confirmá cuando'));
 await act(async()=>{cell('k1').focus();cell('k1').dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));});assert.equal(document.activeElement.dataset.clave,'k2');
-await act(async()=>document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'End',bubbles:true})));assert.equal(document.activeElement.dataset.clave,'k3');
+await act(async()=>document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'End',bubbles:true})));assert.equal(document.activeElement.dataset.clave,'k2');
 await click(cancelar());assert.equal(document.activeElement.dataset.clave,'k1');assert.ok(!document.querySelector('.pc-horarios-feedback'));
 await click(cell('k2'));assert.match(document.querySelector('[role="status"]').textContent,/Dávila/);
 await act(async()=>{const b=confirmar();b.click();b.click();});assert.equal(fijaciones,1);assert.equal(guardado.revision,'r2');
 await click([...document.querySelectorAll('button')].find(b=>b.textContent==='Elegir horario'));
 fallar=true;await click(cell('k0'));await click(confirmar());assert.equal(rechecks,1);assert.match(document.querySelector('[role="alert"]').textContent,/revisi\u00f3n cambi\u00f3/);assert.ok(document.querySelector('[aria-expanded="true"]'));
+
+const { default: Grilla } = await server.ssrLoadModule('/src/components/GrillaHorariosPartido.jsx');
+const tramos = [];
+const fila = (hora, estados, pedir = 'b') => estados.forEach((estado, i) => {
+  const slotId = `Viernes-${hora}:${String(i * 15).padStart(2, '0')}`;
+  tramos.push({ clave: slotId, slotId, fechaHora: `2026-11-0${Number(hora) < 6 ? 7 : 6}T${hora}:${String(i * 15).padStart(2, '0')}:00Z`, estado,
+    parejasAAmpliar: estado === 'PEDIR_1' ? [Array.isArray(pedir) ? pedir[i] : pedir] : estado === 'PEDIR_VARIAS' ? ['a', 'b'] : [] });
+});
+fila('07', Array(4).fill('ENTRA'));
+fila('08', Array(4).fill('NO_DISPONIBLE'));
+for (const hora of ['09', '11', '12']) fila(hora, Array(4).fill('PEDIR_VARIAS'));
+fila('10', Array(4).fill('NO_DISPONIBLE'));
+for (const hora of ['13', '14', '15']) fila(hora, ['PEDIR_1', 'NO_DISPONIBLE', 'ENTRA', 'PEDIR_VARIAS']);
+for (const hora of ['16', '17', '18', '19', '20', '21']) fila(hora, Array(4).fill('NO_DISPONIBLE'));
+fila('22', ['PEDIR_1', 'NO_DISPONIBLE', 'ENTRA', 'PEDIR_VARIAS'], 'a');
+fila('23', ['PEDIR_1', 'PEDIR_1', 'ENTRA', 'NO_DISPONIBLE'], ['a', 'b']);
+fila('00', ['ENTRA', 'NO_DISPONIBLE', 'NO_DISPONIBLE', 'NO_DISPONIBLE']);
+tramos.push({ clave: 'sabado', slotId: 'Sabado-09:00', fechaHora: '2026-11-07T12:00:00Z', estado: 'PEDIR_VARIAS', parejasAAmpliar: ['a', 'b', 'c', 'd'] });
+const propsGrilla = { opciones: tramos, seleccion: null, onSeleccion: () => {}, describir: (o) => o.estado,
+  nombres: new Map([['a', 'Caruso / Vallejos'], ['b', 'Dávila / Arrieta']]), fijando: false, onCambioDia: () => {} };
+await act(async () => root.render(React.createElement(Grilla, propsGrilla)));
+const titulos = [...document.querySelectorAll('.pc-horarios-tramo')].map((e) => e.textContent);
+assert.ok(titulos.includes('13 a 15 h · pedirle a Dávila / Arrieta'), 'PEDIR_VARIAS no cambia el título del tramo visible');
+assert.ok(titulos.includes('22 h · pedirle a Caruso / Vallejos'));
+assert.ok(titulos.includes('23 h · pedirle a Caruso / Vallejos o a Dávila / Arrieta'));
+assert.ok(titulos.includes('00 h · entra en el horario de las dos parejas'));
+assert.ok(titulos.includes('16 a 21 h · sin horarios'));
+assert.ok(titulos.includes('09 h · hay que pedirle a varias parejas'), 'La jornada sin ENTRA/PEDIR_1 queda completa');
+const plegar = document.querySelector('.pc-horarios-plegar');
+assert.equal(plegar.textContent.trim(), '09 a 12 h · hay que pedirle a las dos parejas', 'El tramo mixto solo resume lo elegible');
+const inicio = (hora, minutos = '00') => document.querySelector(`[data-clave="Viernes-${hora}:${minutos}"]`);
+const flecha = async (elemento, key) => act(async () => {
+  elemento.focus(); elemento.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true }));
+});
+assert.equal(inicio('16'), null);
+assert.equal(inicio('13', '15'), null);
+assert.equal(inicio('13').closest('[role="row"]').children[2].getAttribute('aria-hidden'), 'true');
+assert.equal(inicio('13').closest('[role="row"]').children[2].textContent, '');
+assert.equal(inicio('13', '30').parentElement.getAttribute('aria-colindex'), '4');
+assert.match(inicio('00').getAttribute('aria-label'), /^sáb 00:00/);
+assert.ok([...document.querySelectorAll('[role="rowheader"]')].every((e) => !/sáb|dom/.test(e.textContent)));
+await flecha(inicio('07'), 'ArrowDown'); assert.equal(document.activeElement.dataset.clave, 'Viernes-13:00');
+await flecha(inicio('13'), 'ArrowRight'); assert.equal(document.activeElement.dataset.clave, 'Viernes-13:30');
+await flecha(inicio('15'), 'ArrowDown'); assert.equal(document.activeElement.dataset.clave, 'Viernes-22:00');
+await click(plegar);
+assert.ok([...document.querySelectorAll('.pc-horarios-tramo')].some((e) => e.textContent === '10 h · sin horarios'));
+assert.equal(inicio('10'), null);
+await flecha(inicio('09'), 'ArrowDown'); assert.equal(document.activeElement.dataset.clave, 'Viernes-11:00');
+await click(plegar); assert.equal(inicio('09'), null);
+await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, esDefinicion: true })));
+assert.ok(document.body.textContent.includes('00 h · entra en el horario de las cuatro parejas'));
+for (const vacias of [[], tramos.map((o) => ({ ...o, estado: 'NO_DISPONIBLE' }))]) {
+  await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, opciones: vacias })));
+  assert.equal(document.querySelector('[role="status"]').textContent, 'No hay horarios posibles para este partido con las canchas libres.');
+  assert.equal(document.querySelector('[role="grid"]'), null);
+  assert.equal(document.querySelector('.pc-horarios-leyenda'), null);
+}
+await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, opciones: tramos.map((o) => ({ ...o, estado: 'NO_DISPONIBLE', motivo: 'ESPERA_BASES' })) })));
+assert.equal(document.querySelector('[role="status"]').textContent, 'Se habilita cuando los dos primeros partidos tengan horario.');
+assert.equal(document.querySelector('[role="grid"]'), null);
 await act(async()=>root.unmount());
-console.log('PASS DOM: leyenda, estados sin color, pedidos, motivos, teclado, foco, trasnoche, carga sin cursor, doble envio y 409; fijaciones interceptadas');
+console.log('PASS DOM: tramos por pareja, horas sin horarios, huecos, flechas, trasnoche civil, definición, espera de bases, doble envío y 409; fijaciones interceptadas');
 }finally{await server.close();dom.window.close();}

@@ -12,7 +12,7 @@ export function agruparInicios(opciones) {
   });
 }
 
-// Los inicios no disponibles también se recorren para poder consultar su motivo.
+// Recorre las celdas presentes en las filas visibles y saltea los huecos.
 export function moverCelda(filas, fila, columna, tecla) {
   let f = fila, c = columna;
   if (tecla === 'Home' || tecla === 'End') {
