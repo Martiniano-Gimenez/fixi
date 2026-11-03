@@ -28,11 +28,13 @@ for (let i = 0; i < 50 && !cell('k3'); i++) {
   await act(async () => new Promise((r) => setTimeout(r, 20)));
 }
 assert.equal(document.querySelectorAll('[role="grid"]').length,2);
-assert.deepEqual([...document.querySelectorAll('.pc-horarios-leyenda li')].map(e=>e.textContent),['Entra','Pedirle a 1 pareja','Pedirle a 2 o m\u00e1s','No disponible']);
+assert.deepEqual([...document.querySelectorAll('.pc-horarios-leyenda li')].map(e=>e.textContent),['Entra (2)','Pedirle a 1 pareja (1)','Pedirle a 2 o m\u00e1s (1)','No disponible (2)']);
 assert.ok(!document.body.textContent.includes('Viabilidad por verificar'));
 await click(cell('k3'));assert.match(document.querySelector('[role="status"]').textContent,/Caruso \/ Vallejos ya juega/);assert.ok(!confirmar());assert.equal(cell('k3').getAttribute('aria-disabled'),'true');
 await click(cell('k4'));assert.match(document.querySelector('[role="status"]').textContent,/Primero tienen que tener horario/);assert.ok(!confirmar());
 await click(cell('k1'));assert.match(document.querySelector('[role="status"]').textContent,/vie 15:15 \u00b7 Pedile a Caruso/);assert.ok(confirmar());
+assert.match(document.querySelector('.pc-horarios-feedback').textContent,/Al confirmar, vie 15:15 se agrega a la disponibilidad de Caruso \/ Vallejos\. Hacelo solo si ya lo hablaste con ellas\./);
+assert.ok(!document.querySelector('.pc-horarios-feedback').textContent.includes('Confirmá cuando'));
 await act(async()=>{cell('k1').focus();cell('k1').dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));});assert.equal(document.activeElement.dataset.clave,'k2');
 await act(async()=>document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'End',bubbles:true})));assert.equal(document.activeElement.dataset.clave,'k3');
 await click(cancelar());assert.equal(document.activeElement.dataset.clave,'k1');assert.ok(!document.querySelector('.pc-horarios-feedback'));

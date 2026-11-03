@@ -200,7 +200,7 @@ export default function ElegirHorarioPartido({
             <div ref={feedbackRef} className="pc-horarios-feedback">
               <p className="pc-manual-copy" role="status" aria-atomic="true">{formatSlotCorto(seleccion.slotId)} · {describir(seleccion)}</p>
               {seleccion.estado !== 'NO_DISPONIBLE' && seleccion.parejasAAmpliar.length > 0 && (
-                <p className="pc-manual-copy">Confirmá cuando ya lo hayas hablado con {seleccion.parejasAAmpliar.length === 1 ? 'la pareja' : 'las parejas'}.</p>
+                <p className="pc-manual-copy">Al confirmar, {formatSlotCorto(seleccion.slotId)} se agrega a la disponibilidad de {enumerarParejas(seleccion.parejasAAmpliar.map((id) => nombres.get(id) || 'la pareja'))}. Hacelo solo si ya lo hablaste con ellas.</p>
               )}
               <div className="pc-manual-actions">
                 {seleccion.estado !== 'NO_DISPONIBLE' && (
