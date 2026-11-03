@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatPartidoHorario, formatSlotCorto } from '../utils/dateUtils';
-import GrillaHorariosPartido from './GrillaHorariosPartido';
+
+const GrillaHorariosPartido = lazy(() => import('./GrillaHorariosPartido'));
 
 const tieneHorario = (partido) => partido.estado === 'FIJO' || Boolean(partido.fechaHora && partido.canchaNumero);
 
@@ -34,7 +35,7 @@ function enumerarParejas(nombres) {
 
 export default function ElegirHorarioPartido({
   torneoId, categoriaId, zonaId, revision, partido, parejas, abierto, onAbiertoChange, onSaved, onRecheck,
-  mostrarPartido = true,
+  mostrarPartido = true, mostrarBoton = true,
 }) {
   const [resultado, setResultado] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -167,7 +168,7 @@ export default function ElegirHorarioPartido({
   return (
     <div className="pc-horario-partido">
       {mostrarPartido && <FilaPartidoZona partido={partido} nombres={nombres} badge={fijo ? 'fijo' : null} />}
-      {!fijo && (
+      {!fijo && mostrarBoton && (
         <button ref={abrirRef} type="button" className="pc-manual-button" disabled={fijando || !revision}
           aria-expanded={estaAbierto} aria-controls={`${seccionId}-partido-${partido.posicionEnRonda}`} onClick={abrir}>
           {estaAbierto ? 'Ocultar horarios' : 'Elegir horario'}
@@ -180,8 +181,10 @@ export default function ElegirHorarioPartido({
         <div ref={seccionRef} id={`${seccionId}-partido-${partido.posicionEnRonda}`}
           className={`pc-manual-opciones${mostrarFeedback ? ' has-feedback' : ''}`} aria-busy={cargando}>
           {vigente && resultado.opciones.length > 0 && (
-            <GrillaHorariosPartido opciones={resultado.opciones} seleccion={seleccion} onSeleccion={setSeleccion}
-              describir={describir} fijando={fijando} onCambioDia={() => setSeleccion(null)} />
+            <Suspense fallback={<p className="pc-manual-status" role="status">Abriendo la grilla…</p>}>
+              <GrillaHorariosPartido opciones={resultado.opciones} seleccion={seleccion} onSeleccion={setSeleccion}
+                describir={describir} fijando={fijando} onCambioDia={() => setSeleccion(null)} />
+            </Suspense>
           )}
           {(!vigente || cargando) && (
             <div className="pc-manual-status" role="status"><Loader2 size={16} className="pc-propuesta-spinner" aria-hidden="true" />Buscando horarios…</div>

@@ -1106,6 +1106,14 @@ body:has(.panel) {
 .panel .pc-page-torneo { margin: var(--e-2) 0 0; color: var(--gris); overflow-wrap: anywhere; }
 .panel .pc-page-summary { margin: var(--e-2) 0 0; color: var(--tinta-2); overflow-wrap: anywhere; }
 .panel .pc-page-body { min-width: 0; }
+.panel .pc-resolver { min-width: 0; padding: var(--e-4); border-radius: var(--r-tarjeta); background: var(--superficie); box-shadow: var(--sombra-1); }
+.panel .pc-resolver-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--e-3); }
+.panel .pc-resolver-titulo { min-width: 0; margin: 0; color: var(--tinta); font-size: var(--t-17); scroll-margin-block-start: 90px; }
+.panel .pc-resolver-titulo:focus { outline: none; }
+.panel .pc-resolver-navegacion { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: var(--e-2); margin-block: var(--e-4); }
+.panel .pc-resolver-navegacion > p { text-align: center; }
+.panel .pc-resolver-contexto { margin: 0 0 var(--e-3); color: var(--tinta-2); font-size: var(--t-13); overflow-wrap: anywhere; }
+@media (max-width: 374px) { .panel .pc-resolver { padding: var(--e-2); } }
 .panel .pc-page-bar { position: fixed; inset: auto 0 0; z-index: 30; padding: var(--e-3) 0 calc(var(--e-3) + env(safe-area-inset-bottom, 0px)); background: var(--superficie); box-shadow: var(--sombra-2); }
 .panel .pc-page-actions { max-width: 1180px; margin-inline: auto; padding-inline: var(--e-5); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--e-3); min-width: 0; }
 .panel .pc-page-secondary { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); min-width: 0; }

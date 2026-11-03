@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronLeft, ChevronUp, Info, Layers, Play, RefreshCw } from 'lucide-react';
 import { api } from '../../api/client';
@@ -9,6 +9,8 @@ import PartidosZonaManual from '../../components/PartidosZonaManual';
 import ElegirHorarioPartido from '../../components/ElegirHorarioPartido';
 import { agruparSlotsEnRangos } from '../../utils/disponibilidadUtils';
 import usePreCheckInicio from './usePreCheckInicio';
+
+const ResolverPartidos = lazy(() => import('../../components/ResolverPartidos'));
 
 const BADGE_POR_MOTIVO = {
   SIN_FRANJA_COMUN: 'Sin horarios en común',
@@ -23,6 +25,8 @@ export default function TorneoInicio() {
   const [torneo, setTorneo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [modoResolver, setModoResolver] = useState(false);
+  const resolverRef = useRef(null);
   const tituloRef = useRef(null);
   const paginaRef = useRef(null);
   const barraRef = useRef(null);
@@ -53,7 +57,7 @@ export default function TorneoInicio() {
     setPartidoManualAbierto, hayCambiosGuardados, setHayCambiosGuardados,
     confirmarResorteoModalOpen, setConfirmarResorteoModalOpen, avisoSesionReiniciada,
     avisoDestrabe, categoriasConflictosOrdenadas, allConflictosExpanded,
-    toggleCategoriaConflicto, handleToggleAllConflictos, handlePreCheckInicio,
+    toggleCategoriaConflicto, handleToggleAllConflictos, handlePreCheckInicio, aplicarPreCheck,
     executeIniciarTorneo, executeIniciarTorneoEmergencia,
   } = usePreCheckInicio(id, fetchData, () => navigate(`/admin/torneos/${id}`, { replace: true }));
 
@@ -101,8 +105,12 @@ export default function TorneoInicio() {
 
   const totalConflictos = categoriasConflictosOrdenadas.reduce((total, c) => total + c.partidosSinHorario.length, 0);
   const totalCategorias = categoriasConflictosOrdenadas.length;
-  const ocupado = loading || verificandoInicio || iniciandoTorneo;
+  const ocupado = loading || verificandoInicio || iniciandoTorneo || Boolean(partidoManualAbierto?.fijando);
   const confirmacionAbierta = iniciarModalOpen || confirmarEmergenciaModalOpen || confirmarResorteoModalOpen;
+  const cerrarRecorrido = () => {
+    setModoResolver(false); setPartidoManualAbierto(null);
+    (resolverRef.current || tituloRef.current)?.focus({ preventScroll: true });
+  };
 
   return (
     <div className="pc-page" ref={paginaRef}>
@@ -124,11 +132,19 @@ export default function TorneoInicio() {
             </span>
           )}
         </div>
-        {totalCategorias > 1 && (
-          <button type="button" className="pm-button pc-compact" onClick={handleToggleAllConflictos}>
-            {allConflictosExpanded ? 'Cerrar todas' : 'Abrir todas'}
-          </button>
-        )}
+        <div className="pc-page-secondary">
+          {totalConflictos > 0 && !modoResolver && (
+            <button ref={resolverRef} type="button" className="pm-button" disabled={ocupado || !revisionPreCheck || confirmacionAbierta}
+              onClick={() => { setPartidoManualAbierto(null); setModoResolver(true); }}>
+              Resolver de a uno
+            </button>
+          )}
+          {totalCategorias > 1 && !modoResolver && (
+            <button type="button" className="pm-button pc-compact" onClick={handleToggleAllConflictos}>
+              {allConflictosExpanded ? 'Cerrar todas' : 'Abrir todas'}
+            </button>
+          )}
+        </div>
       </header>
 
       <section className="pc-page-body" aria-label="Vista previa del inicio" aria-busy={loading || verificandoInicio}>
@@ -160,7 +176,14 @@ export default function TorneoInicio() {
           </div>
         )}
 
-        <div className="pc-conflict-list">
+        {modoResolver && (
+          <Suspense fallback={<p className="pc-manual-status" role="status">Abriendo el recorrido…</p>}>
+            <ResolverPartidos categorias={categoriasConflictosOrdenadas} torneoId={id} revision={revisionPreCheck}
+              abierto={partidoManualAbierto} onAbiertoChange={setPartidoManualAbierto} onSaved={aplicarPreCheck}
+              onRecheck={() => handlePreCheckInicio(true)} onCerrar={cerrarRecorrido} ocupado={ocupado || confirmacionAbierta} />
+          </Suspense>
+        )}
+        {!modoResolver && <div className="pc-conflict-list">
           {categoriasConflictosOrdenadas.map((c) => {
             const isExpanded = expandedCategoriasConflictos.has(c.categoriaId);
 
@@ -249,10 +272,7 @@ export default function TorneoInicio() {
                               parejas={p.parejasManuales || []}
                               abierto={partidoManualAbierto}
                               onAbiertoChange={setPartidoManualAbierto}
-                              onSaved={async () => {
-                                setHayCambiosGuardados(true);
-                                await handlePreCheckInicio(true);
-                              }}
+                              onSaved={aplicarPreCheck}
                               onRecheck={() => handlePreCheckInicio(true)}
                             >
                             <div className="pc-manual-pairs">
@@ -313,10 +333,7 @@ export default function TorneoInicio() {
                               mostrarPartido={false}
                               abierto={partidoManualAbierto}
                               onAbiertoChange={setPartidoManualAbierto}
-                              onSaved={async () => {
-                                setHayCambiosGuardados(true);
-                                await handlePreCheckInicio(true);
-                              }}
+                              onSaved={aplicarPreCheck}
                               onRecheck={() => handlePreCheckInicio(true)}
                             />
                           </div>
@@ -336,7 +353,7 @@ export default function TorneoInicio() {
               </div>
             );
           })}
-        </div>
+        </div>}
 
         {hayCambiosGuardados && (
           <span className="pc-notice pc-danger-notice">

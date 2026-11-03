@@ -104,6 +104,55 @@ export default function usePreCheckInicio(id, fetchData, onIniciado) {
     }
   };
 
+  const aplicarPreCheck = (res, isReCheckBool = true, forceResetBool = false) => {
+    setHayCambiosGuardados(false);
+    setRevisionPreCheck(res.revision || null);
+    setAvisoSesionReiniciada(Boolean(res.sesionReiniciada));
+
+    if (res.grillaOrganizador) {
+      setGrillaOrganizador(res.grillaOrganizador);
+    }
+    if (res.bloqueado) {
+      const conflictos = res.conflictos || [];
+      const total = conflictos.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0);
+      // En un re-check, explicar si destrabar una zona manual dejó partidos sin cancha
+      // (el contador cuenta partidos y puede subir).
+      setAvisoDestrabe(
+        isReCheckBool && !forceResetBool && !res.sesionReiniciada
+          ? armarAvisoDestrabe(conflictosBloqueo, conflictos)
+          : null
+      );
+      setConflictosBloqueo(conflictos);
+      setPlanEmergenciaId(res.planEmergenciaId || null);
+      setPreCheckAprobado(false);
+      setPlanId(null);
+      if (conteoInicialConflictos === null || !isReCheckBool || forceResetBool) {
+        setConteoInicialConflictos(total);
+      }
+
+      // Actualizar acordeón de categorías con preservación de estado
+      const ordenadas = ordenarCategoriasPorUrgencia(conflictos);
+      setExpandedCategoriasConflictos((prev) => {
+        const categoriasRestantesIds = new Set(ordenadas.map((c) => c.categoriaId));
+        const activas = new Set(Array.from(prev).filter((id) => categoriasRestantesIds.has(id)));
+        if (activas.size > 0) {
+          return activas;
+        }
+        if (ordenadas.length > 0) {
+          return new Set([ordenadas[0].categoriaId]);
+        }
+        return new Set();
+      });
+    } else {
+      setAvisoDestrabe(null);
+      setPlanId(res.planId);
+      setPlanEmergenciaId(null);
+      setExpandedCategoriasConflictos(new Set());
+      setConflictosBloqueo([]);
+      setPreCheckAprobado(true);
+    }
+  };
+
   const handlePreCheckInicio = async (isReCheck = false, forceReset = false) => {
     const isReCheckBool = isReCheck === true;
     const forceResetBool = forceReset === true;
@@ -114,51 +163,8 @@ export default function usePreCheckInicio(id, fetchData, onIniciado) {
         isReCheck: isReCheckBool,
         forceReset: forceResetBool,
       });
-      setRevisionPreCheck(res.revision || null);
-      setAvisoSesionReiniciada(Boolean(res.sesionReiniciada));
-
-      if (res.grillaOrganizador) {
-        setGrillaOrganizador(res.grillaOrganizador);
-      }
-      if (res.bloqueado) {
-        const conflictos = res.conflictos || [];
-        const total = conflictos.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0);
-        // En un re-check, explicar si destrabar una zona manual dejó partidos sin cancha
-        // (el contador cuenta partidos y puede subir).
-        setAvisoDestrabe(
-          isReCheckBool && !forceResetBool && !res.sesionReiniciada
-            ? armarAvisoDestrabe(conflictosBloqueo, conflictos)
-            : null
-        );
-        setConflictosBloqueo(conflictos);
-        setPlanEmergenciaId(res.planEmergenciaId || null);
-        setPreCheckAprobado(false);
-        setPlanId(null);
-        if (conteoInicialConflictos === null || !isReCheck || forceReset) {
-          setConteoInicialConflictos(total);
-        }
-
-        // Actualizar acordeón de categorías con preservación de estado
-        const ordenadas = ordenarCategoriasPorUrgencia(conflictos);
-        setExpandedCategoriasConflictos((prev) => {
-          const categoriasRestantesIds = new Set(ordenadas.map((c) => c.categoriaId));
-          const activas = new Set(Array.from(prev).filter((id) => categoriasRestantesIds.has(id)));
-          if (activas.size > 0) {
-            return activas;
-          }
-          if (ordenadas.length > 0) {
-            return new Set([ordenadas[0].categoriaId]);
-          }
-          return new Set();
-        });
-      } else {
-        setAvisoDestrabe(null);
-        setPlanId(res.planId);
-        setPlanEmergenciaId(null);
-        setExpandedCategoriasConflictos(new Set());
-        setConflictosBloqueo([]);
-        setPreCheckAprobado(true);
-      }
+      aplicarPreCheck(res, isReCheckBool, forceResetBool);
+      return res;
     } catch (err) {
       alert(err.message || 'Error al verificar la disponibilidad de las categorías.');
     } finally {
@@ -237,6 +243,7 @@ export default function usePreCheckInicio(id, fetchData, onIniciado) {
     toggleCategoriaConflicto,
     handleToggleAllConflictos,
     handlePreCheckInicio,
+    aplicarPreCheck,
     executeIniciarTorneo,
     executeIniciarTorneoEmergencia,
   };

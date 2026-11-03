@@ -24,6 +24,9 @@ const cell=k=>document.querySelector(`[data-clave="${k}"]`);
 const confirmar=()=>[...document.querySelectorAll('.pc-horarios-feedback button')].find(b=>b.textContent==='Confirmar');
 const cancelar=()=>[...document.querySelectorAll('.pc-horarios-feedback button')].find(b=>b.textContent==='Cancelar');
 await act(async()=>root.render(React.createElement(App)));
+for (let i = 0; i < 50 && !cell('k3'); i++) {
+  await act(async () => new Promise((r) => setTimeout(r, 20)));
+}
 assert.equal(document.querySelectorAll('[role="grid"]').length,2);
 assert.deepEqual([...document.querySelectorAll('.pc-horarios-leyenda li')].map(e=>e.textContent),['Entra','Pedirle a 1 pareja','Pedirle a 2 o m\u00e1s','No disponible']);
 assert.ok(!document.body.textContent.includes('Viabilidad por verificar'));
