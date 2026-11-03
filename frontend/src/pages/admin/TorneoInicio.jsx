@@ -114,7 +114,7 @@ export default function TorneoInicio() {
           <h1 ref={tituloRef} tabIndex={-1} className="pc-page-title">Iniciar torneo</h1>
           {torneo && <p className="pc-page-torneo">{torneo.nombre}</p>}
           <p className="pc-page-summary" role="status">
-            {loading ? 'Verificando horarios…' : error ? error : preCheckAprobado ? 'Todo listo para iniciar' : conflictosBloqueo !== null
+            {loading || verificandoInicio ? 'Verificando horarios…' : error ? error : preCheckAprobado ? 'Todo listo para iniciar' : conflictosBloqueo !== null
               ? `${totalConflictos} ${totalConflictos === 1 ? 'conflicto' : 'conflictos'} en ${totalCategorias} ${totalCategorias === 1 ? 'categoría' : 'categorías'}`
               : 'No se pudo verificar el torneo.'}
           </p>
@@ -126,22 +126,20 @@ export default function TorneoInicio() {
         </div>
         {totalCategorias > 1 && (
           <button type="button" className="pm-button pc-compact" onClick={handleToggleAllConflictos}>
-            {allConflictosExpanded ? 'Colapsar todas' : 'Expandir todas'}
+            {allConflictosExpanded ? 'Cerrar todas' : 'Expandir todas'}
           </button>
         )}
       </header>
 
       <section className="pc-page-body" aria-label="Vista previa del inicio" aria-busy={loading || verificandoInicio}>
-        {loading && <p className="pc-page-loading"><RefreshCw size={18} className="pc-spin" aria-hidden="true" /> Verificando turnos…</p>}
-        {preCheckAprobado && <>
-          <div className="pc-success-note">Se verificó la asignación global de todas las categorías en borrador. No existen colisiones de cancha ni incompatibilidades horarias.</div>
-          <p className="pc-copy">Al confirmar, se guardarán las zonas y los horarios de cada partido de forma definitiva en el torneo.</p>
-        </>}
+        {preCheckAprobado && (
+          <div className="pc-success-note">Todos los partidos tienen cancha y horario.</div>
+        )}
         {avisoSesionReiniciada && (
           <div className="pc-notice pc-session-notice">
             <Info size={16} className="pc-icon" />
             <span>
-              El servidor se reinició o la sesión expiró. Se recalculó la vista previa con los horarios guardados.
+              La vista previa se volvió a armar con los horarios guardados.
             </span>
           </div>
         )}
@@ -345,7 +343,7 @@ export default function TorneoInicio() {
         {hayCambiosGuardados && (
           <span className="pc-notice pc-danger-notice">
             <AlertTriangle size={13} />
-            Hay cambios guardados. Hacé clic en "Volver a verificar".
+            Guardaste cambios. Volvé a verificar los horarios.
           </span>
         )}
 
@@ -366,7 +364,7 @@ export default function TorneoInicio() {
           <button type="button" className="pm-button pm-primary" disabled={ocupado || confirmacionAbierta || Boolean(error)}
             onClick={() => preCheckAprobado ? setIniciarModalOpen(true) : handlePreCheckInicio(true)}>
             {preCheckAprobado ? <Play size={16} aria-hidden="true" /> : <RefreshCw size={16} className={verificandoInicio ? 'pc-spin' : ''} aria-hidden="true" />}
-            {iniciandoTorneo ? 'Iniciando torneo…' : verificandoInicio ? 'Verificando…' : preCheckAprobado ? 'Iniciar torneo' : 'Volver a verificar'}
+            {iniciandoTorneo ? 'Iniciando torneo…' : preCheckAprobado ? 'Iniciar torneo' : 'Volver a verificar'}
           </button>
         </div>
       </footer>
@@ -374,15 +372,14 @@ export default function TorneoInicio() {
       {iniciarModalOpen && (
         <div className="pm-overlay pm-confirm-overlay">
           <div className="pm-modal pm-confirm" role="dialog" aria-modal="true" aria-labelledby="pc-start-title">
-            <h2 id="pc-start-title" className="pm-header pm-title">Iniciar Torneo y Asignar Horarios</h2>
+            <h2 id="pc-start-title" className="pm-header pm-title">¿Iniciar el torneo?</h2>
             <div className="pm-body">
-              <p className="pc-copy">Se generarán las zonas para todas las categorías en borrador y se asignarán los turnos y canchas optimizados sin solapamientos.</p>
-              <p className="pc-copy">¿Deseas continuar?</p>
+              <p className="pc-copy">Se guardan las zonas y los horarios de cada partido de las categorías en borrador. Después vas a poder cambiar horarios desde el torneo en vivo.</p>
             </div>
             <div className="pm-footer">
               <button ref={cancelarInicioRef} type="button" className="pm-button" onClick={() => setIniciarModalOpen(false)} disabled={iniciandoTorneo}>Cancelar</button>
               <button type="button" className="pm-button pm-primary" onClick={executeIniciarTorneo} disabled={iniciandoTorneo}>
-                {iniciandoTorneo ? 'Iniciando torneo…' : 'Confirmar e Iniciar'}
+                {iniciandoTorneo ? 'Iniciando torneo…' : 'Iniciar torneo'}
               </button>
             </div>
           </div>
@@ -425,7 +422,7 @@ export default function TorneoInicio() {
               </div>
 
               <p className="pc-muted pc-spaced">
-                Las zonas y cuadros se generarán normalmente y el torneo pasará a estado <strong>EN CURSO</strong>. Podrás asignarles cancha y horario a estos partidos en cualquier momento desde el panel de administración en tiempo real.
+                El torneo pasa a estar en curso. Vas a poder asignarles cancha y horario a estos partidos desde el torneo en vivo.
               </p>
 
             </div>
