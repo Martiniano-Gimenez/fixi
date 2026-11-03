@@ -377,7 +377,42 @@ async function testZonaNoManual() {
 async function main() {
   await ensureTestDb();
   const { server, baseUrl: url } = await startTestServer(); baseUrl = url;
-  try { await testFijacion(); await testConflictos(); await testMini(); await testIncompleta(); await testPropuestaEInicio(); await testDeterminismo(); await testInicioConPlanInvalidadoDuranteEspera(); await testZonaNoManual(); }
+  try { await testFijacion(); await testConflictos(); await testMini(); await testIncompleta(); await testPropuestaEInicio(); await testDeterminismo(); await testInicioConPlanInvalidadoDuranteEspera(); await testZonaNoManual(); await testQuitar(); }
   finally { await new Promise((r) => server.close(r)); await prisma.$disconnect(); }
+}
+async function testQuitar() {
+  const c = await crearCaso('quitar-horario');
+  let pre = await precheck(c);
+  pre = await fijar(c, await elegir(c, pre, 1, 'Viernes-15:45'));
+  const disponibilidadAntes = await disponibilidad(c);
+  assert.ok(pre.partidosFijados.some((p) => p.partido.posicionEnRonda === 1));
+  const data = query(c, pre, 1);
+  assert.equal((await post(c, '/partidos/quitar', null)).status, 400);
+  const txOriginal = prisma.$transaction;
+  prisma.$transaction = (fn, opts) => txOriginal.call(prisma, async (tx) => {
+    tx.precheckPlan.updateMany = async () => { throw new Error('rollback quitar'); };
+    return fn(tx);
+  }, opts);
+  try { assert.equal((await post(c, '/partidos/quitar', data)).status, 500); }
+  finally { prisma.$transaction = txOriginal; }
+  assert.equal(partido(c, 1).fijadoManual, true);
+  const respuestas = await Promise.all([post(c, '/partidos/quitar', data), post(c, '/partidos/quitar', data)]);
+  assert.deepEqual(respuestas.map((r) => r.status).sort(), [200, 409]);
+  assert.deepEqual(await disponibilidad(c), disponibilidadAntes);
+  assert.equal(partido(c, 1).fechaHora, null); assert.equal(partido(c, 1).pendienteManual, true);
+  svc.preCheckSessions.delete(c.torneo.id);
+  pre = await precheck(c);
+  assert.equal(partido(c, 1).fechaHora, null, 'Pendiente manual sobrevive reinicio y re-check');
+  pre = await fijar(c, await elegir(c, pre, 1, 'Viernes-15:45'));
+  assert.equal(partido(c, 1).pendienteManual, false);
+  const mini = await crearCaso('quitar-mini', [['Viernes-13:00'], ['Viernes-14:30'], ['Sabado-09:00'], ['Sabado-10:30']]);
+  let mp = await precheck(mini);
+  for (const [pos, slot] of [[1, 'Viernes-09:00'], [2, 'Viernes-10:15'], [3, 'Viernes-11:30']]) mp = await fijar(mini, await elegir(mini, mp, pos, slot));
+  assert.equal((await post(mini, '/partidos/quitar', query(mini, mp, 1))).status, 409);
+  const liberada = await post(mini, '/partidos/quitar', query(mini, mp, 3)); assert.equal(liberada.status, 200);
+  const base = await post(mini, '/partidos/quitar', query(mini, liberada.body, 1)); assert.equal(base.status, 200);
+  assert.equal(partido(mini, 1).pendienteManual, true);
+  assert.equal(partido(mini, 4).fechaHora, null, 'Liberar base retira definiciones automaticas');
+  console.log('PASS: quitar aditivo, rollback, concurrencia, recuperacion pendiente y dependencias MINI');
 }
 main().then(() => process.exit(0)).catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1); });

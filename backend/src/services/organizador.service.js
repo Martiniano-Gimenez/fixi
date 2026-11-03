@@ -250,6 +250,7 @@ function evaluarAsignacionesIncrementales(args) {
   for (const c of categoriasPlan) for (const z of c.zonas) {
     // Terminar el intento y eventual fallback de una zona antes de reservar para la siguiente.
     evaluarAsignacionesIncrementalesBase({ ...entrada, zonaIntento: z });
+    if (z.partidos.some((p) => p.pendienteManual)) continue;
     if (z.parejaIds.length < 2 || z.parejaIds.length > 4) continue;
     if (!z.requiereArmadoManual && !z.partidos.some((p) => p.sinHorarioAsignado)) continue;
     const ajenos = categoriasPlan.map((cat) => ({ ...cat, zonas: cat.zonas.filter((zona) => zona !== z) }));
@@ -364,7 +365,7 @@ function evaluarAsignacionesIncrementalesBase({
     for (const zona of cPlan.zonas) {
       if (zonaIntento && zona !== zonaIntento) continue;
       for (const partido of zona.partidos) {
-        if (!partido.sinHorarioAsignado || (zona.formato === 'MINI_BRACKET' && partido.posicionEnRonda >= 3)) continue;
+        if (partido.pendienteManual || !partido.sinHorarioAsignado || (zona.formato === 'MINI_BRACKET' && partido.posicionEnRonda >= 3)) continue;
 
         const par1 = parejasMap.get(partido.pareja1Id);
         const par2 = parejasMap.get(partido.pareja2Id);
@@ -496,7 +497,7 @@ function evaluarAsignacionesIncrementalesBase({
         commonSlots4 = ordenarSlotsCronologicamente(commonSlots4);
       }
 
-      const matchesToAssign = [p3, p4].filter((p) => p && p.sinHorarioAsignado);
+      const matchesToAssign = [p3, p4].filter((p) => p && p.sinHorarioAsignado && !p.pendienteManual);
       for (const m of matchesToAssign) {
         let asignado = false;
 
@@ -706,7 +707,7 @@ function evaluarAsignacionesIncrementalesBase({
           // Procesar partidos sin horario de esta zona en el loop normal
           for (const partido of z.partidos) {
             if (soloConflictos) break;
-            if (!partido.sinHorarioAsignado || (z.formato === 'MINI_BRACKET' && partido.posicionEnRonda >= 3)) continue;
+            if (partido.pendienteManual || !partido.sinHorarioAsignado || (z.formato === 'MINI_BRACKET' && partido.posicionEnRonda >= 3)) continue;
 
             const par1 = parejasMap.get(partido.pareja1Id);
             const par2 = parejasMap.get(partido.pareja2Id);
@@ -955,7 +956,7 @@ function evaluarAsignacionesIncrementalesBase({
         const shared = interseccionVentanas(win1, win2);
 
         const tieneFranjaComun = shared.some((w) => w.endMs - w.startMs >= DURACION_MS);
-        const motivo = tieneFranjaComun ? 'SIN_CANCHA_DISPONIBLE' : 'SIN_FRANJA_COMUN';
+        const motivo = p.pendienteManual ? 'PARTIDO_SIN_HORARIO' : tieneFranjaComun ? 'SIN_CANCHA_DISPONIBLE' : 'SIN_FRANJA_COMUN';
 
         const slotsViables = allSlotIds.filter((sId) => {
           const info = slotsEvaluadosMap.get(sId);
@@ -2587,6 +2588,7 @@ module.exports = {
   getPropuestasZona: servicioPropuestas.solicitar,
   getOpcionesPartidoZona: servicioPropuestas.opcionesPartido,
   fijarPartidoZona: servicioPropuestas.fijarPartido,
+  quitarPartidoZona: servicioPropuestas.quitarPartido,
   aplicarPropuestaZona: servicioPropuestas.aplicar,
   iniciarTorneoMultiCategoria,
   getPartidosSinHorarioTorneo,

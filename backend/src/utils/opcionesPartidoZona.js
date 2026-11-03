@@ -20,7 +20,8 @@ function listarPartidosZona(zona) {
         : p.posicionEnRonda === 3 ? 'Ganador P1 vs Ganador P2' : 'Perdedor P1 vs Perdedor P2') } : {}),
       fechaHora: tieneHorario(p) ? new Date(p.fechaHora).toISOString() : null,
       canchaNumero: tieneHorario(p) ? p.canchaNumero : null,
-      estado: tieneHorario(p) ? 'FIJO' : 'PENDIENTE' };
+        fijadoManual: Boolean(p.fijadoManual),
+        estado: tieneHorario(p) ? 'FIJO' : 'PENDIENTE' };
   });
 }
 

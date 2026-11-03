@@ -43,7 +43,7 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
       estado.torneo.categorias.map((c) => [c.id, c.nombre, c.estado, c.parejas.map((p) => [p.id, p.orden, p.jugador1, p.jugador2, p.resolucionManual,
         p.slotsSeleccionados.map((s) => s.slotId)])]), estado.externos,
       sesion.categoriasPlan.map((c) => [c.categoriaId, c.zonas.map((z) => [z.id, z.nombre, z.formato, z.requiereArmadoManual,
-        z.parejaIds, z.partidos.map((p) => [p.posicionEnRonda, p.pareja1Id, p.pareja2Id, p.fechaHora, p.canchaNumero, p.sinHorarioAsignado, Boolean(p.fijadoManual)])])]),
+        z.parejaIds, z.partidos.map((p) => [p.posicionEnRonda, p.pareja1Id, p.pareja2Id, p.fechaHora, p.canchaNumero, p.sinHorarioAsignado, Boolean(p.fijadoManual), Boolean(p.pendienteManual)])])]),
     ])).digest('hex');
   }
   function contexto(estado, sesion, zona) {
@@ -97,6 +97,15 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
       }
     }
     respuesta.revision = sesion.revision;
+    respuesta.partidosFijados = sesion.categoriasPlan.flatMap((c) => c.zonas.flatMap((z) => {
+      const parejas = z.parejaIds.map((id) => {
+        const p = estado.torneo.categorias.flatMap((cat) => cat.parejas).find((p) => p.id === id);
+        return { id, nombre: `${p.jugador1} / ${p.jugador2}`, slotIds: p.slotsSeleccionados.map((s) => s.slotId) };
+      });
+      return listarPartidosZona(z).filter((p) => p.fijadoManual).map((partido) => ({
+        categoriaId: c.categoriaId, nombreCategoria: c.nombre, zonaId: z.id, zona: z.nombre, parejas, partido,
+      }));
+    }));
     return respuesta;
   }
   const nomina = (estado) => estado.torneo.categorias.filter((c) => c.estado === 'BORRADOR' && c.parejas.length)
@@ -262,7 +271,7 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     // Adoptar solo despues del commit.
     for (const p of guardada.zona.partidos) {
       const q = guardada.propuesta.partidosPropuestos.find((q) => q.posicionEnRonda === p.posicionEnRonda);
-      p.fechaHora = new Date(q.fechaHora); p.canchaNumero = q.canchaNumero; p.sinHorarioAsignado = false; p.fijadoManual = true;
+      p.fechaHora = new Date(q.fechaHora); p.canchaNumero = q.canchaNumero; p.sinHorarioAsignado = false; p.fijadoManual = true; p.pendienteManual = false;
     }
     guardada.zona.requiereArmadoManual = false;
     for (const [key, plan] of planesCache) if (plan.torneoId === id) planesCache.delete(key);
@@ -366,8 +375,51 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     sesion.guardadoRevision = revisionGuardada;
     // La memoria se actualiza únicamente tras confirmar las altas aditivas en la base.
     Object.assign(partido, { fechaHora: new Date(recalculada.fechaHora), canchaNumero: recalculada.canchaNumero,
-      sinHorarioAsignado: false, fijadoManual: true });
+      sinHorarioAsignado: false, fijadoManual: true, pendienteManual: false });
     reconstruirOcupacion(sesion, estado.club.cantidadCanchas);
+    for (const [key, plan] of planesCache) if (plan.torneoId === id) planesCache.delete(key);
+    return obtener(org, id, { isReCheck: true });
+  }
+  async function quitarPartido(org, id, data = {}) {
+    const { categoriaId, zonaId, posicionEnRonda, revision } = data || {};
+    if (![categoriaId, zonaId, revision].every((v) => typeof v === 'string' && v) ||
+        !Number.isSafeInteger(posicionEnRonda) || posicionEnRonda < 1) {
+      throw error(400, 'Indicá la categoría, la zona, el partido y la revisión.', 'FIJACION_PARTIDO_INVALIDA');
+    }
+    const estado = await leerEstado(prisma, org, id), sesion = preCheckSessions.get(id);
+    if (!sesion || sesion.expiresAt <= Date.now() || sesion.revision !== revision) {
+      return rechazar(org, id, 'El pre-check cambió. Volvé a verificar.', 'REVISION_PRECHECK_VIEJA');
+    }
+    const candidata = structuredClone(sesion);
+    const zona = candidata.categoriasPlan.find((c) => c.categoriaId === categoriaId)?.zonas.find((z) => z.id === zonaId);
+    const partido = zona?.partidos.find((p) => p.posicionEnRonda === posicionEnRonda);
+    if (!partido) throw error(404, 'El partido no pertenece a este pre-check.', 'PARTIDO_PRECHECK_NO_ENCONTRADO');
+    if (!partido.fijadoManual) return rechazar(org, id, 'El partido no tiene un horario fijado.', 'PARTIDO_NO_FIJADO');
+    if (zona.formato === 'MINI_BRACKET' && posicionEnRonda <= 2 && zona.partidos.some((p) => p.posicionEnRonda >= 3 && p.fijadoManual)) {
+      throw error(409, 'Primero quitá los horarios fijados de las definiciones (P3 y P4).', 'DEFINICIONES_FIJADAS');
+    }
+    Object.assign(partido, { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true, fijadoManual: false, pendienteManual: true });
+    if (zona.formato === 'MINI_BRACKET' && posicionEnRonda <= 2) {
+      for (const p of zona.partidos.filter((p) => p.posicionEnRonda >= 3)) {
+        Object.assign(p, { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true });
+      }
+    }
+    let guardadoRevision;
+    try {
+      guardadoRevision = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`UPDATE "Torneo" SET "inscripcionAbierta" = "inscripcionAbierta" WHERE "id" = ${id}`;
+        const actual = await leerEstado(tx, org, id);
+        if (actual.torneo.categorias.find((c) => c.id === categoriaId)?.estado !== 'BORRADOR' ||
+            firma(actual, sesion) !== sesion.propuestasFirma) throw conflictoPlan();
+        return guardarPlan(tx, candidata, firma(actual, candidata));
+      }, { timeout: 10_000 });
+    } catch (e) {
+      if (e.statusCode === 409) return rechazar(org, id, e.message, e.codigo);
+      throw e;
+    }
+    candidata.guardadoRevision = guardadoRevision;
+    reconstruirOcupacion(candidata, estado.club.cantidadCanchas);
+    preCheckSessions.set(id, candidata);
     for (const [key, plan] of planesCache) if (plan.torneoId === id) planesCache.delete(key);
     return obtener(org, id, { isReCheck: true });
   }
@@ -381,6 +433,7 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     aplicar: (org, id, data) => encolar(id, () => aplicar(org, id, data)),
     opcionesPartido: (org, id, data) => encolar(id, () => opcionesPartido(org, id, data)),
     fijarPartido: (org, id, data) => encolar(id, () => fijarPartido(org, id, data)),
+    quitarPartido: (org, id, data) => encolar(id, () => quitarPartido(org, id, data)),
   };
 }
 

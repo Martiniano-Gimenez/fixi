@@ -56,7 +56,7 @@ export default function TorneoInicio() {
     grillaOrganizador, preCheckAprobado, revisionPreCheck, partidoManualAbierto,
     setPartidoManualAbierto, hayCambiosGuardados, setHayCambiosGuardados,
     confirmarResorteoModalOpen, setConfirmarResorteoModalOpen, avisoSesionReiniciada,
-    avisoDestrabe, nominaCambio, categoriasConflictosOrdenadas, allConflictosExpanded,
+    avisoDestrabe, nominaCambio, partidosFijados, categoriasConflictosOrdenadas, allConflictosExpanded,
     toggleCategoriaConflicto, handleToggleAllConflictos, handlePreCheckInicio, aplicarPreCheck,
     executeIniciarTorneo, executeIniciarTorneoEmergencia,
   } = usePreCheckInicio(id, fetchData, () => navigate(`/admin/torneos/${id}`, { replace: true }));
@@ -362,6 +362,20 @@ export default function TorneoInicio() {
           })}
         </div>}
 
+        {partidosFijados.length > 0 && (
+          <details className="pc-fijados">
+            <summary className="pc-manual-button">Horarios fijados ({partidosFijados.length})</summary>
+            <ol className="pc-manual-partidos">
+              {partidosFijados.map((fijo) => (
+                <li key={`${fijo.categoriaId}:${fijo.zonaId}:${fijo.partido.posicionEnRonda}`} className="pc-manual-partido">
+                  <p className="pc-manual-copy">{fijo.nombreCategoria} · {fijo.zona} · Partido {fijo.partido.posicionEnRonda}</p>
+                  <ElegirHorarioPartido {...fijo} torneoId={id} revision={revisionPreCheck} abierto={partidoManualAbierto}
+                    onAbiertoChange={setPartidoManualAbierto} onSaved={aplicarPreCheck} onRecheck={() => handlePreCheckInicio(true)} />
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
         {hayCambiosGuardados && (
           <span className="pc-notice pc-danger-notice">
             <AlertTriangle size={13} />

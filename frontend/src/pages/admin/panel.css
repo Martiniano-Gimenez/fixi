@@ -1218,6 +1218,11 @@ body:has(.panel) {
 .panel .pc-manual-partidos { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-3); min-width: 0; margin: 0; padding: 0; list-style: none; }
 .panel .pc-manual-partido { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--e-3); min-width: 0; padding: var(--e-3); border-radius: var(--r-control); background: var(--superficie); box-shadow: var(--sombra-1); }
 .panel .pc-horario-partido { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--e-3); width: 100%; min-width: 0; }
+.panel .pc-partido-cabecera { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); min-width: 0; max-width: 100%; }
+.panel .pc-partido-cabecera > .pc-zona-fila { min-width: 0; }
+.panel .pc-quitar-confirmacion { display: grid; gap: var(--e-2); width: 100%; min-width: 0; padding: var(--e-3); box-sizing: border-box; border-radius: var(--r-control); background: var(--superficie-2); }
+.panel .pc-fijados { min-width: 0; margin-top: var(--e-4); }
+.panel .pc-fijados > summary { margin-bottom: var(--e-3); }
 .panel .pc-manual-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--e-2); min-height: 44px; min-width: 44px; max-width: 100%; padding: var(--e-2) var(--e-3); border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); background: var(--superficie); color: var(--tinta-2); font: 600 var(--t-13)/1.4 var(--f); text-align: center; overflow-wrap: anywhere; cursor: pointer; transition: transform .2s var(--curva), opacity .2s var(--curva); }
 .panel .pc-manual-button svg { flex-shrink: 0; }
 .panel .pc-manual-button:disabled { opacity: .6; cursor: not-allowed; transform: none; }

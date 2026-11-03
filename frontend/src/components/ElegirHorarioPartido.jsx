@@ -53,6 +53,8 @@ export default function ElegirHorarioPartido({
   const nombres = new Map(parejas.map((p) => [p.id, p.nombre]));
   const esDefinicion = Boolean(partido.origen && !partido.pareja1Id && !partido.pareja2Id && partido.posicionEnRonda >= 3);
   const fijo = tieneHorario(partido);
+  const fijoManual = fijo && (partido.fijadoManual ?? partido.estado === 'FIJO');
+  const quitarAbierto = fijoManual && abierto?.quitar && abierto.editorId === seccionId;
   const estaAbierto = abierto?.categoriaId === categoriaId && abierto.zonaId === zonaId &&
     abierto.posicionEnRonda === partido.posicionEnRonda && !fijo;
   const posicion = estaAbierto ? partido.posicionEnRonda : null;
@@ -126,6 +128,26 @@ export default function ElegirHorarioPartido({
     }
   };
 
+  const quitar = async () => {
+    if (!quitarAbierto || fijando || bloqueoFijar.current) return;
+    bloqueoFijar.current = true;
+    onAbiertoChange((actual) => ({ ...actual, fijando: true }));
+    setErrorFijacion(null);
+    try {
+      const actualizado = await api.post(`/torneos/${torneoId}/pre-check-inicio/partidos/quitar`, {
+        categoriaId, zonaId, posicionEnRonda: partido.posicionEnRonda, revision,
+      });
+      if (montado.current) await onSaved(actualizado);
+      onAbiertoChange(null);
+    } catch (err) {
+      if (montado.current) {
+        setErrorFijacion({ posicion: partido.posicionEnRonda, mensaje: err.message || 'No pudimos quitar el horario.' });
+        if (err.status === 409) await recheckRef.current();
+      }
+      onAbiertoChange((actual) => actual ? { ...actual, fijando: false } : null);
+    } finally { bloqueoFijar.current = false; }
+  };
+
   const pedido = (opcion) => {
     if (!opcion.parejasAAmpliar.length) return esDefinicion
       ? 'Entra en el horario de las cuatro parejas' : 'Entra en el horario de las dos parejas';
@@ -157,7 +179,25 @@ export default function ElegirHorarioPartido({
 
   return (
     <div className="pc-horario-partido">
-      {mostrarPartido && <FilaPartidoZona partido={partido} nombres={nombres} badge={fijo ? 'fijo' : null} />}
+      {(mostrarPartido || fijoManual) && <div className="pc-partido-cabecera">
+        {mostrarPartido && <FilaPartidoZona partido={partido} nombres={nombres} badge={fijoManual ? 'fijo' : fijo ? 'asignado' : null} />}
+        {fijoManual && (
+          <button type="button" className="pc-manual-button" disabled={fijando || !revision}
+            aria-expanded={Boolean(quitarAbierto)} onClick={() => {
+              setErrorFijacion(null);
+              onAbiertoChange(quitarAbierto ? null : { categoriaId, zonaId, posicionEnRonda: partido.posicionEnRonda, quitar: true, editorId: seccionId });
+            }}>Quitar horario</button>
+        )}
+      </div>}
+      {quitarAbierto && (
+        <div className="pc-quitar-confirmacion" role="group" aria-labelledby={`${seccionId}-quitar`}>
+          <p id={`${seccionId}-quitar`} className="pc-manual-copy">¿Quitar el horario de {formatPartidoHorario(partido.fechaHora).toLowerCase().replace(' · ', ' ')}? La disponibilidad que agregaste a las parejas se mantiene.</p>
+          <div className="pc-manual-actions">
+            <button type="button" className="pc-manual-button" disabled={fijando} onClick={quitar}>{fijando ? 'Quitando…' : 'Confirmar'}</button>
+            <button type="button" className="pc-manual-button" disabled={fijando} onClick={() => onAbiertoChange(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
       {!fijo && mostrarBoton && (
         <button ref={abrirRef} type="button" className="pc-manual-button" disabled={fijando || !revision}
           aria-expanded={estaAbierto} aria-controls={`${seccionId}-partido-${partido.posicionEnRonda}`} onClick={abrir}>

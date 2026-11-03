@@ -120,6 +120,17 @@ async function fijarPartidoZona(req, res, next) {
   }
 }
 
+async function quitarPartidoZona(req, res, next) {
+  try {
+    res.json(await organizadorService.quitarPartidoZona(getOrgId(req), req.params.id, req.body));
+  } catch (error) {
+    if (error.statusCode === 409 && error.preCheck) {
+      return res.status(409).json({ error: error.message, codigo: error.codigo, preCheck: error.preCheck });
+    }
+    next(error);
+  }
+}
+
 async function setInscripcion(req, res, next) {
   try {
     const result = await inscripcionService.setInscripcionAbierta(getOrgId(req), req.params.id, req.body?.abierta);
@@ -200,6 +211,7 @@ module.exports = {
   preCheckInicioTorneo,
   getOpcionesPartidoZona,
   fijarPartidoZona,
+  quitarPartidoZona,
   getPropuestasZona,
   aplicarPropuestaZona,
   iniciarTorneo,
