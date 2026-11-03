@@ -204,7 +204,7 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     // Adoptar únicamente después del commit: la memoria no se adelanta a la base.
     for (const p of guardada.zona.partidos) {
       const q = guardada.propuesta.partidosPropuestos.find((q) => q.posicionEnRonda === p.posicionEnRonda);
-      p.fechaHora = new Date(q.fechaHora); p.canchaNumero = q.canchaNumero; p.sinHorarioAsignado = false;
+      p.fechaHora = new Date(q.fechaHora); p.canchaNumero = q.canchaNumero; p.sinHorarioAsignado = false; p.fijadoManual = true;
     }
     guardada.zona.requiereArmadoManual = false;
     for (const [key, plan] of planesCache) if (plan.torneoId === id) planesCache.delete(key);

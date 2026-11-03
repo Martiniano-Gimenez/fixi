@@ -171,6 +171,15 @@ async function crearCaso(nombre, slotsPorPareja) {
 
 async function testIntegracion() {
   await canchasOverridesService.loadFromDb();
+  for (const [indice, slots] of [[[], []], [[], ['Viernes-18:00']],
+    [['Viernes-18:00', 'Viernes-19:15'], ['Viernes-18:15', 'Viernes-19:30']]].entries()) {
+    const libre = await crearCaso(`libre-${indice}`, slots);
+    const preLibre = await organizadorService.preCheckInicioTorneo(libre.org.id, libre.torneo.id);
+    assert.equal(preLibre.bloqueado, false, 'Disponibilidad libre y ventanas sin slot exacto');
+    const z = organizadorService.preCheckSessions.get(libre.torneo.id).categoriasPlan[0].zonas[0];
+    z.esZonaManualOriginal = true;
+    assert.equal((await organizadorService.preCheckInicioTorneo(libre.org.id, libre.torneo.id)).bloqueado, false);
+  }
   // Caruso, Dávila, Medrano: las disponibilidades reales de la zona E aislada.
   const real = await crearCaso('zona-e-aislada', [
     [...viernes('18:00', '03:00'), ...sabado('15:00', '03:00')],

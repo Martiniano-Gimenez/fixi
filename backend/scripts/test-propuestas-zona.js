@@ -281,6 +281,10 @@ async function testApi(baseUrl) {
     }
   }
   const plan = svc.preCheckSessions.get(caso.torneo.id).categoriasPlan[0].zonas[0];
+  assert.ok(plan.partidos.every((p) => p.fijadoManual), 'La propuesta aplicada queda fija');
+  const horariosFijos = structuredClone(plan.partidos);
+  await svc.preCheckInicioTorneo(caso.org.id, caso.torneo.id, { isReCheck: true });
+  assert.deepEqual(plan.partidos, horariosFijos);
   assert.deepEqual(plan.partidos.map((q) => ({ posicionEnRonda: q.posicionEnRonda, fechaHora: new Date(q.fechaHora).toISOString(), canchaNumero: q.canchaNumero })),
     p.partidosPropuestos.map(({ posicionEnRonda, fechaHora, canchaNumero }) => ({ posicionEnRonda, fechaHora, canchaNumero })));
   const vieja = await post(caso, '/propuestas/aplicar', { clave: p.clave, revision: pre.revision });

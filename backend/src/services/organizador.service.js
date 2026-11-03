@@ -332,6 +332,15 @@ function evaluarAsignacionesIncrementalesBase({
   const satDayStartMs = baseSaturday.getTime() + satInicioMin * 60 * 1000;
   const satDayEndMs = baseSaturday.getTime() + satEffectiveFinMin * 60 * 1000;
 
+  const grillaEfectiva = generarGrillaOrganizador(organizador);
+  const slotsClub = [...grillaEfectiva.viernes, ...grillaEfectiva.sabado];
+  const ventanasClubEfectivas = fusionarSlotsEnVentanas(slotsClub, refFecha);
+  const ventanasEfectivas = (slots) => slots.length
+    ? interseccionVentanas(fusionarSlotsEnVentanas(slots, refFecha), ventanasClubEfectivas)
+    : ventanasClubEfectivas;
+  const compatibles = (a, b) => interseccionVentanas(ventanasEfectivas(a), ventanasEfectivas(b))
+    .some((w) => w.endMs - w.startMs >= DURACION_MS);
+
   function isCourtFree(cancha, startMs, endMs) {
     const timeline = courtTimelines.get(cancha) || [];
     for (const interval of timeline) {
@@ -355,30 +364,18 @@ function evaluarAsignacionesIncrementalesBase({
     for (const zona of cPlan.zonas) {
       if (zonaIntento && zona !== zonaIntento) continue;
       for (const partido of zona.partidos) {
-        if (!partido.sinHorarioAsignado) continue;
+        if (!partido.sinHorarioAsignado || (zona.formato === 'MINI_BRACKET' && partido.posicionEnRonda >= 3)) continue;
 
         const par1 = parejasMap.get(partido.pareja1Id);
         const par2 = parejasMap.get(partido.pareja2Id);
         const slotsP1 = ordenarSlotsCronologicamente((par1?.slotsSeleccionados || []).map((s) => s.slotId));
         const slotsP2 = ordenarSlotsCronologicamente((par2?.slotsSeleccionados || []).map((s) => s.slotId));
 
-        const conSlotsP1 = slotsP1.length > 0;
-        const conSlotsP2 = slotsP2.length > 0;
-
-        let sharedWindows = [];
-        let slotsComunes = [];
-        if (conSlotsP1 && conSlotsP2) {
-          const set2 = new Set(slotsP2);
-          slotsComunes = slotsP1.filter((s) => set2.has(s));
-          const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
-          const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
-          sharedWindows = interseccionVentanas(win1, win2);
-        } else if (conSlotsP1 || conSlotsP2) {
-          slotsComunes = conSlotsP1 ? slotsP1 : slotsP2;
-          sharedWindows = fusionarSlotsEnVentanas(slotsComunes, refFecha);
-        }
-
-        slotsComunes = ordenarSlotsCronologicamente(slotsComunes);
+        const sharedWindows = interseccionVentanas(ventanasEfectivas(slotsP1), ventanasEfectivas(slotsP2));
+        const slotsComunes = slotsClub.filter((id) => {
+          const w = slotIdToMsWindow(id, refFecha);
+          return sharedWindows.some((v) => w.startMs >= v.startMs && w.endMs <= v.endMs);
+        });
 
         if (sharedWindows.length === 0) continue;
 
@@ -614,7 +611,7 @@ function evaluarAsignacionesIncrementalesBase({
   const contextosVerificacion = new Map();
   function calcularSugeridosZona(zona, parejaId, slotsViables) {
     if (zona.parejaIds.length < 2 || zona.parejaIds.length > 4) {
-      return { slotsQueDestraban: [], slotsBusquedaIncompleta: [] };
+      return { slotsQueDestraban: [] };
     }
     if (!contextosVerificacion.has(zona)) {
       const ajenos = categoriasPlan.map((c) => ({ ...c, zonas: c.zonas.filter((z) => z !== zona) }));
@@ -633,7 +630,6 @@ function evaluarAsignacionesIncrementalesBase({
       });
     }
     const slotsQueDestraban = [];
-    const slotsBusquedaIncompleta = [];
     for (const slotId of slotsViables) {
       const parejas = zona.parejaIds.map((id) => {
         const pareja = parejasMap.get(id);
@@ -645,9 +641,8 @@ function evaluarAsignacionesIncrementalesBase({
       });
       const resultado = verificarProgramacionZona({ ...contextosVerificacion.get(zona), parejas });
       if (resultado.estado === 'FACTIBLE') slotsQueDestraban.push(slotId);
-      if (resultado.estado === 'BUSQUEDA_INCOMPLETA') slotsBusquedaIncompleta.push(slotId);
     }
-    return { slotsQueDestraban, slotsBusquedaIncompleta };
+    return { slotsQueDestraban };
   }
 
   // 3. Recalcular mapa de conflictos para los partidos y zonas que sigan sin horario
@@ -696,8 +691,7 @@ function evaluarAsignacionesIncrementalesBase({
             for (let j = i + 1; j < rawZonaParejas.length; j++) {
               const s1 = rawZonaParejas[i].slotIds;
               const s2 = rawZonaParejas[j].slotIds;
-              const shared = s1.filter((slot) => s2.includes(slot));
-              if (shared.length === 0) {
+              if (!compatibles(s1, s2)) {
                 todaviaIncompatible = true;
                 break;
               }
@@ -712,30 +706,18 @@ function evaluarAsignacionesIncrementalesBase({
           // Procesar partidos sin horario de esta zona en el loop normal
           for (const partido of z.partidos) {
             if (soloConflictos) break;
-            if (!partido.sinHorarioAsignado) continue;
+            if (!partido.sinHorarioAsignado || (z.formato === 'MINI_BRACKET' && partido.posicionEnRonda >= 3)) continue;
 
             const par1 = parejasMap.get(partido.pareja1Id);
             const par2 = parejasMap.get(partido.pareja2Id);
             const slotsP1 = ordenarSlotsCronologicamente((par1?.slotsSeleccionados || []).map((s) => s.slotId));
             const slotsP2 = ordenarSlotsCronologicamente((par2?.slotsSeleccionados || []).map((s) => s.slotId));
 
-            const conSlotsP1 = slotsP1.length > 0;
-            const conSlotsP2 = slotsP2.length > 0;
-
-            let sharedWindows = [];
-            let slotsComunes = [];
-            if (conSlotsP1 && conSlotsP2) {
-              const set2 = new Set(slotsP2);
-              slotsComunes = slotsP1.filter((s) => set2.has(s));
-              const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
-              const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
-              sharedWindows = interseccionVentanas(win1, win2);
-            } else if (conSlotsP1 || conSlotsP2) {
-              slotsComunes = conSlotsP1 ? slotsP1 : slotsP2;
-              sharedWindows = fusionarSlotsEnVentanas(slotsComunes, refFecha);
-            }
-
-            slotsComunes = ordenarSlotsCronologicamente(slotsComunes);
+            const sharedWindows = interseccionVentanas(ventanasEfectivas(slotsP1), ventanasEfectivas(slotsP2));
+            const slotsComunes = slotsClub.filter((id) => {
+              const w = slotIdToMsWindow(id, refFecha);
+              return sharedWindows.some((v) => w.startMs >= v.startMs && w.endMs <= v.endMs);
+            });
 
             if (sharedWindows.length === 0) continue;
 
@@ -838,16 +820,14 @@ function evaluarAsignacionesIncrementalesBase({
               return true;
             });
 
-            const { slotsQueDestraban, slotsBusquedaIncompleta } = calcularSugeridosZona(z, p.id, slotsViables);
+            const { slotsQueDestraban } = calcularSugeridosZona(z, p.id, slotsViables);
 
             return {
               id: p.id,
               nombre: p.nombre,
-              slotsCount: mySlots.length,
               slotIds: mySlots,
               slotsViables,
               slotsQueDestraban,
-              slotsBusquedaIncompleta,
             };
           });
 
@@ -856,8 +836,7 @@ function evaluarAsignacionesIncrementalesBase({
             for (let j = i + 1; j < rawZonaParejas.length; j++) {
               const p1 = rawZonaParejas[i];
               const p2 = rawZonaParejas[j];
-              const shared = p1.slotIds.filter((slot) => p2.slotIds.includes(slot));
-              if (shared.length === 0) {
+              if (!compatibles(p1.slotIds, p2.slotIds)) {
                 crucesIncompatibles.push({
                   p1: p1.nombre,
                   p2: p2.nombre,
@@ -922,16 +901,14 @@ function evaluarAsignacionesIncrementalesBase({
               return true;
             });
 
-            const { slotsQueDestraban, slotsBusquedaIncompleta } = calcularSugeridosZona(z, par.id, slotsViables);
+            const { slotsQueDestraban } = calcularSugeridosZona(z, par.id, slotsViables);
 
             return {
               id: par.id,
               nombre: par.nombre,
-              slotsCount: mySlots.length,
               slotIds: mySlots,
               slotsViables,
               slotsQueDestraban,
-              slotsBusquedaIncompleta,
             };
           });
 
@@ -940,8 +917,7 @@ function evaluarAsignacionesIncrementalesBase({
             for (let j = i + 1; j < rawZonaParejas.length; j++) {
               const p1 = rawZonaParejas[i];
               const p2 = rawZonaParejas[j];
-              const shared = p1.slotIds.filter((slot) => p2.slotIds.includes(slot));
-              if (shared.length === 0) {
+              if (!compatibles(p1.slotIds, p2.slotIds)) {
                 crucesIncompatibles.push({
                   p1: p1.nombre,
                   p2: p2.nombre,
@@ -974,21 +950,12 @@ function evaluarAsignacionesIncrementalesBase({
         const slotsP1 = ordenarSlotsCronologicamente((par1?.slotsSeleccionados || []).map((s) => s.slotId));
         const slotsP2 = ordenarSlotsCronologicamente((par2?.slotsSeleccionados || []).map((s) => s.slotId));
 
-        const win1 = fusionarSlotsEnVentanas(slotsP1, refFecha);
-        const win2 = fusionarSlotsEnVentanas(slotsP2, refFecha);
+        const win1 = ventanasEfectivas(slotsP1);
+        const win2 = ventanasEfectivas(slotsP2);
         const shared = interseccionVentanas(win1, win2);
 
-        const tieneFranjaComun = shared.length > 0;
+        const tieneFranjaComun = shared.some((w) => w.endMs - w.startMs >= DURACION_MS);
         const motivo = tieneFranjaComun ? 'SIN_CANCHA_DISPONIBLE' : 'SIN_FRANJA_COMUN';
-
-        let p1Score = win1.length * 1000 + slotsP1.length;
-        let p2Score = win2.length * 1000 + slotsP2.length;
-        const p1IsMoreConstrained = p1Score <= p2Score;
-
-        const parejaMasRestringida = p1IsMoreConstrained ? par1 : par2;
-        const parejaMasRestringidaSlots = p1IsMoreConstrained ? slotsP1.length : slotsP2.length;
-        const parejaMasRestringidaOpciones = p1IsMoreConstrained ? win1.length : win2.length;
-        const parejaMasRestringidaSlotIds = p1IsMoreConstrained ? slotsP1 : slotsP2;
 
         const slotsViables = allSlotIds.filter((sId) => {
           const info = slotsEvaluadosMap.get(sId);
@@ -1013,22 +980,11 @@ function evaluarAsignacionesIncrementalesBase({
           pareja1Id: p.pareja1Id,
           posicionEnRonda: p.posicionEnRonda,
           pareja1: par1 ? `${par1.jugador1} / ${par1.jugador2}` : 'Por definirse',
-          pareja1SlotsCount: slotsP1.length,
-          pareja1OpcionesCount: win1.length,
           pareja1SlotIds: slotsP1,
           pareja2Id: p.pareja2Id,
           pareja2: par2 ? `${par2.jugador1} / ${par2.jugador2}` : 'Por definirse',
-          pareja2SlotsCount: slotsP2.length,
-          pareja2OpcionesCount: win2.length,
           pareja2SlotIds: slotsP2,
           motivo,
-          parejaMasRestringidaId: parejaMasRestringida?.id || null,
-          parejaMasRestringidaNombre: parejaMasRestringida
-            ? `${parejaMasRestringida.jugador1} / ${parejaMasRestringida.jugador2}`
-            : '',
-          parejaMasRestringidaSlots: parejaMasRestringidaSlots,
-          parejaMasRestringidaOpciones: parejaMasRestringidaOpciones,
-          parejaMasRestringidaSlotIds: parejaMasRestringidaSlotIds,
           slotsViables,
           opcionesResolucion,
           aparicionesMaximas: maxApariciones,
