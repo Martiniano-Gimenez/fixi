@@ -1247,10 +1247,12 @@ body:has(.panel) {
 .panel .pc-horarios-inicio:focus-visible { outline: 3px solid var(--marca); outline-offset: 2px; }
 .panel .pc-horarios-inicio:disabled { cursor: wait; }
 .panel .pc-horarios-hueco { min-height: 44px; }
-.panel .pc-horarios-resumen { max-width: 336px; margin-top: var(--e-1); }
-.panel :is(.pc-horarios-plegar, .pc-horarios-tramo) { display: flex; align-items: center; justify-content: flex-start; gap: var(--e-1); width: 100%; min-width: 44px; min-height: 44px; margin: 0; padding: var(--e-2) var(--e-1); border: 0; border-radius: var(--r-control); background: transparent; color: var(--tinta-2); font: 400 var(--t-12)/1.5 var(--f); text-align: left; overflow-wrap: anywhere; }
-.panel .pc-horarios-plegar { cursor: pointer; }
-.panel .pc-horarios-plegar svg { flex-shrink: 0; transition: transform .2s var(--curva); }
+.panel .pc-horarios-resumen { max-width: 336px; }
+.panel :is(.pc-horarios-plegar, .pc-horarios-tramo) { display: grid; grid-template-columns: minmax(0, 32px) repeat(4, minmax(44px, 1fr)); align-items: center; gap: var(--e-1); width: 100%; margin: 0; padding: 0; border: 0; border-radius: var(--r-control); background: transparent; color: var(--tinta-2); font: 400 var(--t-12)/1.5 var(--f); text-align: left; overflow-wrap: anywhere; }
+.panel :is(.pc-horarios-plegar, .pc-horarios-tramo) > span { grid-column: 2 / -1; min-width: 0; }
+.panel .pc-horarios-tramo { margin-block: var(--e-3) var(--e-1); }
+.panel .pc-horarios-plegar { min-width: 44px; min-height: 44px; padding-block: var(--e-1); cursor: pointer; }
+.panel .pc-horarios-plegar svg { justify-self: center; transition: transform .2s var(--curva); }
 .panel .pc-horarios-plegar svg.is-open { transform: rotate(90deg); }
 .panel .pc-horarios-plegar:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
 .panel .pc-horarios-plegar:disabled { cursor: wait; }

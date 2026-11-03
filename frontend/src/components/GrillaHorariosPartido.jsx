@@ -63,19 +63,8 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
               anterior.filas.push(fila);
             } else lista.push({ ...crearBloque(tipo, [fila]), firma });
             return lista;
-          }, []).flatMap((b) => {
-            if (b.tipo !== 'secundario') return [b];
-            const primeraElegible = b.filas.findIndex((f) => !sinHorarios(f));
-            if (primeraElegible < 0) return [crearBloque('sin', b.filas)];
-            const ultimaElegible = b.filas.findLastIndex((f) => !sinHorarios(f));
-            // Los huecos de los extremos se informan aparte; los interiores se ven al desplegar.
-            return [
-              primeraElegible > 0 && crearBloque('sin', b.filas.slice(0, primeraElegible)),
-              crearBloque('varias', b.filas.slice(primeraElegible, ultimaElegible + 1)),
-              ultimaElegible < b.filas.length - 1 && crearBloque('sin', b.filas.slice(ultimaElegible + 1)),
-            ].filter(Boolean);
-          });
-          const sePliega = (bloque) => bloque.tipo === 'varias' && bloque.filas.length > 1;
+          }, []);
+          const sePliega = (bloque) => bloque.tipo === 'secundario' && bloque.filas.some((f) => !sinHorarios(f));
           const visibles = bloques.flatMap((b) => sePliega(b) && !desplegados[b.clave] ? [] : b.filas).filter((f) => !sinHorarios(f));
           const primera = visibles.flatMap((f) => f.celdas).find(Boolean);
           const claveFoco = visibles.some((f) => f.celdas.some((o) => o?.clave === foco[dia])) ? foco[dia] : primera?.clave;
@@ -124,7 +113,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
               {!filas.length ? <p className="pc-manual-copy">El club no tiene inicios para esta jornada.</p> : (
                 <div role="grid" aria-label={`Inicios del ${dia === 'Viernes' ? 'viernes' : 'sábado'}`} aria-colcount={5} aria-describedby={`${id}-ayuda`}>
                   {bloques.map((bloque) => {
-                    if (bloque.tipo === 'sin') return renderizarSinHorarios(bloque.filas);
+                    if (bloque.filas.every(sinHorarios)) return renderizarSinHorarios(bloque.filas);
                     const inicios = bloque.filas.flatMap((f) => f.celdas).filter(Boolean);
                     const pedirUna = parejasDeUna(inicios);
                     const resumen = pedirUna.length

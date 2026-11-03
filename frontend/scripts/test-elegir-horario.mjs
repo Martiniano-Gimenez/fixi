@@ -59,6 +59,8 @@ for (const hora of ['16', '17', '18', '19', '20', '21']) fila(hora, Array(4).fil
 fila('22', ['PEDIR_1', 'NO_DISPONIBLE', 'ENTRA', 'PEDIR_VARIAS'], 'a');
 fila('23', ['PEDIR_1', 'PEDIR_1', 'ENTRA', 'NO_DISPONIBLE'], ['a', 'b']);
 fila('00', ['ENTRA', 'NO_DISPONIBLE', 'NO_DISPONIBLE', 'NO_DISPONIBLE']);
+fila('01', Array(4).fill('PEDIR_VARIAS'));
+fila('02', Array(4).fill('ENTRA'));
 tramos.push({ clave: 'sabado', slotId: 'Sabado-09:00', fechaHora: '2026-11-07T12:00:00Z', estado: 'PEDIR_VARIAS', parejasAAmpliar: ['a', 'b', 'c', 'd'] });
 const propsGrilla = { opciones: tramos, seleccion: null, onSeleccion: () => {}, describir: (o) => o.estado,
   nombres: new Map([['a', 'Caruso / Vallejos'], ['b', 'Dávila / Arrieta']]), fijando: false, onCambioDia: () => {} };
@@ -71,7 +73,13 @@ assert.ok(titulos.includes('00 h · entra en el horario de las dos parejas'));
 assert.ok(titulos.includes('16 a 21 h · sin horarios'));
 assert.ok(titulos.includes('09 h · hay que pedirle a varias parejas'), 'La jornada sin ENTRA/PEDIR_1 queda completa');
 const plegar = document.querySelector('.pc-horarios-plegar');
-assert.equal(plegar.textContent.trim(), '09 a 12 h · hay que pedirle a las dos parejas', 'El tramo mixto solo resume lo elegible');
+assert.equal(plegar.textContent.trim(), '08 a 12 h · hay que pedirle a las dos parejas', 'El tramo secundario conserva los extremos sin horarios');
+assert.ok(!titulos.includes('08 h · sin horarios'), 'No agrega una línea para el extremo de un tramo cerrado');
+const unaHora = [...document.querySelectorAll('.pc-horarios-plegar')].find((e) => e.textContent.trim() === '01 h · hay que pedirle a las dos parejas');
+assert.ok(unaHora, 'Una sola hora secundaria también se pliega');
+assert.equal(document.querySelector('[data-clave="Viernes-01:00"]'), null);
+await click(unaHora); assert.ok(document.querySelector('[data-clave="Viernes-01:00"]'));
+await click(unaHora); assert.equal(document.querySelector('[data-clave="Viernes-01:00"]'), null);
 const inicio = (hora, minutos = '00') => document.querySelector(`[data-clave="Viernes-${hora}:${minutos}"]`);
 const flecha = async (elemento, key) => act(async () => {
   elemento.focus(); elemento.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true }));
@@ -87,10 +95,19 @@ await flecha(inicio('07'), 'ArrowDown'); assert.equal(document.activeElement.dat
 await flecha(inicio('13'), 'ArrowRight'); assert.equal(document.activeElement.dataset.clave, 'Viernes-13:30');
 await flecha(inicio('15'), 'ArrowDown'); assert.equal(document.activeElement.dataset.clave, 'Viernes-22:00');
 await click(plegar);
+assert.ok([...document.querySelectorAll('.pc-horarios-tramo')].some((e) => e.textContent === '08 h · sin horarios'));
 assert.ok([...document.querySelectorAll('.pc-horarios-tramo')].some((e) => e.textContent === '10 h · sin horarios'));
 assert.equal(inicio('10'), null);
 await flecha(inicio('09'), 'ArrowDown'); assert.equal(document.activeElement.dataset.clave, 'Viernes-11:00');
 await click(plegar); assert.equal(inicio('09'), null);
+const mixto = tramos.map((o) => o.slotId === 'Viernes-16:00' ? { ...o, estado: 'PEDIR_VARIAS', parejasAAmpliar: ['a', 'b'] } : o);
+await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, opciones: mixto })));
+const conExtremo = [...document.querySelectorAll('.pc-horarios-plegar')].find((e) => e.textContent.trim() === '16 a 21 h · hay que pedirle a las dos parejas');
+assert.ok(conExtremo, 'Un inicio elegible incluye todas las horas secundarias contiguas');
+assert.ok(!document.body.textContent.includes('17 a 21 h · sin horarios'));
+await click(conExtremo);
+assert.ok([...document.querySelectorAll('.pc-horarios-tramo')].some((e) => e.textContent === '17 a 21 h · sin horarios'));
+await click(conExtremo);
 await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, esDefinicion: true })));
 assert.ok(document.body.textContent.includes('00 h · entra en el horario de las cuatro parejas'));
 for (const vacias of [[], tramos.map((o) => ({ ...o, estado: 'NO_DISPONIBLE' }))]) {
