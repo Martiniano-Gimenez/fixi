@@ -201,7 +201,7 @@ async function testApi(baseUrl) {
   const sesion = svc.preCheckSessions.get(torneo.id); sesion.expiresAt = Date.now() - 1;
   const vencida = await post(endpoint, { ...body, revision: cambio.body.preCheck.revision });
   assert.equal(vencida.status, 409); assert.equal(vencida.body.codigo, 'REVISION_PRECHECK_VIEJA');
-  assert.ok(vencida.body.preCheck.sesionReiniciada);
+  assert.equal(vencida.body.preCheck.sesionReiniciada, false, 'TTL recupera el plan guardado');
   assert.deepEqual(await prisma.pareja.findMany({ where: { categoriaId: cat.id }, include: { slotsSeleccionados: true }, orderBy: { orden: 'asc' } }), antes, 'Pedir horarios no escribe disponibilidad');
   console.log('PASS: HTTP, formato partidosZona, caché por página/revisión, permisos, 400/404/409 y lectura sin cambios en parejas');
 }

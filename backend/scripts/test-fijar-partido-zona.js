@@ -195,7 +195,7 @@ async function testConflictos() {
   sesion(expirada).expiresAt = Date.now() - 1;
   const resExpirada = await post(expirada, '/partidos/fijar', selExpirada.body);
   assert.equal(resExpirada.status, 409); assert.equal(resExpirada.body.codigo, 'REVISION_PRECHECK_VIEJA');
-  assert.equal(resExpirada.body.preCheck.sesionReiniciada, true); assert.deepEqual(await disponibilidad(expirada), antesExpirada);
+  assert.equal(resExpirada.body.preCheck.sesionReiniciada, false); assert.deepEqual(await disponibilidad(expirada), antesExpirada);
   console.log('PASS: claves/revisiones, permisos, ocupación cambiada, verificación dentro de transacción y rollback real');
 }
 
@@ -282,7 +282,7 @@ async function testPropuestaEInicio() {
   }, opts);
   try { await svc.iniciarTorneoMultiCategoria(c.org.id, c.torneo.id, pre.planEmergenciaId); }
   finally { prisma.$transaction = txOriginal; }
-  assert.ok(actualizados.length, 'El greedy procesó pendientes de la otra categoría');
+  assert.ok(actualizados.length === 0, 'El inicio conserva pendientes: antes procesó pendientes de la otra categoría');
   const db = await prisma.partido.findMany({ where: { categoria: { torneoId: c.torneo.id }, zonaId: { not: null } }, include: { zona: true } });
   for (const cat of plan) for (const z of cat.zonas) for (const p of z.partidos.filter((p) => !p.sinHorarioAsignado)) {
     const guardado = db.find((q) => q.categoriaId === cat.categoriaId && q.zona.nombre === z.nombre && q.posicionEnRonda === p.posicionEnRonda);
@@ -320,7 +320,7 @@ async function testInicioConPlanInvalidadoDuranteEspera() {
   prisma.$transaction = (fn, opts) => txOriginal.call(prisma, async (tx) => {
     // El inicio ya leyó el caché fuera de la transacción. Una fijación confirmada
     // lo invalida mientras el inicio espera el bloqueo, aun sin cambiar disponibilidad.
-    svc.planesCache.delete(planId);
+    await tx.precheckPlan.update({ where: { torneoId: c.torneo.id }, data: { revision: 'otra-revision' } });
     return fn(tx);
   }, opts);
   try { await assert.rejects(svc.iniciarTorneoMultiCategoria(c.org.id, c.torneo.id, planId), (e) => e.statusCode === 409); }

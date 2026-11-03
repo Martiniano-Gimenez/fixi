@@ -8,6 +8,7 @@ const { generarGrillaOrganizador } = require('./slots.service');
 const { fusionarSlotsEnVentanas, slotIdToMsWindow } = require('./zona.service');
 const { requireTorneoFecha } = require('../utils/dateUtils');
 const DURACION_MS = 75 * 60_000;
+const { hidratarPlan, guardarPlan, comprobarRevision, conflictoPlan } = require('./precheckPlan.service');
 
 function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preCheckBase, reconstruirOcupacion }) {
   const colas = new Map();
@@ -98,7 +99,54 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     respuesta.revision = sesion.revision;
     return respuesta;
   }
-  async function obtener(org, id, opciones) { return anexar(org, id, await preCheckBase(org, id, opciones)); }
+  const nomina = (estado) => estado.torneo.categorias.filter((c) => c.estado === 'BORRADOR' && c.parejas.length)
+    .map((c) => [c.id, c.parejas.map((p) => p.id).sort()]).sort((a, b) => a[0].localeCompare(b[0]));
+  const hashParejas = (estado) => estado.torneo.categorias.filter((c) => c.estado === 'BORRADOR')
+    .flatMap((c) => c.parejas.map((p) => p.id)).sort().join(',');
+  async function obtener(org, id, opciones = {}) {
+    const estado = await leerEstado(prisma, org, id);
+    const fila = await prisma.precheckPlan.findUnique({ where: { torneoId: id } });
+    // La identidad incluye la categoría: mover una pareja también cambia la nómina.
+    if (fila && !opciones.forceReset && (fila.nomina !== hashParejas(estado) ||
+        JSON.stringify(fila.contenido.nominaCategorias) !== JSON.stringify(nomina(estado)))) {
+      return { bloqueado: true, codigo: 'NOMINA_PRECHECK_CAMBIO', nominaCambio: true,
+        motivo: 'Cambió la lista de parejas. Para seguir, rearmá las zonas desde cero.',
+        conflictos: [], revision: null, permiteInicioEmergencia: false };
+    }
+    let anterior = preCheckSessions.get(id);
+    if (fila && (!anterior || anterior.expiresAt <= Date.now() || anterior.guardadoRevision !== fila.revision)) {
+      anterior = hidratarPlan(fila, org);
+      reconstruirOcupacion(anterior, estado.club.cantidadCanchas);
+      preCheckSessions.set(id, anterior);
+    }
+    const respaldo = anterior && structuredClone(anterior);
+    const planesAntes = [...planesCache].filter(([, p]) => p.torneoId === id);
+    const firmaEntrada = anterior ? firma(estado, respaldo) : null;
+    try {
+      const respuesta = await anexar(org, id, await preCheckBase(org, id, opciones));
+      const sesion = preCheckSessions.get(id);
+      sesion.guardadoRevision = fila?.revision || null;
+      sesion.nominaCategorias = nomina(estado);
+      const plan = planesCache.get(respuesta.planId || respuesta.planEmergenciaId) || null;
+      const revision = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`UPDATE "Torneo" SET "inscripcionAbierta" = "inscripcionAbierta" WHERE "id" = ${id}`;
+        const actual = await leerEstado(tx, org, id);
+        if (JSON.stringify(nomina(actual)) !== JSON.stringify(nomina(estado)) ||
+            (respaldo && firma(actual, respaldo) !== firmaEntrada) ||
+            (!respaldo && firma(actual, sesion) !== firma(estado, sesion))) throw conflictoPlan();
+        const revision = await guardarPlan(tx, sesion, firma(actual, sesion), plan);
+        return revision;
+      }, { timeout: 10_000 });
+      sesion.guardadoRevision = revision;
+      return respuesta;
+    } catch (e) {
+      if (anterior && respaldo) { Object.assign(anterior, respaldo); preCheckSessions.set(id, anterior); }
+      else preCheckSessions.delete(id);
+      for (const [key, p] of planesCache) if (p.torneoId === id) planesCache.delete(key);
+      for (const [key, p] of planesAntes) planesCache.set(key, p);
+      throw e;
+    }
+  }
   async function rechazar(org, id, mensaje, codigo) {
     let preCheck;
     try { preCheck = await obtener(org, id, { isReCheck: true }); }
@@ -162,10 +210,12 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     }
     const guardada = sesion.propuestasCache?.get(clave);
     if (!guardada) return rechazar(org, id, 'La propuesta ya no está disponible. Revisá el pre-check actualizado.', 'PROPUESTA_VENCIDA');
+    let revisionGuardada;
     try {
       await prisma.$transaction(async (tx) => {
         // Primera escritura para serializar con altas, inicio y otras ediciones en SQLite.
         await tx.torneo.update({ where: { id }, data: { inscripcionAbierta: estado.torneo.inscripcionAbierta } });
+        await comprobarRevision(tx, id, sesion.guardadoRevision);
         const actual = await leerEstado(tx, org, id), { propuesta, zona, categoriaId } = guardada;
         const categoriaActual = actual.torneo.categorias.find((c) => c.id === categoriaId);
         if (preCheckSessions.get(id) !== sesion || sesion.revision !== revision ||
@@ -196,12 +246,20 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
           if (nuevos.length) await tx.slotPareja.createMany({ data: nuevos.map((slotId) => ({ parejaId: c.parejaId, slotId })) });
         }
         await tx.pareja.updateMany({ where: { id: { in: propuesta.cambios.map((c) => c.parejaId) } }, data: { resolucionManual: true } });
+        const candidata = structuredClone(sesion);
+        const zonaCandidata = candidata.categoriasPlan.find((c) => c.categoriaId === categoriaId).zonas.find((z) => z.id === zona.id);
+        for (const p of zonaCandidata.partidos) Object.assign(p,
+          propuesta.partidosPropuestos.find((q) => q.posicionEnRonda === p.posicionEnRonda),
+          { sinHorarioAsignado: false, fijadoManual: true, pendienteManual: false });
+        zonaCandidata.requiereArmadoManual = false;
+        revisionGuardada = await guardarPlan(tx, candidata, firma(await leerEstado(tx, org, id), candidata));
       }, { timeout: 10_000 });
     } catch (e) {
       if (e.statusCode === 409) return rechazar(org, id, e.message, e.codigo);
       throw e;
     }
-    // Adoptar únicamente después del commit: la memoria no se adelanta a la base.
+    sesion.guardadoRevision = revisionGuardada;
+    // Adoptar solo despues del commit.
     for (const p of guardada.zona.partidos) {
       const q = guardada.propuesta.partidosPropuestos.find((q) => q.posicionEnRonda === p.posicionEnRonda);
       p.fechaHora = new Date(q.fechaHora); p.canchaNumero = q.canchaNumero; p.sinHorarioAsignado = false; p.fijadoManual = true;
@@ -260,11 +318,12 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     if (!partido) throw error(404, 'El partido no pertenece a esta zona.', 'PARTIDO_PRECHECK_NO_ENCONTRADO');
     const slotId = sesion.opcionesCache?.get(JSON.stringify([categoriaId, zonaId, posicionEnRonda, clave]));
     if (!slotId) return rechazar(org, id, 'La opción ya no está disponible. Volvé a pedir los horarios del partido.', 'OPCION_VENCIDA');
-    let recalculada;
+    let recalculada, revisionGuardada;
     try {
       await prisma.$transaction(async (tx) => {
         // Toma el bloqueo sin copiar un valor leído fuera de la transacción ni cambiar updatedAt.
         await tx.$executeRaw`UPDATE "Torneo" SET "inscripcionAbierta" = "inscripcionAbierta" WHERE "id" = ${id}`;
+        await comprobarRevision(tx, id, sesion.guardadoRevision);
         const actual = await leerEstado(tx, org, id);
         const categoriaActual = actual.torneo.categorias.find((c) => c.id === categoriaId);
         if (preCheckSessions.get(id) !== sesion || sesion.expiresAt <= Date.now() || sesion.revision !== revision ||
@@ -293,11 +352,18 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
           if (nuevos.length) await tx.slotPareja.createMany({ data: nuevos.map((parejaId) => ({ parejaId, slotId })) });
           await tx.pareja.updateMany({ where: { id: { in: involucradas } }, data: { resolucionManual: true } });
         }
+        const candidata = structuredClone(sesion);
+        const p = candidata.categoriasPlan.find((c) => c.categoriaId === categoriaId).zonas.find((z) => z.id === zonaId)
+          .partidos.find((p) => p.posicionEnRonda === posicionEnRonda);
+        Object.assign(p, { fechaHora: new Date(recalculada.fechaHora), canchaNumero: recalculada.canchaNumero,
+          sinHorarioAsignado: false, fijadoManual: true, pendienteManual: false });
+        revisionGuardada = await guardarPlan(tx, candidata, firma(await leerEstado(tx, org, id), candidata));
       }, { timeout: 10_000 });
     } catch (e) {
       if (e.statusCode === 409) return rechazar(org, id, e.message, e.codigo);
       throw e;
     }
+    sesion.guardadoRevision = revisionGuardada;
     // La memoria se actualiza únicamente tras confirmar las altas aditivas en la base.
     Object.assign(partido, { fechaHora: new Date(recalculada.fechaHora), canchaNumero: recalculada.canchaNumero,
       sinHorarioAsignado: false, fijadoManual: true });
@@ -306,6 +372,10 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     return obtener(org, id, { isReCheck: true });
   }
   return {
+    validarInicio: async (org, id, db, fila) => {
+      const actual = await leerEstado(db, org, id);
+      if (firma(actual, hidratarPlan(fila, org)) !== fila.firma) throw conflictoPlan();
+    },
     preCheck: (org, id, opciones) => encolar(id, () => obtener(org, id, opciones)),
     solicitar: (org, id, data) => encolar(id, () => solicitar(org, id, data)),
     aplicar: (org, id, data) => encolar(id, () => aplicar(org, id, data)),

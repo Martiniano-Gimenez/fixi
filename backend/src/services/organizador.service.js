@@ -1366,10 +1366,11 @@ async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = 
  */
 async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = null) {
   if (planId) {
-    const cached = planesCache.get(planId);
-    if (!cached || cached.expiresAt < Date.now() || cached.organizadorId !== organizadorId || cached.torneoId !== torneoId) {
-      const error = new Error('El plan de inicio expiró o no es válido. Por favor volvé a verificar.');
-      error.statusCode = 400;
+    const guardado = await prisma.precheckPlan.findUnique({ where: { torneoId }, include: { torneo: true } });
+    const cached = guardado?.contenido.plan;
+    if (!cached || cached.planId !== planId || guardado.torneo.organizadorId !== organizadorId || cached.organizadorId !== organizadorId || cached.torneoId !== torneoId) {
+      const error = new Error('Los datos o el plan cambiaron desde la última verificación. Volvé a verificar antes de iniciar.');
+      error.statusCode = guardado ? 409 : 400;
       throw error;
     }
 
@@ -1399,13 +1400,19 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
       // que toma cada inscripción. Después se repite la verificación de parejas y club dentro de
       // la transacción: una inscripción (o un alta) confirmada entre la verificación de arriba y
       // este punto quedaría sin zona en una categoría ya iniciada.
+      await tx.$executeRaw`UPDATE "Torneo" SET "inscripcionAbierta" = "inscripcionAbierta" WHERE "id" = ${torneoId}`;
+      const actual = await tx.precheckPlan.findUnique({ where: { torneoId } });
+      if (!actual || actual.revision !== guardado.revision) {
+        throw require('./precheckPlan.service').conflictoPlan();
+      }
+      await servicioPropuestas.validarInicio(organizadorId, torneoId, tx, actual);
       await tx.torneo.update({
         where: { id: torneoId },
         data: { inscripcionAbierta: false },
       });
       // Una fijación sin ampliación también invalida el plan: su fingerprint de
       // disponibilidad no cambia. Revalidar el caché después de tomar el bloqueo.
-      if (planesCache.get(planId) !== cached) {
+      if (actual.contenido.plan?.planId !== planId) {
         const error = new Error('El plan cambió desde la última verificación. Volvé a verificar antes de iniciar.');
         error.statusCode = 409;
         throw error;
@@ -1422,7 +1429,6 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
         throw error;
       }
 
-      const categoriasConSinHorario = [];
       for (const cPlan of cached.categoriasPlan) {
         const categoria = await tx.categoria.findUnique({ where: { id: cPlan.categoriaId } });
         if (!categoria || categoria.estado !== 'BORRADOR') {
@@ -1462,6 +1468,7 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
                 fechaHora: pData.fechaHora ? new Date(pData.fechaHora) : null,
                 canchaNumero: pData.canchaNumero,
                 sinHorarioAsignado: pData.sinHorarioAsignado,
+                horarioManual: Boolean(pData.fijadoManual),
                 estado: 'PENDIENTE',
               },
             });
@@ -1476,9 +1483,6 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
           data: { estado: 'EN_CURSO' },
         });
 
-        if (sinHorarioCount > 0) {
-          categoriasConSinHorario.push(cPlan.categoriaId);
-        }
 
         resumen.push({
           categoriaId: cPlan.categoriaId,
@@ -1491,9 +1495,8 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
 
       // Asignar horarios automáticos con pool global a todas las categorías que tengan partidos sin horario
       // una vez que TODOS los partidos aprobados de todas las categorías ya fueron persistidos en la base de datos
-      if (categoriasConSinHorario.length > 0) {
-        await asignarHorariosAutomatico(organizadorId, categoriasConSinHorario, tx);
-      }
+      // También los pendientes se copian exactamente: no recalcular el plan aprobado al iniciar.
+      await tx.precheckPlan.delete({ where: { torneoId } });
 
       await tx.torneo.update({
         where: { id: torneoId },

@@ -245,16 +245,12 @@ async function main() {
   const p3_3 = await prisma.pareja.create({ data: { categoriaId: cat3.id, orden: 3, jugador1: 'X5', jugador2: 'X6' } });
   await prisma.slotPareja.create({ data: { parejaId: p3_3.id, slotId: 'Viernes-18:00' } });
 
-  // 2do pre-check sin forceReset -> debe detectar mismatch de hash y regenerar
-  await preCheckInicioTorneo(organizador.id, torneo3.id);
-  const session2 = preCheckSessions.get(torneo3.id);
-  if (session2.parejaIdsHash === session1.parejaIdsHash) {
-    throw new Error('Fallo: session2 retuvo el hash viejo a pesar del agregado de pareja.');
+  const cambioNomina = await preCheckInicioTorneo(organizador.id, torneo3.id);
+  if (!cambioNomina.nominaCambio || preCheckSessions.get(torneo3.id) !== session1) {
+    throw new Error('La nomina cambiada debe bloquear sin descartar el plan.');
   }
-  if (!session2.parejaIdsHash.includes(p3_3.id)) {
-    throw new Error('Fallo: session2 no incluye el ID de la nueva pareja en su hash.');
-  }
-  console.log('  ✅ Verificado: preCheck detectó automáticamente el cambio en la nómina de parejas.');
+  await preCheckInicioTorneo(organizador.id, torneo3.id, { forceReset: true });
+  if (!preCheckSessions.get(torneo3.id).parejaIdsHash.includes(p3_3.id)) throw new Error('Rearmado explicito fallido');
 
   // =========================================================================
   // TEST 4: eliminatoriaScheduler respeta categoriaId

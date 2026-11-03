@@ -404,12 +404,14 @@ async function main() {
     const pc2 = await http('POST', `/torneos/${t5.id}/pre-check-inicio`, { body: { isReCheck: true }, token: tokenA });
     esperar(pc2, 200);
     const hash2 = preCheckSessions.get(t5.id)?.parejaIdsHash;
-    assert(hash2 && hash2 !== hash1 && hash2.includes(nueva.id), 'la sesión no se regeneró con la pareja nueva');
+    assert(hash2 === hash1 && pc2.json.nominaCambio === true, 'la nomina cambiada bloquea sin reemplazar zonas');
+    const rearmado = await http('POST', `/torneos/${t5.id}/pre-check-inicio`, { body: { forceReset: true }, token: tokenA });
+    esperar(rearmado, 200);
     // La respuesta sin bloqueo no lista parejas: se mira el plan que quedó en caché
     const { planesCache } = require('../src/services/organizador.service');
-    const plan = pc2.json.planId ? planesCache.get(pc2.json.planId) : null;
-    assert(plan || pc2.json.bloqueado, `pre-check sin planId ni bloqueo: ${pc2.texto.slice(0, 200)}`);
-    const contenido = plan ? JSON.stringify(plan.categoriasPlan) : pc2.texto;
+    const plan = rearmado.json.planId ? planesCache.get(rearmado.json.planId) : null;
+    assert(plan || rearmado.json.bloqueado, `pre-check sin planId ni bloqueo: ${pc2.texto.slice(0, 200)}`);
+    const contenido = plan ? JSON.stringify(plan.categoriasPlan) : rearmado.texto;
     assert(contenido.includes(nueva.id), 'el plan nuevo no incluye a la pareja inscripta');
   });
 

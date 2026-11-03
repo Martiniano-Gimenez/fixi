@@ -202,6 +202,7 @@ async function reiniciarTorneo(organizadorId, torneoId) {
     await tx.overrideCanchasDia.deleteMany({
       where: { torneoId: torneo.id },
     });
+    await tx.precheckPlan.deleteMany({ where: { torneoId: torneo.id } });
 
     await tx.torneo.update({
       where: { id: torneo.id },

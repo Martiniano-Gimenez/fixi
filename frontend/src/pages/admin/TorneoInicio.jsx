@@ -56,7 +56,7 @@ export default function TorneoInicio() {
     grillaOrganizador, preCheckAprobado, revisionPreCheck, partidoManualAbierto,
     setPartidoManualAbierto, hayCambiosGuardados, setHayCambiosGuardados,
     confirmarResorteoModalOpen, setConfirmarResorteoModalOpen, avisoSesionReiniciada,
-    avisoDestrabe, categoriasConflictosOrdenadas, allConflictosExpanded,
+    avisoDestrabe, nominaCambio, categoriasConflictosOrdenadas, allConflictosExpanded,
     toggleCategoriaConflicto, handleToggleAllConflictos, handlePreCheckInicio, aplicarPreCheck,
     executeIniciarTorneo, executeIniciarTorneoEmergencia,
   } = usePreCheckInicio(id, fetchData, () => navigate(`/admin/torneos/${id}`, { replace: true }));
@@ -122,7 +122,7 @@ export default function TorneoInicio() {
           <h1 ref={tituloRef} tabIndex={-1} className="pc-page-title">Iniciar torneo</h1>
           {torneo && <p className="pc-page-torneo">{torneo.nombre}</p>}
           <p className="pc-page-summary" role="status">
-            {loading || verificandoInicio ? 'Verificando horarios…' : error ? error : preCheckAprobado ? 'Todo listo para iniciar' : conflictosBloqueo !== null
+            {loading || verificandoInicio ? 'Verificando horarios…' : error ? error : nominaCambio ? 'Hay que revisar el armado de zonas' : preCheckAprobado ? 'Todo listo para iniciar' : conflictosBloqueo !== null
               ? `${totalConflictos} ${totalConflictos === 1 ? 'conflicto' : 'conflictos'} en ${totalCategorias} ${totalCategorias === 1 ? 'categoría' : 'categorías'}`
               : 'No se pudo verificar el torneo.'}
           </p>
@@ -148,6 +148,13 @@ export default function TorneoInicio() {
       </header>
 
       <section className="pc-page-body" aria-label="Vista previa del inicio" aria-busy={loading || verificandoInicio}>
+        {nominaCambio && (
+          <div className="pc-notice" role="status">
+            <p>Cambió la lista de parejas. Para seguir, rearmá las zonas desde cero.</p>
+            <button type="button" className="pc-manual-button" disabled={ocupado}
+              onClick={() => setConfirmarResorteoModalOpen(true)}>Rearmar las zonas desde cero</button>
+          </div>
+        )}
         {preCheckAprobado && (
           <div className="pc-success-note">Todos los partidos tienen cancha y horario.</div>
         )}
@@ -155,7 +162,7 @@ export default function TorneoInicio() {
           <div className="pc-notice pc-session-notice">
             <Info size={16} className="pc-icon" />
             <span>
-              Pasó mucho tiempo sin cambios o se reinició el servidor, así que volvimos a armar los horarios. Los horarios que agregaste a las parejas siguen guardados, pero revisá los partidos que habías fijado: pueden haber cambiado.
+              Recuperamos el plan guardado. Las zonas y los partidos fijados se mantienen.
             </span>
           </div>
         )}
@@ -474,7 +481,7 @@ export default function TorneoInicio() {
             </div>
             <div className="pm-body">
               <p className="pc-copy">
-                Se descartan las zonas actuales y se vuelven a armar con las parejas y los horarios cargados ahora. Si no cambiaste nada, vas a obtener las mismas zonas.
+                Se descartan las zonas actuales y sus horarios fijados, y se vuelven a armar con las parejas y los horarios cargados ahora. Si no cambiaste nada, vas a obtener las mismas zonas.
               </p>
             </div>
             <div className="pm-footer">

@@ -16,7 +16,12 @@ const GUARDS_SQL = path.join(__dirname, 'utils', 'test-db-guards.sql');
 const GUARDS_MARKER = path.join(PRISMA_DIR, 'test.template.guards');
 
 function hashGuards() {
-  return crypto.createHash('sha256').update(fs.readFileSync(GUARDS_SQL)).digest('hex');
+  const hash = crypto.createHash('sha256').update(fs.readFileSync(GUARDS_SQL));
+  for (const dir of fs.readdirSync(path.join(PRISMA_DIR, 'migrations')).sort()) {
+    const sql = path.join(PRISMA_DIR, 'migrations', dir, 'migration.sql');
+    if (fs.existsSync(sql)) hash.update(fs.readFileSync(sql));
+  }
+  return hash.digest('hex');
 }
 
 // Sin contar comentarios de línea (--) ni espacios
@@ -46,6 +51,8 @@ function regenerarPlantilla() {
   }
 
   console.log('⚙️ [reset-test-db] Generando test.template.db con prisma migrate deploy sobre base temporal...');
+  // En Windows el motor puede fallar al abrir una base inexistente.
+  fs.writeFileSync(tempDb, '');
   const schemaPath = path.join(PRISMA_DIR, 'schema.prisma');
   execSync(`npx prisma migrate deploy --schema="${schemaPath}"`, {
     cwd: path.resolve(__dirname, '..'),

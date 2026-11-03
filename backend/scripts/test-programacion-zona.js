@@ -312,7 +312,7 @@ async function comprobarInicioConPendientes(caso, planId, categoriasPlan) {
   try {
     await organizadorService.iniciarTorneoMultiCategoria(caso.org.id, caso.torneo.id, planId);
   } finally { prisma.$transaction = transaction; }
-  assert.ok(actualizados.length > 0, 'El greedy realmente procesó pendientes al iniciar');
+  assert.ok(actualizados.length === 0, 'El inicio no reprocesa pendientes: antes procesó pendientes al iniciar');
   const db = await prisma.partido.findMany({
     where: { categoria: { torneoId: caso.torneo.id }, zonaId: { not: null } },
     include: { zona: true },

@@ -55,6 +55,18 @@ model Torneo {
   organizador    Organizador          @relation(fields: [organizadorId], references: [id])
   categorias     Categoria[]
   overridesDia   OverrideCanchasDia[]
+  precheckPlan   PrecheckPlan?
+}
+
+model PrecheckPlan {
+  torneoId String @id
+  contenido Json
+  revision String
+  firma String
+  nomina String
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+  torneo Torneo @relation(fields: [torneoId], references: [id], onDelete: Cascade)
 }
 
 model OverrideCanchasDia {

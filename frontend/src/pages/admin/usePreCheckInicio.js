@@ -74,6 +74,7 @@ export default function usePreCheckInicio(id, fetchData, onIniciado) {
   const [confirmarResorteoModalOpen, setConfirmarResorteoModalOpen] = useState(false);
   const [avisoSesionReiniciada, setAvisoSesionReiniciada] = useState(false);
   const [avisoDestrabe, setAvisoDestrabe] = useState(null);
+  const [nominaCambio, setNominaCambio] = useState(false);
 
   const categoriasConflictosOrdenadas = useMemo(() => {
     if (!conflictosBloqueo || conflictosBloqueo.length === 0) return [];
@@ -105,6 +106,7 @@ export default function usePreCheckInicio(id, fetchData, onIniciado) {
   };
 
   const aplicarPreCheck = (res, isReCheckBool = true, forceResetBool = false) => {
+    setNominaCambio(Boolean(res.nominaCambio));
     setHayCambiosGuardados(false);
     setRevisionPreCheck(res.revision || null);
     setAvisoSesionReiniciada(Boolean(res.sesionReiniciada));
@@ -238,6 +240,7 @@ export default function usePreCheckInicio(id, fetchData, onIniciado) {
     setConfirmarResorteoModalOpen,
     avisoSesionReiniciada,
     avisoDestrabe,
+    nominaCambio,
     categoriasConflictosOrdenadas,
     allConflictosExpanded,
     toggleCategoriaConflicto,
