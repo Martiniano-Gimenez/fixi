@@ -45,6 +45,7 @@ const TEST_SUITES = [
   'test-persistencia-overrides.js',
   'test-precheck-snapshot.js',
   'test-precheck-persistencia.js',
+  'test-reacomodar-precheck.js',
   'test-programacion-zona.js',
   'test-propuestas-zona.js',
   'test-opciones-partido-zona.js',

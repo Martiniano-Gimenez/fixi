@@ -11,6 +11,7 @@ const {
 const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal, clavesJornadasTorneo } = require('../utils/dateUtils');
 const { minutosDespuesDelCierre } = require('../utils/horarioClub');
 const { verificarProgramacionZona } = require('../utils/programacionZona');
+const { reacomodarPrecheck } = require('../utils/reacomodarPrecheck');
 const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -199,12 +200,12 @@ async function getSlotsGrilla(organizadorId) {
  * de los partidos actualmente agendados en categoriasPlan.
  * Garantiza total sincronía entre el dry-run y cada re-check incremental.
  */
-function buildTimelinesFromPlan({ categoriasPlan, cantCanchas, DURACION_MS }) {
+function buildTimelinesFromPlan({ categoriasPlan, cantCanchas, DURACION_MS, externos = [] }) {
   const courtTimelines = new Map();
   for (let c = 1; c <= cantCanchas; c++) courtTimelines.set(c, []);
   const parejaAssignments = new Map();
 
-  for (const cPlan of categoriasPlan) {
+  for (const cPlan of [...categoriasPlan, { zonas: [{ partidos: externos }] }]) {
     for (const z of cPlan.zonas) {
       for (const p of z.partidos) {
         if (!p.sinHorarioAsignado && p.fechaHora && p.canchaNumero) {
@@ -231,7 +232,7 @@ function buildTimelinesFromPlan({ categoriasPlan, cantCanchas, DURACION_MS }) {
 
 /**
  * Evalúa incrementalmente los partidos sin horario de un snapshot sobre los huecos libres del timeline
- * garantizando que ningún partido previamente asignado sea modificado.
+ * conservando fijos y reacomodando automáticos solo para liberar canchas.
  * Operación 100% síncrona en memoria (cero riesgo de race conditions).
  */
 function evaluarAsignacionesIncrementales(args) {
@@ -255,7 +256,7 @@ function evaluarAsignacionesIncrementales(args) {
     if (!z.requiereArmadoManual && !z.partidos.some((p) => p.sinHorarioAsignado)) continue;
     const ajenos = categoriasPlan.map((cat) => ({ ...cat, zonas: cat.zonas.filter((zona) => zona !== z) }));
     const ocupacion = buildTimelinesFromPlan({
-      categoriasPlan: ajenos, cantCanchas: args.cantidadCanchas, DURACION_MS: args.DURACION_MS,
+      categoriasPlan: ajenos, cantCanchas: args.cantidadCanchas, DURACION_MS: args.DURACION_MS, externos: args.externos,
     });
     const resultado = verificarProgramacionZona({
       formato: z.formato,
@@ -290,6 +291,8 @@ function evaluarAsignacionesIncrementales(args) {
       for (const [id, intervalos] of timelines[clave]) args[clave].set(id, intervalos);
     }
   }
+  reacomodarPrecheck({ categoriasPlan, parejasMap: args.parejasMap, organizador: args.organizador,
+    refFecha: args.refFecha, externos: args.externos });
   // Recalcular respuesta/contadores sobre el testigo, sin otro intento greedy.
   return evaluarAsignacionesIncrementalesBase({
     ...entrada, soloConflictos: true, zonasVerificadas: verificadas,
@@ -308,9 +311,10 @@ function evaluarAsignacionesIncrementalesBase({
   soloConflictos = false,
   zonasVerificadas = new Set(),
   zonaIntento = null,
+  externos = [],
 }) {
   // Reconstrucción limpia de timelines a partir del estado actual de los partidos del plan
-  const freshTimelines = buildTimelinesFromPlan({ categoriasPlan, cantCanchas: cantidadCanchas, DURACION_MS });
+  const freshTimelines = buildTimelinesFromPlan({ categoriasPlan, cantCanchas: cantidadCanchas, DURACION_MS, externos });
   const courtTimelines = freshTimelines.courtTimelines;
   const parejaAssignments = freshTimelines.parejaAssignments;
   const friInicioMin = horaAMinutos(organizador.viernesInicio);
@@ -616,7 +620,7 @@ function evaluarAsignacionesIncrementalesBase({
     }
     if (!contextosVerificacion.has(zona)) {
       const ajenos = categoriasPlan.map((c) => ({ ...c, zonas: c.zonas.filter((z) => z !== zona) }));
-      const ocupacion = buildTimelinesFromPlan({ categoriasPlan: ajenos, cantCanchas: cantidadCanchas, DURACION_MS });
+      const ocupacion = buildTimelinesFromPlan({ categoriasPlan: ajenos, cantCanchas: cantidadCanchas, DURACION_MS, externos });
       contextosVerificacion.set(zona, {
         formato: zona.formato,
         partidos: zona.partidos.map((p) => ({ ...p })),
@@ -1101,6 +1105,11 @@ async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = 
 
   // Hash de IDs de parejas para invalidar automáticamente el snapshot si se agregan o eliminan parejas
   const currentParejaIds = Array.from(parejasMap.keys()).sort().join(',');
+  const externos = await prisma.partido.findMany({ where: {
+    categoria: { torneo: { organizadorId } }, esBye: false,
+    fechaHora: { not: null }, canchaNumero: { not: null }, sinHorarioAsignado: false,
+  }, orderBy: [{ fechaHora: 'asc' }, { canchaNumero: 'asc' }, { categoria: { nombre: 'asc' } }, { posicionEnRonda: 'asc' }],
+  select: { id: true, zonaId: true, pareja1Id: true, pareja2Id: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true } });
 
   // =========================================================================
   // CAMINO 1: RE-EVALUACIÓN SOBRE SNAPSHOT CONGELADO EXISTENTE (Incremental)
@@ -1125,6 +1134,7 @@ async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = 
       refFecha,
       organizador,
       DURACION_MS,
+      externos,
     });
 
     if (evalRes.totalConflictos > 0) {
@@ -1301,6 +1311,7 @@ async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = 
         refFecha,
         organizador,
         DURACION_MS,
+        externos,
       });
 
       if (evalRes.totalConflictos > 0) {
