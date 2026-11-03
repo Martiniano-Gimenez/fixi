@@ -126,7 +126,7 @@ export default function TorneoInicio() {
         </div>
         {totalCategorias > 1 && (
           <button type="button" className="pm-button pc-compact" onClick={handleToggleAllConflictos}>
-            {allConflictosExpanded ? 'Cerrar todas' : 'Expandir todas'}
+            {allConflictosExpanded ? 'Cerrar todas' : 'Abrir todas'}
           </button>
         )}
       </header>
@@ -139,7 +139,7 @@ export default function TorneoInicio() {
           <div className="pc-notice pc-session-notice">
             <Info size={16} className="pc-icon" />
             <span>
-              La vista previa se volvió a armar con los horarios guardados.
+              Pasó mucho tiempo sin cambios o se reinició el servidor, así que volvimos a armar los horarios. Los horarios que agregaste a las parejas siguen guardados, pero revisá los partidos que habías fijado: pueden haber cambiado.
             </span>
           </div>
         )}
