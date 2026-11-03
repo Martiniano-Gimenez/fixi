@@ -13,6 +13,10 @@ assert.deepEqual(lista.map((p) => [p.zona, p.partido.posicionEnRonda]), [['Zona 
 assert.equal(lista[0].parejas[0].nombre, 'Una');
 assert.equal(lista[3].parejas[1].nombre, 'Otra');
 assert.equal(listarPendientes([{ ...categorias[0], partidosSinHorario: [categorias[0].partidosSinHorario[2]] }])[0].partido.origen, 'Ganador P1 vs Ganador P2');
+const quitado = { ...categorias[0].partidosSinHorario[0], motivo: 'HORARIO_QUITADO' };
+const pendienteQuitado = listarPendientes([{ ...categorias[0], partidosSinHorario: [quitado] }])[0];
+assert.equal(pendienteQuitado.partido.origen, undefined);
+assert.deepEqual(pendienteQuitado.parejas.map((p) => p.nombre), ['Una', 'Otra']);
 let recorrido = actualizarRecorrido(null, lista);
 assert.equal(recorrido.actual, lista[0].clave);
 assert.equal(actualizarRecorrido(recorrido, lista), recorrido, 'No produce un ciclo de renders');

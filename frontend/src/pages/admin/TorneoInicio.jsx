@@ -16,6 +16,7 @@ const BADGE_POR_MOTIVO = {
   SIN_FRANJA_COMUN: 'Sin horarios en común',
   ZONA_MANUAL_INCOMPLETA: 'Sin horarios en común',
   PARTIDO_SIN_HORARIO: 'Sin horario',
+  HORARIO_QUITADO: 'Horario quitado',
   SIN_CANCHA_DISPONIBLE: 'Canchas saturadas',
 };
 
@@ -25,6 +26,9 @@ export default function TorneoInicio() {
   const [torneo, setTorneo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cerrandoInscripcion, setCerrandoInscripcion] = useState(false);
+  const [errorInscripcion, setErrorInscripcion] = useState('');
+  const cierreInscripcionRef = useRef(false);
   const [modoResolver, setModoResolver] = useState(false);
   const resolverRef = useRef(null);
   const tituloRef = useRef(null);
@@ -105,11 +109,28 @@ export default function TorneoInicio() {
 
   const totalConflictos = categoriasConflictosOrdenadas.reduce((total, c) => total + c.partidosSinHorario.length, 0);
   const totalCategorias = categoriasConflictosOrdenadas.length;
-  const ocupado = loading || verificandoInicio || iniciandoTorneo || Boolean(partidoManualAbierto?.fijando);
+  const ocupado = loading || verificandoInicio || iniciandoTorneo || cerrandoInscripcion || Boolean(partidoManualAbierto?.fijando);
   const confirmacionAbierta = iniciarModalOpen || confirmarEmergenciaModalOpen || confirmarResorteoModalOpen;
   const cerrarRecorrido = () => {
     setModoResolver(false); setPartidoManualAbierto(null);
     (resolverRef.current || tituloRef.current)?.focus({ preventScroll: true });
+  };
+  const cerrarInscripcion = async () => {
+    if (ocupado || confirmacionAbierta || cierreInscripcionRef.current) return;
+    cierreInscripcionRef.current = true;
+    setCerrandoInscripcion(true);
+    setErrorInscripcion('');
+    try {
+      const res = await api.patch(`/torneos/${id}/inscripcion`, { abierta: false });
+      setTorneo((prev) => ({ ...prev, inscripcionAbierta: res.inscripcionAbierta }));
+      await handlePreCheckInicio(true);
+      tituloRef.current?.focus({ preventScroll: true });
+    } catch (err) {
+      setErrorInscripcion(err.message || 'No pudimos cerrar la inscripción.');
+    } finally {
+      cierreInscripcionRef.current = false;
+      setCerrandoInscripcion(false);
+    }
   };
 
   return (
@@ -162,8 +183,23 @@ export default function TorneoInicio() {
           <div className="pc-notice pc-session-notice">
             <Info size={16} className="pc-icon" />
             <span>
-              Recuperamos el plan guardado. Las zonas y los partidos fijados se mantienen.
+              Pasó mucho tiempo sin cambios o se reinició el servidor, así que volvimos a armar los horarios. Los horarios que agregaste a las parejas siguen guardados, pero revisá los partidos que habías fijado: pueden haber cambiado.
             </span>
+          </div>
+        )}
+
+        {torneo?.inscripcionAbierta && (
+          <div className="pc-notice pc-inscripcion-notice" role="status">
+            <Info size={16} className="pc-icon" aria-hidden="true" />
+            <div className="pc-notice-lines">
+              <p className="pc-notice-line">La inscripción sigue abierta. Si se anota otra pareja, vas a tener que rearmar las zonas y se pierden los horarios fijados.</p>
+              <div className="pc-manual-actions">
+                <button type="button" className="pc-manual-button" disabled={ocupado || confirmacionAbierta} onClick={cerrarInscripcion}>
+                  {cerrandoInscripcion ? 'Cerrando inscripción…' : 'Cerrar inscripción'}
+                </button>
+              </div>
+              {errorInscripcion && <p className="pc-manual-error" role="alert">{errorInscripcion}</p>}
+            </div>
           </div>
         )}
 

@@ -1151,7 +1151,8 @@ body:has(.panel) {
 .panel .pc-notice svg { flex-shrink: 0; margin-top: var(--e-1); }
 .panel .pc-notice-lines { min-width: 0; }
 .panel .pc-notice-line { margin: 0; }
-.panel .pc-session-notice { margin-top: 0; background: var(--marca-suave); color: var(--marca-hover); }
+.panel .pc-session-notice, .panel .pc-inscripcion-notice { margin-top: 0; background: var(--marca-suave); color: var(--marca-hover); }
+.panel .pc-inscripcion-notice .pc-manual-actions { margin-top: var(--e-2); }
 .panel .pc-danger-notice { color: var(--alerta-texto); background: var(--alerta-suave); }
 .panel .pc-badge { display: inline-flex; align-items: center; gap: var(--e-1); max-width: 100%; padding: var(--e-1) var(--e-2); border-radius: var(--r-dato); font-size: var(--t-12); font-weight: 600; overflow-wrap: anywhere; }
 .panel .pc-danger-badge { color: var(--alerta-texto); background: var(--alerta-suave); }

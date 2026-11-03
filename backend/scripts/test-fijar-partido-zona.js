@@ -381,6 +381,16 @@ async function main() {
   finally { await new Promise((r) => server.close(r)); await prisma.$disconnect(); }
 }
 async function testQuitar() {
+  const normal = await crearCaso('quitar-partido-normal', [['Viernes-13:00'], ['Viernes-18:00']]);
+  let np = await precheck(normal);
+  np = await fijar(normal, await elegir(normal, np, 1, 'Viernes-15:45'));
+  const quitado = await post(normal, '/partidos/quitar', query(normal, np, 1));
+  assert.equal(quitado.status, 200);
+  const pendiente = quitado.body.conflictos.flatMap((c) => c.partidosSinHorario).find((p) => p.zonaId === zona(normal).id);
+  assert.equal(pendiente.motivo, 'HORARIO_QUITADO');
+  assert.ok(pendiente.pareja1Id && pendiente.pareja2Id);
+  assert.equal(pendiente.pareja1, 'Pareja 1 / Test'); assert.equal(pendiente.pareja2, 'Pareja 2 / Test');
+  assert.equal(pendiente.origen, undefined, 'El partido liberado conserva sus dos rivales, sin origen de definición');
   const c = await crearCaso('quitar-horario');
   let pre = await precheck(c);
   pre = await fijar(c, await elegir(c, pre, 1, 'Viernes-15:45'));

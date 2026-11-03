@@ -180,7 +180,7 @@ export default function ElegirHorarioPartido({
   return (
     <div className="pc-horario-partido">
       {(mostrarPartido || fijoManual) && <div className="pc-partido-cabecera">
-        {mostrarPartido && <FilaPartidoZona partido={partido} nombres={nombres} badge={fijoManual ? 'fijo' : fijo ? 'asignado' : null} />}
+        {mostrarPartido && <FilaPartidoZona partido={partido} nombres={nombres} badge={fijoManual ? 'fijo' : fijo ? 'asignado' : partido.motivo === 'HORARIO_QUITADO' ? 'Horario quitado' : null} />}
         {fijoManual && (
           <button type="button" className="pc-manual-button" disabled={fijando || !revision}
             aria-expanded={Boolean(quitarAbierto)} onClick={() => {

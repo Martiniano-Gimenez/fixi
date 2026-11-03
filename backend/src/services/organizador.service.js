@@ -960,7 +960,7 @@ function evaluarAsignacionesIncrementalesBase({
         const shared = interseccionVentanas(win1, win2);
 
         const tieneFranjaComun = shared.some((w) => w.endMs - w.startMs >= DURACION_MS);
-        const motivo = p.pendienteManual ? 'PARTIDO_SIN_HORARIO' : tieneFranjaComun ? 'SIN_CANCHA_DISPONIBLE' : 'SIN_FRANJA_COMUN';
+        const motivo = p.pendienteManual ? 'HORARIO_QUITADO' : tieneFranjaComun ? 'SIN_CANCHA_DISPONIBLE' : 'SIN_FRANJA_COMUN';
 
         const slotsViables = allSlotIds.filter((sId) => {
           const info = slotsEvaluadosMap.get(sId);
