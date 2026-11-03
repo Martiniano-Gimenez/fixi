@@ -211,11 +211,11 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     return obtener(org, id, { isReCheck: true });
   }
   async function opcionesPartido(org, id, data = {}) {
-    const { categoriaId, zonaId, posicionEnRonda, revision, cursor = null } = data || {};
+    const { categoriaId, zonaId, posicionEnRonda, revision } = data || {};
     if (![categoriaId, zonaId, revision].every((v) => typeof v === 'string' && v) ||
         !Number.isSafeInteger(posicionEnRonda) || posicionEnRonda < 1 ||
-        (cursor !== null && (typeof cursor !== 'string' || !cursor || cursor.length > 512))) {
-      throw error(400, 'Indicá la categoría, la zona, el partido y la revisión del pre-check; el cursor debe ser válido.', 'OPCIONES_PARTIDO_INVALIDAS');
+        data?.cursor != null) {
+      throw error(400, 'Indicá la categoría, la zona, el partido y la revisión del pre-check, sin cursor.', 'OPCIONES_PARTIDO_INVALIDAS');
     }
     const estado = await leerEstado(prisma, org, id);
     const sesion = preCheckSessions.get(id);
@@ -231,11 +231,12 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     if (!zona.partidos.some((p) => p.posicionEnRonda === posicionEnRonda)) {
       throw error(404, 'El partido no pertenece a esta zona.', 'PARTIDO_PRECHECK_NO_ENCONTRADO');
     }
-    const key = JSON.stringify([categoriaId, zonaId, posicionEnRonda, cursor]);
+    const key = JSON.stringify([categoriaId, zonaId, posicionEnRonda]);
     if (!sesion.opcionesPorPartido.has(key)) sesion.opcionesPorPartido.set(key,
       obtenerOpcionesPartidoZona({ ...contexto(estado, sesion, zona), claveZona: claveNaturalZona(estado, categoria, zona) },
-        posicionEnRonda, { cursor }));
+        posicionEnRonda));
     for (const opcion of sesion.opcionesPorPartido.get(key).opciones) {
+      if (opcion.estado === 'NO_DISPONIBLE') continue;
       sesion.opcionesCache.set(JSON.stringify([categoriaId, zonaId, posicionEnRonda, opcion.clave]), opcion.slotId);
     }
     sesion.expiresAt = Date.now() + 60 * 60_000;

@@ -7,7 +7,7 @@ const opcionesUtil = require('../src/utils/opcionesPartidoZona');
 const listar = opcionesUtil.obtenerOpcionesPartidoZona, recalcular = opcionesUtil.recalcularOpcionPartidoZona;
 let presupuestoLista = null, presupuestoFijar = null;
 opcionesUtil.obtenerOpcionesPartidoZona = (e, ...args) => listar({ ...e,
-  ...(presupuestoLista === null ? {} : { maxNodosPagina: presupuestoLista }) }, ...args);
+  ...(presupuestoLista === null ? {} : { maxNodosOpcion: presupuestoLista }) }, ...args);
 opcionesUtil.recalcularOpcionPartidoZona = (e, ...args) => recalcular({ ...e,
   ...(presupuestoFijar === null ? {} : { maxNodosOpcion: presupuestoFijar }) }, ...args);
 const prisma = require('../src/lib/prisma');
@@ -52,13 +52,9 @@ function partido(c, posicion) { return zona(c).partidos.find((p) => p.posicionEn
 function query(c, pre, posicion) { return { categoriaId: c.cat.id, zonaId: zona(c).id, posicionEnRonda: posicion, revision: pre.revision }; }
 async function elegir(c, pre, posicion, slotId) {
   const body = query(c, pre, posicion);
-  let cursor = null;
-  do {
-    const r = await post(c, '/partidos/opciones', { ...body, cursor }); assert.equal(r.status, 200);
-    const opcion = r.body.opciones.find((o) => !slotId || o.slotId === slotId);
-    if (opcion) return { body: { ...body, clave: opcion.clave }, opcion };
-    cursor = r.body.siguienteCursor;
-  } while (cursor);
+  const r = await post(c, '/partidos/opciones', body); assert.equal(r.status, 200);
+  const opcion = r.body.opciones.find((o) => o.estado !== 'NO_DISPONIBLE' && (!slotId || o.slotId === slotId));
+  if (opcion) return { body: { ...body, clave: opcion.clave }, opcion };
   assert.fail(`No se encontró ${slotId || 'ninguna opción'} para P${posicion}`);
 }
 async function fijar(c, seleccion) {
@@ -99,7 +95,7 @@ async function testFijacion() {
   assert.ok(sesion(c).courtTimelines.get(1).some((o) => o.startMs === reservado.fechaHora), 'Ocupación reconstruida');
   const restante = await post(c, '/partidos/opciones', query(c, despues, 2));
   assert.equal(restante.status, 200);
-  assert.ok(restante.body.opciones.every((o) => +new Date(o.fechaHora) + 75 * 60_000 <= reservado.fechaHora || +new Date(o.fechaHora) >= reservado.fechaHora + 75 * 60_000));
+  assert.ok(restante.body.opciones.filter((o) => o.estado !== 'NO_DISPONIBLE').every((o) => +new Date(o.fechaHora) + 75 * 60_000 <= reservado.fechaHora || +new Date(o.fechaHora) >= reservado.fechaHora + 75 * 60_000));
 
   const sin = await crearCaso('fijacion-sin-ampliacion', [viernes('18:00', '23:00'), viernes('18:00', '23:00'), sabado('09:00', '13:00')]);
   const sinPre = await precheck(sin), sinAntes = await disponibilidad(sin), sinSel = await elegir(sin, sinPre, 1, 'Viernes-18:00');
@@ -207,9 +203,9 @@ async function testMini() {
   const c = await crearCaso('fijacion-mini', [['Viernes-13:00'], ['Viernes-14:30'], ['Sabado-09:00'], ['Sabado-10:30']]);
   let pre = await precheck(c);
   assert.equal(zona(c).formato, 'MINI_BRACKET');
-  for (const pos of [3, 4]) assert.deepEqual((await post(c, '/partidos/opciones', query(c, pre, pos))).body.opciones, []);
+  for (const pos of [3, 4]) assert.ok((await post(c, '/partidos/opciones', query(c, pre, pos))).body.opciones.every((o) => o.motivo === 'ESPERA_BASES'));
   pre = await fijar(c, await elegir(c, pre, 1, 'Viernes-09:00'));
-  assert.deepEqual((await post(c, '/partidos/opciones', query(c, pre, 3))).body.opciones, []);
+  assert.ok((await post(c, '/partidos/opciones', query(c, pre, 3))).body.opciones.every((o) => o.motivo === 'ESPERA_BASES'));
   pre = await fijar(c, await elegir(c, pre, 2, 'Viernes-10:15'));
   assert.ok(partido(c, 1).fijadoManual); assert.ok(partido(c, 2).fijadoManual);
   const sel = await elegir(c, pre, 3, 'Viernes-11:30');
@@ -308,7 +304,9 @@ async function testDeterminismo() {
   const resA = await fijar(a, selA), resB = await fijar(b, selB);
   assert.deepEqual(horario(partido(a, 1)), horario(partido(b, 1)));
   const pA = await post(a, '/partidos/opciones', query(a, resA, 2)), pB = await post(b, '/partidos/opciones', query(b, resB, 2));
-  const normalizar = (r, c) => r.body.opciones.map((o) => ({ ...o, parejasAAmpliar: o.parejasAAmpliar.map((id) => c.parejas.findIndex((p) => p.id === id)) }));
+  const normalizar = (r, c) => r.body.opciones.map((o) => ({ ...o,
+    parejasAAmpliar: o.parejasAAmpliar.map((id) => c.parejas.findIndex((p) => p.id === id)),
+    parejasOcupadas: o.parejasOcupadas.map((id) => c.parejas.findIndex((p) => p.id === id)) }));
   assert.equal(pA.status, 200); assert.equal(pB.status, 200); assert.deepEqual(normalizar(pA, a), normalizar(pB, b));
   assert.ok(preB.revision);
   console.log('PASS: fijación y opciones posteriores deterministas con UUID y entradas permutados');
@@ -347,17 +345,17 @@ async function testZonaNoManual() {
   const body = { categoriaId: c.cat.id, zonaId: conflicto.zonaId, posicionEnRonda: conflicto.posicionEnRonda, revision: pre.revision };
   const opciones = await post(c, '/partidos/opciones', body); assert.equal(opciones.status, 200);
   assert.ok(opciones.body.opciones.length);
-  for (const o of opciones.body.opciones) {
+  for (const o of opciones.body.opciones.filter((o) => o.estado !== 'NO_DISPONIBLE')) {
     const inicio = +new Date(o.fechaHora), fin = inicio + 75 * 60_000;
     for (const p of previos) assert.ok(fin <= +p.fechaHora || inicio >= +p.fechaHora + 75 * 60_000,
       'En RR de tres, los otros dos partidos se conservan fijos y no se superponen');
   }
-  const despues = await fijar(c, { body: { ...body, clave: opciones.body.opciones[0].clave } });
+  const despues = await fijar(c, { body: { ...body, clave: opciones.body.opciones.find((o) => o.estado !== 'NO_DISPONIBLE').clave } });
   assert.equal(hayConflicto(c, despues), false);
   assert.deepEqual(previos.map((p) => [p.posicionEnRonda, horario(p)]), horariosPrevios);
   const fijado = partido(c, conflicto.posicionEnRonda), guardado = horario(fijado);
   assert.equal(fijado.fijadoManual, true);
-  assert.equal(guardado.fechaHora, +new Date(opciones.body.opciones[0].fechaHora));
+  assert.equal(guardado.fechaHora, +new Date(opciones.body.opciones.find((o) => o.estado !== 'NO_DISPONIBLE').fechaHora));
   const recheck = await precheck(c);
   assert.equal(hayConflicto(c, recheck), false); assert.deepEqual(horario(fijado), guardado);
   assert.deepEqual(previos.map((p) => [p.posicionEnRonda, horario(p)]), horariosPrevios);

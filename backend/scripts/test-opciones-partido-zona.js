@@ -32,15 +32,10 @@ function fijar(e, posicion, slotId, canchaNumero = 1) {
   });
 }
 function todas(e, posicion = 1) {
-  const opciones = [];
-  let cursor = null;
-  do {
-    const pagina = obtenerOpcionesPartidoZona(e, posicion, { cursor });
-    assert.ok(pagina.opciones.length <= 6);
-    opciones.push(...pagina.opciones); cursor = pagina.siguienteCursor;
-  } while (cursor);
+  const { opciones } = obtenerOpcionesPartidoZona(e, posicion);
   assert.equal(new Set(opciones.map((o) => o.slotId)).size, opciones.length, 'Un inicio aparece una sola vez');
-  return opciones;
+  assert.deepEqual(opciones.map((o) => o.fechaHora), opciones.map((o) => o.fechaHora).sort(), 'Orden cronológico');
+  return opciones.filter((o) => o.estado !== 'NO_DISPONIBLE');
 }
 function testPuro() {
   const e = entrada([viernes('13:00', '17:00'), []], {
@@ -57,16 +52,15 @@ function testPuro() {
   assert.deepEqual(e, originales, 'Sin mutaciones');
   const dos = entrada([['Viernes-13:00'], ['Viernes-16:00']], { club: ['Viernes-14:30'] });
   assert.deepEqual(todas(dos)[0].parejasAAmpliar, ['id-0', 'id-1']);
+  const cronologica = entrada([['Viernes-16:00'], ['Viernes-16:00']], { club: viernes('15:00', '18:00') });
+  assert.equal(todas(cronologica)[0].slotId, 'Viernes-15:00', 'Una ampliación mayor no reordena la grilla');
+  assert.equal(todas(cronologica).find((o) => o.slotId === 'Viernes-16:00').estado, 'ENTRA');
 
   const pagina = entrada([[], []]);
   const primera = obtenerOpcionesPartidoZona(pagina, 1);
-  assert.equal(primera.opciones.length, 6); assert.ok(primera.siguienteCursor);
-  const segunda = obtenerOpcionesPartidoZona(pagina, 1, { cursor: primera.siguienteCursor });
-  assert.equal(segunda.opciones[0].slotId, 'Viernes-10:30');
+  assert.equal(primera.opciones.length, pagina.grilla.length);
+  assert.equal(primera.siguienteCursor, undefined);
   assert.equal(todas(pagina).length, pagina.grilla.length);
-  assert.throws(() => obtenerOpcionesPartidoZona(pagina, 1, { cursor: 'basura' }), (e) => e.statusCode === 400);
-  const otraZona = { ...pagina, claveZona: 'otra' };
-  assert.throws(() => obtenerOpcionesPartidoZona(otraZona, 1, { cursor: primera.siguienteCursor }), (e) => e.statusCode === 400);
   assert.throws(() => obtenerOpcionesPartidoZona(pagina, 999), (e) => e.statusCode === 404);
 
   // Identidad y orden naturales, incluso cambiando UUID y la inserción de grilla/parejas/partidos/maps.
@@ -94,6 +88,12 @@ function testPuro() {
   ocupada.courtTimelines = new Map([1, 2, 3].map((c) => [c, [ventana('Viernes-09:00')]]));
   ocupada.parejaAssignments = new Map([['id-0', [ventana('Viernes-10:15')]]]);
   assert.deepEqual(todas(ocupada).map((o) => o.slotId), ['Viernes-11:30', 'Viernes-11:45'], 'Respeta intervalos completos de ocupación externa y de la pareja');
+  const bloqueadas = obtenerOpcionesPartidoZona(ocupada, 1).opciones;
+  assert.equal(bloqueadas[0].motivo, 'SIN_CANCHA');
+  assert.deepEqual(bloqueadas.find((o) => o.slotId === 'Viernes-10:15').parejasOcupadas, ['id-0']);
+  assert.equal(bloqueadas.find((o) => o.slotId === 'Viernes-10:15').motivo, 'PAREJA_OCUPADA');
+  assert.equal(opciones[0].estado, 'ENTRA'); assert.equal(opciones[2].estado, 'PEDIR_1');
+  assert.equal(todas(dos)[0].estado, 'PEDIR_VARIAS');
   const canchaBaja = entrada([[], []], { club: ['Viernes-09:00'], canchas: 3 });
   const clave = todas(canchaBaja)[0].clave;
   canchaBaja.courtTimelines = new Map([[1, [ventana('Viernes-09:00')]]]);
@@ -102,8 +102,8 @@ function testPuro() {
   const rr = entrada([[], [], []], { club: viernes('09:00', '12:45'), canchas: 2 });
   fijar(rr, 2, 'Viernes-09:00');
   assert.deepEqual(todas(rr, 1).map((o) => o.slotId), ['Viernes-10:15', 'Viernes-11:30'], 'Solo conserva opciones que permiten el tercer partido; excluye solapes propios y NO_FACTIBLE');
-  assert.deepEqual(obtenerOpcionesPartidoZona(rr, 2), { opciones: [], siguienteCursor: null });
-  const incompleta = { ...rr, maxNodosPagina: 0 };
+  assert.deepEqual(obtenerOpcionesPartidoZona(rr, 2), { opciones: [] });
+  const incompleta = { ...rr, maxNodosOpcion: 0 };
   assert.ok(todas(incompleta, 1).some((o) => !o.verificada), 'Una búsqueda incompleta se devuelve');
   const sinLugar = entrada([[], [], []], { club: ['Viernes-09:00'], canchas: 3 });
   assert.deepEqual(todas(sinLugar), [], 'No hay programación completa ni ampliando toda la disponibilidad');
@@ -117,6 +117,7 @@ function testPuro() {
     formato: 'MINI_BRACKET', club: viernes('09:00', '14:00'), canchas: 2,
   });
   assert.deepEqual(todas(mini, 3), [], 'P3 espera P1 y P2');
+  assert.ok(obtenerOpcionesPartidoZona(mini, 3).opciones.every((o) => o.motivo === 'ESPERA_BASES'));
   fijar(mini, 1, 'Viernes-09:00');
   assert.deepEqual(todas(mini, 4), [], 'No alcanza con un solo partido base');
   fijar(mini, 2, 'Viernes-09:00', 2);
@@ -160,20 +161,14 @@ async function testApi(baseUrl) {
   const endpoint = '/partidos/opciones', llamadas = generaciones;
   assert.equal(svc.preCheckSessions.get(torneo.id).opcionesPorPartido.size, 0, 'Pre-check no genera opciones');
   const primera = await post(endpoint, body);
-  assert.equal(primera.status, 200); assert.equal(primera.body.opciones.length, 6);
-  assert.deepEqual(Object.keys(primera.body).sort(), ['opciones', 'revision', 'siguienteCursor']);
-  assert.deepEqual(Object.keys(primera.body.opciones[0]).sort(), ['clave', 'diasNuevos', 'fechaHora', 'minutosAmpliacion', 'parejasAAmpliar', 'slotId', 'verificada']);
+  assert.equal(primera.status, 200); assert.ok(primera.body.opciones.length > 6);
+  assert.deepEqual(Object.keys(primera.body).sort(), ['opciones', 'revision']);
+  assert.deepEqual(Object.keys(primera.body.opciones[0]).sort(), ['clave', 'diasNuevos', 'estado', 'fechaHora', 'minutosAmpliacion', 'motivo', 'parejasAAmpliar', 'parejasOcupadas', 'slotId', 'verificada']);
   assert.equal(generaciones, llamadas + 1);
   const cached = await post(endpoint, body); assert.deepEqual(cached, primera); assert.equal(generaciones, llamadas + 1);
-  const segunda = await post(endpoint, { ...body, cursor: primera.body.siguienteCursor });
-  assert.equal(segunda.status, 200); assert.equal(segunda.body.opciones.length, 6);
-  assert.ok(segunda.body.opciones.every((o) => !primera.body.opciones.some((p) => p.clave === o.clave)));
-  assert.equal(generaciones, llamadas + 2);
-  assert.deepEqual(await post(endpoint, { ...body, cursor: primera.body.siguienteCursor }), segunda);
-  assert.equal(generaciones, llamadas + 2, 'Segunda página también cacheada');
   pre = (await post('', { isReCheck: true })).body;
   assert.equal(pre.revision, body.revision); assert.deepEqual(await post(endpoint, body), primera);
-  assert.equal(generaciones, llamadas + 2, 'Re-check idéntico conserva caché');
+  assert.equal(generaciones, llamadas + 1, 'Re-check idéntico conserva caché');
   assert.equal((await post(endpoint, {})).status, 400);
   assert.equal((await post(endpoint, null)).status, 400);
   for (const patch of [{ posicionEnRonda: '1' }, { posicionEnRonda: 0 }, { cursor: 7 }, { cursor: '' }, { cursor: 'basura' }]) {
@@ -197,7 +192,11 @@ async function testApi(baseUrl) {
   assert.equal(cambio.status, 409); assert.equal(cambio.body.codigo, 'ESTADO_PRECHECK_CAMBIO');
   assert.notEqual(cambio.body.preCheck.revision, body.revision);
   const nueva = await post(endpoint, { ...body, revision: cambio.body.preCheck.revision });
-  assert.equal(nueva.status, 200); assert.ok(nueva.body.opciones.every((o) => o.slotId !== elegida.slotId));
+  assert.equal(nueva.status, 200); assert.equal(nueva.body.opciones.find((o) => o.slotId === elegida.slotId).estado, 'NO_DISPONIBLE');
+  const bloqueada = nueva.body.opciones.find((o) => o.slotId === elegida.slotId);
+  assert.equal(bloqueada.motivo, 'SIN_CANCHA');
+  assert.ok(!svc.preCheckSessions.get(torneo.id).opcionesCache.has(JSON.stringify([cat.id, conflicto.zonaId, 1, bloqueada.clave])),
+    'Un inicio bloqueado no autoriza fijación');
   assert.equal(svc.preCheckSessions.get(torneo.id).opcionesPorPartido.size, 1, 'Se invalida todo el caché anterior');
   const sesion = svc.preCheckSessions.get(torneo.id); sesion.expiresAt = Date.now() - 1;
   const vencida = await post(endpoint, { ...body, revision: cambio.body.preCheck.revision });
