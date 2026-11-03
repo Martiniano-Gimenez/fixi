@@ -32,6 +32,12 @@ assert.deepEqual([...document.querySelectorAll('.pc-horarios-leyenda li')].map(e
 assert.ok(!document.body.textContent.includes('Viabilidad por verificar'));
 assert.equal(cell('k3'), null); assert.equal(cell('k4'), null);
 assert.ok([...document.querySelectorAll('.pc-horarios-hueco')].every(e=>e.getAttribute('aria-hidden')==='true' && e.textContent===''));
+assert.match(document.querySelector('.pc-horarios-recomendado').textContent, /Recomendado: vie 15:00 · entra en el horario de las dos parejas/);
+assert.match(cell('k0').getAttribute('aria-label'), /recomendado$/);
+assert.equal(document.querySelectorAll('.pc-horarios-estrella').length, 1);
+await click(document.querySelector('.pc-horarios-recomendado'));
+assert.ok(cell('k0').classList.contains('is-selected')); assert.ok(confirmar());
+await click(cancelar());
 await click(cell('k1'));assert.match(document.querySelector('[role="status"]').textContent,/vie 15:15 \u00b7 Pedile a Caruso/);assert.ok(confirmar());
 assert.match(document.querySelector('.pc-horarios-feedback').textContent,/Al confirmar, vie 15:15 se agrega a la disponibilidad de Caruso \/ Vallejos\. Hacelo solo si ya lo hablaste con ellas\./);
 assert.ok(!document.querySelector('.pc-horarios-feedback').textContent.includes('Confirmá cuando'));
@@ -110,15 +116,83 @@ assert.ok([...document.querySelectorAll('.pc-horarios-tramo')].some((e) => e.tex
 await click(conExtremo);
 await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, esDefinicion: true })));
 assert.ok(document.body.textContent.includes('00 h · entra en el horario de las cuatro parejas'));
+
+const nombresRec = new Map([['orellana', 'Orellana / Peralta'], ['davila', 'Dávila / Arrieta']]);
+const opcionRec = (clave, slotId, estado, diasNuevos, minutosAmpliacion, parejasAAmpliar = ['orellana']) => {
+  const [dia, hora] = slotId.split('-'), [h, m] = hora.split(':').map(Number);
+  return { clave, slotId, estado, diasNuevos, minutosAmpliacion, parejasAAmpliar,
+    fechaHora: new Date(Date.UTC(2026, 10, dia === 'Viernes' ? 6 : 7, h + 3 + (h < 6 ? 24 : 0), m)).toISOString() };
+};
+let recomendadoSeleccionado;
+function ProbarRecomendado({ opciones: opcionesRec, fijando = false }) {
+  const [seleccionRec, setSeleccionRec] = React.useState(null);
+  return React.createElement(Grilla, { ...propsGrilla, opciones: opcionesRec, nombres: nombresRec, fijando, seleccion: seleccionRec,
+    describir: (o) => `Pedile a ${o.parejasAAmpliar.map((parejaId) => nombresRec.get(parejaId)).join(' y a ')}${o.diasNuevos ? ' (no cargó ese día)' : ''}`,
+    onSeleccion: (o) => { recomendadoSeleccionado = o; setSeleccionRec(o); } });
+}
+const casosRec = [
+  { nombre: 'entra primero', esperado: 'entra', texto: 'entra en el horario de las dos parejas', opciones: [
+    opcionRec('pedir', 'Viernes-22:00', 'PEDIR_1', 0, 0), opcionRec('entra', 'Sabado-09:00', 'ENTRA', 1, 120, []),
+  ] },
+  { nombre: 'menos días antes que minutos o cantidad de parejas', esperado: 'dias', texto: '15 min más en total', opciones: [
+    opcionRec('no', 'Viernes-07:00', 'NO_DISPONIBLE', 0, 0), opcionRec('nuevo', 'Viernes-08:00', 'PEDIR_1', 1, 0),
+    opcionRec('dias', 'Viernes-09:00', 'PEDIR_VARIAS', 0, 15, ['orellana', 'davila']),
+  ] },
+  { nombre: 'menos minutos', esperado: 'minutos', texto: '1 h 15 min más', opciones: [
+    opcionRec('caro', 'Viernes-20:00', 'PEDIR_1', 0, 120), opcionRec('minutos', 'Viernes-22:45', 'PEDIR_1', 0, 75),
+  ] },
+  { nombre: 'inicio más temprano con trasnoche', esperado: 'hora', texto: 'Recomendado: vie 22:45 · pedirle a Orellana / Peralta 2 h más', opciones: [
+    opcionRec('madrugada', 'Viernes-00:00', 'PEDIR_1', 0, 120), opcionRec('tarde', 'Viernes-23:00', 'PEDIR_1', 0, 120),
+    opcionRec('hora', 'Viernes-22:45', 'PEDIR_1', 0, 120),
+  ] },
+  { nombre: 'día nuevo', esperado: 'nuevo', texto: 'Orellana / Peralta (no cargó ese día)', opciones: [
+    opcionRec('nuevo', 'Sabado-22:45', 'PEDIR_1', 1, 0), opcionRec('dos', 'Viernes-20:00', 'PEDIR_VARIAS', 2, 0),
+  ] },
+];
+for (const caso of casosRec) {
+  const originales = structuredClone(caso.opciones);
+  recomendadoSeleccionado = undefined;
+  await act(async () => root.render(React.createElement(ProbarRecomendado, { key: caso.nombre, opciones: caso.opciones })));
+  const botonRec = document.querySelector('.pc-horarios-recomendado');
+  assert.ok(botonRec.textContent.includes(caso.texto), caso.nombre);
+  await click(botonRec);
+  assert.equal(recomendadoSeleccionado, caso.opciones.find((o) => o.clave === caso.esperado), caso.nombre);
+  const estrella = document.querySelector('.pc-horarios-estrella');
+  assert.equal(estrella.closest('button').dataset.clave, caso.esperado);
+  assert.match(estrella.closest('button').getAttribute('aria-label'), /recomendado$/);
+  assert.equal(document.querySelectorAll('.pc-horarios-estrella').length, 1);
+  assert.deepEqual(caso.opciones, originales, 'No muta los datos del endpoint');
+}
+const plegadoRec = [opcionRec('viernes', 'Viernes-07:00', 'PEDIR_1', 2, 0),
+  opcionRec('recomendado', 'Sabado-09:00', 'PEDIR_VARIAS', 0, 15, ['orellana', 'davila']),
+  opcionRec('otro', 'Sabado-10:00', 'PEDIR_VARIAS', 0, 30, ['orellana', 'davila']),
+  opcionRec('sabado', 'Sabado-11:00', 'PEDIR_1', 1, 0)];
+await act(async () => root.render(React.createElement(ProbarRecomendado, { key: 'plegado', opciones: plegadoRec })));
+assert.ok(document.querySelector('.pc-horarios-dia.is-active').id.endsWith('Viernes'));
+assert.equal(document.querySelector('[data-clave="recomendado"]'), null);
+await click(document.querySelector('.pc-horarios-recomendado'));
+assert.ok(document.querySelector('.pc-horarios-dia.is-active').id.endsWith('Sabado'));
+assert.ok(document.querySelector('[data-clave="recomendado"]').classList.contains('is-selected'));
+assert.equal(document.querySelector('.pc-horarios-plegar').getAttribute('aria-expanded'), 'true');
+await click(document.querySelector('.pc-horarios-plegar'));
+assert.equal(document.querySelector('[data-clave="recomendado"]'), null, 'Se puede volver a plegar el tramo');
+await click(document.querySelector('.pc-horarios-recomendado'));
+assert.ok(document.querySelector('[data-clave="recomendado"]'));
+recomendadoSeleccionado = undefined;
+await act(async () => root.render(React.createElement(ProbarRecomendado, { key: 'bloqueado', opciones: plegadoRec, fijando: true })));
+assert.ok(document.querySelector('.pc-horarios-recomendado').disabled);
+await click(document.querySelector('.pc-horarios-recomendado')); assert.equal(recomendadoSeleccionado, undefined);
+
 for (const vacias of [[], tramos.map((o) => ({ ...o, estado: 'NO_DISPONIBLE' }))]) {
   await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, opciones: vacias })));
   assert.equal(document.querySelector('[role="status"]').textContent, 'No hay horarios posibles para este partido con las canchas libres.');
   assert.equal(document.querySelector('[role="grid"]'), null);
   assert.equal(document.querySelector('.pc-horarios-leyenda'), null);
+  assert.equal(document.querySelector('.pc-horarios-recomendado'), null);
 }
 await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, opciones: tramos.map((o) => ({ ...o, estado: 'NO_DISPONIBLE', motivo: 'ESPERA_BASES' })) })));
 assert.equal(document.querySelector('[role="status"]').textContent, 'Se habilita cuando los dos primeros partidos tengan horario.');
 assert.equal(document.querySelector('[role="grid"]'), null);
 await act(async()=>root.unmount());
-console.log('PASS DOM: tramos por pareja, horas sin horarios, huecos, flechas, trasnoche civil, definición, espera de bases, doble envío y 409; fijaciones interceptadas');
+console.log('PASS DOM: recomendado por costo, estrella, selección, jornada y tramo plegado, tramos por pareja, teclado, doble envío y 409; fijaciones interceptadas');
 }finally{await server.close();dom.window.close();}

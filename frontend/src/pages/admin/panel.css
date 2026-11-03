@@ -1229,6 +1229,11 @@ body:has(.panel) {
 .panel .pc-horarios-leyenda { display: flex; flex-wrap: wrap; gap: var(--e-2) var(--e-4); margin: 0 0 var(--e-2); padding: 0; list-style: none; font-size: var(--t-12); color: var(--tinta-2); }
 .panel .pc-horarios-leyenda li { display: inline-flex; align-items: center; gap: var(--e-1); }
 .panel .pc-horarios-marca { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); }
+.panel .pc-horarios-recomendado { display: flex; align-items: center; justify-content: flex-start; gap: var(--e-2); width: 100%; min-width: 0; min-height: 44px; margin: 0 0 var(--e-2); padding: var(--e-2) 0; border: 0; border-radius: var(--r-control); background: transparent; color: var(--tinta-2); font: 400 var(--t-13)/1.5 var(--f); text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+.panel .pc-horarios-recomendado > span { min-width: 0; }
+.panel .pc-horarios-recomendado > svg { flex-shrink: 0; color: var(--marca); }
+.panel .pc-horarios-recomendado:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+.panel .pc-horarios-recomendado:disabled { cursor: wait; }
 .panel .pc-horarios-ayuda { margin: 0 0 var(--e-3); color: var(--gris); font-size: var(--t-12); overflow-wrap: anywhere; }
 .panel .pc-horarios-tabs { display: flex; gap: var(--e-2); margin-bottom: var(--e-3); }
 .panel .pc-horarios-tabs [aria-selected="true"] { background: var(--marca-suave); color: var(--marca-hover); border-color: var(--marca); }
@@ -1238,8 +1243,9 @@ body:has(.panel) {
 .panel .pc-horarios-dia-titulo { margin: 0; color: var(--tinta); font-size: var(--t-14); }
 .panel .pc-horarios-fila { display: grid; grid-template-columns: minmax(0, 32px) repeat(4, minmax(44px, 1fr)); align-items: center; gap: var(--e-1); max-width: 336px; margin-top: var(--e-1); }
 .panel .pc-horarios-hora { min-width: 0; color: var(--tinta-2); font-size: var(--t-12); font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
-.panel .pc-horarios-inicio { display: flex; align-items: center; justify-content: center; gap: calc(var(--e-1) / 2); width: 100%; min-width: 44px; min-height: 44px; padding: var(--e-1) calc(var(--e-1) / 2); border: 1px solid transparent; border-radius: var(--r-control); font: 500 var(--t-14)/1 var(--f); font-variant-numeric: tabular-nums; cursor: pointer; }
+.panel .pc-horarios-inicio { position: relative; display: flex; align-items: center; justify-content: center; gap: calc(var(--e-1) / 2); width: 100%; min-width: 44px; min-height: 44px; padding: var(--e-1) calc(var(--e-1) / 2); border: 1px solid transparent; border-radius: var(--r-control); font: 500 var(--t-14)/1 var(--f); font-variant-numeric: tabular-nums; cursor: pointer; }
 .panel .pc-horarios-inicio svg { flex-shrink: 0; }
+.panel .pc-horarios-estrella { position: absolute; top: calc(var(--e-1) / 2); right: calc(var(--e-1) / 2); color: var(--marca); }
 .panel .pc-horarios .is-entra { background: var(--marca-suave); color: var(--tinta); border: 2px solid var(--marca); font-weight: 700; }
 .panel .pc-horarios .is-pedir_1 { background: var(--superficie); color: var(--tinta-2); border: 1px solid var(--marca); }
 .panel .pc-horarios .is-pedir_varias { background: var(--superficie-2); color: var(--tinta-2); border-color: transparent; }
