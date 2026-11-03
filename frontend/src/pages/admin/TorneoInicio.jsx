@@ -311,8 +311,6 @@ export default function TorneoInicio() {
                                 { id: p.pareja2Id, nombre: p.pareja2, slotIds: p.pareja2SlotIds || [] },
                               ]}
                               mostrarPartido={false}
-                              esperaBases={p.motivo === 'PARTIDO_SIN_HORARIO' && c.partidosSinHorario.some((otro) =>
-                                otro.zonaId === p.zonaId && [1, 2].includes(otro.posicionEnRonda))}
                               abierto={partidoManualAbierto}
                               onAbiertoChange={setPartidoManualAbierto}
                               onSaved={async () => {

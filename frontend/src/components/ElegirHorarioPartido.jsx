@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatPartidoHorario, formatSlotCorto } from '../utils/dateUtils';
+import GrillaHorariosPartido from './GrillaHorariosPartido';
 
 const tieneHorario = (partido) => partido.estado === 'FIJO' || Boolean(partido.fechaHora && partido.canchaNumero);
 
@@ -33,14 +34,16 @@ function enumerarParejas(nombres) {
 
 export default function ElegirHorarioPartido({
   torneoId, categoriaId, zonaId, revision, partido, parejas, abierto, onAbiertoChange, onSaved, onRecheck,
-  esperaBases = false, mostrarPartido = true,
+  mostrarPartido = true,
 }) {
   const [resultado, setResultado] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [seleccion, setSeleccion] = useState(null);
   const [errorFijacion, setErrorFijacion] = useState(null);
   const solicitudRef = useRef(null);
-  const cargaEnCurso = useRef(null);
+  const seccionRef = useRef(null);
+  const feedbackRef = useRef(null);
+  const abrirRef = useRef(null);
   const bloqueoFijar = useRef(false);
   const recheckRef = useRef(onRecheck);
   const montado = useRef(false);
@@ -50,7 +53,7 @@ export default function ElegirHorarioPartido({
   const esDefinicion = Boolean(partido.origen && !partido.pareja1Id && !partido.pareja2Id && partido.posicionEnRonda >= 3);
   const fijo = tieneHorario(partido);
   const estaAbierto = abierto?.categoriaId === categoriaId && abierto.zonaId === zonaId &&
-    abierto.posicionEnRonda === partido.posicionEnRonda && !fijo && !esperaBases;
+    abierto.posicionEnRonda === partido.posicionEnRonda && !fijo;
   const posicion = estaAbierto ? partido.posicionEnRonda : null;
   const solicitud = JSON.stringify([torneoId, categoriaId, zonaId, revision, posicion]);
   const vigente = resultado?.solicitud === solicitud;
@@ -59,24 +62,18 @@ export default function ElegirHorarioPartido({
   useEffect(() => { recheckRef.current = onRecheck; }, [onRecheck]);
   useEffect(() => { montado.current = true; return () => { montado.current = false; }; }, []);
 
-  const cargarPagina = useCallback(async (cursor = null) => {
-    if (posicion === null || !revision || (cursor && cargaEnCurso.current === solicitud)) return;
+  const cargarHorarios = useCallback(async () => {
+    if (posicion === null || !revision) return;
     const ticket = {};
     solicitudRef.current = ticket;
-    cargaEnCurso.current = solicitud;
     setCargando(true);
-    setResultado((prev) => cursor && prev?.solicitud === solicitud ? { ...prev, error: '' }
-      : { solicitud, opciones: [], siguienteCursor: null, error: '' });
+    setResultado({ solicitud, opciones: [], error: '' });
     try {
       const res = await api.post(`/torneos/${torneoId}/pre-check-inicio/partidos/opciones`, {
-        categoriaId, zonaId, posicionEnRonda: posicion, revision, cursor,
+        categoriaId, zonaId, posicionEnRonda: posicion, revision,
       });
       if (ticket !== solicitudRef.current) return;
-      setResultado((prev) => {
-        const anteriores = cursor && prev?.solicitud === solicitud ? prev.opciones : [];
-        const opciones = [...new Map([...anteriores, ...(res.opciones || [])].map((o) => [o.clave, o])).values()];
-        return { solicitud, opciones, siguienteCursor: res.siguienteCursor, error: '' };
-      });
+      setResultado({ solicitud, opciones: res.opciones || [], error: '' });
     } catch (err) {
       if (ticket !== solicitudRef.current) return;
       const mensaje = err.message || 'No pudimos buscar los horarios.';
@@ -86,15 +83,15 @@ export default function ElegirHorarioPartido({
         await recheckRef.current();
       }
     } finally {
-      if (ticket === solicitudRef.current) { cargaEnCurso.current = null; setCargando(false); }
+      if (ticket === solicitudRef.current) setCargando(false);
     }
   }, [torneoId, categoriaId, zonaId, revision, posicion, solicitud]);
 
   useEffect(() => {
     setSeleccion(null);
-    void cargarPagina();
-    return () => { solicitudRef.current = null; cargaEnCurso.current = null; };
-  }, [cargarPagina]);
+    void cargarHorarios();
+    return () => { solicitudRef.current = null; };
+  }, [cargarHorarios]);
 
   const abrir = () => {
     if (fijando || bloqueoFijar.current) return;
@@ -104,18 +101,18 @@ export default function ElegirHorarioPartido({
   };
 
   const confirmar = async () => {
-    if (!seleccion || !vigente || posicion === null || fijando || bloqueoFijar.current) return;
+    if (!seleccion || seleccion.estado === 'NO_DISPONIBLE' || !vigente || posicion === null || fijando || bloqueoFijar.current) return;
     bloqueoFijar.current = true;
     const esEstePartido = (actual) => actual?.categoriaId === categoriaId && actual.zonaId === zonaId && actual.posicionEnRonda === posicion;
     onAbiertoChange((actual) => esEstePartido(actual) ? { ...actual, fijando: true } : actual);
     setErrorFijacion(null);
     let guardado = false;
     try {
-      await api.post(`/torneos/${torneoId}/pre-check-inicio/partidos/fijar`, {
+      const actualizado = await api.post(`/torneos/${torneoId}/pre-check-inicio/partidos/fijar`, {
         categoriaId, zonaId, posicionEnRonda: posicion, clave: seleccion.clave, revision,
       });
       guardado = true;
-      if (montado.current) await onSaved();
+      if (montado.current) await onSaved(actualizado);
     } catch (err) {
       if (montado.current) {
         setErrorFijacion({ posicion, mensaje: err.message || 'No pudimos fijar el horario.' });
@@ -124,6 +121,7 @@ export default function ElegirHorarioPartido({
     } finally {
       bloqueoFijar.current = false;
       onAbiertoChange((actual) => esEstePartido(actual) ? guardado ? null : { ...actual, fijando: false } : actual);
+      if (guardado) abrirRef.current?.focus({ preventScroll: true });
     }
   };
 
@@ -139,13 +137,38 @@ export default function ElegirHorarioPartido({
     }))}`;
   };
 
+  const describir = (opcion) => {
+    if (opcion.estado !== 'NO_DISPONIBLE') return pedido(opcion);
+    if (opcion.motivo === 'ESPERA_BASES') return 'Primero tienen que tener horario los dos partidos iniciales';
+    if (opcion.motivo === 'ZONA_SIN_SALIDA') return 'Con ese horario la zona queda sin salida';
+    if (opcion.motivo === 'PAREJA_OCUPADA') {
+      const ocupadas = opcion.parejasOcupadas.map((id) => nombres.get(id) || 'Una pareja');
+      return `${ocupadas.join(' y ')} ${ocupadas.length === 1 ? 'ya juega' : 'ya juegan'} a esa hora`;
+    }
+    return 'No hay cancha libre a esa hora';
+  };
+  const cancelar = () => {
+    const clave = seleccion?.clave;
+    setSeleccion(null);
+    seccionRef.current?.querySelector(`[data-clave="${clave}"]`)?.focus({ preventScroll: true });
+  };
+  const mostrarFeedback = Boolean(vigente && seleccion && estaAbierto);
+  useEffect(() => {
+    const feedback = feedbackRef.current;
+    const seccion = seccionRef.current;
+    if (!mostrarFeedback || !feedback || !seccion) return;
+    const medir = () => seccion.style.setProperty('--pc-feedback-alto', `${feedback.getBoundingClientRect().height}px`);
+    medir();
+    const observer = new ResizeObserver(medir);
+    observer.observe(feedback);
+    return () => observer.disconnect();
+  }, [mostrarFeedback]);
+
   return (
     <div className="pc-horario-partido">
       {mostrarPartido && <FilaPartidoZona partido={partido} nombres={nombres} badge={fijo ? 'fijo' : null} />}
-      {!fijo && esperaBases ? (
-        <p className="pc-manual-copy">Se habilita cuando los dos primeros partidos tengan horario.</p>
-      ) : !fijo && (
-        <button type="button" className="pc-manual-button" disabled={fijando || !revision}
+      {!fijo && (
+        <button ref={abrirRef} type="button" className="pc-manual-button" disabled={fijando || !revision}
           aria-expanded={estaAbierto} aria-controls={`${seccionId}-partido-${partido.posicionEnRonda}`} onClick={abrir}>
           {estaAbierto ? 'Ocultar horarios' : 'Elegir horario'}
         </button>
@@ -154,39 +177,36 @@ export default function ElegirHorarioPartido({
         <p className="pc-manual-error" role="alert">{errorFijacion.mensaje}</p>
       )}
       {estaAbierto && (
-        <div id={`${seccionId}-partido-${partido.posicionEnRonda}`} className="pc-manual-opciones" aria-busy={cargando}>
-          {vigente && resultado.opciones.map((opcion) => (
-            <button key={opcion.clave} type="button" className={`pc-manual-button pc-manual-opcion${seleccion?.clave === opcion.clave ? ' is-selected' : ''}`}
-              disabled={fijando} aria-pressed={seleccion?.clave === opcion.clave} onClick={() => setSeleccion(opcion)}>
-              <span className="pc-manual-horario">{formatSlotCorto(opcion.slotId)}</span>
-              <span className="pc-manual-pedido">{pedido(opcion)}</span>
-            </button>
-          ))}
+        <div ref={seccionRef} id={`${seccionId}-partido-${partido.posicionEnRonda}`}
+          className={`pc-manual-opciones${mostrarFeedback ? ' has-feedback' : ''}`} aria-busy={cargando}>
+          {vigente && resultado.opciones.length > 0 && (
+            <GrillaHorariosPartido opciones={resultado.opciones} seleccion={seleccion} onSeleccion={setSeleccion}
+              describir={describir} fijando={fijando} onCambioDia={() => setSeleccion(null)} />
+          )}
           {(!vigente || cargando) && (
             <div className="pc-manual-status" role="status"><Loader2 size={16} className="pc-propuesta-spinner" aria-hidden="true" />Buscando horarios…</div>
           )}
           {vigente && resultado.error && errorFijacion?.mensaje !== resultado.error && <p className="pc-manual-error" role="alert">{resultado.error}</p>}
           {vigente && !cargando && !resultado.error && resultado.opciones.length === 0 && (
-            <p className="pc-manual-copy">No hay horarios posibles para este partido con las canchas libres.</p>
+            <p className="pc-manual-copy">El club no tiene inicios para este partido.</p>
           )}
-          {vigente && (resultado.siguienteCursor || resultado.error) && (
-            <button type="button" className="pc-manual-button" disabled={cargando || fijando} onClick={() => cargarPagina(resultado.siguienteCursor || null)}>
-              {resultado.siguienteCursor ? 'Ver más horarios' : 'Volver a buscar horarios'}
-            </button>
+          {vigente && resultado.error && (
+            <button type="button" className="pc-manual-button" disabled={cargando || fijando} onClick={cargarHorarios}>Volver a buscar horarios</button>
           )}
-          {vigente && seleccion && (
-            <div className="pc-manual-confirmacion">
-              <p className="pc-manual-copy">
-                {seleccion.parejasAAmpliar.length
-                  ? `Se agrega ${formatSlotCorto(seleccion.slotId)} a ${enumerarParejas(seleccion.parejasAAmpliar.map((id) => nombres.get(id) || 'la pareja'))}. Confirmalo solo si ya lo hablaste con ${seleccion.parejasAAmpliar.length === 1 ? 'ella' : 'ellas'}.`
-                  : `El partido queda fijo el ${formatSlotCorto(seleccion.slotId)}.`}
-              </p>
+          {mostrarFeedback && (
+            <div ref={feedbackRef} className="pc-horarios-feedback">
+              <p className="pc-manual-copy" role="status" aria-atomic="true">{formatSlotCorto(seleccion.slotId)} · {describir(seleccion)}</p>
+              {seleccion.estado !== 'NO_DISPONIBLE' && seleccion.parejasAAmpliar.length > 0 && (
+                <p className="pc-manual-copy">Confirmá cuando ya lo hayas hablado con {seleccion.parejasAAmpliar.length === 1 ? 'la pareja' : 'las parejas'}.</p>
+              )}
               <div className="pc-manual-actions">
-                <button type="button" className="pc-manual-button" disabled={fijando} onClick={confirmar}>
-                  {fijando && <Loader2 size={16} className="pc-propuesta-spinner" aria-hidden="true" />}
-                  {fijando ? 'Fijando…' : 'Confirmar'}
-                </button>
-                <button type="button" className="pc-manual-button" disabled={fijando} onClick={() => setSeleccion(null)}>Cancelar</button>
+                {seleccion.estado !== 'NO_DISPONIBLE' && (
+                  <button type="button" className="pc-manual-button" disabled={fijando} onClick={confirmar}>
+                    {fijando && <Loader2 size={16} className="pc-propuesta-spinner" aria-hidden="true" />}
+                    {fijando ? 'Fijando…' : 'Confirmar'}
+                  </button>
+                )}
+                <button type="button" className="pc-manual-button" disabled={fijando} onClick={cancelar}>Cancelar</button>
               </div>
             </div>
           )}

@@ -6,7 +6,6 @@ export default function PartidosZonaManual({ partidos, children, ...editorProps 
   const [editorAbierto, setEditorAbierto] = useState(false);
   const seccionId = useId();
   const ordenados = [...partidos].sort((a, b) => a.posicionEnRonda - b.posicionEnRonda);
-  const basesPendientes = ordenados.some((p) => p.posicionEnRonda <= 2 && p.estado !== 'FIJO' && !(p.fechaHora && p.canchaNumero));
 
   return (
     <section className="pc-manual-zone" aria-labelledby={`${seccionId}-titulo`}>
@@ -14,8 +13,7 @@ export default function PartidosZonaManual({ partidos, children, ...editorProps 
       <ol className="pc-manual-partidos">
         {ordenados.map((partido) => (
           <li key={partido.posicionEnRonda} className="pc-manual-partido">
-            <ElegirHorarioPartido {...editorProps} partido={partido}
-              esperaBases={Boolean(partido.origen && !partido.pareja1Id && !partido.pareja2Id && partido.posicionEnRonda >= 3 && basesPendientes)} />
+            <ElegirHorarioPartido {...editorProps} partido={partido} />
           </li>
         ))}
       </ol>

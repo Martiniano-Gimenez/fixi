@@ -1216,16 +1216,40 @@ body:has(.panel) {
 .panel .pc-manual-button:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
 .panel .pc-manual-button:active:not(:disabled) { transform: scale(.97); }
 .panel .pc-manual-opciones { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-2); width: 100%; min-width: 0; animation: pc-manual-abrir .2s cubic-bezier(.16, 1, .3, 1); }
-.panel .pc-manual-opcion { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: start; justify-items: start; gap: var(--e-1); width: 100%; text-align: left; }
-.panel .pc-manual-opcion.is-selected { background: var(--superficie-2); border-color: var(--tinta-2); }
-.panel .pc-manual-horario { font-variant-numeric: tabular-nums; }
-.panel .pc-manual-pedido { min-width: 0; font-weight: 400; }
+.panel .pc-manual-opciones.has-feedback { padding-bottom: calc(var(--pc-feedback-alto, 180px) + var(--e-4)); }
+.panel .pc-horarios { width: 100%; min-width: 0; }
+.panel .pc-horarios-leyenda { display: flex; flex-wrap: wrap; gap: var(--e-2) var(--e-4); margin: 0 0 var(--e-2); padding: 0; list-style: none; font-size: var(--t-12); color: var(--tinta-2); }
+.panel .pc-horarios-leyenda li { display: inline-flex; align-items: center; gap: var(--e-1); }
+.panel .pc-horarios-marca { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); }
+.panel .pc-horarios-ayuda { margin: 0 0 var(--e-3); color: var(--gris); font-size: var(--t-12); overflow-wrap: anywhere; }
+.panel .pc-horarios-tabs { display: flex; gap: var(--e-2); margin-bottom: var(--e-3); }
+.panel .pc-horarios-tabs [aria-selected="true"] { background: var(--marca-suave); color: var(--marca-hover); border-color: var(--marca); }
+.panel .pc-horarios-dias { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-5); min-width: 0; }
+.panel .pc-horarios-dia { min-width: 0; }
+.panel .pc-horarios-dia:not(.is-active) { display: none; }
+.panel .pc-horarios-dia-titulo { margin: 0; color: var(--tinta); font-size: var(--t-14); }
+.panel .pc-horarios-fila { display: grid; grid-template-columns: repeat(4, minmax(44px, 1fr)); gap: var(--e-1); margin-top: var(--e-2); }
+.panel .pc-horarios-hora { grid-column: 1 / -1; color: var(--tinta-2); font-size: var(--t-13); font-weight: 600; }
+.panel .pc-horarios-inicio { display: flex; align-items: center; justify-content: center; gap: var(--e-1); width: 100%; min-width: 44px; min-height: 48px; padding: var(--e-1); border: 1px solid var(--linea-fuerte); border-radius: var(--r-control); font: 600 var(--t-14)/1 var(--f); font-variant-numeric: tabular-nums; cursor: pointer; }
+.panel .pc-horarios .is-entra { background: var(--marca-suave); color: var(--tinta); border-color: var(--marca); }
+.panel .pc-horarios .is-pedir_1 { background: var(--superficie); color: var(--tinta-2); border-color: var(--tinta-2); border-style: dashed; }
+.panel .pc-horarios .is-pedir_varias { background: var(--superficie-2); color: var(--tinta-2); border: 3px double var(--tinta-2); }
+.panel .pc-horarios .is-no_disponible { background: var(--superficie-2); color: var(--gris); border-color: var(--linea-fuerte); cursor: help; }
+.panel .pc-horarios-inicio.is-selected { outline: 2px solid var(--tinta); outline-offset: 1px; }
+.panel .pc-horarios-inicio:focus-visible { outline: 3px solid var(--marca); outline-offset: 2px; }
+.panel .pc-horarios-inicio:disabled { opacity: .6; cursor: wait; }
+.panel .pc-horarios-hueco { display: flex; align-items: center; justify-content: center; min-height: 48px; color: var(--gris); }
+.panel .pc-horarios-feedback { position: fixed; z-index: 35; bottom: calc(var(--pc-barra-alto, 0px) + var(--e-2)); inset-inline: var(--e-3); width: auto; max-width: 1140px; max-height: calc(100dvh - var(--pc-barra-alto, 0px) - var(--e-5)); overflow-y: auto; margin-inline: auto; display: grid; gap: var(--e-2); padding: var(--e-3); border-radius: var(--r-tarjeta); background: var(--superficie); box-shadow: var(--sombra-3); }
+.panel .pc-horarios-feedback .pc-manual-copy { color: var(--tinta-2); }
+@media (min-width: 1100px) {
+  .panel .pc-horarios-tabs { display: none; }
+  .panel .pc-horarios-dias { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .panel .pc-horarios-dia:not(.is-active) { display: block; }
+}
 .panel .pc-manual-copy { margin: 0; color: var(--gris); font-size: var(--t-13); line-height: 1.5; overflow-wrap: anywhere; }
 .panel .pc-manual-status { display: flex; align-items: center; gap: var(--e-2); min-width: 0; padding-block: var(--e-2); color: var(--gris); font-size: var(--t-13); }
 .panel .pc-manual-status svg { flex-shrink: 0; }
 .panel .pc-manual-error { margin: 0; color: var(--alerta-texto); font-size: var(--t-13); overflow-wrap: anywhere; }
-.panel .pc-manual-confirmacion { display: grid; gap: var(--e-3); min-width: 0; margin-top: var(--e-2); padding-top: var(--e-3); border-top: 1px solid var(--linea); }
-.panel .pc-manual-confirmacion .pc-manual-copy { color: var(--tinta-2); }
 .panel .pc-manual-actions { display: flex; flex-wrap: wrap; gap: var(--e-2); min-width: 0; }
 .panel .pc-manual-toggle { justify-content: flex-start; margin-top: var(--e-2); padding-inline: 0; border: 0; background: none; color: var(--marca-hover); text-align: left; }
 .panel .pc-manual-editor { min-width: 0; margin-top: var(--e-2); animation: pc-manual-abrir .2s cubic-bezier(.16, 1, .3, 1); }
