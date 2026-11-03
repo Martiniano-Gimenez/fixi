@@ -55,14 +55,13 @@ function ordenarCategoriasPorUrgencia(conflictos) {
   });
 }
 
-export default function usePreCheckInicio(id, fetchData) {
+export default function usePreCheckInicio(id, fetchData, onIniciado) {
   // Iniciar Torneo Multi-categoría
   const [verificandoInicio, setVerificandoInicio] = useState(false);
   const [iniciarModalOpen, setIniciarModalOpen] = useState(false);
   const [iniciandoTorneo, setIniciandoTorneo] = useState(false);
   const [planId, setPlanId] = useState(null);
   const [planEmergenciaId, setPlanEmergenciaId] = useState(null);
-  const [permiteInicioEmergencia, setPermiteInicioEmergencia] = useState(false);
   const [conteoInicialConflictos, setConteoInicialConflictos] = useState(null);
   const [confirmarEmergenciaModalOpen, setConfirmarEmergenciaModalOpen] = useState(false);
   const [conflictosBloqueo, setConflictosBloqueo] = useState(null);
@@ -72,7 +71,6 @@ export default function usePreCheckInicio(id, fetchData) {
   const [revisionPreCheck, setRevisionPreCheck] = useState(null);
   const [partidoManualAbierto, setPartidoManualAbierto] = useState(null);
   const [hayCambiosGuardados, setHayCambiosGuardados] = useState(false);
-  const [resultadoInicio, setResultadoInicio] = useState(null);
   const [confirmarResorteoModalOpen, setConfirmarResorteoModalOpen] = useState(false);
   const [avisoSesionReiniciada, setAvisoSesionReiniciada] = useState(false);
   const [avisoDestrabe, setAvisoDestrabe] = useState(null);
@@ -133,7 +131,6 @@ export default function usePreCheckInicio(id, fetchData) {
             : null
         );
         setConflictosBloqueo(conflictos);
-        setPermiteInicioEmergencia(Boolean(res.permiteInicioEmergencia));
         setPlanEmergenciaId(res.planEmergenciaId || null);
         setPreCheckAprobado(false);
         setPlanId(null);
@@ -159,44 +156,14 @@ export default function usePreCheckInicio(id, fetchData) {
         setPlanId(res.planId);
         setPlanEmergenciaId(null);
         setExpandedCategoriasConflictos(new Set());
-        if (conflictosBloqueo !== null || isReCheck) {
-          setConflictosBloqueo([]);
-          setPreCheckAprobado(true);
-        } else {
-          setConflictosBloqueo(null);
-          setPreCheckAprobado(false);
-          setIniciarModalOpen(true);
-        }
+        setConflictosBloqueo([]);
+        setPreCheckAprobado(true);
       }
     } catch (err) {
       alert(err.message || 'Error al verificar la disponibilidad de las categorías.');
     } finally {
       setVerificandoInicio(false);
     }
-  };
-
-  const handleSlotSaved = async (categoriaId, partidoId, parejaId, newSlots) => {
-    setHayCambiosGuardados(true);
-    setConflictosBloqueo((prev) => {
-      if (!prev) return prev;
-      return prev.map((cat) => {
-        if (cat.categoriaId !== categoriaId) return cat;
-        return {
-          ...cat,
-          partidosSinHorario: cat.partidosSinHorario.map((p) => {
-            if (p.partidoId !== partidoId) return p;
-            return {
-              ...p,
-              parejaMasRestringidaSlotIds: newSlots,
-              parejaMasRestringidaSlots: newSlots.length,
-            };
-          }),
-        };
-      });
-    });
-
-    // Re-verificación reactiva automática en background
-    await handlePreCheckInicio(true);
   };
 
   const executeIniciarTorneo = async () => {
@@ -209,8 +176,7 @@ export default function usePreCheckInicio(id, fetchData) {
       setPlanId(null);
       setPlanEmergenciaId(null);
       setConteoInicialConflictos(null);
-      setResultadoInicio(res);
-      fetchData();
+      onIniciado(res);
     } catch (err) {
       alert(err.message || 'Error al iniciar el torneo.');
       setIniciarModalOpen(false);
@@ -234,8 +200,7 @@ export default function usePreCheckInicio(id, fetchData) {
       setPlanId(null);
       setPlanEmergenciaId(null);
       setConteoInicialConflictos(null);
-      setResultadoInicio(res);
-      fetchData();
+      onIniciado(res);
     } catch (err) {
       alert(err.message || 'Error al iniciar el torneo con partidos pendientes.');
       setConfirmarEmergenciaModalOpen(false);
@@ -247,49 +212,31 @@ export default function usePreCheckInicio(id, fetchData) {
 
   return {
     verificandoInicio,
-    setVerificandoInicio,
     iniciarModalOpen,
     setIniciarModalOpen,
     iniciandoTorneo,
-    setIniciandoTorneo,
-    planId,
-    setPlanId,
     planEmergenciaId,
-    setPlanEmergenciaId,
-    permiteInicioEmergencia,
-    setPermiteInicioEmergencia,
     conteoInicialConflictos,
-    setConteoInicialConflictos,
     confirmarEmergenciaModalOpen,
     setConfirmarEmergenciaModalOpen,
     conflictosBloqueo,
-    setConflictosBloqueo,
     expandedCategoriasConflictos,
-    setExpandedCategoriasConflictos,
     grillaOrganizador,
-    setGrillaOrganizador,
     preCheckAprobado,
-    setPreCheckAprobado,
     revisionPreCheck,
-    setRevisionPreCheck,
     partidoManualAbierto,
     setPartidoManualAbierto,
     hayCambiosGuardados,
     setHayCambiosGuardados,
-    resultadoInicio,
-    setResultadoInicio,
     confirmarResorteoModalOpen,
     setConfirmarResorteoModalOpen,
     avisoSesionReiniciada,
-    setAvisoSesionReiniciada,
     avisoDestrabe,
-    setAvisoDestrabe,
     categoriasConflictosOrdenadas,
     allConflictosExpanded,
     toggleCategoriaConflicto,
     handleToggleAllConflictos,
     handlePreCheckInicio,
-    handleSlotSaved,
     executeIniciarTorneo,
     executeIniciarTorneoEmergencia,
   };

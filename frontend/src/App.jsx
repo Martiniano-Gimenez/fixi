@@ -10,6 +10,7 @@ import Register from './pages/Register';
 import TorneosList from './pages/admin/TorneosList';
 import TorneoCreate from './pages/admin/TorneoCreate';
 import TorneoDetail from './pages/admin/TorneoDetail';
+import TorneoInicio from './pages/admin/TorneoInicio';
 import CategoriaDetail from './pages/admin/CategoriaDetail';
 import ParejasManager from './pages/admin/ParejasManager';
 import TorneoPublic from './pages/public/TorneoPublic';
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="club" element={<ConfiguracionClub />} />
             <Route path="torneos/nuevo" element={<TorneoCreate />} />
             <Route path="torneos/:id" element={<TorneoDetail />} />
+            <Route path="torneos/:id/iniciar" element={<TorneoInicio />} />
             <Route path="torneos/:id/en-vivo" element={<TorneoEnVivo />} />
             <Route path="torneos/:torneoId/categorias/:id" element={<CategoriaDetail />} />
             <Route path="torneos/:torneoId/categorias/:id/parejas" element={<ParejasManager />} />
