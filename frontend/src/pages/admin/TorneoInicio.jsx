@@ -428,7 +428,7 @@ export default function TorneoInicio() {
               Rearmar zonas desde cero
             </button>
             {totalConflictos > 0 && !conflictosBloqueo.some((c) => c.partidosSinHorario.some((p) => p.motivo === 'ZONA_MANUAL_INCOMPLETA')) && Boolean(planEmergenciaId) && (
-              <button type="button" className="pm-button pm-danger-secondary" onClick={() => setConfirmarEmergenciaModalOpen(true)} disabled={ocupado || confirmacionAbierta}>
+              <button type="button" className="pm-button" onClick={() => setConfirmarEmergenciaModalOpen(true)} disabled={ocupado || confirmacionAbierta}>
                 Iniciar dejando {totalConflictos} pendientes
               </button>
             )}
@@ -531,7 +531,7 @@ export default function TorneoInicio() {
             </div>
             <div className="pm-body">
               <p className="pc-copy">
-                Se descartan las zonas actuales y sus horarios fijados, y se vuelven a armar con las parejas y los horarios cargados ahora. Si no cambiaste nada, vas a obtener las mismas zonas.
+                Se descartan las zonas actuales y sus horarios fijados, y se vuelven a armar con las parejas y los horarios cargados ahora. Tarda unos segundos y puede dar un resultado distinto.
               </p>
             </div>
             <div className="pm-footer">

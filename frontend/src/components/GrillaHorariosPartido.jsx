@@ -1,13 +1,7 @@
 import { useId, useRef, useState } from 'react';
-import { Check, ChevronRight, Star, UserRound, UsersRound } from 'lucide-react';
+import { ChevronRight, Star } from 'lucide-react';
 import { formatSlotCorto } from '../utils/dateUtils';
-import { agruparInicios, moverCelda } from './grillaHorarios';
-
-const ESTADOS = [
-  { estado: 'ENTRA', texto: 'Entra', Icono: Check },
-  { estado: 'PEDIR_1', texto: 'Pedirle a 1 pareja', Icono: UserRound },
-  { estado: 'PEDIR_VARIAS', texto: 'Pedirle a 2 o más', Icono: UsersRound },
-];
+import { agruparInicios, armarTramos, moverCelda } from './grillaHorarios';
 
 export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion, describir, fijando, onCambioDia, nombres = new Map(), esDefinicion = false }) {
   const id = useId();
@@ -16,9 +10,11 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
   const [diaActivo, setDiaActivo] = useState(() => dias.find((d) => d.filas.length)?.dia || 'Viernes');
   const [foco, setFoco] = useState({});
   const [desplegados, setDesplegados] = useState({});
+  const [verTodos, setVerTodos] = useState(false);
   const cambiarDia = (dia) => { setDiaActivo(dia); onCambioDia(); };
   const enfocar = (opcion) => raiz.current?.querySelector(`[data-clave="${opcion.clave}"]`)?.focus();
-  const recomendado = opciones.filter((o) => o.estado !== 'NO_DISPONIBLE').sort((a, b) =>
+  const disponibles = opciones.filter((o) => o.estado !== 'NO_DISPONIBLE');
+  const recomendado = [...disponibles].sort((a, b) =>
     Number(b.estado === 'ENTRA') - Number(a.estado === 'ENTRA') ||
     (a.diasNuevos ?? 0) - (b.diasNuevos ?? 0) ||
     (a.minutosAmpliacion ?? 0) - (b.minutosAmpliacion ?? 0) ||
@@ -36,24 +32,48 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
     ? `entra en el horario de las ${esDefinicion ? 'cuatro' : 'dos'} parejas`
     : describir(recomendado).replace(/^Pedile a /, 'pedirle a ') +
       (duracion ? ` ${duracion} más${recomendado.parejasAAmpliar.length > 1 ? ' en total' : ''}` : '');
+  // Sin ningún horario que entre ni que pida a una sola pareja, la grilla no ayuda a decidir: queda plegada.
+  const hayUtiles = disponibles.some((o) => o.estado === 'ENTRA' || o.estado === 'PEDIR_1');
+  const grillaVisible = hayUtiles || verTodos;
+  const elegirRecomendado = () => {
+    const dia = recomendado.slotId.split('-')[0];
+    setDiaActivo(dia);
+    setFoco((prev) => ({ ...prev, [dia]: recomendado.clave }));
+    onSeleccion(recomendado);
+  };
+  const titulo = (categoria, inicios) => {
+    if (categoria === 'entra') return 'entra sin pedir nada';
+    const parejas = inicios[0].parejasAAmpliar;
+    if (parejas.length === 1) return `pedirle a ${nombres.get(parejas[0]) || 'la pareja'}`;
+    if (!esDefinicion && parejas.length === 2) return 'hay que pedirle a las dos parejas';
+    if (esDefinicion && parejas.length === 4) return 'hay que pedirle a las cuatro parejas';
+    const lista = parejas.map((p) => nombres.get(p) || 'la pareja');
+    return `hay que pedirle a ${lista.slice(0, -1).join(', a ')} y a ${lista.at(-1)}`;
+  };
 
   return (
     <div className="pc-horarios" ref={raiz}>
-      <ul className="pc-horarios-leyenda" aria-label="Estados de los horarios">
-        {ESTADOS.map(({ estado, texto, Icono }) => (
-          <li key={estado}><span className={`pc-horarios-marca is-${estado.toLowerCase()}`}><Icono size={14} aria-hidden="true" /></span>{texto} ({opciones.filter((o) => o.estado === estado).length})</li>
-        ))}
-      </ul>
-      <button type="button" className="pc-horarios-recomendado" disabled={fijando} onClick={() => {
-        const dia = recomendado.slotId.split('-')[0];
-        setDiaActivo(dia);
-        setFoco((prev) => ({ ...prev, [dia]: recomendado.clave }));
-        onSeleccion(recomendado);
-      }}>
-        <Star size={16} aria-hidden="true" />
-        <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)} · {detalle}</span>
-      </button>
-      <p className="pc-horarios-ayuda" id={`${id}-ayuda`}>Recorré los horarios con las flechas.</p>
+      {hayUtiles ? (
+        <button type="button" className="pc-horarios-recomendado" disabled={fijando} onClick={elegirRecomendado}>
+          <Star size={16} aria-hidden="true" />
+          <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)} · {detalle}</span>
+        </button>
+      ) : (
+        <div className="pc-horarios-solo-recomendado">
+          <p className="pc-horarios-recomendado-texto">
+            <Star size={16} aria-hidden="true" />
+            <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)} · {detalle}</span>
+          </p>
+          <button type="button" className="pc-manual-button" disabled={fijando} onClick={elegirRecomendado}>Elegir este horario</button>
+          <button type="button" className="pc-horarios-plegar pc-horarios-ver-todos" aria-expanded={verTodos} aria-controls={`${id}-todos`}
+            disabled={fijando} onClick={() => setVerTodos((v) => !v)}>
+            <ChevronRight size={14} aria-hidden="true" className={verTodos ? 'is-open' : ''} />
+            <span>Ver todos los horarios ({disponibles.length})</span>
+          </button>
+        </div>
+      )}
+      {grillaVisible && <div id={`${id}-todos`}>
+      <p className="pm-visually-hidden" id={`${id}-ayuda`}>Recorré los horarios con las flechas.</p>
       <div className="pc-horarios-tabs" role="tablist" aria-label="Jornadas del club">
         {dias.map(({ dia, etiqueta }, i) => (
           <button key={dia} id={`${id}-tab-${dia}`} type="button" role="tab" className="pc-manual-button"
@@ -69,53 +89,35 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
       <div className="pc-horarios-dias">
         {dias.map(({ dia, etiqueta, filas: originales }) => {
           const filas = originales.map((f) => ({ ...f, celdas: f.celdas.map((o) => o?.estado === 'NO_DISPONIBLE' ? null : o) }));
-          const esUtil = (fila) => fila.celdas.some((o) => o?.estado === 'ENTRA' || o?.estado === 'PEDIR_1');
-          const sinHorarios = (fila) => !fila.celdas.some(Boolean);
-          const parejasDeUna = (celdas) => [...new Set(celdas.filter((o) => o?.estado === 'PEDIR_1').flatMap((o) => o.parejasAAmpliar))];
-          const hayUtiles = filas.some(esUtil);
-          const crearBloque = (tipo, grupo) => ({ tipo, filas: grupo, clave: `${dia}-${grupo[0].hora}` });
-          const consecutivas = (anterior, siguiente) => (Number(anterior.hora) + 1) % 24 === Number(siguiente.hora);
-          const bloques = filas.reduce((lista, fila) => {
-            const tipo = hayUtiles && !esUtil(fila) ? 'secundario' : sinHorarios(fila) ? 'sin' : 'visible';
-            const firma = tipo === 'visible' ? JSON.stringify(parejasDeUna(fila.celdas).sort()) : tipo;
-            const anterior = lista.at(-1);
-            if (anterior?.firma === firma && consecutivas(anterior.filas.at(-1), fila)) {
-              anterior.filas.push(fila);
-            } else lista.push({ ...crearBloque(tipo, [fila]), firma });
-            return lista;
-          }, []);
-          const sePliega = (bloque) => bloque.tipo === 'secundario' && bloque.filas.some((f) => !sinHorarios(f));
-          const estaAbierto = (bloque) => Boolean(desplegados[bloque.clave] ||
-            (seleccion?.clave === recomendado.clave && bloque.filas.some((f) => f.celdas.some((o) => o?.clave === recomendado.clave))));
-          const visibles = bloques.flatMap((b) => sePliega(b) && !estaAbierto(b) ? [] : b.filas).filter((f) => !sinHorarios(f));
+          const conHorarios = filas.filter((f) => f.celdas.some(Boolean));
+          const tramos = armarTramos(dia, conHorarios);
+          // Con horarios que entran o que piden a una sola pareja, los que piden a varias quedan plegados.
+          const sePliega = (tramo) => hayUtiles && tramo.categoria !== 'entra' &&
+            tramo.filas.flatMap((f) => f.celdas).find(Boolean).parejasAAmpliar.length > 1;
+          const estaAbierto = (tramo) => Boolean(desplegados[tramo.clave] ||
+            (seleccion?.clave === recomendado.clave && tramo.filas.some((f) => f.celdas.some((o) => o?.clave === recomendado.clave))));
+          const visibles = tramos.flatMap((t) => sePliega(t) && !estaAbierto(t) ? [] : t.filas);
           const primera = visibles.flatMap((f) => f.celdas).find(Boolean);
           const claveFoco = visibles.some((f) => f.celdas.some((o) => o?.clave === foco[dia])) ? foco[dia] : primera?.clave;
-          const rango = (grupo) => grupo.length === 1 ? `${grupo[0].hora} h` : `${grupo[0].hora} a ${grupo.at(-1).hora} h`;
-          const renderizarSinHorarios = (grupo) => (
-            <div key={`sin-${grupo[0].hora}`} role="row" className="pc-horarios-resumen">
-              <div role="gridcell" aria-colspan={5}><p className="pc-horarios-tramo"><span><strong>{rango(grupo)}</strong> · sin horarios</span></p></div>
-            </div>
-          );
-          const renderizarFila = ({ hora, celdas }) => (
-            <div key={hora} role="row" className="pc-horarios-fila">
-              <span className="pc-horarios-hora" role="rowheader">{hora} h</span>
-              {celdas.map((opcion, columna) => {
+          const rango = (grupo) => grupo.length === 1 ? `${Number(grupo[0].hora)} h` : `${Number(grupo[0].hora)} a ${Number(grupo.at(-1).hora)} h`;
+          const renderizarFila = (fila, indice) => (
+            <div key={`${fila.hora}-${indice}`} role="row" className="pc-horarios-fila">
+              {fila.celdas.map((opcion, columna) => {
                 if (!opcion) return <div key={columna} className="pc-horarios-hueco" aria-hidden="true" />;
-                const { Icono } = ESTADOS.find((e) => e.estado === opcion.estado);
                 return (
-                  <div key={columna} role="gridcell" aria-colindex={columna + 2} aria-selected={seleccion?.clave === opcion.clave}>
+                  <div key={columna} role="gridcell" aria-colindex={columna + 1} aria-selected={seleccion?.clave === opcion.clave}>
                     <button type="button" data-clave={opcion.clave}
                       className={`pc-horarios-inicio is-${opcion.estado.toLowerCase()}${seleccion?.clave === opcion.clave ? ' is-selected' : ''}`}
                       tabIndex={claveFoco === opcion.clave ? 0 : -1} disabled={fijando}
                       aria-label={`${formatSlotCorto(opcion.slotId)} · ${describir(opcion)}${opcion.clave === recomendado.clave ? ' · recomendado' : ''}`}
                       onFocus={() => setFoco((prev) => ({ ...prev, [dia]: opcion.clave }))}
                       onClick={() => onSeleccion(opcion)} onKeyDown={(event) => {
-                        const fila = visibles.findIndex((f) => f.hora === hora);
-                        const siguiente = moverCelda(visibles, fila, columna, event.key);
+                        const fila_ = visibles.indexOf(fila);
+                        const siguiente = moverCelda(visibles, fila_, columna, event.key);
                         if (siguiente) { event.preventDefault(); enfocar(siguiente); }
                         else if (event.key.startsWith('Arrow')) event.preventDefault();
                       }}>
-                      <span>:{String(columna * 15).padStart(2, '0')}</span><Icono size={13} aria-hidden="true" />
+                      <span>{opcion.slotId.split('-')[1]}</span>
                       {opcion.clave === recomendado.clave && <Star size={10} className="pc-horarios-estrella" aria-hidden="true" />}
                     </button>
                   </div>
@@ -123,46 +125,35 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
               })}
             </div>
           );
-          const renderizarFilas = (grupo) => grupo.reduce((lista, fila) => {
-            const anterior = lista.at(-1);
-            if (sinHorarios(fila) && anterior?.sin) anterior.filas.push(fila);
-            else lista.push({ sin: sinHorarios(fila), filas: [fila] });
-            return lista;
-          }, []).map((g) => g.sin ? renderizarSinHorarios(g.filas) : g.filas.map(renderizarFila));
           return (
             <section key={dia} id={`${id}-${dia}`} role="tabpanel" aria-labelledby={`${id}-tab-${dia}`}
               className={`pc-horarios-dia${diaActivo === dia ? ' is-active' : ''}`}>
               <h5 className="pc-horarios-dia-titulo">{etiqueta}</h5>
-              {!filas.length ? <p className="pc-manual-copy">El club no tiene inicios para esta jornada.</p> : (
-                <div role="grid" aria-label={`Inicios del ${dia === 'Viernes' ? 'viernes' : 'sábado'}`} aria-colcount={5} aria-describedby={`${id}-ayuda`}>
-                  {bloques.map((bloque) => {
-                    if (bloque.filas.every(sinHorarios)) return renderizarSinHorarios(bloque.filas);
-                    const inicios = bloque.filas.flatMap((f) => f.celdas).filter(Boolean);
-                    const pedirUna = parejasDeUna(inicios);
-                    const resumen = pedirUna.length
-                      ? `pedirle a ${pedirUna.map((parejaId) => nombres.get(parejaId) || 'la pareja').join(' o a ')}`
-                      : inicios.some((o) => o.estado === 'ENTRA')
-                        ? `entra en el horario de las ${esDefinicion ? 'cuatro' : 'dos'} parejas`
-                        : new Set(inicios.flatMap((o) => o.parejasAAmpliar)).size === 2 ? 'hay que pedirle a las dos parejas' : 'hay que pedirle a varias parejas';
-                    const plegable = sePliega(bloque);
-                    const abierto = estaAbierto(bloque);
+              {!filas.length ? <p className="pc-manual-copy">El club no tiene inicios para esta jornada.</p>
+                : !tramos.length ? <p className="pc-manual-copy">Sin horarios posibles en esta jornada.</p> : (
+                <div role="grid" aria-label={`Inicios del ${dia === 'Viernes' ? 'viernes' : 'sábado'}`} aria-colcount={4} aria-describedby={`${id}-ayuda`}>
+                  {tramos.map((tramo) => {
+                    const inicios = tramo.filas.flatMap((f) => f.celdas).filter(Boolean);
+                    const resumen = titulo(tramo.categoria, inicios);
+                    const plegable = sePliega(tramo);
+                    const abierto = estaAbierto(tramo);
                     return (
-                      <div key={bloque.clave} role="rowgroup">
+                      <div key={tramo.clave} role="rowgroup">
                         <div role="row" className="pc-horarios-resumen">
-                          <div role="gridcell" aria-colspan={5}>
+                          <div role="gridcell" aria-colspan={4}>
                             {plegable ? <button type="button" className="pc-horarios-plegar" aria-expanded={abierto}
-                              aria-controls={`${id}-grupo-${bloque.clave}`} disabled={fijando} onClick={() => {
-                                setDesplegados((prev) => ({ ...prev, [bloque.clave]: !abierto }));
+                              aria-controls={`${id}-grupo-${tramo.clave}`} disabled={fijando} onClick={() => {
+                                setDesplegados((prev) => ({ ...prev, [tramo.clave]: !abierto }));
                                 onSeleccion(null);
                                 if (!abierto) setFoco((prev) => ({ ...prev, [dia]: inicios[0].clave }));
                               }}>
                               <ChevronRight size={14} aria-hidden="true" className={abierto ? 'is-open' : ''} />
-                              <span><strong>{rango(bloque.filas)}</strong> · {resumen}</span>
-                            </button> : <p className="pc-horarios-tramo"><span><strong>{rango(bloque.filas)}</strong> · {resumen}</span></p>}
+                              <span><strong>{rango(tramo.filas)}</strong> · {resumen}</span>
+                            </button> : <p className="pc-horarios-tramo"><span><strong>{rango(tramo.filas)}</strong> · {resumen}</span></p>}
                           </div>
                         </div>
-                        <div role="rowgroup" id={`${id}-grupo-${bloque.clave}`}>
-                          {(!plegable || abierto) && renderizarFilas(bloque.filas)}
+                        <div role="rowgroup" id={`${id}-grupo-${tramo.clave}`}>
+                          {(!plegable || abierto) && tramo.filas.map(renderizarFila)}
                         </div>
                       </div>
                     );
@@ -173,6 +164,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
           );
         })}
       </div>
+      </div>}
     </div>
   );
 }

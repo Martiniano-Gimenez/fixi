@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 
 import { Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatPartidoHorario, formatSlotCorto } from '../utils/dateUtils';
+import { resumirCanchasSaturadas } from './grillaHorarios';
 
 const GrillaHorariosPartido = lazy(() => import('./GrillaHorariosPartido'));
 
@@ -80,15 +81,33 @@ export default function ElegirHorarioPartido({
     } catch (err) {
       if (ticket !== solicitudRef.current) return;
       const mensaje = err.message || 'No pudimos buscar los horarios.';
-      setResultado((prev) => ({ ...prev, solicitud, error: mensaje }));
       if (err.status === 409) {
-        setErrorFijacion({ posicion, mensaje });
+        // La sesión del pre-check cambió o venció (por ejemplo, al reiniciar el backend): se vuelve a verificar y
+        // la revisión nueva recarga los horarios, sin mostrar el aviso. Solo si no llega otra carga queda el error.
         await recheckRef.current();
+        if (ticket === solicitudRef.current) setResultado((prev) => ({ ...prev, solicitud, error: mensaje }));
+        return;
       }
+      setResultado((prev) => ({ ...prev, solicitud, error: mensaje }));
     } finally {
       if (ticket === solicitudRef.current) setCargando(false);
     }
   }, [torneoId, categoriaId, zonaId, revision, posicion, solicitud]);
+
+  // "Canchas saturadas": cuándo pueden todas las parejas y por qué no entra, con las opciones SIN_CANCHA.
+  const saturado = partido.motivo === 'SIN_CANCHA_DISPONIBLE' && !fijo && Boolean(revision);
+  const [saturacion, setSaturacion] = useState(null);
+  useEffect(() => {
+    if (!saturado) return undefined;
+    let vigenteResumen = true;
+    api.post(`/torneos/${torneoId}/pre-check-inicio/partidos/opciones`, {
+      categoriaId, zonaId, posicionEnRonda: partido.posicionEnRonda, revision,
+    }).then((res) => {
+      if (vigenteResumen) setSaturacion({ revision, texto: resumirCanchasSaturadas(res.opciones || [], esDefinicion) });
+    }).catch(() => { if (vigenteResumen) setSaturacion(null); }); // la línea es una ayuda: si falla, no se muestra
+    return () => { vigenteResumen = false; };
+  }, [saturado, torneoId, categoriaId, zonaId, partido.posicionEnRonda, revision, esDefinicion]);
+  const textoSaturacion = saturado && saturacion?.revision === revision ? saturacion.texto : null;
 
   useEffect(() => {
     setSeleccion(null);
@@ -179,6 +198,7 @@ export default function ElegirHorarioPartido({
 
   return (
     <div className="pc-horario-partido">
+      {textoSaturacion && <p className="pc-saturacion">{textoSaturacion}</p>}
       {(mostrarPartido || fijoManual) && <div className="pc-partido-cabecera">
         {mostrarPartido && <FilaPartidoZona partido={partido} nombres={nombres} badge={fijoManual ? 'fijo' : fijo ? 'asignado' : partido.motivo === 'HORARIO_QUITADO' ? 'Horario quitado' : null} />}
         {fijoManual && (
