@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { ChevronRight, Star } from 'lucide-react';
 import { formatSlotCorto } from '../utils/dateUtils';
-import { agruparInicios, armarTramos, detallePorPareja, moverCelda } from './grillaHorarios';
+import { agruparInicios, detallePorPareja, esSecundario, filasVisibles, moverCelda } from './grillaHorarios';
 
 export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion, describir, fijando, onCambioDia, nombres = new Map(), esDefinicion = false }) {
   const id = useId();
@@ -47,15 +47,6 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
     setFoco((prev) => ({ ...prev, [dia]: recomendado.clave }));
     onSeleccion(recomendado);
   };
-  const titulo = (categoria, inicios) => {
-    if (categoria === 'entra') return 'entra sin pedir nada';
-    const parejas = inicios[0].parejasAAmpliar;
-    if (parejas.length === 1) return `pedirle a ${nombres.get(parejas[0]) || 'la pareja'}`;
-    if (!esDefinicion && parejas.length === 2) return 'hay que pedirle a las dos parejas';
-    if (esDefinicion && parejas.length === 4) return 'hay que pedirle a las cuatro parejas';
-    const lista = parejas.map((p) => nombres.get(p) || 'la pareja');
-    return `hay que pedirle a ${lista.slice(0, -1).join(', a ')} y a ${lista.at(-1)}`;
-  };
 
   return (
     <div className="pc-horarios" ref={raiz}>
@@ -94,20 +85,18 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
       </div>
       <div className="pc-horarios-dias">
         {dias.map(({ dia, etiqueta, filas: originales }) => {
-          const filas = originales.map((f) => ({ ...f, celdas: f.celdas.map((o) => o?.estado === 'NO_DISPONIBLE' ? null : o) }));
-          const conHorarios = filas.filter((f) => f.celdas.some(Boolean));
-          const tramos = armarTramos(dia, conHorarios);
-          // Con horarios que entran o que piden a una sola pareja, los que piden a varias quedan plegados.
-          const sePliega = (tramo) => hayUtiles && tramo.categoria !== 'entra' &&
-            tramo.filas.flatMap((f) => f.celdas).find(Boolean).parejasAAmpliar.length > 1;
-          const estaAbierto = (tramo) => Boolean(desplegados[tramo.clave] ||
-            (seleccion?.clave === recomendado.clave && tramo.filas.some((f) => f.celdas.some((o) => o?.clave === recomendado.clave))));
-          const visibles = tramos.flatMap((t) => sePliega(t) && !estaAbierto(t) ? [] : t.filas);
+          // Con horarios que entran o que piden a una sola pareja, los que piden a varias quedan plegados
+          // en un único "Ver más horarios" al final del día.
+          const secundarios = originales.flatMap((f) => f.celdas).filter((o) => o && o.estado !== 'NO_DISPONIBLE' && esSecundario(o));
+          const pliega = hayUtiles && secundarios.length > 0;
+          const abierto = Boolean(desplegados[dia] ||
+            (seleccion?.clave === recomendado.clave && secundarios.some((o) => o.clave === recomendado.clave)));
+          const visibles = filasVisibles(originales, { conSecundarios: !pliega || abierto });
+          const hayHorarios = visibles.length > 0 || secundarios.length > 0;
           const primera = visibles.flatMap((f) => f.celdas).find(Boolean);
           const claveFoco = visibles.some((f) => f.celdas.some((o) => o?.clave === foco[dia])) ? foco[dia] : primera?.clave;
-          const rango = (grupo) => grupo.length === 1 ? `${Number(grupo[0].hora)} h` : `${Number(grupo[0].hora)} a ${Number(grupo.at(-1).hora)} h`;
-          const renderizarFila = (fila, indice) => (
-            <div key={`${fila.hora}-${indice}`} role="row" className="pc-horarios-fila">
+          const renderizarFila = (fila) => (
+            <div key={fila.hora} role="row" className={`pc-horarios-fila${fila.salto ? ' is-salto' : ''}`}>
               {fila.celdas.map((opcion, columna) => {
                 if (!opcion) return null; // los horarios van juntos a la izquierda: solo quedan lugares libres al final
                 return (
@@ -135,36 +124,27 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
             <section key={dia} id={`${id}-${dia}`} role="tabpanel" aria-labelledby={`${id}-tab-${dia}`}
               className={`pc-horarios-dia${diaActivo === dia ? ' is-active' : ''}`}>
               <h5 className="pc-horarios-dia-titulo">{etiqueta}</h5>
-              {!filas.length ? <p className="pc-manual-copy">El club no tiene inicios para esta jornada.</p>
-                : !tramos.length ? <p className="pc-manual-copy">Sin horarios posibles en esta jornada.</p> : (
-                <div role="grid" aria-label={`Inicios del ${dia === 'Viernes' ? 'viernes' : 'sábado'}`} aria-colcount={4} aria-describedby={`${id}-ayuda`}>
-                  {tramos.map((tramo) => {
-                    const inicios = tramo.filas.flatMap((f) => f.celdas).filter(Boolean);
-                    const resumen = titulo(tramo.categoria, inicios);
-                    const plegable = sePliega(tramo);
-                    const abierto = estaAbierto(tramo);
-                    return (
-                      <div key={tramo.clave} role="rowgroup">
-                        <div role="row" className="pc-horarios-resumen">
-                          <div role="gridcell" aria-colspan={4}>
-                            {plegable ? <button type="button" className="pc-horarios-plegar" aria-expanded={abierto}
-                              aria-controls={`${id}-grupo-${tramo.clave}`} disabled={fijando} onClick={() => {
-                                setDesplegados((prev) => ({ ...prev, [tramo.clave]: !abierto }));
-                                onSeleccion(null);
-                                if (!abierto) setFoco((prev) => ({ ...prev, [dia]: inicios[0].clave }));
-                              }}>
-                              <ChevronRight size={14} aria-hidden="true" className={abierto ? 'is-open' : ''} />
-                              <span><strong>{rango(tramo.filas)}</strong> · {resumen}</span>
-                            </button> : <p className="pc-horarios-tramo"><span><strong>{rango(tramo.filas)}</strong> · {resumen}</span></p>}
-                          </div>
-                        </div>
-                        <div role="rowgroup" id={`${id}-grupo-${tramo.clave}`}>
-                          {(!plegable || abierto) && tramo.filas.map(renderizarFila)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              {!originales.length ? <p className="pc-manual-copy">El club no tiene inicios para esta jornada.</p>
+                : !hayHorarios ? <p className="pc-manual-copy">Sin horarios posibles en esta jornada.</p> : (
+                <>
+                  {visibles.length > 0 && (
+                    <div role="grid" id={`${id}-grilla-${dia}`} aria-label={`Inicios del ${dia === 'Viernes' ? 'viernes' : 'sábado'}`}
+                      aria-colcount={4} aria-describedby={`${id}-ayuda`}>
+                      {visibles.map(renderizarFila)}
+                    </div>
+                  )}
+                  {pliega && (
+                    <button type="button" className="pc-horarios-plegar pc-horarios-ver-mas" aria-expanded={abierto}
+                      aria-controls={`${id}-grilla-${dia}`} disabled={fijando} onClick={() => {
+                        setDesplegados((prev) => ({ ...prev, [dia]: !abierto }));
+                        onSeleccion(null);
+                        if (!abierto) setFoco((prev) => ({ ...prev, [dia]: secundarios[0].clave }));
+                      }}>
+                      <ChevronRight size={14} aria-hidden="true" className={abierto ? 'is-open' : ''} />
+                      <span>Ver más horarios ({secundarios.length})</span>
+                    </button>
+                  )}
+                </>
               )}
             </section>
           );

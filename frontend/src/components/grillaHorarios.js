@@ -30,43 +30,25 @@ export function moverCelda(filas, fila, columna, tecla) {
   }
 }
 
-/** Qué hace falta para usar un horario: entra, pedirle a una pareja o pedirle a varias (la clave agrupa iguales). */
-export function categoriaHorario(opcion) {
-  if (opcion.estado === 'ENTRA') return 'entra';
-  return `pedir:${[...opcion.parejasAAmpliar].sort().join(',')}`;
-}
+/** Un horario que pide a dos o más parejas: con otros mejores, queda plegado bajo "Ver más horarios". */
+export const esSecundario = (opcion) => opcion.estado !== 'ENTRA' && opcion.estado !== 'PEDIR_1';
 
 /**
- * Tramos de la grilla de un día. Cada hora se parte por categoría (sus horarios quedan juntos a la izquierda), así el título
- * de un tramo vale para todos sus horarios. Se unen horas seguidas de la misma categoría.
- * @returns {{ categoria: string, clave: string, filas: { hora: string, celdas: (object|null)[] }[] }[]}
+ * Filas visibles de un día, una por hora. Saca los horarios no disponibles (y los secundarios si van plegados),
+ * junta los que quedan desde la izquierda y omite las horas vacías. `salto` marca la fila que viene después de
+ * una hora salteada (la trasnoche sigue a las 23).
+ * @returns {{ hora: string, celdas: (object|null)[], salto: boolean }[]}
  */
-export function armarTramos(dia, filas) {
-  const unidades = [];
+export function filasVisibles(filas, { conSecundarios = true } = {}) {
+  const visibles = [];
   for (const fila of filas) {
-    const porCategoria = new Map();
-    fila.celdas.forEach((opcion, columna) => {
-      if (!opcion) return;
-      const cat = categoriaHorario(opcion);
-      if (!porCategoria.has(cat)) porCategoria.set(cat, { hora: fila.hora, inicios: [], primera: columna });
-      porCategoria.get(cat).inicios.push(opcion);
-    });
-    // Los horarios de cada hora van seguidos desde la izquierda, sin huecos.
-    unidades.push(...[...porCategoria].sort((a, b) => a[1].primera - b[1].primera).map(([categoria, u]) => ({
-      categoria, hora: u.hora, primera: u.primera, celdas: [0, 1, 2, 3].map((i) => u.inicios[i] ?? null),
-    })));
+    const inicios = fila.celdas.filter((o) => o && o.estado !== 'NO_DISPONIBLE' && (conSecundarios || !esSecundario(o)));
+    if (!inicios.length) continue;
+    const anterior = visibles.at(-1);
+    visibles.push({ hora: fila.hora, celdas: [0, 1, 2, 3].map((i) => inicios[i] ?? null),
+      salto: Boolean(anterior) && (Number(anterior.hora) + 1) % 24 !== Number(fila.hora) });
   }
-  const consecutivas = (a, b) => a === b || (Number(a) + 1) % 24 === Number(b);
-  return unidades.reduce((tramos, u) => {
-    const anterior = tramos.at(-1);
-    const ultimaHora = anterior?.filas.at(-1).hora;
-    if (anterior?.categoria === u.categoria && consecutivas(ultimaHora, u.hora) && ultimaHora !== u.hora) {
-      anterior.filas.push({ hora: u.hora, celdas: u.celdas });
-    } else {
-      tramos.push({ categoria: u.categoria, clave: `${dia}-${u.hora}-${u.primera}`, filas: [{ hora: u.hora, celdas: u.celdas }] });
-    }
-    return tramos;
-  }, []);
+  return visibles;
 }
 
 const minutosJornada = (hhmm) => {
