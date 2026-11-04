@@ -520,7 +520,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
   }
 
   const conSlots = parejas.filter((p) => p.slotsSeleccionados.length > 0);
-  if (conSlots.length === 0) {
+  if (!armado && conSlots.length === 0) {
     const error = new Error(
       'Ninguna pareja tiene disponibilidad horaria cargada. Usá el inicio por sorteo o cargá disponibilidad primero.'
     );

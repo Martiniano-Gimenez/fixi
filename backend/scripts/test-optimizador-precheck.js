@@ -16,6 +16,7 @@
  * F   Integración con el pre-check (test.db): sin optimizador = armado de siempre; si el optimizador falla, devuelve
  *     un plan inválido, empata o no mejora, queda el armado de siempre; si mejora estrictamente, se adopta y queda
  *     guardado en PrecheckPlan; un re-check posterior no mueve nada.
+ * H   Una categoría sin disponibilidad (sorteo) no apaga el optimizador: se optimiza la otra sin pisar sus canchas.
  * G   Un solo cálculo por torneo a la vez: dos "volver a armar" simultáneos comparten el resultado (un solo worker);
  *     pedidos distintos del mismo torneo corren de a uno; el worker que no responde se descarta.
  */
@@ -346,6 +347,39 @@ async function main() {
   try { assert.equal(await opt.ejecutar('T-lento', { ...e, presupuestoMs: 20000, maxIteraciones: 100000, estancamiento: 100000, base: baseVacia(inst) }), null); }
   finally { opt.config.limiteDuroMs = limite; }
   console.log('✅ G: un solo cálculo por torneo a la vez');
+
+  // H: una categoría sin disponibilidad (sorteo) no apaga el optimizador: la otra se optimiza, la del sorteo queda con
+  // el armado de siempre y sus partidos ocupan canchas (nada se pisa)
+  {
+    const inst = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'armado-zonas', 'fuzzchica-s120-4ta.json'), 'utf8'));
+    const t = await torneoDe(inst);
+    const sorteo = await prisma.categoria.create({ data: { torneoId: t.torneo.id, nombre: 'Sorteo', estado: 'BORRADOR' } });
+    await prisma.pareja.createMany({ data: [1, 2, 3, 4, 5, 6].map((o) => ({ categoriaId: sorteo.id, jugador1: `S${o}A`, jugador2: `S${o}B`, orden: o })) });
+    const originalEjecutar = opt.ejecutar; const originalFijo = opt.armadoDesdePlan;
+    let entradaVista = null; let planFijoVisto = null;
+    opt.ejecutar = (id, entrada) => { entradaVista = entrada; return originalEjecutar(id, entrada); };
+    opt.armadoDesdePlan = (planFijo) => { planFijoVisto = structuredClone(planFijo); return originalFijo(planFijo); };
+    try { await pre(t, { forceReset: true }); } finally { opt.ejecutar = originalEjecutar; opt.armadoDesdePlan = originalFijo; }
+    const o = sesion(t).optimizacion;
+    assert.equal(o.intentada, true, 'H: el optimizador corre aunque haya una categoría por sorteo');
+    assert.deepEqual(entradaVista.categorias.map((c) => c.key), [t.cat.id], 'H: solo se optimiza la categoría con disponibilidad');
+    assert.equal(o.aplicada, true, 'H: la categoría con conflictos mejora');
+    const plan = sesion(t).categoriasPlan;
+    const resumen = (c) => c.zonas.map((z) => [z.nombre, [...z.parejaIds].sort(), z.partidos.map((p) => [p.posicionEnRonda, p.pareja1Id, p.pareja2Id, p.fechaHora && +new Date(p.fechaHora), p.canchaNumero])]);
+    assert.ok(planFijoVisto && planFijoVisto.length === 1 && planFijoVisto[0].categoriaId === sorteo.id);
+    assert.deepEqual(resumen(plan.find((c) => c.categoriaId === sorteo.id)), resumen(planFijoVisto[0]), 'H: la categoría por sorteo queda con el armado de siempre');
+    // los partidos del sorteo ya agendados entran como ocupación
+    const ticksSorteo = planFijoVisto[0].zonas.flatMap((z) => z.partidos.filter((p) => p.fechaHora && !p.sinHorarioAsignado)).length;
+    assert.ok(ticksSorteo > 0 && entradaVista.externosPorCancha.length >= ticksSorteo, 'H: sus partidos cuentan como ocupación de canchas');
+    // nada se pisa: ni canchas ni parejas en todo el torneo
+    const intervalos = plan.flatMap((c) => c.zonas.flatMap((z) => z.partidos.filter((p) => p.fechaHora && !p.sinHorarioAsignado)
+      .map((p) => ({ s: +new Date(p.fechaHora), cancha: p.canchaNumero }))));
+    for (let i = 0; i < intervalos.length; i++) for (let j = i + 1; j < intervalos.length; j++) {
+      const a = intervalos[i]; const b = intervalos[j];
+      assert.ok(a.cancha !== b.cancha || a.s + 75 * 60000 <= b.s || b.s + 75 * 60000 <= a.s, 'H: dos partidos en la misma cancha a la vez');
+    }
+    console.log(`✅ H: con una categoría por sorteo se optimiza la otra (${JSON.stringify(o.base)} -> ${JSON.stringify(o.final)}) sin pisar canchas`);
+  }
 
   await prisma.$disconnect();
   console.log('\n🎉 test-optimizador-precheck: OK');

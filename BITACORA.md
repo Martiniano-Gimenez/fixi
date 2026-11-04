@@ -3036,7 +3036,7 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 ### 5. Pendientes
 - El resultado varía entre 3 y 6 de una corrida a otra según la carga de la máquina; si se necesita estabilidad exacta, hay que pasar de un tope por tiempo a uno por trabajo.
 - Las preferencias de texto de las parejas ("seguidos", "no seguidos", "cuanto más temprano mejor") quedan fuera.
-- Categorías sin ninguna disponibilidad cargada (sorteo) no se optimizan.
+- Categorías sin ninguna disponibilidad cargada (sorteo) no se optimizan; quedan con el armado de siempre y sus partidos ocupan canchas. Corrección posterior: en 9c6c52e una sola categoría por sorteo apagaba el optimizador para todo el torneo.
 
 ---
 

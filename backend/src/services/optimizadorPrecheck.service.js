@@ -46,7 +46,7 @@ function mejora(nueva, actual) {
  * @param validos [{ categoria: { id, nombre, parejas: [{ id, orden, slotsSeleccionados }] } }]
  * @param planBase categoriasPlan ya evaluado (zonas + horarios que arma hoy el pre-check)
  */
-function construirEntrada({ validos, organizador, refFecha, externos, planBase }) {
+function construirEntrada({ validos, organizador, refFecha, externos, planBase, planFijo = [] }) {
   const grilla = generarGrillaOrganizador(organizador);
   const ids = [...grilla.viernes, ...grilla.sabado];
   const inicios = ids.map((id) => slotIdToMsWindow(id, refFecha));
@@ -61,6 +61,13 @@ function construirEntrada({ validos, organizador, refFecha, externos, planBase }
     const t0 = Math.round(+new Date(e.fechaHora) / TICK_MS);
     for (let k = 0; k < TICKS_PARTIDO; k++) uso.set(t0 + k, (uso.get(t0 + k) || 0) + 1);
     externosPorCancha.push({ cancha: e.canchaNumero, tick: t0 });
+  }
+  // Categorías que no se optimizan (sin disponibilidad: sorteo): sus partidos ya agendados ocupan canchas como externos.
+  for (const c of planFijo) for (const z of c.zonas) for (const p of z.partidos) {
+    if (!p.fechaHora || !p.canchaNumero || p.sinHorarioAsignado) continue;
+    const t0 = Math.round(+new Date(p.fechaHora) / TICK_MS);
+    for (let k = 0; k < TICKS_PARTIDO; k++) uso.set(t0 + k, (uso.get(t0 + k) || 0) + 1);
+    externosPorCancha.push({ cancha: p.canchaNumero, tick: t0 });
   }
 
   const dominio = new Map();
@@ -157,4 +164,32 @@ function aArmado(resultado, entrada) {
   return porCategoria;
 }
 
-module.exports = { construirEntrada, ejecutar, aArmado, metricaPlan, mejora, config, estadisticas };
+/**
+ * Armado impuesto que reproduce exactamente las zonas y horarios de un plan ya armado (categorías que no se optimizan).
+ * Los miembros salen en orden de juego desde los partidos: P1 = [0] vs [1], P2 = [0] vs [2] (zona de 3) o [2] vs [3] (de 4).
+ */
+function armadoDesdePlan(categoriasPlan) {
+  const porCategoria = new Map();
+  for (const c of categoriasPlan) {
+    const a = { grupos: [], sinGrupo: [], horarios: new Map() };
+    for (const z of c.zonas) {
+      if (z.requiereArmadoManual) { a.sinGrupo.push(...z.parejaIds); continue; }
+      const porPos = new Map(z.partidos.map((p) => [p.posicionEnRonda, p]));
+      const p1 = porPos.get(1); const p2 = porPos.get(2);
+      let miembros = z.parejaIds;
+      if (z.parejaIds.length === 2 && p1) miembros = [p1.pareja1Id, p1.pareja2Id];
+      else if (z.parejaIds.length === 3 && p1 && p2) miembros = [p1.pareja1Id, p1.pareja2Id, p2.pareja2Id];
+      else if (z.formato === 'MINI_BRACKET' && p1 && p2) miembros = [p1.pareja1Id, p1.pareja2Id, p2.pareja1Id, p2.pareja2Id];
+      a.grupos.push(miembros);
+      for (const p of z.partidos) {
+        if (!p.fechaHora || !p.canchaNumero || p.sinHorarioAsignado) continue;
+        const clave = z.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3 ? qk(miembros, p.posicionEnRonda) : pk(p.pareja1Id, p.pareja2Id);
+        a.horarios.set(clave, { startMs: +new Date(p.fechaHora), cancha: p.canchaNumero });
+      }
+    }
+    porCategoria.set(c.categoriaId, a);
+  }
+  return porCategoria;
+}
+
+module.exports = { construirEntrada, armadoDesdePlan, ejecutar, aArmado, metricaPlan, mejora, config, estadisticas };

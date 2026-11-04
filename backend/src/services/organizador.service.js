@@ -1239,9 +1239,11 @@ async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = 
       await prisma.$transaction(async (tx) => {
         // 1. Iniciar zonas en cada categoría válida (usando tx)
         for (const item of validos) {
-          if (item.tieneDisponibilidad) {
-            await iniciarCategoriaConDisponibilidad(organizadorId, item.categoria.id, tx,
-              armado ? { armado: armado.get(item.categoria.id) } : {});
+          if (armado) {
+            // Con armado impuesto (optimizador, o copia del armado de siempre para las categorías por sorteo).
+            await iniciarCategoriaConDisponibilidad(organizadorId, item.categoria.id, tx, { armado: armado.get(item.categoria.id) });
+          } else if (item.tieneDisponibilidad) {
+            await iniciarCategoriaConDisponibilidad(organizadorId, item.categoria.id, tx);
           } else {
             await iniciarCategoria(organizadorId, item.categoria.id, tx);
           }
@@ -1353,16 +1355,27 @@ async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = 
   // Optimización conjunta de zonas y horarios: solo al armar el plan (primer pre-check o "volver a armar") y solo
   // si el armado de siempre dejó parejas en zona manual o partidos sin horario. Reemplaza al plan de siempre
   // únicamente si mejora estrictamente (primero menos parejas en zona manual, después menos partidos sin horario).
+  // Las categorías sin ninguna disponibilidad cargada (sorteo) no se optimizan: quedan con el armado de siempre y
+  // sus partidos ocupan canchas para el optimizador, igual que los externos.
   const base = optimizadorPrecheck.metricaPlan(plan.categoriasPlan);
   optimizacion.base = base;
-  if (optimizar && (base.manual > 0 || base.sinHorario > 0) && validos.every((v) => v.tieneDisponibilidad)) {
+  const optimizables = validos.filter((v) => v.tieneDisponibilidad);
+  const idsOptimizables = new Set(optimizables.map((v) => v.categoria.id));
+  const planOptimizable = plan.categoriasPlan.filter((c) => idsOptimizables.has(c.categoriaId));
+  const planFijo = plan.categoriasPlan.filter((c) => !idsOptimizables.has(c.categoriaId));
+  const pendientes = optimizadorPrecheck.metricaPlan(planOptimizable);
+  if (optimizar && optimizables.length > 0 && (pendientes.manual > 0 || pendientes.sinHorario > 0)) {
     optimizacion.intentada = true;
     try {
-      const entrada = optimizadorPrecheck.construirEntrada({ validos, organizador, refFecha, externos, planBase: plan.categoriasPlan });
+      const entrada = optimizadorPrecheck.construirEntrada({
+        validos: optimizables, organizador, refFecha, externos, planBase: planOptimizable, planFijo,
+      });
       const resultado = await optimizadorPrecheck.ejecutar(torneoId, entrada);
       if (resultado && resultado.errores.length === 0) {
         optimizacion.metricas = resultado.metricas;
-        const alternativa = await armarPlan(optimizadorPrecheck.aArmado(resultado, entrada));
+        const armado = optimizadorPrecheck.aArmado(resultado, entrada);
+        for (const [id, a] of optimizadorPrecheck.armadoDesdePlan(planFijo)) armado.set(id, a);
+        const alternativa = await armarPlan(armado);
         const final = alternativa ? optimizadorPrecheck.metricaPlan(alternativa.categoriasPlan) : null;
         if (final && optimizadorPrecheck.mejora(final, base)) {
           plan = alternativa;
