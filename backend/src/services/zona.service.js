@@ -494,7 +494,7 @@ function intentarArmarGrupo(candidatos, size, asignado, matriz) {
 /**
  * Iniciar categoría agrupando zonas por disponibilidad horaria
  */
-async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, externalTx = null) {
+async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, externalTx = null, { armado = null } = {}) {
   const db = externalTx || prisma;
   const categoria = await getCategoriaById(organizadorId, categoriaId, db);
 
@@ -528,10 +528,22 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
     throw error;
   }
 
-  const matriz = construirMatrizCompatibilidad(parejas.map((p) => p.slotsSeleccionados.map((s) => s.slotId)));
-
-  const configZonas = calcularConfigZonas(numParejas);
-  const { grupos, sinGrupo } = armarGruposPorCompatibilidad(parejas, configZonas, matriz);
+  let grupos;
+  let sinGrupo;
+  if (armado) {
+    // Armado impuesto por el optimizador del pre-check: grupos de parejaId en orden de juego (P1 = [0] vs [1], ...).
+    const indice = new Map(parejas.map((p, i) => [p.id, i]));
+    const aIndices = (ids) => ids.map((id) => {
+      if (!indice.has(id)) throw new Error('El armado impuesto incluye una pareja que no es de la categoría.');
+      return indice.get(id);
+    });
+    grupos = armado.grupos.map(aIndices);
+    sinGrupo = aIndices(armado.sinGrupo);
+  } else {
+    const matriz = construirMatrizCompatibilidad(parejas.map((p) => p.slotsSeleccionados.map((s) => s.slotId)));
+    const configZonas = calcularConfigZonas(numParejas);
+    ({ grupos, sinGrupo } = armarGruposPorCompatibilidad(parejas, configZonas, matriz));
+  }
 
   const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const resumenZonasCreadas = [];

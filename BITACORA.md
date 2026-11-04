@@ -3011,6 +3011,35 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+## 91. El pre-check arma zonas y horarios optimizando las canchas
+
+### 1. Problema y medición de partida
+- **Problema:** en "Impares Noviembre" el pre-check dejaba 20 partidos de zona sin horario (17 más 3 de una zona manual de 7ma Damas). Con un solver exacto sobre una copia de `dev.db`: con las zonas de Fixi y los horarios mejor acomodados quedaban 12 (más los 3 de la zona manual); con las zonas que armó otro agente, 4. Las causas: `armarGruposPorCompatibilidad` solo mira si dos parejas comparten algún inicio y no la capacidad de canchas (el viernes de 19 a 20:30 hay entre 43 y 46 parejas que pueden empezar y 6 canchas), y el acomodo de horarios va partido por partido.
+- **Hallazgo:** en 7ma Damas no existe ninguna partición en tríos donde todos los pares compartan algún inicio. Las zonas del agente tenían partidos imposibles que contaban como sin horario.
+
+### 2. Qué se hizo
+- Optimizador conjunto en `utils/optimizadorPrecheck.js` (puro) con HiGHS en un `worker_threads`: búsqueda por vecindarios con sub-MIP exactos, partiendo del armado de siempre; reemplaza al armado de siempre solo si mejora estrictamente (primero parejas en zona manual, después partidos sin horario). Detalle del modelo, el tiempo y el determinismo en CONTEXT.md.
+- `preCheckInicioTorneoBase`: el armado se extrajo a `armarPlan(armado)` (transacción que siempre se revierte); sesión y planes se registran fuera de ella. `iniciarCategoriaConDisponibilidad` acepta un armado impuesto.
+- Un solo cálculo por torneo a la vez (promesa compartida en `precheckPropuestas` y candado en el servicio del optimizador).
+- Sin cambios de pantalla, endpoints ni migraciones. Nueva dependencia: `highs` 1.15.4 (MIT, WASM).
+
+### 3. Decisiones tomadas
+- **Compatibilidad blanda:** una zona puede tener un par sin inicio común (cuenta como sin horario) en lugar de mandar parejas a la zona manual. Es lo único que permite 0 parejas en zona manual en 7ma Damas.
+- **Apagado en tests y fuzz** (`FIXI_OPTIMIZADOR=0` desde `testEnvGuard`): el optimizador usa hasta ~10 s por armado. Con el optimizador apagado, 60 semillas del fuzz dan hashes idénticos a los del código anterior.
+- **Tope de 9,5 s** para la búsqueda (el armado completo tarda ~11 s, de los cuales ~1,3 s son los dos armados de siempre). El resultado depende de cuánto alcanza a avanzar la búsqueda en ese tiempo.
+
+### 4. Resultados (copia de dev.db, 5 procesos nuevos)
+- Antes: 20 sin horario, 3 parejas en zona manual, armado 0,64 s, re-check 0,33 s.
+- Después: 4, 3, 5, 6 y 4 sin horario, 0 parejas en zona manual, armado 10,9 a 11,4 s, re-check 0,38 a 0,60 s. Verificador independiente (`capturas/valida-plan.py`): 0 errores, 6 simultáneos como máximo. `dev.db` con el mismo hash antes y después.
+- `npm test`: 51 de 51 suites (la nueva es `test-optimizador-precheck.js`). Lint con los mismos 7 avisos y build sin errores.
+
+### 5. Pendientes
+- El resultado varía entre 3 y 6 de una corrida a otra según la carga de la máquina; si se necesita estabilidad exacta, hay que pasar de un tope por tiempo a uno por trabajo.
+- Las preferencias de texto de las parejas ("seguidos", "no seguidos", "cuanto más temprano mejor") quedan fuera.
+- Categorías sin ninguna disponibilidad cargada (sorteo) no se optimizan.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
 El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 90 sesiones de trabajo, sumando un aproximado total de entre 272 y 326 horas de programación, refactorización, depuración y testeo (las horas indicadas por sesión corresponden a estimaciones aproximadas de esfuerzo, no a mediciones cronometradas exactas).

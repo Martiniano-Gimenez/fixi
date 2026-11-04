@@ -12,6 +12,8 @@ const { getDiaCalendarioConTrasnoche, requireTorneoFecha, parseFechaLocal, clave
 const { minutosDespuesDelCierre } = require('../utils/horarioClub');
 const { verificarProgramacionZona } = require('../utils/programacionZona');
 const { reacomodarPrecheck } = require('../utils/reacomodarPrecheck');
+const optimizadorPrecheck = require('./optimizadorPrecheck.service');
+const { pk, qk } = require('../utils/optimizadorPrecheck');
 const {
   iniciarCategoria,
   iniciarCategoriaConDisponibilidad,
@@ -193,6 +195,32 @@ async function updateOrganizador(organizadorId, data) {
 async function getSlotsGrilla(organizadorId) {
   const organizador = await getOrganizador(organizadorId);
   return generarGrillaOrganizador(organizador);
+}
+
+/**
+ * Escribe en las zonas recién creadas de la categoría los horarios que calculó el optimizador del pre-check.
+ * `horarios` mapea la clave del partido (par de parejas, o Q:<parejas>:<posición> para P3/P4 de una zona de 4)
+ * a { startMs, cancha }. Los partidos sin entrada quedan sin horario, igual que en el armado de siempre.
+ */
+async function aplicarHorariosArmado(tx, categoriaId, horarios) {
+  const zonas = await tx.zona.findMany({
+    where: { categoriaId },
+    include: { zonaParejas: { select: { parejaId: true } }, partidos: { select: { id: true, posicionEnRonda: true, pareja1Id: true, pareja2Id: true } } },
+  });
+  for (const z of zonas) {
+    if (z.requiereArmadoManual) continue;
+    const ids = z.zonaParejas.map((zp) => zp.parejaId);
+    for (const p of z.partidos) {
+      const clave = z.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3 ? qk(ids, p.posicionEnRonda) : pk(p.pareja1Id, p.pareja2Id);
+      const h = horarios.get(clave);
+      await tx.partido.update({
+        where: { id: p.id },
+        data: h
+          ? { fechaHora: new Date(h.startMs), canchaNumero: h.cancha, sinHorarioAsignado: false }
+          : { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true },
+      });
+    }
+  }
 }
 
 /**
@@ -1015,7 +1043,7 @@ function evaluarAsignacionesIncrementalesBase({
  * Utiliza un Snapshot Estable en memoria para garantizar que durante la sesión de resolución de cruces
  * las zonas se mantengan congeladas y los partidos asignados permanezcan inmutables.
  */
-async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = false, isReCheck = false } = {}) {
+async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = false, isReCheck = false, optimizar = process.env.FIXI_OPTIMIZADOR !== '0' } = {}) {
   const organizador = await getOrganizador(organizadorId);
 
   const torneo = await prisma.torneo.findUnique({
@@ -1201,176 +1229,219 @@ async function preCheckInicioTorneoBase(organizadorId, torneoId, { forceReset = 
 
   const fingerprint = buildFingerprint(organizador, categoriasBorrador);
   const PLANNED_ROLLBACK = Symbol('PLANNED_ROLLBACK');
-  let dryRunResult = null;
 
-  try {
-    await prisma.$transaction(async (tx) => {
-      // 1. Iniciar zonas en cada categoría válida (usando tx)
-      for (const item of validos) {
-        if (item.tieneDisponibilidad) {
-          await iniciarCategoriaConDisponibilidad(organizadorId, item.categoria.id, tx);
-        } else {
-          await iniciarCategoria(organizadorId, item.categoria.id, tx);
+  // Arma el plan completo (zonas, horarios y evaluación) en una transacción que siempre se revierte.
+  // Sin `armado` es el armado de siempre (voraz + scheduler); con `armado` (del optimizador) se imponen
+  // las zonas y los horarios que él calculó.
+  async function armarPlan(armado) {
+    let armadoPlan = null;
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 1. Iniciar zonas en cada categoría válida (usando tx)
+        for (const item of validos) {
+          if (item.tieneDisponibilidad) {
+            await iniciarCategoriaConDisponibilidad(organizadorId, item.categoria.id, tx,
+              armado ? { armado: armado.get(item.categoria.id) } : {});
+          } else {
+            await iniciarCategoria(organizadorId, item.categoria.id, tx);
+          }
         }
-      }
 
-      // 2. Ordenar categorías por restricción (menor score / promedio de slots primero)
-      validos.sort((a, b) => a.scoreFlexibilidad - b.scoreFlexibilidad);
+        // 2. Ordenar categorías por restricción (menor score / promedio de slots primero)
+        validos.sort((a, b) => a.scoreFlexibilidad - b.scoreFlexibilidad);
 
-      // 3. Asignar horarios y canchas en tx con pool global multi-categoría (MCF Global)
-      const categoriasIdsValidos = validos.map((v) => v.categoria.id);
-      await asignarHorariosAutomatico(organizadorId, categoriasIdsValidos, tx, { isPreCheck: true });
+        // 3. Asignar horarios y canchas en tx con pool global multi-categoría (MCF Global)
+        const categoriasIdsValidos = validos.map((v) => v.categoria.id);
+        if (armado) {
+          for (const id of categoriasIdsValidos) await aplicarHorariosArmado(tx, id, armado.get(id).horarios);
+        } else {
+          await asignarHorariosAutomatico(organizadorId, categoriasIdsValidos, tx, { isPreCheck: true });
+        }
 
-      // 4. Construir categoriasPlan y capturar timelines del snapshot mediante buildTimelinesFromPlan
-      const categoriasPlan = [];
+        // 4. Construir categoriasPlan y capturar timelines del snapshot mediante buildTimelinesFromPlan
+        const categoriasPlan = [];
 
-      for (const v of validos) {
-        // Orden explícito (sesión 81). zonaParejas por pareja.orden: sin orderBy SQLite las devolvía por el
-        // índice (zonaId, parejaId), en orden de UUID, distinto en cada corrida. Zonas por nombre y partidos
-        // por posición: hoy coinciden con el orden de creación (sin efecto observable), quedan explícitos.
-        const zonasTx = await tx.zona.findMany({
-          where: { categoriaId: v.categoria.id },
-          orderBy: { nombre: 'asc' },
-          include: {
-            zonaParejas: {
-              select: { parejaId: true },
-              orderBy: [{ pareja: { orden: 'asc' } }, { parejaId: 'asc' }],
-            },
-            partidos: {
-              orderBy: { posicionEnRonda: 'asc' },
-              select: {
-                id: true,
-                posicionEnRonda: true,
-                pareja1Id: true,
-                pareja2Id: true,
-                origenPareja1: true,
-                origenPareja2: true,
-                fechaHora: true,
-                canchaNumero: true,
-                sinHorarioAsignado: true,
+        for (const v of validos) {
+          // Orden explícito (sesión 81). zonaParejas por pareja.orden: sin orderBy SQLite las devolvía por el
+          // índice (zonaId, parejaId), en orden de UUID, distinto en cada corrida. Zonas por nombre y partidos
+          // por posición: hoy coinciden con el orden de creación (sin efecto observable), quedan explícitos.
+          const zonasTx = await tx.zona.findMany({
+            where: { categoriaId: v.categoria.id },
+            orderBy: { nombre: 'asc' },
+            include: {
+              zonaParejas: {
+                select: { parejaId: true },
+                orderBy: [{ pareja: { orden: 'asc' } }, { parejaId: 'asc' }],
+              },
+              partidos: {
+                orderBy: { posicionEnRonda: 'asc' },
+                select: {
+                  id: true,
+                  posicionEnRonda: true,
+                  pareja1Id: true,
+                  pareja2Id: true,
+                  origenPareja1: true,
+                  origenPareja2: true,
+                  fechaHora: true,
+                  canchaNumero: true,
+                  sinHorarioAsignado: true,
+                },
               },
             },
-          },
-        });
+          });
 
-        categoriasPlan.push({
-          categoriaId: v.categoria.id,
-          nombre: v.categoria.nombre,
-          avgSlots: v.avgSlots,
-          zonas: zonasTx.map((z) => ({
-            id: z.id,
-            nombre: z.nombre,
-            clasifican: z.clasifican,
-            formato: z.formato,
-            requiereArmadoManual: z.requiereArmadoManual || false,
-            esZonaManualOriginal: Boolean(z.requiereArmadoManual),
-            parejaIds: z.zonaParejas.map((zp) => zp.parejaId),
-            partidos: z.partidos.map((p) => ({
-              id: p.id,
-              posicionEnRonda: p.posicionEnRonda,
-              pareja1Id: p.pareja1Id,
-              pareja2Id: p.pareja2Id,
-              origenPareja1: p.origenPareja1 || null,
-              origenPareja2: p.origenPareja2 || null,
-              fechaHora: p.fechaHora,
-              canchaNumero: p.canchaNumero,
-              sinHorarioAsignado: p.sinHorarioAsignado || false,
+          categoriasPlan.push({
+            categoriaId: v.categoria.id,
+            nombre: v.categoria.nombre,
+            avgSlots: v.avgSlots,
+            zonas: zonasTx.map((z) => ({
+              id: z.id,
+              nombre: z.nombre,
+              clasifican: z.clasifican,
+              formato: z.formato,
+              requiereArmadoManual: z.requiereArmadoManual || false,
+              esZonaManualOriginal: Boolean(z.requiereArmadoManual),
+              parejaIds: z.zonaParejas.map((zp) => zp.parejaId),
+              partidos: z.partidos.map((p) => ({
+                id: p.id,
+                posicionEnRonda: p.posicionEnRonda,
+                pareja1Id: p.pareja1Id,
+                pareja2Id: p.pareja2Id,
+                origenPareja1: p.origenPareja1 || null,
+                origenPareja2: p.origenPareja2 || null,
+                fechaHora: p.fechaHora,
+                canchaNumero: p.canchaNumero,
+                sinHorarioAsignado: p.sinHorarioAsignado || false,
+              })),
             })),
-          })),
-        });
-      }
-
-      const { courtTimelines, parejaAssignments } = buildTimelinesFromPlan({
-        categoriasPlan,
-        cantCanchas,
-        DURACION_MS,
-      });
-
-      // Guardar sesión en memoria para re-checks incrementales estables
-      preCheckSessions.set(torneoId, {
-        torneoId,
-        organizadorId,
-        createdAt: Date.now(),
-        expiresAt: Date.now() + PRECHECK_TTL_MS,
-        parejaIdsHash: currentParejaIds,
-        validos,
-        omitidos,
-        categoriasPlan,
-        courtTimelines,
-        parejaAssignments,
-        refFecha,
-      });
-
-      // 5. Evaluar conflictos iniciales
-      const evalRes = evaluarAsignacionesIncrementales({
-        categoriasPlan,
-        courtTimelines,
-        parejaAssignments,
-        parejasMap,
-        cantidadCanchas: cantCanchas,
-        refFecha,
-        organizador,
-        DURACION_MS,
-        externos,
-      });
-
-      if (evalRes.totalConflictos > 0) {
-        let planEmergenciaId = null;
-        if (evalRes.totalZonasManuales === 0) {
-          planEmergenciaId = crypto.randomUUID();
-          planesCache.set(planEmergenciaId, {
-            planId: planEmergenciaId,
-            organizadorId,
-            torneoId,
-            expiresAt: Date.now() + PRECHECK_TTL_MS,
-            fingerprint,
-            categoriasPlan: structuredClone(categoriasPlan),
-            omitidos,
-            esEmergencia: true,
           });
         }
 
-        dryRunResult = {
-          bloqueado: true,
-          motivo: 'Existen partidos o zonas sin horario compatible asignado.',
-          conflictos: evalRes.conflictos,
-          grillaOrganizador: evalRes.grillaOrganizador,
-          permiteInicioEmergencia: evalRes.totalZonasManuales === 0,
-          planEmergenciaId,
-          omitidos,
-          sesionReiniciada,
-        };
-      } else {
-        const planId = crypto.randomUUID();
-        planesCache.set(planId, {
-          planId,
-          organizadorId,
-          torneoId,
-          expiresAt: Date.now() + PRECHECK_TTL_MS,
-          fingerprint,
-          categoriasPlan: structuredClone(categoriasPlan),
-          omitidos,
+        const { courtTimelines, parejaAssignments } = buildTimelinesFromPlan({
+          categoriasPlan,
+          cantCanchas,
+          DURACION_MS,
         });
 
-        dryRunResult = {
-          bloqueado: false,
-          planId,
-          torneoId,
-          categoriasAIniciar: validos.map((v) => ({ id: v.categoria.id, nombre: v.categoria.nombre })),
-          omitidos,
-          sesionReiniciada,
-        };
-      }
+        // 5. Evaluar conflictos iniciales (muta categoriasPlan y los timelines: reacomodo y fallback por zona)
+        const evalRes = evaluarAsignacionesIncrementales({
+          categoriasPlan,
+          courtTimelines,
+          parejaAssignments,
+          parejasMap,
+          cantidadCanchas: cantCanchas,
+          refFecha,
+          organizador,
+          DURACION_MS,
+          externos,
+        });
 
-      throw PLANNED_ROLLBACK;
-    });
-  } catch (err) {
-    if (err !== PLANNED_ROLLBACK) {
-      throw err;
+        armadoPlan = { categoriasPlan, courtTimelines, parejaAssignments, evalRes };
+        throw PLANNED_ROLLBACK;
+      });
+    } catch (err) {
+      if (err !== PLANNED_ROLLBACK) {
+        throw err;
+      }
+    }
+    return armadoPlan;
+  }
+
+  let plan = await armarPlan(null);
+  const optimizacion = { aplicada: false, intentada: false };
+
+  // Optimización conjunta de zonas y horarios: solo al armar el plan (primer pre-check o "volver a armar") y solo
+  // si el armado de siempre dejó parejas en zona manual o partidos sin horario. Reemplaza al plan de siempre
+  // únicamente si mejora estrictamente (primero menos parejas en zona manual, después menos partidos sin horario).
+  const base = optimizadorPrecheck.metricaPlan(plan.categoriasPlan);
+  optimizacion.base = base;
+  if (optimizar && (base.manual > 0 || base.sinHorario > 0) && validos.every((v) => v.tieneDisponibilidad)) {
+    optimizacion.intentada = true;
+    try {
+      const entrada = optimizadorPrecheck.construirEntrada({ validos, organizador, refFecha, externos, planBase: plan.categoriasPlan });
+      const resultado = await optimizadorPrecheck.ejecutar(torneoId, entrada);
+      if (resultado && resultado.errores.length === 0) {
+        optimizacion.metricas = resultado.metricas;
+        const alternativa = await armarPlan(optimizadorPrecheck.aArmado(resultado, entrada));
+        const final = alternativa ? optimizadorPrecheck.metricaPlan(alternativa.categoriasPlan) : null;
+        if (final && optimizadorPrecheck.mejora(final, base)) {
+          plan = alternativa;
+          optimizacion.aplicada = true;
+          optimizacion.final = final;
+        }
+      } else if (resultado) {
+        console.warn('[pre-check] el optimizador devolvió un plan inválido; queda el armado de siempre:', resultado.errores.slice(0, 3));
+      }
+    } catch (err) {
+      console.warn('[pre-check] el optimizador falló; queda el armado de siempre:', err.message);
     }
   }
 
-  return dryRunResult;
+  const { categoriasPlan, courtTimelines, parejaAssignments, evalRes } = plan;
+
+  // Guardar sesión en memoria para re-checks incrementales estables
+  preCheckSessions.set(torneoId, {
+    torneoId,
+    organizadorId,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + PRECHECK_TTL_MS,
+    parejaIdsHash: currentParejaIds,
+    validos,
+    omitidos,
+    categoriasPlan,
+    courtTimelines,
+    parejaAssignments,
+    refFecha,
+    optimizacion,
+  });
+
+  if (evalRes.totalConflictos > 0) {
+    let planEmergenciaId = null;
+    if (evalRes.totalZonasManuales === 0) {
+      planEmergenciaId = crypto.randomUUID();
+      planesCache.set(planEmergenciaId, {
+        planId: planEmergenciaId,
+        organizadorId,
+        torneoId,
+        expiresAt: Date.now() + PRECHECK_TTL_MS,
+        fingerprint,
+        categoriasPlan: structuredClone(categoriasPlan),
+        omitidos,
+        esEmergencia: true,
+      });
+    }
+
+    return {
+      bloqueado: true,
+      motivo: 'Existen partidos o zonas sin horario compatible asignado.',
+      conflictos: evalRes.conflictos,
+      grillaOrganizador: evalRes.grillaOrganizador,
+      permiteInicioEmergencia: evalRes.totalZonasManuales === 0,
+      planEmergenciaId,
+      omitidos,
+      sesionReiniciada,
+    };
+  }
+
+  const planId = crypto.randomUUID();
+  planesCache.set(planId, {
+    planId,
+    organizadorId,
+    torneoId,
+    expiresAt: Date.now() + PRECHECK_TTL_MS,
+    fingerprint,
+    categoriasPlan: structuredClone(categoriasPlan),
+    omitidos,
+  });
+
+  return {
+    bloqueado: false,
+    planId,
+    torneoId,
+    categoriasAIniciar: validos.map((v) => ({ id: v.categoria.id, nombre: v.categoria.nombre })),
+    omitidos,
+    sesionReiniciada,
+  };
 }
 
 /**

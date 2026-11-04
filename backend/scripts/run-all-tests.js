@@ -72,6 +72,7 @@ const TEST_SUITES = [
   'test-padres-hijo-fijo.js',
   'test-armado-zonas-reparacion.js',
   'test-inscripcion-publica.js',
+  'test-optimizador-precheck.js',
 ];
 
 /**

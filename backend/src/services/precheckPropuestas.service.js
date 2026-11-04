@@ -12,6 +12,7 @@ const { hidratarPlan, guardarPlan, comprobarRevision, conflictoPlan } = require(
 
 function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preCheckBase, reconstruirOcupacion }) {
   const colas = new Map();
+  const rearmesPendientes = new Map();
   function encolar(id, fn) {
     const siguiente = (colas.get(id) || Promise.resolve()).catch(() => {}).then(fn);
     colas.set(id, siguiente);
@@ -428,7 +429,19 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
       const actual = await leerEstado(db, org, id);
       if (firma(actual, hidratarPlan(fila, org)) !== fila.firma) throw conflictoPlan();
     },
-    preCheck: (org, id, opciones) => encolar(id, () => obtener(org, id, opciones)),
+    // Varios "volver a armar" del mismo torneo mientras uno está corriendo (doble toque, dos pestañas) esperan
+    // ese resultado: no se arma ni se optimiza dos veces.
+    preCheck: (org, id, opciones = {}) => {
+      if (!opciones.forceReset) return encolar(id, () => obtener(org, id, opciones));
+      const clave = `${org}:${id}`;
+      if (!rearmesPendientes.has(clave)) {
+        const promesa = encolar(id, () => obtener(org, id, opciones));
+        rearmesPendientes.set(clave, promesa);
+        const limpiar = () => { if (rearmesPendientes.get(clave) === promesa) rearmesPendientes.delete(clave); };
+        promesa.then(limpiar, limpiar);
+      }
+      return rearmesPendientes.get(clave);
+    },
     solicitar: (org, id, data) => encolar(id, () => solicitar(org, id, data)),
     aplicar: (org, id, data) => encolar(id, () => aplicar(org, id, data)),
     opcionesPartido: (org, id, data) => encolar(id, () => opcionesPartido(org, id, data)),

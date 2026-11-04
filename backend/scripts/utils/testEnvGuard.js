@@ -20,6 +20,10 @@ if (envResult.error) {
   process.exit(1);
 }
 
+// El optimizador del pre-check usa hasta ~10 s por armado: en las suites y el fuzz queda apagado (se arma como
+// siempre y los hashes de referencia no cambian). Solo test-optimizador-precheck.js lo prende.
+if (process.env.FIXI_OPTIMIZADOR === undefined) process.env.FIXI_OPTIMIZADOR = '0';
+
 // 2. Pre-chequeo sincrónico estricto de DATABASE_URL en process.env
 const dbUrl = process.env.DATABASE_URL || '';
 if (!dbUrl.includes('test.db') || dbUrl.includes('dev.db')) {
