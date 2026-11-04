@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { ChevronRight, Star } from 'lucide-react';
 import { formatSlotCorto } from '../utils/dateUtils';
-import { agruparInicios, armarTramos, moverCelda } from './grillaHorarios';
+import { agruparInicios, armarTramos, detallePorPareja, moverCelda } from './grillaHorarios';
 
 export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion, describir, fijando, onCambioDia, nombres = new Map(), esDefinicion = false }) {
   const id = useId();
@@ -26,12 +26,18 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
   if (!recomendado) {
     return <p className="pc-manual-copy" role="status">No hay horarios posibles para este partido con las canchas libres.</p>;
   }
-  const minutos = recomendado.minutosAmpliacion ?? 0;
-  const duracion = [Math.floor(minutos / 60) > 0 && `${Math.floor(minutos / 60)} h`, minutos % 60 > 0 && `${minutos % 60} min`].filter(Boolean).join(' ');
-  const detalle = recomendado.estado === 'ENTRA'
-    ? `entra en el horario de las ${esDefinicion ? 'cuatro' : 'dos'} parejas`
-    : describir(recomendado).replace(/^Pedile a /, 'pedirle a ') +
-      (duracion ? ` ${duracion} más${recomendado.parejasAAmpliar.length > 1 ? ' en total' : ''}` : '');
+  // Lo que hay que pedirle a cada pareja, por separado: cuánto antes o después de su horario, o un día nuevo.
+  const textoRecomendado = (
+    <span className="pc-horarios-recomendado-cuerpo">
+      <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)}
+        {recomendado.estado === 'ENTRA' && ` · entra en el horario de las ${esDefinicion ? 'cuatro' : 'dos'} parejas`}</span>
+      {recomendado.estado !== 'ENTRA' && (
+        <span className="pc-horarios-recomendado-detalle">
+          {detallePorPareja(recomendado, nombres).map((d) => `${d.nombre}: ${d.texto}`).join(' · ')}
+        </span>
+      )}
+    </span>
+  );
   // Sin ningún horario que entre ni que pida a una sola pareja, la grilla no ayuda a decidir: queda plegada.
   const hayUtiles = disponibles.some((o) => o.estado === 'ENTRA' || o.estado === 'PEDIR_1');
   const grillaVisible = hayUtiles || verTodos;
@@ -56,13 +62,13 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
       {hayUtiles ? (
         <button type="button" className="pc-horarios-recomendado" disabled={fijando} onClick={elegirRecomendado}>
           <Star size={16} aria-hidden="true" />
-          <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)} · {detalle}</span>
+          {textoRecomendado}
         </button>
       ) : (
         <div className="pc-horarios-solo-recomendado">
           <p className="pc-horarios-recomendado-texto">
             <Star size={16} aria-hidden="true" />
-            <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)} · {detalle}</span>
+            {textoRecomendado}
           </p>
           <button type="button" className="pc-manual-button" disabled={fijando} onClick={elegirRecomendado}>Elegir este horario</button>
           <button type="button" className="pc-horarios-plegar pc-horarios-ver-todos" aria-expanded={verTodos} aria-controls={`${id}-todos`}
@@ -103,7 +109,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
           const renderizarFila = (fila, indice) => (
             <div key={`${fila.hora}-${indice}`} role="row" className="pc-horarios-fila">
               {fila.celdas.map((opcion, columna) => {
-                if (!opcion) return <div key={columna} className="pc-horarios-hueco" aria-hidden="true" />;
+                if (!opcion) return null; // los horarios van juntos a la izquierda: solo quedan lugares libres al final
                 return (
                   <div key={columna} role="gridcell" aria-colindex={columna + 1} aria-selected={seleccion?.clave === opcion.clave}>
                     <button type="button" data-clave={opcion.clave}

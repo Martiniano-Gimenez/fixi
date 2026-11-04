@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 
 import { Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatPartidoHorario, formatSlotCorto } from '../utils/dateUtils';
-import { explicarPorQueNoEntra } from './grillaHorarios';
+import { describirHorarioPareja, detallePorPareja, explicarPorQueNoEntra } from './grillaHorarios';
 
 const GrillaHorariosPartido = lazy(() => import('./GrillaHorariosPartido'));
 
@@ -50,7 +50,6 @@ export default function ElegirHorarioPartido({
   const recheckRef = useRef(onRecheck);
   const montado = useRef(false);
   const seccionId = useId();
-  const parejasMap = new Map(parejas.map((p) => [p.id, p]));
   const nombres = new Map(parejas.map((p) => [p.id, p.nombre]));
   const esDefinicion = Boolean(partido.origen && !partido.pareja1Id && !partido.pareja2Id && partido.posicionEnRonda >= 3);
   const fijo = tieneHorario(partido);
@@ -77,7 +76,7 @@ export default function ElegirHorarioPartido({
         categoriaId, zonaId, posicionEnRonda: posicion, revision,
       });
       if (ticket !== solicitudRef.current) return;
-      setResultado({ solicitud, opciones: res.opciones || [], error: '' });
+      setResultado({ solicitud, opciones: res.opciones || [], horariosParejas: res.horariosParejas || null, error: '' });
     } catch (err) {
       if (ticket !== solicitudRef.current) return;
       const mensaje = err.message || 'No pudimos buscar los horarios.';
@@ -103,11 +102,20 @@ export default function ElegirHorarioPartido({
     api.post(`/torneos/${torneoId}/pre-check-inicio/partidos/opciones`, {
       categoriaId, zonaId, posicionEnRonda: partido.posicionEnRonda, revision,
     }).then((res) => {
-      if (vigenteResumen) setSaturacion({ revision, texto: explicarPorQueNoEntra(res.opciones || [], esDefinicion) });
+      if (vigenteResumen) setSaturacion({ revision, texto: explicarPorQueNoEntra(res.opciones || [], esDefinicion),
+        horariosParejas: res.horariosParejas || null });
     }).catch(() => { if (vigenteResumen) setSaturacion(null); }); // la línea es una ayuda: si falla, no se muestra
     return () => { vigenteResumen = false; };
   }, [saturado, torneoId, categoriaId, zonaId, partido.posicionEnRonda, revision, esDefinicion]);
-  const textoSaturacion = saturado && saturacion?.revision === revision ? saturacion.texto : null;
+  const saturacionVigente = saturado && saturacion?.revision === revision ? saturacion : null;
+  const textoSaturacion = saturacionVigente?.texto ?? null;
+  // Horario cargado de cada pareja: llega con los horarios del partido (al abrir la grilla o, si no entra, al cargar).
+  const horariosParejas = (vigente && resultado.horariosParejas) || saturacionVigente?.horariosParejas || null;
+  const textoHorarios = horariosParejas?.length ? horariosParejas.map((h) => {
+    const nombre = nombres.get(h.parejaId) || 'La pareja';
+    const horario = describirHorarioPareja(h);
+    return horario ? `${nombre} pueden ${horario}` : `${nombre}, sin horario cargado`;
+  }).join(' · ') : null;
 
   useEffect(() => {
     setSeleccion(null);
@@ -167,16 +175,11 @@ export default function ElegirHorarioPartido({
     } finally { bloqueoFijar.current = false; }
   };
 
+  // Qué hay que pedirle a cada pareja, por separado: "Caruso / Vallejos: 2 h antes · Dávila / Arrieta: 45 min después".
   const pedido = (opcion) => {
     if (!opcion.parejasAAmpliar.length) return esDefinicion
       ? 'Entra en el horario de las cuatro parejas' : 'Entra en el horario de las dos parejas';
-    // La comparación usa la jornada lógica; solo la etiqueta muestra el día civil.
-    const dia = opcion.slotId.split('-')[0];
-    return `Pedile a ${enumerarParejas(opcion.parejasAAmpliar.map((id) => {
-      const pareja = parejasMap.get(id);
-      const diaNuevo = pareja?.slotIds && !pareja.slotIds.some((s) => s.startsWith(`${dia}-`));
-      return `${pareja?.nombre || 'la pareja'}${diaNuevo ? ' (no cargó ese día)' : ''}`;
-    }))}`;
+    return detallePorPareja(opcion, nombres).map((d) => `${d.nombre}: ${d.texto}`).join(' · ');
   };
 
   const cancelar = () => {
@@ -198,7 +201,6 @@ export default function ElegirHorarioPartido({
 
   return (
     <div className="pc-horario-partido">
-      {textoSaturacion && <p className="pc-saturacion">{textoSaturacion}</p>}
       {(mostrarPartido || fijoManual) && <div className="pc-partido-cabecera">
         {mostrarPartido && <FilaPartidoZona partido={partido} nombres={nombres} badge={fijoManual ? 'fijo' : fijo ? 'asignado' : partido.motivo === 'HORARIO_QUITADO' ? 'Horario quitado' : null} />}
         {fijoManual && (
@@ -209,6 +211,8 @@ export default function ElegirHorarioPartido({
             }}>Quitar horario</button>
         )}
       </div>}
+      {textoHorarios && !fijo && <p className="pc-horarios-parejas">{textoHorarios}</p>}
+      {textoSaturacion && <p className="pc-saturacion">{textoSaturacion}</p>}
       {quitarAbierto && (
         <div className="pc-quitar-confirmacion" role="group" aria-labelledby={`${seccionId}-quitar`}>
           <p id={`${seccionId}-quitar`} className="pc-manual-copy">¿Quitar el horario de {formatPartidoHorario(partido.fechaHora).toLowerCase().replace(' · ', ' ')}? La disponibilidad que agregaste a las parejas se mantiene.</p>

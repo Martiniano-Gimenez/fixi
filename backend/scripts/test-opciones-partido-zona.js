@@ -35,6 +35,12 @@ function todas(e, posicion = 1) {
   const { opciones } = obtenerOpcionesPartidoZona(e, posicion);
   assert.equal(new Set(opciones.map((o) => o.slotId)).size, opciones.length, 'Un inicio aparece una sola vez');
   assert.deepEqual(opciones.map((o) => o.fechaHora), opciones.map((o) => o.fechaHora).sort(), 'Orden cronológico');
+  for (const o of opciones) {
+    // El detalle por pareja reparte exactamente lo que suman minutosAmpliacion y diasNuevos.
+    assert.deepEqual(o.ampliacionPorPareja.map((a) => a.parejaId), o.parejasAAmpliar);
+    assert.equal(o.ampliacionPorPareja.reduce((n, a) => n + a.minutosAntes + a.minutosDespues, 0), o.minutosAmpliacion);
+    assert.equal(o.ampliacionPorPareja.filter((a) => a.diaNuevo).length, o.diasNuevos);
+  }
   return opciones.filter((o) => o.estado !== 'NO_DISPONIBLE');
 }
 function testPuro() {
@@ -56,6 +62,25 @@ function testPuro() {
   assert.equal(todas(cronologica)[0].slotId, 'Viernes-15:00', 'Una ampliación mayor no reordena la grilla');
   assert.equal(todas(cronologica).find((o) => o.slotId === 'Viernes-16:00').estado, 'ENTRA');
 
+  // Detalle por pareja y horario cargado de cada una
+  const detalle = (op, id) => { const a = op.ampliacionPorPareja.find((x) => x.parejaId === id); return a && [a.diaNuevo, a.minutosAntes, a.minutosDespues]; };
+  assert.deepEqual(detalle(opciones[2], 'id-0'), [false, 0, 90], 'Después: termina 90 min más tarde');
+  assert.deepEqual(detalle(opciones[4], 'id-0'), [true, 0, 0], 'Día que no tenía cargado');
+  assert.deepEqual(todas(dos)[0].ampliacionPorPareja.map((a) => [a.parejaId, a.minutosAntes, a.minutosDespues]),
+    [['id-0', 0, 90], ['id-1', 90, 0]], 'Antes y después, cada pareja por separado');
+  const conHueco = entrada([['Viernes-13:00', 'Viernes-16:00'], []], { club: ['Viernes-14:30', 'Viernes-14:45'] });
+  assert.deepEqual(todas(conHueco).map((o) => detalle(o, 'id-0')), [[false, 0, 90], [false, 75, 0]],
+    'Entre dos bloques cuenta hacia el lado más corto, como la suma');
+  assert.deepEqual(obtenerOpcionesPartidoZona(e, 1).horariosParejas, [
+    { parejaId: 'id-0', cargado: true, ventanas: [{ dia: 'Viernes', desde: '13:00', hasta: '17:00' }] },
+    { parejaId: 'id-1', cargado: false, ventanas: [
+      { dia: 'Viernes', desde: '13:00', hasta: '14:30' }, { dia: 'Viernes', desde: '17:15', hasta: '18:30' },
+      { dia: 'Viernes', desde: '22:45', hasta: '00:00' }, { dia: 'Sabado', desde: '09:00', hasta: '10:15' }] },
+  ], 'Sin horario cargado: marcada, con el horario del club');
+  const trasnoche = entrada([viernes('18:00', '03:00'), []], { club: ['Viernes-00:00'] });
+  assert.deepEqual(obtenerOpcionesPartidoZona(trasnoche, 1).horariosParejas[0].ventanas, [{ dia: 'Viernes', desde: '18:00', hasta: '03:00' }],
+    'La madrugada queda en el viernes');
+
   const pagina = entrada([[], []]);
   const primera = obtenerOpcionesPartidoZona(pagina, 1);
   assert.equal(primera.opciones.length, pagina.grilla.length);
@@ -68,12 +93,15 @@ function testPuro() {
   perm.parejas = perm.parejas.map((p) => ({ ...p, id: ids.get(p.id) })).reverse();
   perm.partidos = perm.partidos.map((p) => ({ ...p, pareja1Id: ids.get(p.pareja1Id), pareja2Id: ids.get(p.pareja2Id) })).reverse();
   perm.grilla.reverse();
-  assert.deepEqual(obtenerOpcionesPartidoZona(perm, 1), primera);
+  const permutada = obtenerOpcionesPartidoZona(perm, 1);
+  assert.deepEqual(permutada.opciones, primera.opciones);
+  assert.deepEqual(permutada.horariosParejas.map((h) => ({ ...h, parejaId: [...ids].find(([, n]) => n === h.parejaId)[0] })), primera.horariosParejas);
   assert.deepEqual(obtenerOpcionesPartidoZona(pagina, 1), primera);
   const permFuera = structuredClone(dos);
   permFuera.parejas = permFuera.parejas.map((p) => ({ ...p, id: ids.get(p.id) })).reverse();
   permFuera.partidos = permFuera.partidos.map((p) => ({ ...p, pareja1Id: ids.get(p.pareja1Id), pareja2Id: ids.get(p.pareja2Id) }));
-  assert.deepEqual(todas(permFuera), todas(dos).map((o) => ({ ...o, parejasAAmpliar: o.parejasAAmpliar.map((id) => ids.get(id)) })));
+  assert.deepEqual(todas(permFuera), todas(dos).map((o) => ({ ...o, parejasAAmpliar: o.parejasAAmpliar.map((id) => ids.get(id)),
+    ampliacionPorPareja: o.ampliacionPorPareja.map((a) => ({ ...a, parejaId: ids.get(a.parejaId) })) })));
 
   const noche = entrada([viernes('18:00', '03:00'), viernes('18:00', '03:00')], {
     club: ['Viernes-00:00', 'Sabado-01:00', 'Domingo-09:00'],
@@ -102,7 +130,7 @@ function testPuro() {
   const rr = entrada([[], [], []], { club: viernes('09:00', '12:45'), canchas: 2 });
   fijar(rr, 2, 'Viernes-09:00');
   assert.deepEqual(todas(rr, 1).map((o) => o.slotId), ['Viernes-10:15', 'Viernes-11:30'], 'Solo conserva opciones que permiten el tercer partido; excluye solapes propios y NO_FACTIBLE');
-  assert.deepEqual(obtenerOpcionesPartidoZona(rr, 2), { opciones: [] });
+  assert.deepEqual(obtenerOpcionesPartidoZona(rr, 2).opciones, []);
   const incompleta = { ...rr, maxNodosOpcion: 0 };
   assert.ok(todas(incompleta, 1).some((o) => !o.verificada), 'Una búsqueda incompleta se devuelve');
   const sinLugar = entrada([[], [], []], { club: ['Viernes-09:00'], canchas: 3 });
@@ -162,8 +190,10 @@ async function testApi(baseUrl) {
   assert.equal(svc.preCheckSessions.get(torneo.id).opcionesPorPartido.size, 0, 'Pre-check no genera opciones');
   const primera = await post(endpoint, body);
   assert.equal(primera.status, 200); assert.ok(primera.body.opciones.length > 6);
-  assert.deepEqual(Object.keys(primera.body).sort(), ['opciones', 'revision']);
-  assert.deepEqual(Object.keys(primera.body.opciones[0]).sort(), ['clave', 'diasNuevos', 'estado', 'fechaHora', 'minutosAmpliacion', 'motivo', 'parejasAAmpliar', 'parejasOcupadas', 'slotId', 'verificada']);
+  assert.deepEqual(Object.keys(primera.body).sort(), ['horariosParejas', 'opciones', 'revision']);
+  assert.deepEqual(primera.body.horariosParejas.map((h) => h.ventanas[0]),
+    [{ dia: 'Viernes', desde: '13:00', hasta: '17:00' }, { dia: 'Viernes', desde: '18:00', hasta: '23:00' }]);
+  assert.deepEqual(Object.keys(primera.body.opciones[0]).sort(), ['ampliacionPorPareja', 'clave', 'diasNuevos', 'estado', 'fechaHora', 'minutosAmpliacion', 'motivo', 'parejasAAmpliar', 'parejasOcupadas', 'slotId', 'verificada']);
   assert.equal(generaciones, llamadas + 1);
   const cached = await post(endpoint, body); assert.deepEqual(cached, primera); assert.equal(generaciones, llamadas + 1);
   pre = (await post('', { isReCheck: true })).body;

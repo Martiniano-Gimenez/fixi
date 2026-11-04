@@ -306,6 +306,7 @@ async function testDeterminismo() {
   const pA = await post(a, '/partidos/opciones', query(a, resA, 2)), pB = await post(b, '/partidos/opciones', query(b, resB, 2));
   const normalizar = (r, c) => r.body.opciones.map((o) => ({ ...o,
     parejasAAmpliar: o.parejasAAmpliar.map((id) => c.parejas.findIndex((p) => p.id === id)),
+    ampliacionPorPareja: o.ampliacionPorPareja.map((a) => ({ ...a, parejaId: c.parejas.findIndex((p) => p.id === a.parejaId) })),
     parejasOcupadas: o.parejasOcupadas.map((id) => c.parejas.findIndex((p) => p.id === id)) }));
   assert.equal(pA.status, 200); assert.equal(pB.status, 200); assert.deepEqual(normalizar(pA, a), normalizar(pB, b));
   assert.ok(preB.revision);

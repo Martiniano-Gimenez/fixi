@@ -1240,6 +1240,9 @@ body:has(.panel) {
 .panel .pc-horarios-solo-recomendado { display: grid; justify-items: start; gap: var(--e-2); margin-bottom: var(--e-3); }
 .panel .pc-horarios-recomendado-texto { display: flex; align-items: flex-start; gap: var(--e-2); margin: 0; color: var(--tinta-2); font-size: var(--t-13); line-height: 1.5; overflow-wrap: anywhere; }
 .panel .pc-horarios-recomendado-texto > svg { flex-shrink: 0; margin-top: 2px; color: var(--marca); }
+.panel .pc-horarios-recomendado-cuerpo { display: grid; gap: calc(var(--e-1) / 2); min-width: 0; }
+.panel .pc-horarios-recomendado-detalle { color: var(--tinta-2); overflow-wrap: anywhere; }
+.panel .pc-horarios-parejas { margin: 0 0 var(--e-2); color: var(--tinta-2); font-size: var(--t-13); line-height: 1.5; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .panel .pc-saturacion { margin: 0 0 var(--e-2); color: var(--tinta-2); font-size: var(--t-13); line-height: 1.5; overflow-wrap: anywhere; }
 .panel .pc-horarios-tabs { display: flex; gap: var(--e-2); margin-bottom: var(--e-3); }
 .panel .pc-horarios-tabs [aria-selected="true"] { background: var(--marca-suave); color: var(--marca-hover); border-color: var(--marca); }
@@ -1257,7 +1260,6 @@ body:has(.panel) {
 .panel .pc-horarios-inicio.is-selected { outline: 2px solid var(--tinta); outline-offset: 1px; }
 .panel .pc-horarios-inicio:focus-visible { outline: 3px solid var(--marca); outline-offset: 2px; }
 .panel .pc-horarios-inicio:disabled { cursor: wait; }
-.panel .pc-horarios-hueco { min-height: 44px; }
 .panel .pc-horarios-resumen { max-width: 336px; }
 .panel :is(.pc-horarios-plegar, .pc-horarios-tramo) { display: flex; align-items: center; gap: var(--e-1); width: 100%; margin: 0; padding: 0; border: 0; border-radius: var(--r-control); background: transparent; color: var(--tinta-2); font: 400 var(--t-12)/1.5 var(--f); text-align: left; overflow-wrap: anywhere; }
 .panel :is(.pc-horarios-plegar, .pc-horarios-tramo) > span { min-width: 0; }

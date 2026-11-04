@@ -37,7 +37,7 @@ export function categoriaHorario(opcion) {
 }
 
 /**
- * Tramos de la grilla de un día. Cada hora se parte por categoría (las celdas conservan su columna), así el título
+ * Tramos de la grilla de un día. Cada hora se parte por categoría (sus horarios quedan juntos a la izquierda), así el título
  * de un tramo vale para todos sus horarios. Se unen horas seguidas de la misma categoría.
  * @returns {{ categoria: string, clave: string, filas: { hora: string, celdas: (object|null)[] }[] }[]}
  */
@@ -48,10 +48,13 @@ export function armarTramos(dia, filas) {
     fila.celdas.forEach((opcion, columna) => {
       if (!opcion) return;
       const cat = categoriaHorario(opcion);
-      if (!porCategoria.has(cat)) porCategoria.set(cat, { hora: fila.hora, celdas: [null, null, null, null], primera: columna });
-      porCategoria.get(cat).celdas[columna] = opcion;
+      if (!porCategoria.has(cat)) porCategoria.set(cat, { hora: fila.hora, inicios: [], primera: columna });
+      porCategoria.get(cat).inicios.push(opcion);
     });
-    unidades.push(...[...porCategoria].sort((a, b) => a[1].primera - b[1].primera).map(([categoria, u]) => ({ categoria, ...u })));
+    // Los horarios de cada hora van seguidos desde la izquierda, sin huecos.
+    unidades.push(...[...porCategoria].sort((a, b) => a[1].primera - b[1].primera).map(([categoria, u]) => ({
+      categoria, hora: u.hora, primera: u.primera, celdas: [0, 1, 2, 3].map((i) => u.inicios[i] ?? null),
+    })));
   }
   const consecutivas = (a, b) => a === b || (Number(a) + 1) % 24 === Number(b);
   return unidades.reduce((tramos, u) => {
@@ -74,6 +77,44 @@ const formatoHora = (minutos) => {
   const h = Math.floor(minutos / 60) % 24, m = minutos % 60;
   return m ? `${h}:${String(m).padStart(2, '0')}` : `${h}`;
 };
+
+const DIA_CORTO = { Viernes: 'vie', Sabado: 'sáb' };
+const horaCorta = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return m ? `${h}:${String(m).padStart(2, '0')}` : `${h}`; };
+
+/** "2 h", "45 min", "1 h 15 min". */
+export function formatoDuracion(minutos) {
+  const h = Math.floor(minutos / 60), m = minutos % 60;
+  return [h > 0 && `${h} h`, m > 0 && `${m} min`].filter(Boolean).join(' ');
+}
+
+/**
+ * Horario cargado de una pareja ("vie de 18 a 21:30 h y sáb de 10 a 13 h"). Null si no cargó horario.
+ * @param {{ cargado: boolean, ventanas: { dia: string, desde: string, hasta: string }[] }} horario
+ */
+export function describirHorarioPareja(horario) {
+  if (!horario?.cargado) return null;
+  const partes = horario.ventanas.map((v, i) => {
+    const mismoDia = i > 0 && horario.ventanas[i - 1].dia === v.dia;
+    return `${mismoDia ? '' : `${DIA_CORTO[v.dia] || v.dia} `}de ${horaCorta(v.desde)} a ${horaCorta(v.hasta)} h`;
+  });
+  return partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes.at(-1)}` : partes[0];
+}
+
+/** Lo que hay que pedirle a una pareja para un horario: "2 h antes", "45 min después", "el sáb, que no tenía cargado". */
+export function describirAmpliacion(ampliacion, dia) {
+  if (ampliacion.diaNuevo) return `el ${DIA_CORTO[dia] || dia}, que no tenía cargado`;
+  const partes = [ampliacion.minutosAntes > 0 && `${formatoDuracion(ampliacion.minutosAntes)} antes`,
+    ampliacion.minutosDespues > 0 && `${formatoDuracion(ampliacion.minutosDespues)} después`].filter(Boolean);
+  return partes.join(' y ') || 'sumar este horario';
+}
+
+/** Detalle por pareja de un horario que pide ampliar: [{ parejaId, nombre, texto }]. Vacío si entra sin pedir nada. */
+export function detallePorPareja(opcion, nombres = new Map()) {
+  const dia = opcion.slotId.split('-')[0];
+  const lista = opcion.ampliacionPorPareja || opcion.parejasAAmpliar.map((parejaId) => ({ parejaId }));
+  return lista.map((a) => ({ parejaId: a.parejaId, nombre: nombres.get(a.parejaId) || 'La pareja',
+    texto: 'diaNuevo' in a ? describirAmpliacion(a, dia) : 'sumar este horario' }));
+}
 
 /** Rangos de juego (del primer inicio al final del último partido) de unas opciones, unidos si se pisan. */
 function rangosDeJuego(opciones) {

@@ -10,6 +10,52 @@ const solapan = (a, b) => a.startMs < b.endMs && b.startMs < a.endMs;
 const tieneHorario = (p) => Boolean(p.fechaHora && p.canchaNumero && !p.sinHorarioAsignado);
 const hash = (valor) => crypto.createHash('sha256').update(JSON.stringify(valor)).digest('hex').slice(0, 32);
 
+/**
+ * Detalle por pareja de lo que calcularAmpliacion suma para un inicio: minutos antes del primer bloque del día,
+ * después del último, o un día que no tenía. Entre dos bloques se cuenta hacia el lado que cuesta menos, igual
+ * que calcularAmpliacion, así minutosAntes + minutosDespues es la misma ampliación. Solo informa: no decide nada.
+ */
+function detalleAmpliacion(s, ventanas) {
+  const bloques = [];
+  for (const w of ventanas.filter((v) => v.dia === s.dia).sort((a, b) => a.startMs - b.startMs)) {
+    const ultimo = bloques.at(-1);
+    if (ultimo && w.startMs <= ultimo.endMs) ultimo.endMs = Math.max(ultimo.endMs, w.endMs);
+    else bloques.push({ startMs: w.startMs, endMs: w.endMs });
+  }
+  if (!bloques.length) return { diaNuevo: true, minutosAntes: 0, minutosDespues: 0 };
+  let antes = Math.max(0, bloques[0].startMs - s.startMs);
+  let despues = Math.max(0, s.endMs - bloques.at(-1).endMs);
+  for (let i = 1; i < bloques.length; i++) {
+    const inicio = bloques[i - 1].endMs, fin = bloques[i].startMs;
+    const desde = Math.max(inicio, s.startMs), hasta = Math.min(fin, s.endMs);
+    if (desde >= hasta) continue;
+    if (fin - hasta >= desde - inicio) despues += hasta - inicio;
+    else antes += fin - desde;
+  }
+  return { diaNuevo: false, minutosAntes: antes / 60_000, minutosDespues: despues / 60_000 };
+}
+
+/** "HH:MM" de la hora local de un instante, tomando como referencia un inicio de la grilla del club. */
+function horaLocal(ms, referencia) {
+  const [h, m] = referencia.slotId.split('-')[1].split(':').map(Number);
+  const minutos = ((h * 60 + m + Math.round((ms - referencia.startMs) / 60_000)) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Horario cargado de cada pareja del partido, por jornada lógica (la madrugada va con el día anterior).
+ * Sin franjas cargadas, la pareja puede en todo el horario del club y queda marcada con cargado: false.
+ */
+function horariosDeParejas(entrada, pares, tarea) {
+  const referencia = entrada.grilla[0];
+  return tarea.participantes.map((i) => {
+    const cargado = pares[i].ventanas.length > 0;
+    const ventanas = referencia ? (cargado ? pares[i].ventanas : entrada.ventanasClub) : [];
+    return { parejaId: pares[i].id, cargado, ventanas: [...ventanas].sort((a, b) => a.startMs - b.startMs)
+      .map((w) => ({ dia: w.dia, desde: horaLocal(w.startMs, referencia), hasta: horaLocal(w.endMs, referencia) })) };
+  });
+}
+
 function listarPartidosZona(zona) {
   return [...zona.partidos].sort((a, b) => a.posicionEnRonda - b.posicionEnRonda).map((p) => {
     const derivado = zona.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3;
@@ -77,6 +123,7 @@ function prepararCandidatosPartidoZona(entrada, posicionEnRonda) {
       motivo, parejasOcupadas: ocupadas.map((i) => pares[i].id),
       diasNuevos: costos.reduce((n, c) => n + c.diasNuevos, 0),
       minutosAmpliacion: costos.reduce((n, c) => n + c.minutosAmpliacion, 0),
+      ampliacionPorPareja: faltan.map((i) => ({ parejaId: pares[i].id, ...detalleAmpliacion(s, pares[i].ventanas) })),
     } });
   }
   return { pares, tareas, indice, clavePartido, candidatos };
@@ -111,7 +158,7 @@ function obtenerOpcionesPartidoZona(entrada, posicionEnRonda) {
       // Interno: una búsqueda incompleta conserva el estado por disponibilidad.
       verificada: resultado.estado === 'FACTIBLE' };
   });
-  return { opciones };
+  return { opciones, horariosParejas: horariosDeParejas(entrada, problema.pares, problema.tareas[problema.indice]) };
 }
 
 module.exports = { obtenerOpcionesPartidoZona, recalcularOpcionPartidoZona, listarPartidosZona,
