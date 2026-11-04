@@ -374,6 +374,8 @@ export default function TorneoInicio() {
                                 { id: p.pareja2Id, nombre: p.pareja2, slotIds: p.pareja2SlotIds || [] },
                               ]}
                               mostrarPartido={false}
+                              partidosZona={p.partidosZona}
+                              parejasZona={p.parejasZona}
                               abierto={partidoManualAbierto}
                               onAbiertoChange={setPartidoManualAbierto}
                               onSaved={aplicarPreCheck}

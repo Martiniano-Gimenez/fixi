@@ -340,6 +340,11 @@ async function testZonaNoManual() {
   const pendientes = pre.conflictos.find((cat) => cat.categoriaId === c.cat.id).partidosSinHorario;
   assert.equal(pendientes.length, 1); assert.equal(pendientes[0].motivo, 'SIN_CANCHA_DISPONIBLE');
   const conflicto = pendientes[0]; assert.ok(Number.isInteger(conflicto.posicionEnRonda));
+  // Un partido que no entra también trae los partidos de su zona y los nombres de sus parejas.
+  assert.equal(conflicto.partidosZona.length, zona(c).partidos.length);
+  assert.equal(conflicto.partidosZona.filter((p) => p.estado === 'FIJO').length, 2);
+  assert.deepEqual(conflicto.parejasZona.map((p) => p.id).sort(), [...zona(c).parejaIds].sort());
+  assert.ok(conflicto.parejasZona.every((p) => / \/ /.test(p.nombre)));
   const previos = zona(c).partidos.filter((p) => !p.sinHorarioAsignado);
   assert.equal(previos.length, 2);
   const horariosPrevios = previos.map((p) => [p.posicionEnRonda, horario(p)]);

@@ -89,12 +89,20 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
       sesion.opcionesPorPartido = new Map();
       sesion.opcionesCache = new Map();
     }
+    const parejasPorId = new Map(estado.torneo.categorias.flatMap((c) => c.parejas).map((p) => [p.id, p]));
     for (const conflicto of respuesta.conflictos || []) {
       const categoria = sesion.categoriasPlan.find((c) => c.categoriaId === conflicto.categoriaId);
       for (const pendiente of conflicto.partidosSinHorario || []) {
-        if (pendiente.motivo !== 'ZONA_MANUAL_INCOMPLETA') continue;
         const zona = categoria?.zonas.find((z) => z.id === pendiente.zonaId);
-        if (zona) pendiente.partidosZona = listarPartidosZona(zona);
+        if (!zona) continue;
+        // Solo informa: los otros partidos de la zona, para responderle a una pareja cuándo juega.
+        pendiente.partidosZona = listarPartidosZona(zona);
+        if (pendiente.motivo !== 'ZONA_MANUAL_INCOMPLETA') {
+          pendiente.parejasZona = zona.parejaIds.map((id) => {
+            const p = parejasPorId.get(id);
+            return { id, nombre: p ? `${p.jugador1} / ${p.jugador2}` : 'Pareja' };
+          });
+        }
       }
     }
     respuesta.revision = sesion.revision;

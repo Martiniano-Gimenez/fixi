@@ -51,15 +51,6 @@ export function filasVisibles(filas, { conSecundarios = true } = {}) {
   return visibles;
 }
 
-const minutosJornada = (hhmm) => {
-  const [h, m] = hhmm.split(':').map(Number);
-  return (h < 6 ? h + 24 : h) * 60 + m;
-};
-const formatoHora = (minutos) => {
-  const h = Math.floor(minutos / 60) % 24, m = minutos % 60;
-  return m ? `${h}:${String(m).padStart(2, '0')}` : `${h}`;
-};
-
 const DIA_CORTO = { Viernes: 'vie', Sabado: 'sáb' };
 const horaCorta = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return m ? `${h}:${String(m).padStart(2, '0')}` : `${h}`; };
 
@@ -96,46 +87,4 @@ export function detallePorPareja(opcion, nombres = new Map()) {
   const lista = opcion.ampliacionPorPareja || opcion.parejasAAmpliar.map((parejaId) => ({ parejaId }));
   return lista.map((a) => ({ parejaId: a.parejaId, nombre: nombres.get(a.parejaId) || 'La pareja',
     texto: 'diaNuevo' in a ? describirAmpliacion(a, dia) : 'sumar este horario' }));
-}
-
-/** Rangos de juego (del primer inicio al final del último partido) de unas opciones, unidos si se pisan. */
-function rangosDeJuego(opciones) {
-  const inicios = opciones
-    .map((o) => { const [dia, hora] = o.slotId.split('-'); return { dia, inicio: minutosJornada(hora) }; })
-    .sort((a, b) => (a.dia === b.dia ? a.inicio - b.inicio : a.dia === 'Viernes' ? -1 : 1));
-  const rangos = [];
-  for (const p of inicios) {
-    const ultimo = rangos.at(-1);
-    if (ultimo && ultimo.dia === p.dia && p.inicio <= ultimo.fin) ultimo.fin = Math.max(ultimo.fin, p.inicio + 75);
-    else rangos.push({ dia: p.dia, desde: p.inicio, fin: p.inicio + 75 });
-  }
-  return rangos;
-}
-
-function nombrarRangos(rangos, conDia = true) {
-  const texto = rangos.map((r) => `${conDia ? `el ${r.dia === 'Viernes' ? 'vie' : 'sáb'} ` : ''}de ${formatoHora(r.desde)} a ${formatoHora(r.fin)} h`);
-  return texto.length > 1 ? `${texto.slice(0, -1).join(', ')} y ${texto.at(-1)}` : texto[0];
-}
-
-/**
- * Por qué no entra un partido cuyas parejas coinciden. Usa los horarios donde todas pueden sin pedir nada y que
- * quedan bloqueados por falta de cancha (SIN_CANCHA) o porque alguna ya juega otro partido (PAREJA_OCUPADA).
- * Null si no hay ninguno.
- */
-export function explicarPorQueNoEntra(opciones, esDefinicion = false) {
-  const coinciden = opciones.filter((o) => ['SIN_CANCHA', 'PAREJA_OCUPADA'].includes(o.motivo) && !(o.parejasAAmpliar || []).length);
-  if (!coinciden.length) return null;
-  const todas = esDefinicion ? 'cuatro' : 'dos';
-  const sinCancha = coinciden.filter((o) => o.motivo === 'SIN_CANCHA');
-  const rangos = rangosDeJuego(coinciden);
-  if (sinCancha.length === coinciden.length) {
-    return `Pueden las ${todas} ${nombrarRangos(rangos)}, pero todas las canchas están ocupadas.`;
-  }
-  if (!sinCancha.length) {
-    return `Coinciden ${nombrarRangos(rangos)}, pero en ese horario ya juegan sus otros partidos de la zona.`;
-  }
-  const libres = rangosDeJuego(sinCancha);
-  const unSoloDia = new Set(rangos.map((r) => r.dia)).size === 1;
-  return `Coinciden ${nombrarRangos(rangos)}. Libres las ${todas}, solo ${nombrarRangos(libres, !unSoloDia)}, ` +
-    `y ${libres.length > 1 ? 'en esos horarios' : 'a esa hora'} todas las canchas están ocupadas.`;
 }

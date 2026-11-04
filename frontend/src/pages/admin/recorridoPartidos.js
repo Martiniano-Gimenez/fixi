@@ -15,6 +15,7 @@ export function listarPendientes(categorias) {
         const clave = identidad(categoria.categoriaId, conflicto.zonaId, partido.posicionEnRonda);
         if (!lista.has(clave)) lista.set(clave, { clave, categoriaId: categoria.categoriaId, nombreCategoria: categoria.nombreCategoria,
           zonaId: conflicto.zonaId, zona: conflicto.zona, partido,
+          partidosZona: conflicto.partidosZona || null, parejasZona: conflicto.parejasZona || conflicto.parejasManuales || null,
           parejas: conflicto.parejasManuales || [
             { id: conflicto.pareja1Id, nombre: conflicto.pareja1, slotIds: conflicto.pareja1SlotIds || [] },
             { id: conflicto.pareja2Id, nombre: conflicto.pareja2, slotIds: conflicto.pareja2SlotIds || [] },

@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 
 import { Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatPartidoHorario, formatSlotCorto } from '../utils/dateUtils';
-import { describirHorarioPareja, detallePorPareja, explicarPorQueNoEntra } from './grillaHorarios';
+import { describirHorarioPareja, detallePorPareja } from './grillaHorarios';
 
 const GrillaHorariosPartido = lazy(() => import('./GrillaHorariosPartido'));
 
@@ -36,7 +36,7 @@ function enumerarParejas(nombres) {
 
 export default function ElegirHorarioPartido({
   torneoId, categoriaId, zonaId, revision, partido, parejas, abierto, onAbiertoChange, onSaved, onRecheck,
-  mostrarPartido = true, mostrarBoton = true,
+  mostrarPartido = true, mostrarBoton = true, partidosZona = null, parejasZona = null,
 }) {
   const [resultado, setResultado] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -50,7 +50,7 @@ export default function ElegirHorarioPartido({
   const recheckRef = useRef(onRecheck);
   const montado = useRef(false);
   const seccionId = useId();
-  const nombres = new Map(parejas.map((p) => [p.id, p.nombre]));
+  const nombres = new Map([...(parejasZona || []), ...parejas].map((p) => [p.id, p.nombre]));
   const esDefinicion = Boolean(partido.origen && !partido.pareja1Id && !partido.pareja2Id && partido.posicionEnRonda >= 3);
   const fijo = tieneHorario(partido);
   const fijoManual = fijo && (partido.fijadoManual ?? partido.estado === 'FIJO');
@@ -93,29 +93,33 @@ export default function ElegirHorarioPartido({
     }
   }, [torneoId, categoriaId, zonaId, revision, posicion, solicitud]);
 
-  // "No entra en su horario": cuándo coinciden las parejas y por qué no entra (sin cancha o pareja ocupada).
-  const saturado = partido.motivo === 'SIN_CANCHA_DISPONIBLE' && !fijo && Boolean(revision);
-  const [saturacion, setSaturacion] = useState(null);
+  // "No entra en su horario": el horario de cada pareja se pide de entrada, sin esperar a que se abra la grilla.
+  const noEntra = partido.motivo === 'SIN_CANCHA_DISPONIBLE' && !fijo && Boolean(revision);
+  const [resumen, setResumen] = useState(null);
   useEffect(() => {
-    if (!saturado) return undefined;
+    if (!noEntra) return undefined;
     let vigenteResumen = true;
     api.post(`/torneos/${torneoId}/pre-check-inicio/partidos/opciones`, {
       categoriaId, zonaId, posicionEnRonda: partido.posicionEnRonda, revision,
     }).then((res) => {
-      if (vigenteResumen) setSaturacion({ revision, texto: explicarPorQueNoEntra(res.opciones || [], esDefinicion),
-        horariosParejas: res.horariosParejas || null });
-    }).catch(() => { if (vigenteResumen) setSaturacion(null); }); // la línea es una ayuda: si falla, no se muestra
+      if (vigenteResumen) setResumen({ revision, horariosParejas: res.horariosParejas || null });
+    }).catch(() => { if (vigenteResumen) setResumen(null); }); // es una ayuda: si falla, no se muestra
     return () => { vigenteResumen = false; };
-  }, [saturado, torneoId, categoriaId, zonaId, partido.posicionEnRonda, revision, esDefinicion]);
-  const saturacionVigente = saturado && saturacion?.revision === revision ? saturacion : null;
-  const textoSaturacion = saturacionVigente?.texto ?? null;
+  }, [noEntra, torneoId, categoriaId, zonaId, partido.posicionEnRonda, revision]);
+  const resumenVigente = noEntra && resumen?.revision === revision ? resumen : null;
   // Horario cargado de cada pareja: llega con los horarios del partido (al abrir la grilla o, si no entra, al cargar).
-  const horariosParejas = (vigente && resultado.horariosParejas) || saturacionVigente?.horariosParejas || null;
+  const horariosParejas = (vigente && resultado.horariosParejas) || resumenVigente?.horariosParejas || null;
   const textoHorarios = horariosParejas?.length ? horariosParejas.map((h) => {
     const nombre = nombres.get(h.parejaId) || 'La pareja';
     const horario = describirHorarioPareja(h);
     return horario ? `${nombre} pueden ${horario}` : `${nombre}, sin horario cargado`;
   }).join(' · ') : null;
+  // Los otros partidos de la zona, por horario: si una pareja pregunta cuándo juega, está a la vista.
+  const otrosPartidos = !fijo && partidosZona?.length
+    ? partidosZona.filter((p) => p.posicionEnRonda !== partido.posicionEnRonda && !p.esBye).sort((a, b) =>
+      (a.fechaHora ? 0 : 1) - (b.fechaHora ? 0 : 1) || +new Date(a.fechaHora || 0) - +new Date(b.fechaHora || 0) ||
+      a.posicionEnRonda - b.posicionEnRonda)
+    : [];
 
   useEffect(() => {
     setSeleccion(null);
@@ -212,7 +216,18 @@ export default function ElegirHorarioPartido({
         )}
       </div>}
       {textoHorarios && !fijo && <p className="pc-horarios-parejas">{textoHorarios}</p>}
-      {textoSaturacion && <p className="pc-saturacion">{textoSaturacion}</p>}
+      {otrosPartidos.length > 0 && (
+        <section className="pc-propuesta-partidos" aria-label="Partidos de la zona">
+          <h5 className="pc-propuesta-partidos-title">Partidos de la zona</h5>
+          <ul className="pc-propuesta-partidos-list">
+            {otrosPartidos.map((p) => (
+              <li key={p.posicionEnRonda} className="pc-propuesta-partido">
+                <FilaPartidoZona partido={p} nombres={nombres} badge={p.fechaHora && p.canchaNumero ? null : 'sin horario'} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {quitarAbierto && (
         <div className="pc-quitar-confirmacion" role="group" aria-labelledby={`${seccionId}-quitar`}>
           <p id={`${seccionId}-quitar`} className="pc-manual-copy">¿Quitar el horario de {formatPartidoHorario(partido.fechaHora).toLowerCase().replace(' · ', ' ')}? La disponibilidad que agregaste a las parejas se mantiene.</p>

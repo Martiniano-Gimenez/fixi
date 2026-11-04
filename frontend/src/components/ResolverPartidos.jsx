@@ -47,6 +47,7 @@ export default function ResolverPartidos({ categorias, torneoId, revision, abier
           <p className="pc-resolver-contexto">{actual.nombreCategoria} · {actual.zona} · Partido {actual.partido.posicionEnRonda}</p>
           <ElegirHorarioPartido key={actual.clave} torneoId={torneoId} categoriaId={actual.categoriaId} zonaId={actual.zonaId}
             revision={revision} partido={actual.partido} parejas={actual.parejas} mostrarBoton={false}
+            partidosZona={actual.partidosZona} parejasZona={actual.parejasZona}
             abierto={esActual(abierto) ? abierto : identidad} onAbiertoChange={cambiarEditor}
             onSaved={(res) => { setMensaje('Horario confirmado.'); onSaved(res); }} onRecheck={onRecheck} />
         </>

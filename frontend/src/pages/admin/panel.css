@@ -1243,7 +1243,6 @@ body:has(.panel) {
 .panel .pc-horarios-recomendado-cuerpo { display: grid; gap: calc(var(--e-1) / 2); min-width: 0; }
 .panel .pc-horarios-recomendado-detalle { color: var(--tinta-2); overflow-wrap: anywhere; }
 .panel .pc-horarios-parejas { margin: 0 0 var(--e-2); color: var(--tinta-2); font-size: var(--t-13); line-height: 1.5; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.panel .pc-saturacion { margin: 0 0 var(--e-2); color: var(--tinta-2); font-size: var(--t-13); line-height: 1.5; overflow-wrap: anywhere; }
 .panel .pc-horarios-tabs { display: flex; gap: var(--e-2); margin-bottom: var(--e-3); }
 .panel .pc-horarios-tabs [aria-selected="true"] { background: var(--marca-suave); color: var(--marca-hover); border-color: var(--marca); }
 .panel .pc-horarios-dias { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--e-5); min-width: 0; }
