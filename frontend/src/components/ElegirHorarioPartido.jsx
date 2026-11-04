@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 
 import { Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { formatPartidoHorario, formatSlotCorto } from '../utils/dateUtils';
-import { resumirCanchasSaturadas } from './grillaHorarios';
+import { explicarPorQueNoEntra } from './grillaHorarios';
 
 const GrillaHorariosPartido = lazy(() => import('./GrillaHorariosPartido'));
 
@@ -94,7 +94,7 @@ export default function ElegirHorarioPartido({
     }
   }, [torneoId, categoriaId, zonaId, revision, posicion, solicitud]);
 
-  // "Canchas saturadas": cuándo pueden todas las parejas y por qué no entra, con las opciones SIN_CANCHA.
+  // "No entra en su horario": cuándo coinciden las parejas y por qué no entra (sin cancha o pareja ocupada).
   const saturado = partido.motivo === 'SIN_CANCHA_DISPONIBLE' && !fijo && Boolean(revision);
   const [saturacion, setSaturacion] = useState(null);
   useEffect(() => {
@@ -103,7 +103,7 @@ export default function ElegirHorarioPartido({
     api.post(`/torneos/${torneoId}/pre-check-inicio/partidos/opciones`, {
       categoriaId, zonaId, posicionEnRonda: partido.posicionEnRonda, revision,
     }).then((res) => {
-      if (vigenteResumen) setSaturacion({ revision, texto: resumirCanchasSaturadas(res.opciones || [], esDefinicion) });
+      if (vigenteResumen) setSaturacion({ revision, texto: explicarPorQueNoEntra(res.opciones || [], esDefinicion) });
     }).catch(() => { if (vigenteResumen) setSaturacion(null); }); // la línea es una ayuda: si falla, no se muestra
     return () => { vigenteResumen = false; };
   }, [saturado, torneoId, categoriaId, zonaId, partido.posicionEnRonda, revision, esDefinicion]);

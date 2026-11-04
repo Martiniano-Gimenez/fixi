@@ -17,7 +17,7 @@ const BADGE_POR_MOTIVO = {
   ZONA_MANUAL_INCOMPLETA: 'Sin horarios en común',
   PARTIDO_SIN_HORARIO: 'Sin horario',
   HORARIO_QUITADO: 'Horario quitado',
-  SIN_CANCHA_DISPONIBLE: 'Canchas saturadas',
+  SIN_CANCHA_DISPONIBLE: 'No entra en su horario',
 };
 
 export default function TorneoInicio() {
