@@ -50,8 +50,8 @@ try {
   assert.equal(document.querySelector('.pc-propuesta-partidos-title').textContent, 'Partidos de la zona');
   const lista = filas();
   assert.equal(lista.length, 2, 'Solo los otros partidos de la zona');
-  assert.match(lista[0], /^Mendoza \/ Ávalos vs Pellegrini \/ Cepeda · vie 18:00 · Cancha 3$/, 'Ordenados por horario, con la tercera pareja');
-  assert.match(lista[1], /^Coria \/ Giuliani vs Pellegrini \/ Cepeda · vie 19:45 · Cancha 6$/);
+  assert.match(lista[0], /^Mendoza \/ Ávalos vs Pellegrini \/ Cepeda · vie 18:00$/, 'Ordenados por horario, con la tercera pareja y sin cancha');
+  assert.match(lista[1], /^Coria \/ Giuliani vs Pellegrini \/ Cepeda · vie 19:45$/);
   assert.ok(document.querySelector('.pc-horarios-parejas'), 'El horario de cada pareja se queda');
   assert.ok(!document.body.textContent.includes('Coinciden'), 'Sin la frase de por qué no entra');
   assert.ok(!document.body.textContent.includes('canchas están ocupadas'));
