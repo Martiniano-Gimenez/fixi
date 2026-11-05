@@ -524,10 +524,11 @@ async function testModoDiaTorneo() {
   console.log('✅ TEST B PASÓ: Restauración simétrica respetó el sábado, evaluó todos los partidos del viernes y dejó las tres jornadas sin lluvia.');
 
   // =======================================================================
-  // 15. Test C: Determinismo de partido sin fechaHora con el contrato nuevo:
+  // 15. Test C: partidos sin fechaHora antes de la lluvia:
   // - Un pendiente que no está en partidosSinSlot no se toca.
-  // - Un partido que sí está en el mapa, al restaurar debe quedar agendado
-  //   en el día del override sin depender de torneo.fecha ni del reloj del sistema.
+  // - Restaurar devuelve el horario de antes de la lluvia: un partido que ya estaba sin horario no está en
+  //   ese registro y sigue sin horario, aunque se haya cargado a mano en partidosSinSlot.
+  // - Lo que vuelve a su horario no depende del reloj del sistema.
   // =======================================================================
   console.log('\n🎯 TEST C: Contrato nuevo para partidos sin horario: no tocar pendientes fuera del mapa y agendar en el día del override a los que sí están...');
 
@@ -612,27 +613,25 @@ async function testModoDiaTorneo() {
     );
     assert.strictEqual(pSinHorarioPostRest.sinHorarioAsignado, true);
 
-    // - pEnMapa (que sí estaba en partidosSinSlot) debe quedar agendado en el día del override (Viernes)
+    // - pEnMapa no tenía horario antes de la lluvia: sigue sin horario
     const pEnMapaPost = await prisma.partido.findUnique({ where: { id: pEnMapa.id } });
-    assert.ok(pEnMapaPost.fechaHora !== null, 'FALLÓ TEST C: El partido en partidosSinSlot no recibió fechaHora al restaurar');
-    assert.strictEqual(pEnMapaPost.sinHorarioAsignado, false, 'FALLÓ TEST C: sinHorarioAsignado debería ser false al restaurar');
+    assert.strictEqual(pEnMapaPost.fechaHora, null, 'FALLÓ TEST C: Un partido sin horario antes de la lluvia recibió horario al restaurar');
+    assert.strictEqual(pEnMapaPost.sinHorarioAsignado, true);
 
-    const diaPartidoAsignado = getDiaCalendarioConTrasnoche(pEnMapaPost.fechaHora, horariosClubTest).key;
-    assert.strictEqual(
-      diaPartidoAsignado,
-      diaOverrideViernesEsperado,
-      `FALLÓ TEST C: El partido en mapa fue asignado a ${diaPartidoAsignado}, pero debe coincidir con el día del override (${diaOverrideViernesEsperado}), sin depender del reloj del sistema`
-    );
-
-    const anioAsignado = new OriginalDate(pEnMapaPost.fechaHora).getFullYear();
+    // - Los pendientes del viernes quedan en el año del torneo (el reloj de 2038 no influye)
     const anioEsperado = new OriginalDate(fechaTorneo).getFullYear();
-    assert.strictEqual(
-      anioAsignado,
-      anioEsperado,
-      `FALLÓ TEST C: El año asignado (${anioAsignado}) fue influenciado por el reloj del sistema mockeado (2038)`
-    );
+    const pendientesTrasRestaurar = await prisma.partido.findMany({
+      where: { categoria: { torneoId: torneo.id }, estado: 'PENDIENTE', fechaHora: { not: null } },
+    });
+    for (const p of pendientesTrasRestaurar) {
+      assert.strictEqual(
+        new OriginalDate(p.fechaHora).getFullYear(),
+        anioEsperado,
+        'FALLÓ TEST C: El horario restaurado fue influenciado por el reloj del sistema mockeado (2038)'
+      );
+    }
 
-    console.log(`✅ TEST C PASÓ: Partido fuera de mapa no se tocó; partido en mapa quedó agendado en el día del override (${diaOverrideViernesEsperado}) sin depender del reloj del sistema.`);
+    console.log(`✅ TEST C PASÓ: Los partidos sin horario antes de la lluvia no se tocaron y el resto volvió a su horario (${diaOverrideViernesEsperado}) sin depender del reloj del sistema.`);
   } finally {
     global.Date = OriginalDate;
   }

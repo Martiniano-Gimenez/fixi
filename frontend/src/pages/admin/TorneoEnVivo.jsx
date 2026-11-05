@@ -31,6 +31,10 @@ import { formatDiaHorario, formatDiaNombre, formatHora, getDiaCalendarioConTrasn
 
 /** "7ma Damas · Zona C" o "7ma · Dieciseisavos de Final". */
 const contextoPartido = (p) => [p.categoria, p.zona || p.fase].filter(Boolean).join(' · ');
+// "vie 19:00"
+const diaHoraCorto = (fechaHora) => (fechaHora
+  ? `${formatDiaNombre(fechaHora).slice(0, 3).toLowerCase()} ${formatHora(fechaHora)}`
+  : '');
 
 export default function TorneoEnVivo() {
   const { id } = useParams();
@@ -425,12 +429,6 @@ export default function TorneoEnVivo() {
 
   const diaLluviaNombre = activeJornadaInfo?.diaNombre
     || (diaInfoContextual?.activoDesde ? formatDiaNombre(diaInfoContextual.activoDesde) : null);
-
-  // Canchas activas de la jornada de un partido (para el aviso de cancha fantasma)
-  const canchasDeLaJornadaDe = (fechaHora) => {
-    const key = fechaHora ? getDiaCalendarioConTrasnoche(fechaHora, horariosClub)?.key : null;
-    return key ? data?.canchasPorDia?.[key]?.canchas ?? canchasClub : canchasClub;
-  };
 
   const prevTabDayRef = useRef(activeTabDay);
 
@@ -924,13 +922,13 @@ export default function TorneoEnVivo() {
                         </span>
                       </div>
                       <div className="dt-change-times">
-                        <span className="dt-old-time">
-                          C{c.antes.canchaNumero} • {formatDiaHorario(c.antes.fechaHora)}
+                        <span className="dt-old-time dt-num">
+                          {c.antes.fechaHora ? diaHoraCorto(c.antes.fechaHora) : 'Sin horario'}
                         </span>
-                        <span>→</span>
-                        {c.despues.canchaNumero ? (
-                          <span className="dt-new-time">
-                            C{c.despues.canchaNumero} • {formatDiaHorario(c.despues.fechaHora)}
+                        <span aria-hidden="true">→</span>
+                        {c.despues.fechaHora ? (
+                          <span className="dt-new-time dt-num">
+                            {diaHoraCorto(c.despues.fechaHora)}
                           </span>
                         ) : (
                           <span className="dt-danger-text">
@@ -958,7 +956,9 @@ export default function TorneoEnVivo() {
             <div className="dt-notice-main">
               <AlertTriangle size={20} className="dt-icon" />
               <h3 className="dt-section-title">
-                {partidosEnCanchaFantasma.length} partido(s) en canchas inhabilitadas requieren atención manual
+                {partidosEnCanchaFantasma.length === 1
+                  ? '1 partido no entra con las canchas habilitadas'
+                  : `${partidosEnCanchaFantasma.length} partidos no entran con las canchas habilitadas`}
               </h3>
             </div>
             <button
@@ -972,7 +972,7 @@ export default function TorneoEnVivo() {
           </div>
 
           <p className="dt-notice-copy">
-            Estos partidos tenían asignada una cancha que ahora está inhabilitada por la lluvia de su jornada y no pudieron ser reprogramados automáticamente. Revisá su asignación en cada categoría.
+            No se pudieron reprogramar solos. Asignales horario desde Pendientes.
           </p>
 
           {fantasmaExpanded && (
@@ -989,15 +989,8 @@ export default function TorneoEnVivo() {
                       <span className="dt-pair-name">{p.pareja2}</span>
                     </div>
                     <div className="dt-muted">
-                      {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''} • Asignado a: Cancha {p.canchaNumero} ({formatDiaHorario(p.fechaHora)})
-                      <span className="dt-block">
-                        Inhabilitadas ese día: Cancha &gt; {canchasDeLaJornadaDe(p.fechaHora)}
-                      </span>
-                      {p.motivo && (
-                        <span className="dt-block dt-danger-text">
-                          Motivo: {p.motivo}
-                        </span>
-                      )}
+                      {contextoPartido(p)}
+                      {p.fechaHora && <> · <span className="dt-num">{diaHoraCorto(p.fechaHora)}</span></>}
                     </div>
                   </div>
                   <Link
@@ -1408,9 +1401,9 @@ export default function TorneoEnVivo() {
       {/* ─── Modal de Confirmación: Reducir Canchas (Modo Lluvia) ───── */}
       <ConfirmModal
         isOpen={confirmReducirOpen}
-        title={`🌧️ ¿Reducir a ${targetCanchas} ${targetCanchas === 1 ? 'cancha activa' : 'canchas activas'}?`}
-        message={`Se activará el Modo Lluvia y se reprogramarán automáticamente los partidos pendientes de la jornada en curso para ajustarse a ${targetCanchas} ${targetCanchas === 1 ? 'cancha' : 'canchas'}. Los partidos de otras jornadas, así como los en curso y finalizados, no se modificarán.`}
-        confirmText={actionLoading ? 'Reprogramando...' : 'Reducir y Reprogramar'}
+        title={`¿Reducir a ${targetCanchas} ${targetCanchas === 1 ? 'cancha activa' : 'canchas activas'}?`}
+        message="Los partidos pendientes de esta jornada se acomodan en las canchas habilitadas, uno detrás de otro. El viernes nadie juega antes de su horario de inicio; lo que no entre pasa al sábado."
+        confirmText={actionLoading ? 'Reprogramando...' : 'Reducir y reprogramar'}
         onConfirm={handleReducir}
         onCancel={() => setConfirmReducirOpen(false)}
         isDanger={true}
@@ -1419,9 +1412,9 @@ export default function TorneoEnVivo() {
       {/* ─── Modal de Confirmación: Restaurar Canchas ───────────────── */}
       <ConfirmModal
         isOpen={confirmRestaurarOpen}
-        title="☀️ ¿Restaurar todas las canchas del club?"
-        message={`Se desactivará el Modo Lluvia y volverán a estar habilitadas las ${canchasClub} canchas del club. Los partidos pendientes de esta jornada se redistribuirán para aprovechar todas las canchas disponibles. Las demás jornadas no se modificarán.`}
-        confirmText={actionLoading ? 'Restaurando...' : 'Restaurar Canchas'}
+        title="¿Restaurar todas las canchas del club?"
+        message={`Vuelven a estar habilitadas las ${canchasClub} canchas. Los partidos pendientes vuelven a su horario de antes de la lluvia, salvo los que ya no entren.`}
+        confirmText={actionLoading ? 'Restaurando...' : 'Restaurar canchas'}
         onConfirm={handleRestaurar}
         onCancel={() => setConfirmRestaurarOpen(false)}
         isDanger={false}

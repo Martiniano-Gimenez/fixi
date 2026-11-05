@@ -24,6 +24,7 @@ const {
   proximaFechaPorDia,
   slotIdToMsWindow,
   asignarHorariosModoLluviaMCF,
+  restaurarHorariosAntesLluvia,
 } = require('./zona.service');
 const canchasOverridesService = require('./canchasOverrides.service');
 const { programarHorariosEliminatorias } = require('./eliminatoriaScheduler.service');
@@ -2327,8 +2328,53 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   };
 }
 
+function leerJson(valor) {
+  if (!valor) return null;
+  if (typeof valor === 'string') {
+    try {
+      return JSON.parse(valor);
+    } catch {
+      return null;
+    }
+  }
+  return typeof valor === 'object' ? valor : null;
+}
+
+/**
+ * Horario de antes de la lluvia de los partidos PENDIENTE de la jornada: { [partidoId]: { fechaHora,
+ * canchaNumero, sinHorarioAsignado } }. Quedan afuera los que ya están en el registro de otra jornada
+ * (un partido del viernes que pasó al sábado sigue siendo del viernes).
+ */
+async function armarHorariosAntesLluvia(tx, torneoId, diaKey, horariosClubObj) {
+  const otrasJornadas = await tx.overrideCanchasDia.findMany({
+    where: { torneoId, NOT: { diaKey } },
+    select: { horariosAntesLluvia: true },
+  });
+  const enOtroRegistro = new Set();
+  for (const o of otrasJornadas) {
+    for (const id of Object.keys(leerJson(o.horariosAntesLluvia) || {})) enOtroRegistro.add(id);
+  }
+  const pendientes = await tx.partido.findMany({
+    where: { categoria: { torneoId }, estado: 'PENDIENTE', esBye: false, fechaHora: { not: null } },
+    select: { id: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true },
+  });
+  const registro = {};
+  for (const p of pendientes) {
+    if (enOtroRegistro.has(p.id)) continue;
+    if (getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key !== diaKey) continue;
+    registro[p.id] = {
+      fechaHora: new Date(p.fechaHora).toISOString(),
+      canchaNumero: p.canchaNumero,
+      sinHorarioAsignado: p.sinHorarioAsignado,
+    };
+  }
+  return registro;
+}
+
 /**
  * Reprograma automáticamente los partidos pendientes ante una reducción de canchas activas (Modo Lluvia).
+ * Al reducir el viernes o el sábado guarda el horario de antes de la lluvia (solo la primera vez); al
+ * restaurar, los pendientes vuelven a ese horario. Nada se acomoda antes de la hora actual.
  */
 async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanchasOverride, mockTimestamp = null, diaKey = null) {
   const torneo = await prisma.torneo.findUnique({
@@ -2418,6 +2464,14 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     timestampOverride = new Date();
   }
 
+  // Hora actual (mockTimestamp en tests) redondeada hacia arriba a 15 min: nada se acomoda antes.
+  // Con el torneo ya terminado no hay piso (no hay nada que jugar después de ahora).
+  const TICK_MS = 15 * 60 * 1000;
+  const ahoraMs = mockTimestamp ? new Date(mockTimestamp).getTime() : Date.now();
+  const domingoTorneo = clavesJornadasTorneo(requireTorneoFecha(torneo))[2];
+  const finTorneoMs = getDiaCalendarioConTrasnoche(parseFechaLocal(domingoTorneo), horariosClubObj).dayLimitMs;
+  const pisoAhoraMs = ahoraMs > finTorneoMs ? null : Math.ceil(ahoraMs / TICK_MS) * TICK_MS;
+
   // Día lógico de la operación. Restaurar todo (sin jornada) no tiene un día propio: recorre cada override.
   const diaOverrideTs = diaKey ? parseFechaLocal(diaKey) : (diaKeyJornada ? timestampOverride : null);
 
@@ -2499,6 +2553,19 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   const { res: mcfRes, pendingMutations } = await prisma.$transaction(async (tx) => {
     let res;
 
+    // Primera reducción del viernes o del sábado: guardar el horario de antes de la lluvia antes de mover nada.
+    // Si la jornada ya tiene override (segunda reducción), su registro no se pisa.
+    let horariosAntesLluvia;
+    if (!esRestauracion && !esDomingo && overrideDiaKey) {
+      const existente = await tx.overrideCanchasDia.findUnique({
+        where: { torneoId_diaKey: { torneoId, diaKey: overrideDiaKey } },
+        select: { id: true },
+      });
+      if (!existente) {
+        horariosAntesLluvia = await armarHorariosAntesLluvia(tx, torneoId, overrideDiaKey, horariosClubObj);
+      }
+    }
+
     if (esRestauracion && !diaKeyJornada) {
       // Restauración global multi-día sin jornada:
       // Consultar todos los overrides activos del torneo en DB ordenados cronológicamente
@@ -2537,13 +2604,19 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
               partidosSinHorarioNuevo: schedRes.partidosSinHorario,
               cambios: schedRes.cambios || [],
             };
+          } else if (leerJson(ov.horariosAntesLluvia)) {
+            dayRes = await restaurarHorariosAntesLluvia(
+              organizadorId, torneoId, ov.diaKey, leerJson(ov.horariosAntesLluvia), tx, { pisoAhoraMs }
+            );
           } else {
+            // Override sin registro (creado antes de guardar el horario de antes de la lluvia)
             dayRes = await asignarHorariosModoLluviaMCF(
               organizadorId,
               torneoId,
               canchasClub,
               tx,
-              diaTs
+              diaTs,
+              { pisoAhoraMs }
             );
           }
 
@@ -2567,9 +2640,19 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
           torneoId,
           overrideNum,
           tx,
-          diaOverrideTs
+          diaOverrideTs,
+          { pisoAhoraMs }
         );
       }
+    } else if (esRestauracion && !esDomingo) {
+      // Restaurar el viernes o el sábado: los pendientes vuelven al horario de antes de la lluvia.
+      const ov = await tx.overrideCanchasDia.findUnique({
+        where: { torneoId_diaKey: { torneoId, diaKey: overrideDiaKey } },
+      });
+      const registro = leerJson(ov?.horariosAntesLluvia);
+      res = registro
+        ? await restaurarHorariosAntesLluvia(organizadorId, torneoId, overrideDiaKey, registro, tx, { pisoAhoraMs })
+        : await asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideNum, tx, diaOverrideTs, { pisoAhoraMs });
     } else if (esDomingo) {
       // En Domingo todas las fases son eliminatorias/playoffs.
       // Delegamos en programarHorariosEliminatorias con las canchas reducidas y descansos reales.
@@ -2596,7 +2679,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         torneoId,
         overrideNum,
         tx,             // externalTx: operaciones sobre db.partido dentro de tx
-        diaOverrideTs   // overrideTimestamp para scopear al día lógico correspondiente
+        diaOverrideTs,  // overrideTimestamp para scopear al día lógico correspondiente
+        { pisoAhoraMs }
       );
     }
 
@@ -2622,7 +2706,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         overrideNum,
         timestampOverride,
         res?.partidosSinSlot || {},
-        tx
+        tx,
+        horariosAntesLluvia
       );
       if (m) mutations.push(m);
     }

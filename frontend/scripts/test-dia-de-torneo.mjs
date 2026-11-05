@@ -29,7 +29,17 @@ try {
     partidosFinalizados: [{ ...base, id: 'f', pareja1: 'Maidana / Valentini', pareja2: 'Albornoz / Ponce', ganadorId: 'a', fechaHora: '2026-11-06T16:00:00.000Z', sets: [{ gamesPareja1: 6, gamesPareja2: 2 }, { gamesPareja1: 6, gamesPareja2: 3 }] }],
     resumenEstado: { totalPartidos: 5, enCurso: 1, pendientesConHorario: 3, finalizados: 1, pendientesSinHorario: 0 },
   };
-  globalThis.fetch = async (url) => {
+  const reprogramacion = { ejecutada: true, overrideDiaKey: '2026-11-06', diaNombre: 'Viernes', partidosReprogramados: 1, partidosSinCambio: 0,
+    partidosSinHorarioNuevo: 0, cambios: [{ partidoId: 'p1', pareja1: 'Dávila / Arrieta', pareja2: 'Tapia / Nieva', categoria: '7ma Damas',
+      antes: { fechaHora: '2026-11-06T22:00:00.000Z', canchaNumero: 3 }, despues: { fechaHora: '2026-11-07T13:15:00.000Z', canchaNumero: 2 } }] };
+  const enviosLluvia = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    if (String(url).endsWith('/canchas-override')) {
+      enviosLluvia.push(JSON.parse(opts.body));
+      datos.partidosEnCanchaFantasma = [{ ...base, id: 'g', categoriaId: 'c', pareja1: 'Monti / Lugones', pareja2: 'Monzón / Bazán', canchaNumero: 6,
+        fechaHora: '2026-11-06T22:00:00.000Z', motivo: 'Sin cancha activa libre disponible en ese horario' }];
+      return new Response(JSON.stringify({ reprogramacion }));
+    }
     if (String(url).endsWith('/en-vivo')) return new Response(JSON.stringify(datos));
     if (String(url).endsWith('/partidos-sin-horario')) return new Response(JSON.stringify([]));
     throw Error(`Petición no interceptada ${url}`);
@@ -66,6 +76,27 @@ try {
   assert.ok(!/\bC4\b|Cancha/.test(fin.textContent), 'Finalizados sin cancha');
   assert.ok(fin.querySelector('.is-winner').textContent === 'Maidana / Valentini');
   assert.ok([...fin.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Editar'));
+
+  // Lluvia: textos de los modales y banner sin número de cancha
+  const botonQueEmpieza = (t) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(t));
+  const menos = document.querySelector('[aria-label="Reducir cantidad de canchas"]');
+  await act(async () => menos.click());
+  await act(async () => menos.click());
+  await act(async () => botonQueEmpieza('Reducir a 4 canchas').click());
+  assert.match(document.body.textContent, /Los partidos pendientes de esta jornada se acomodan en las canchas habilitadas, uno detrás de otro\. El viernes nadie juega antes de su horario de inicio; lo que no entre pasa al sábado\./);
+  await act(async () => botonQueEmpieza('Reducir y reprogramar').click());
+  for (let i = 0; i < 50 && !document.querySelector('.dt-feedback'); i++) await act(async () => new Promise((r) => setTimeout(r, 20)));
+  assert.deepEqual(enviosLluvia, [{ canchasDisponiblesOverride: 4, diaKey: '2026-11-06' }]);
+  const banner = document.querySelector('.dt-feedback');
+  assert.ok(banner, 'Aparece el banner de reprogramación');
+  assert.equal([...banner.querySelector('.dt-change-times').children].map((s) => s.textContent.trim()).join(' '), 'vie 19:00 → sáb 10:15');
+  assert.ok(!/Cancha|\bC\d/.test(banner.textContent), 'El banner de lluvia no muestra canchas');
+  for (let i = 0; i < 50 && !document.querySelector('.dt-ghost-match'); i++) await act(async () => new Promise((r) => setTimeout(r, 20)));
+  const alerta = document.querySelector('.dt-notice.dt-danger');
+  assert.match(alerta.textContent, /1 partido no entra con las canchas habilitadas/);
+  assert.match(alerta.textContent, /No se pudieron reprogramar solos\. Asignales horario desde Pendientes\./);
+  assert.equal(texto('.dt-ghost-match .dt-muted'), '7ma Damas · Zona C · vie 19:00');
+  assert.ok(!/Cancha|\bC\d|Inhabilitadas|Asignado a/.test(alerta.textContent), 'La alerta no muestra canchas');
 
   // Todo el torneo: los títulos llevan el día
   const todo = [...document.querySelectorAll('button')].find((b) => /todo/i.test(b.textContent));

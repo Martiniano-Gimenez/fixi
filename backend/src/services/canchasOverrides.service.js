@@ -149,8 +149,9 @@ function getCanchasDia(torneoId, diaKey, defaultCanchasClub) {
  * Registra o actualiza la reducción de canchas para un día específico del torneo en DB.
  * Si se pasa `tx`, la operación se realiza dentro de la transacción y NO muta la caché (el llamador
  * debe invocar `applyCacheMutation` post-commit). Si no se pasa `tx`, ejecuta en DB y aplica la mutación DESPUÉS del éxito.
+ * `horariosAntesLluvia` (opcional) se guarda solo si viene: una segunda reducción el mismo día no lo pisa.
  */
-async function setOverrideDia(torneoId, diaKey, canchas, activoDesde = null, partidosSinSlot = {}, tx = null) {
+async function setOverrideDia(torneoId, diaKey, canchas, activoDesde = null, partidosSinSlot = {}, tx = null, horariosAntesLluvia = undefined) {
   if (!torneoId || !diaKey) return null;
 
   const client = tx || prisma;
@@ -170,12 +171,14 @@ async function setOverrideDia(torneoId, diaKey, canchas, activoDesde = null, par
       isLluvia: true,
       activoDesde: fechaActivo,
       partidosSinSlot: partidosSinSlot || {},
+      ...(horariosAntesLluvia !== undefined ? { horariosAntesLluvia } : {}),
     },
     update: {
       canchas: Number(canchas),
       isLluvia: true,
       activoDesde: fechaActivo,
       partidosSinSlot: partidosSinSlot || {},
+      ...(horariosAntesLluvia !== undefined ? { horariosAntesLluvia } : {}),
     },
   });
 

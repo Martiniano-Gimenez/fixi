@@ -248,7 +248,7 @@ async function runTest() {
   assert.strictEqual(p6Post.fechaHora.getTime(), hora20_45.getTime(), 'FALLÓ: Partido D/E debió mantenerse a las 20:45');
   console.log('✅ Verificado: Ambos dieciseisavos sin parejas fueron reubicados a canchas 1..4 a las 20:45 en canchas distintas!');
 
-  // Restaurar a 6 y verificar que no se reubiquen ni retrocedan
+  // Restaurar a 6: vuelven a su horario y cancha de antes de la lluvia
   await organizadorService.reprogramarPorReduccionCanchas(
     organizador.id,
     torneo.id,
@@ -258,11 +258,11 @@ async function runTest() {
   );
   const p5Rest = await prisma.partido.findUnique({ where: { id: pDieciseisavosCancha5.id } });
   const p6Rest = await prisma.partido.findUnique({ where: { id: pDieciseisavosCancha6.id } });
-  assert.strictEqual(p5Rest.canchaNumero, p5Post.canchaNumero, 'Al restaurar, cruce F/G no debe cambiar de cancha');
-  assert.strictEqual(p5Rest.fechaHora.getTime(), p5Post.fechaHora.getTime(), 'Al restaurar, cruce F/G no debe cambiar de hora');
-  assert.strictEqual(p6Rest.canchaNumero, p6Post.canchaNumero, 'Al restaurar, cruce D/E no debe cambiar de cancha');
-  assert.strictEqual(p6Rest.fechaHora.getTime(), p6Post.fechaHora.getTime(), 'Al restaurar, cruce D/E no debe cambiar de hora');
-  console.log('✅ Verificado: Al restaurar, los cruces sin parejas no retrocedieron ni fueron alterados!');
+  assert.strictEqual(p5Rest.canchaNumero, 5, 'Al restaurar, cruce F/G vuelve a su cancha de antes de la lluvia');
+  assert.strictEqual(p5Rest.fechaHora.getTime(), hora20_45.getTime(), 'Al restaurar, cruce F/G vuelve a su hora de antes de la lluvia');
+  assert.strictEqual(p6Rest.canchaNumero, 6, 'Al restaurar, cruce D/E vuelve a su cancha de antes de la lluvia');
+  assert.strictEqual(p6Rest.fechaHora.getTime(), hora20_45.getTime(), 'Al restaurar, cruce D/E vuelve a su hora de antes de la lluvia');
+  console.log('✅ Verificado: Al restaurar, los cruces sin parejas volvieron a su horario de antes de la lluvia!');
 
   // =========================================================================
   // TEST PUNTO 1: Manejo de partidosSinSlot en removeOverrideDia y reemplazo total

@@ -13,7 +13,7 @@ const {
 const { parseFechaLocal, requireTorneoFecha, getDiaCalendarioConTrasnoche } = require('../utils/dateUtils');
 const canchasOverridesService = require('./canchasOverrides.service');
 const { calcularVentanaSabadoNoche } = require('../utils/ventanaSabadoNoche');
-const { minutosDespuesDelCierre } = require('../utils/horarioClub');
+const { minutosDespuesDelCierre, calcularFinJornadaMs } = require('../utils/horarioClub');
 
 // Fisher-Yates shuffle
 function shuffleArray(array) {
@@ -1340,11 +1340,17 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
  * Reubica los partidos PENDIENTE de un torneo durante Modo Lluvia (reducción o restauración de canchas)
  * aplicando Compactación Continua Earliest-Fit ordenada cronológicamente por horario original.
  * Garantiza que los partidos FINALIZADO y EN_CURSO queden 100% fijos como ocupación inmutable en sus canchas y horarios originales.
- * En situación de emergencia (lluvia), no bloquea por disponibilidad de pareja, permitiendo jugar en cualquier horario
- * dentro del día lógico hasta el límite de trasnoche (dayLimitMs).
+ * En situación de emergencia (lluvia) se apila sin mirar la disponibilidad de las parejas, con estas reglas:
+ * - Viernes: ningún partido empieza antes del inicio de la disponibilidad del viernes de sus dos parejas
+ *   (una pareja sin horarios ese día no pone piso) y todos terminan antes del cierre del club del viernes.
+ *   Lo que no entra pasa al sábado: earliest-fit desde la apertura, en canchas libres, sin mover los
+ *   partidos del sábado. Si tampoco entra, queda sin horario.
+ * - Sábado: desde la apertura hasta el límite de trasnoche (dayLimitMs).
+ * - opciones.pisoAhoraMs: nada se acomoda antes de ese momento (la hora actual redondeada a 15 min).
  */
-async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null, overrideTimestamp = null) {
+async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null, overrideTimestamp = null, opciones = {}) {
   const db = externalTx || prisma;
+  const pisoAhoraMs = opciones.pisoAhoraMs || null;
 
   const torneo = await db.torneo.findUnique({
     where: { id: torneoId },
@@ -1380,6 +1386,13 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   // Inicio de la ventana nocturna de R32 (misma fuente que programarHorariosEliminatorias)
   const { sabNightStartMs } = calcularVentanaSabadoNoche(organizador, baseSaturday.getTime());
 
+  // Viernes con lluvia: el límite es el cierre del club del viernes (no la trasnoche).
+  const medianocheViernes = new Date(baseFriday);
+  medianocheViernes.setHours(0, 0, 0, 0);
+  const cierreViernesMs = calcularFinJornadaMs(medianocheViernes.getTime(), organizador.viernesInicio, organizador.viernesFin);
+  // Lo que no entra el viernes pasa al sábado, hasta el fin de la jornada del sábado.
+  const sabadoInfo = getDiaCalendarioConTrasnoche(new Date(satDayStartMs), organizador);
+
   // 1. Cargar todos los partidos del torneo
   const todosLosPartidos = await db.partido.findMany({
     where: {
@@ -1389,8 +1402,8 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       categoria: { select: { id: true, nombre: true } },
       zona: { select: { id: true, formato: true, nombre: true } },
       faseEliminatoria: { select: { ronda: true } },
-      pareja1: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true } },
-      pareja2: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true } },
+      pareja1: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true, slotsSeleccionados: { select: { slotId: true } } } },
+      pareja2: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true, slotsSeleccionados: { select: { slotId: true } } } },
     },
   });
 
@@ -1411,16 +1424,17 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     return esR32(p) && !p.horarioManual;
   }
 
-  // 2. Inicializar timelines de canchas habilitadas (1..cantidadCanchas) y asignaciones de parejas
+  // 2. Inicializar timelines de todas las canchas del club y asignaciones de parejas. La jornada afectada
+  //    solo busca en las habilitadas (1..cantidadCanchas); el sábado, si recibe partidos del viernes, en las suyas.
   const courtTimelines = new Map();
-  for (let c = 1; c <= cantidadCanchas; c++) {
+  for (let c = 1; c <= Math.max(cantidadCanchas, canchasClub); c++) {
     courtTimelines.set(c, []);
   }
 
   const parejaAssignments = new Map();
 
   function addInterval(cancha, pareja1Id, pareja2Id, startMs, endMs) {
-    if (cancha && cancha <= cantidadCanchas && courtTimelines.has(cancha)) {
+    if (cancha && courtTimelines.has(cancha)) {
       courtTimelines.get(cancha).push({ startMs, endMs });
     }
     if (pareja1Id) {
@@ -1767,6 +1781,36 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     registrarPartidoSinSlot(partido.id, motivo);
   }
 
+  // Inicio de la disponibilidad del viernes de una pareja (null si no cargó horarios ese día)
+  function inicioViernesPareja(pareja) {
+    let inicio = null;
+    for (const s of pareja?.slotsSeleccionados || []) {
+      if (!s.slotId || !s.slotId.startsWith('Viernes-')) continue;
+      const d = parseSlotToDate(s.slotId, refFecha);
+      if (d && (inicio === null || d.getTime() < inicio)) inicio = d.getTime();
+    }
+    return inicio;
+  }
+
+  // Un partido de zona que pasa al sábado termina antes de lo que depende de él y no se reprograma en esta
+  // corrida: el primer dieciseisavos de su categoría y, en MINI_BRACKET, los P3/P4 de su zona.
+  const idsAAsignar = new Set(partidosAAsignar.map((p) => p.id));
+  const primerR32PorCategoria = new Map();
+  const primerRonda2PorZona = new Map();
+  const guardarMinimo = (mapa, clave, t) => {
+    const actual = mapa.get(clave);
+    if (actual === undefined || t < actual) mapa.set(clave, t);
+  };
+  for (const p of todosLosPartidos) {
+    if (idsAAsignar.has(p.id) || !p.fechaHora || p.sinHorarioAsignado) continue;
+    const t = new Date(p.fechaHora).getTime();
+    if (esR32(p)) guardarMinimo(primerR32PorCategoria, p.categoriaId, t);
+    if (isMiniBracketRonda2(p)) guardarMinimo(primerRonda2PorZona, p.zonaId, t);
+  }
+
+  const TICK_MS = 15 * 60 * 1000;
+  const redondearArriba = (ms) => (ms % TICK_MS === 0 ? ms : ms + TICK_MS - (ms % TICK_MS));
+
   // 4. Asignación Global Earliest-Fit para cada partido
   for (const partido of partidosAAsignar) {
     if (esR32Automatico(partido) && categoriaTieneZonaSinHorarioPorLluvia(partido.categoriaId)) {
@@ -1817,11 +1861,21 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       }
     }
 
-    // Ajustar minSearchMs al tick de 15 minutos más cercano hacia arriba
-    const remainder = minSearchMs % (15 * 60 * 1000);
-    if (remainder !== 0) {
-      minSearchMs += (15 * 60 * 1000 - remainder);
+    // Viernes con lluvia: nadie juega antes del inicio de su disponibilidad del viernes y todo termina
+    // antes del cierre del club. En la restauración sin registro previo se conserva el comportamiento anterior.
+    const lluviaViernes = isFriday && !esRestauracionTotal && !esR32(partido);
+    if (lluviaViernes) {
+      const pisosParejas = [inicioViernesPareja(partido.pareja1), inicioViernesPareja(partido.pareja2)]
+        .filter((v) => v !== null);
+      if (pisosParejas.length > 0) minSearchMs = Math.max(minSearchMs, ...pisosParejas);
     }
+    const limiteBusquedaMs = lluviaViernes && cierreViernesMs ? Math.min(dayLimitMs, cierreViernesMs) : dayLimitMs;
+
+    // Nada se acomoda antes de la hora actual
+    if (pisoAhoraMs) minSearchMs = Math.max(minSearchMs, pisoAhoraMs);
+
+    // Ajustar minSearchMs al tick de 15 minutos más cercano hacia arriba
+    minSearchMs = redondearArriba(minSearchMs);
 
     let bestCandidate = null;
     let T = minSearchMs;
@@ -1831,7 +1885,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       esR32(partido) && partido.canchaNumero && partido.canchaNumero <= cantidadCanchas ? partido.canchaNumero : null;
 
     if (!ronda1SinHorario) {
-      while (T + DURACION_MS <= dayLimitMs) {
+      while (T + DURACION_MS <= limiteBusquedaMs) {
         const tEnd = T + DURACION_MS;
         if (
           canchaPreferida &&
@@ -1854,6 +1908,36 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
         }
         if (bestCandidate !== null) break;
         T += 15 * 60 * 1000;
+      }
+    }
+
+    // Lo que no entra el viernes pasa al sábado: desde la apertura, sin mirar disponibilidad, en las canchas
+    // libres del sábado y sin que una pareja juegue dos a la vez. Un partido de zona termina antes del primer
+    // dieciseisavos de su categoría.
+    if (bestCandidate === null && lluviaViernes && !ronda1SinHorario) {
+      const canchasSabado = Math.min(
+        canchasOverridesService.getCanchasDia(torneoId, sabadoInfo.key, canchasClub).canchas,
+        canchasClub
+      );
+      let pisoSabado = satDayStartMs;
+      if (pisoAhoraMs) pisoSabado = Math.max(pisoSabado, pisoAhoraMs);
+      if (isMiniBracketR2) pisoSabado = Math.max(pisoSabado, getRonda1InfoZona(partido.zonaId, partido.id).maxEndMs);
+      let limiteSabado = sabadoInfo.dayLimitMs;
+      const primerR32 = partido.zonaId ? primerR32PorCategoria.get(partido.categoriaId) : undefined;
+      if (primerR32 !== undefined) limiteSabado = Math.min(limiteSabado, primerR32);
+      const primerRonda2 = partido.zonaId && !isMiniBracketR2 ? primerRonda2PorZona.get(partido.zonaId) : undefined;
+      if (primerRonda2 !== undefined) limiteSabado = Math.min(limiteSabado, primerRonda2);
+      for (let T2 = redondearArriba(pisoSabado); bestCandidate === null && T2 + DURACION_MS <= limiteSabado; T2 += TICK_MS) {
+        for (let c = 1; c <= canchasSabado; c++) {
+          if (
+            isCourtFree(c, T2, T2 + DURACION_MS) &&
+            isPairFree(partido.pareja1Id, T2, T2 + DURACION_MS) &&
+            isPairFree(partido.pareja2Id, T2, T2 + DURACION_MS)
+          ) {
+            bestCandidate = { T: T2, cancha: c };
+            break;
+          }
+        }
       }
     }
 
@@ -1977,6 +2061,207 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     partidosSinSlot: Object.fromEntries(partidosSinSlotMotivos),
     cambios,
     total: updates.length,
+  };
+}
+
+/**
+ * Restaura una jornada (viernes o sábado) después de la lluvia. Cada partido PENDIENTE del registro
+ * horariosAntesLluvia vuelve a su horario de antes de la lluvia si no es anterior a la hora actual y la
+ * cancha y las dos parejas están libres. Si no se puede, earliest-fit desde max(ese horario, hora actual)
+ * en su jornada original (el viernes hasta el cierre del club; el sábado hasta el límite de trasnoche).
+ * Lo que no entra queda sin horario. FINALIZADO, EN_CURSO y los partidos fuera del registro no se tocan.
+ * Los P3/P4 de MINI_BRACKET quedan después de la ronda 1 de su zona y los dieciseisavos después de las zonas.
+ */
+async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, registro, externalTx = null, opciones = {}) {
+  const db = externalTx || prisma;
+  const pisoAhoraMs = opciones.pisoAhoraMs || null;
+
+  const torneo = await db.torneo.findUnique({ where: { id: torneoId }, include: { organizador: true } });
+  if (!torneo || torneo.organizadorId !== organizadorId) {
+    const error = new Error('Torneo no encontrado o no autorizado.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const organizador = torneo.organizador;
+  const canchasClub = organizador.cantidadCanchas || 1;
+  const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
+  const TICK_MS = 15 * 60 * 1000;
+  const redondearArriba = (ms) => (ms % TICK_MS === 0 ? ms : ms + TICK_MS - (ms % TICK_MS));
+
+  const diaInfo = getDiaCalendarioConTrasnoche(parseFechaLocal(diaKey), organizador);
+  const esViernes = diaInfo.logicalDate.getDay() === 5;
+  const medianoche = new Date(diaInfo.logicalDate);
+  medianoche.setHours(0, 0, 0, 0);
+  const inicioJornadaMs = medianoche.getTime()
+    + horaAMinutos(esViernes ? organizador.viernesInicio : organizador.sabadoInicio) * 60 * 1000;
+  const cierreViernesMs = esViernes
+    ? calcularFinJornadaMs(medianoche.getTime(), organizador.viernesInicio, organizador.viernesFin)
+    : null;
+  const limiteMs = cierreViernesMs ? Math.min(diaInfo.dayLimitMs, cierreViernesMs) : diaInfo.dayLimitMs;
+
+  const partidos = await db.partido.findMany({
+    where: { categoria: { torneoId } },
+    include: {
+      categoria: { select: { nombre: true } },
+      zona: { select: { formato: true } },
+      faseEliminatoria: { select: { ronda: true } },
+      pareja1: { select: { jugador1: true, jugador2: true } },
+      pareja2: { select: { jugador1: true, jugador2: true } },
+    },
+  });
+
+  const aRestaurar = partidos.filter((p) => p.estado === 'PENDIENTE' && registro[p.id]);
+  const idsRestaurar = new Set(aRestaurar.map((p) => p.id));
+
+  // Ocupación: todo lo que tiene horario y no se restaura (finalizados, en juego y los demás pendientes)
+  const canchas = new Map();
+  for (let c = 1; c <= canchasClub; c++) canchas.set(c, []);
+  const parejas = new Map();
+  function ocupar(p, startMs, cancha) {
+    if (cancha && canchas.has(cancha)) canchas.get(cancha).push([startMs, startMs + DURACION_MS]);
+    for (const pid of [p.pareja1Id, p.pareja2Id]) {
+      if (!pid) continue;
+      if (!parejas.has(pid)) parejas.set(pid, []);
+      parejas.get(pid).push([startMs, startMs + DURACION_MS]);
+    }
+  }
+  for (const p of partidos) {
+    if (idsRestaurar.has(p.id) || p.esBye || !p.fechaHora || p.sinHorarioAsignado) continue;
+    ocupar(p, new Date(p.fechaHora).getTime(), p.canchaNumero);
+  }
+  const libre = (lista, s) => !(lista || []).some(([a, b]) => s < b && s + DURACION_MS > a);
+  const parejasLibres = (p, s) => [p.pareja1Id, p.pareja2Id].every((pid) => !pid || libre(parejas.get(pid), s));
+
+  // Inicio efectivo de un partido: el nuevo si ya se restauró, undefined si todavía falta ubicarlo
+  const ubicados = new Map();
+  function inicioEfectivo(m) {
+    if (idsRestaurar.has(m.id)) return ubicados.has(m.id) ? ubicados.get(m.id) : undefined;
+    return m.fechaHora && !m.sinHorarioAsignado ? new Date(m.fechaHora).getTime() : null;
+  }
+  // Piso por dependencias (undefined si alguna todavía no se ubicó)
+  function pisoDependencias(p) {
+    let deps = [];
+    if (p.zonaId && p.zona?.formato === 'MINI_BRACKET' && (p.posicionEnRonda === 3 || p.posicionEnRonda === 4)) {
+      deps = partidos.filter((m) => m.zonaId === p.zonaId && m.posicionEnRonda != null && m.posicionEnRonda <= 2);
+    } else if (p.faseEliminatoriaId && !p.esBye && (p.faseEliminatoria?.ronda || 0) >= 32) {
+      deps = partidos.filter((m) => m.zonaId && m.categoriaId === p.categoriaId && !m.esBye);
+    }
+    let piso = 0;
+    for (const m of deps) {
+      const s = inicioEfectivo(m);
+      if (s === undefined) return undefined;
+      if (s !== null) piso = Math.max(piso, s + DURACION_MS);
+    }
+    return piso;
+  }
+
+  const inicioOriginal = (p) => {
+    const o = registro[p.id];
+    return o.fechaHora && !o.sinHorarioAsignado ? new Date(o.fechaHora).getTime() : null;
+  };
+  const orden = [...aRestaurar].sort((a, b) => {
+    const ta = inicioOriginal(a) ?? Infinity;
+    const tb = inicioOriginal(b) ?? Infinity;
+    if (ta !== tb) return ta - tb;
+    const ca = registro[a.id].canchaNumero || 0;
+    const cb = registro[b.id].canchaNumero || 0;
+    if (ca !== cb) return ca - cb;
+    return a.id.localeCompare(b.id);
+  });
+
+  const nuevos = new Map();
+  function fijar(p, startMs, cancha) {
+    ocupar(p, startMs, cancha);
+    ubicados.set(p.id, startMs);
+    nuevos.set(p.id, { fechaHora: new Date(startMs), canchaNumero: cancha, sinHorarioAsignado: false });
+  }
+
+  // 1. Vuelven a su horario original los que pueden
+  const sinLugar = [];
+  for (const p of orden) {
+    const original = registro[p.id];
+    const s = inicioOriginal(p);
+    if (s === null) {
+      ubicados.set(p.id, null);
+      nuevos.set(p.id, {
+        fechaHora: original.fechaHora ? new Date(original.fechaHora) : null,
+        canchaNumero: original.canchaNumero ?? null,
+        sinHorarioAsignado: Boolean(original.sinHorarioAsignado),
+      });
+      continue;
+    }
+    const piso = pisoDependencias(p);
+    const cancha = original.canchaNumero;
+    if (
+      piso !== undefined && s >= piso &&
+      (!pisoAhoraMs || s >= pisoAhoraMs) &&
+      cancha && canchas.has(cancha) &&
+      libre(canchas.get(cancha), s) && parejasLibres(p, s)
+    ) {
+      fijar(p, s, cancha);
+    } else {
+      sinLugar.push(p);
+    }
+  }
+
+  // 2. El resto: earliest-fit desde max(horario original, hora actual) en su jornada
+  for (const p of sinLugar) {
+    const preferida = registro[p.id].canchaNumero;
+    const ordenCanchas = [...canchas.keys()].sort((a, b) => (a === preferida ? -1 : b === preferida ? 1 : a - b));
+    let T = redondearArriba(Math.max(inicioOriginal(p), pisoAhoraMs || 0, pisoDependencias(p) || 0, inicioJornadaMs));
+    let elegido = null;
+    for (; elegido === null && T + DURACION_MS <= limiteMs; T += TICK_MS) {
+      if (!parejasLibres(p, T)) continue;
+      const c = ordenCanchas.find((n) => libre(canchas.get(n), T));
+      if (c) elegido = { T, cancha: c };
+    }
+    if (elegido) {
+      fijar(p, elegido.T, elegido.cancha);
+    } else {
+      ubicados.set(p.id, null);
+      nuevos.set(p.id, { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true });
+    }
+  }
+
+  // 3. Cambios respecto del horario actual y escritura
+  const nombre = (pareja, origen) => (pareja ? `${pareja.jugador1} / ${pareja.jugador2}` : origen || 'Por definirse');
+  const cambios = [];
+  let partidosReprogramados = 0;
+  let partidosSinCambio = 0;
+  let partidosSinHorarioNuevo = 0;
+  for (const p of orden) {
+    const n = nuevos.get(p.id);
+    const antesMs = p.fechaHora ? new Date(p.fechaHora).getTime() : null;
+    const despuesMs = n.fechaHora ? n.fechaHora.getTime() : null;
+    if (n.sinHorarioAsignado || !n.fechaHora) partidosSinHorarioNuevo++;
+    const igual = antesMs === despuesMs && (p.canchaNumero ?? null) === (n.canchaNumero ?? null)
+      && Boolean(p.sinHorarioAsignado) === Boolean(n.sinHorarioAsignado);
+    if (igual) {
+      partidosSinCambio++;
+      continue;
+    }
+    partidosReprogramados++;
+    cambios.push({
+      partidoId: p.id,
+      pareja1: nombre(p.pareja1, p.origenPareja1),
+      pareja2: nombre(p.pareja2, p.origenPareja2),
+      categoria: p.categoria?.nombre || '',
+      antes: { fechaHora: p.fechaHora ? new Date(p.fechaHora).toISOString() : null, canchaNumero: p.canchaNumero },
+      despues: n.fechaHora && !n.sinHorarioAsignado
+        ? { fechaHora: n.fechaHora.toISOString(), canchaNumero: n.canchaNumero }
+        : { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true },
+    });
+    await db.partido.update({ where: { id: p.id }, data: n });
+  }
+
+  return {
+    partidosReprogramados,
+    partidosSinCambio,
+    partidosSinHorarioNuevo,
+    partidosSinSlot: {},
+    cambios,
+    total: orden.length,
   };
 }
 
@@ -2629,6 +2914,7 @@ module.exports = {
   proximaFechaPorDia,
   slotIdToMsWindow,
   asignarHorariosModoLluviaMCF,
+  restaurarHorariosAntesLluvia,
   evaluarCompatibilidadZona,
   construirMatrizCompatibilidad,
   calcularConfigZonas,

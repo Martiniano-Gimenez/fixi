@@ -20,7 +20,7 @@ const { generarEliminatoria } = require('../src/services/faseEliminatoria.servic
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const { DURACION_PARTIDO_MIN } = require('../src/services/slots.service');
-const { parseFechaLocal } = require('../src/utils/dateUtils');
+const { parseFechaLocal, getDiaCalendarioConTrasnoche } = require('../src/utils/dateUtils');
 
 const DURACION_MS = DURACION_PARTIDO_MIN * 60 * 1000;
 
@@ -702,13 +702,13 @@ async function reproEmergenciaIntactoLluvia(registrarResultado) {
 async function reproReduccionEscalonada6a4a3YRestaurar(registrarResultado) {
   await limpiarDb();
 
-  // Viernes 22:00 a 04:15 con sabadoInicio=04:15 -> dayLimitMs de Viernes = Sábado 04:15 (375 min = 5 turnos exactos de 75 min por cancha).
+  // Viernes 22:00 a 04:15 (cierre del club = apertura del sábado): 375 min = 5 turnos exactos de 75 min por cancha.
   // En 6 canchas entran hasta 30 partidos; en 4 canchas entran 20; en 3 canchas entran 15.
   // Con 24 zonas de 2 parejas = 24 partidos independientes:
-  // - Inicio (6 canchas): 24 agendados.
-  // - Reducir 6->4: 20 agendados, 4 en partidosSinSlot.
-  // - Reducir 4->3: 15 agendados, 9 en partidosSinSlot (4 previos + 5 nuevos).
-  // - Restaurar 3->6: 24 agendados, 0 en partidosSinSlot.
+  // - Inicio (6 canchas): 24 agendados el viernes.
+  // - Reducir 6->4: 20 el viernes y 4 pasan al sábado; nadie queda sin horario.
+  // - Reducir 4->3: 15 el viernes y 9 en el sábado (4 previos + 5 nuevos); nadie queda sin horario.
+  // - Restaurar 3->6: los 24 vuelven al viernes, a su horario de antes de la lluvia.
   const org = await prisma.organizador.create({
     data: {
       nombre: 'Club Escalona 6-4-3',
@@ -766,36 +766,41 @@ async function reproReduccionEscalonada6a4a3YRestaurar(registrarResultado) {
 
   await zonaService.asignarHorariosAutomatico(org.id, [cat.id]);
 
-  const inicial = await prisma.partido.findMany({ where: { categoriaId: cat.id } });
-  const agendadosInicial = inicial.filter((p) => p.fechaHora && !p.sinHorarioAsignado).length;
+  const horarios = { viernesInicio: '22:00', viernesFin: '04:15', sabadoInicio: '04:15', sabadoFin: '22:00' };
+  const contar = async () => {
+    const lista = await prisma.partido.findMany({ where: { categoriaId: cat.id } });
+    const conHorario = lista.filter((p) => p.fechaHora && !p.sinHorarioAsignado);
+    const vie = conHorario.filter((p) => getDiaCalendarioConTrasnoche(p.fechaHora, horarios).key === '2026-09-04').length;
+    return { lista, vie, sab: conHorario.length - vie, sin: lista.length - conHorario.length };
+  };
+
+  const inicial = await contar();
+  const horarioInicial = new Map(inicial.lista.map((p) => [p.id, p.fechaHora?.getTime()]));
 
   await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, null, '2026-09-04');
-  const ov4 = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6);
-  const sinSlot4Count = Object.keys(ov4.partidosSinSlot || {}).length;
+  const c4 = await contar();
+  const sinSlot4Count = Object.keys(canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6).partidosSinSlot || {}).length;
 
   await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 3, null, '2026-09-04');
-  const ov3 = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6);
-  const sinSlot3Count = Object.keys(ov3.partidosSinSlot || {}).length;
+  const c3 = await contar();
+  const sinSlot3Count = Object.keys(canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6).partidosSinSlot || {}).length;
 
   await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 6, null, '2026-09-04');
-  const finalPartidos = await prisma.partido.findMany({ where: { categoriaId: cat.id } });
-  const agendadosFinal = finalPartidos.filter((p) => p.fechaHora && !p.sinHorarioAsignado).length;
-  const ovRest = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 6);
-  const sinSlotRestCount = Object.keys(ovRest.partidosSinSlot || {}).length;
+  const cRest = await contar();
+  const vuelvenAlOriginal = cRest.lista.every((p) => p.fechaHora && p.fechaHora.getTime() === horarioInicial.get(p.id));
 
   const ok =
-    agendadosInicial === 24 &&
-    sinSlot4Count === 4 &&
-    sinSlot3Count === 9 &&
-    agendadosFinal === 24 &&
-    sinSlotRestCount === 0;
+    inicial.vie === 24 &&
+    c4.vie === 20 && c4.sab === 4 && c4.sin === 0 && sinSlot4Count === 0 &&
+    c3.vie === 15 && c3.sab === 9 && c3.sin === 0 && sinSlot3Count === 0 &&
+    cRest.vie === 24 && vuelvenAlOriginal;
 
   registrarResultado(
     'lluvia_escalonada_6_4_3:post-restauracion',
     ok,
     ok
       ? 'OK'
-      : `Esperado inicial=24, sinSlot4=4, sinSlot3=9, final=24, sinSlotRest=0; obtenido inicial=${agendadosInicial}, sinSlot4=${sinSlot4Count}, sinSlot3=${sinSlot3Count}, final=${agendadosFinal}, sinSlotRest=${sinSlotRestCount}`
+      : `Esperado vie/sáb/sin 24/0/0 → 20/4/0 → 15/9/0 → 24 en su horario; obtenido ${inicial.vie}/${inicial.sab}/${inicial.sin} → ${c4.vie}/${c4.sab}/${c4.sin} (sinSlot ${sinSlot4Count}) → ${c3.vie}/${c3.sab}/${c3.sin} (sinSlot ${sinSlot3Count}) → ${cRest.vie}, original=${vuelvenAlOriginal}`
   );
 }
 
@@ -1157,8 +1162,8 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
   }
 
   // P1 y P2 en Viernes (22:00 y 23:15) Cancha 2 (PENDIENTE).
-  // Al reducir Viernes a 1 cancha, ambos pierden horario y entran a partidosSinSlot de Viernes,
-  // mientras P3 y P4 siguen en Sábado 10:00.
+  // Al reducir Viernes a 1 cancha no entran el viernes y pasan al sábado (abre 01:45), antes de P3 y P4,
+  // que siguen en Sábado 10:00.
   const vie22 = new Date(2026, 8, 4, 22, 0, 0, 0);
   const vie23_15 = new Date(2026, 8, 4, 23, 15, 0, 0);
   const sab10 = new Date(2026, 8, 5, 10, 0, 0, 0);
@@ -1220,7 +1225,7 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
     },
   });
 
-  // 1) Reducir Viernes (2026-09-04) a 1 cancha -> P1 y P2 quedan en partidosSinSlot de Viernes, P3/P4 siguen en Sábado 10:00
+  // 1) Reducir Viernes (2026-09-04) a 1 cancha -> P1 y P2 pasan al sábado antes de las 10:00, P3/P4 siguen en Sábado 10:00
   await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-04');
   const p1Red = await prisma.partido.findUnique({ where: { id: p1.id } });
   const p2Red = await prisma.partido.findUnique({ where: { id: p2.id } });
@@ -1228,11 +1233,17 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
   const p4Red = await prisma.partido.findUnique({ where: { id: p4.id } });
   const ovVieRed = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 2);
 
+  const horariosMB = { viernesInicio: '22:00', viernesFin: '01:45', sabadoInicio: '01:45', sabadoFin: '22:00' };
+  const pasoAlSabadoAntesDeP3P4 = (p) => Boolean(p.fechaHora) && !p.sinHorarioAsignado &&
+    getDiaCalendarioConTrasnoche(p.fechaHora, horariosMB).key === '2026-09-05' &&
+    p.fechaHora.getTime() + DURACION_PARTIDO_MIN * 60 * 1000 <= sab10.getTime();
   const okReduccion =
-    p1Red.fechaHora === null &&
-    p2Red.fechaHora === null &&
-    Boolean(ovVieRed.partidosSinSlot?.[p1.id]) &&
-    Boolean(ovVieRed.partidosSinSlot?.[p2.id]) &&
+    pasoAlSabadoAntesDeP3P4(p1Red) &&
+    pasoAlSabadoAntesDeP3P4(p2Red) &&
+    !ovVieRed.partidosSinSlot?.[p1.id] &&
+    !ovVieRed.partidosSinSlot?.[p2.id] &&
+    p3Red.fechaHora?.getTime() === sab10.getTime() &&
+    p4Red.fechaHora?.getTime() === sab10.getTime() &&
     p3Red.fechaHora !== null &&
     !p3Red.sinHorarioAsignado &&
     p4Red.fechaHora !== null &&
@@ -1244,15 +1255,19 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
     data: { fechaHora: sab12, canchaNumero: 1, sinHorarioAsignado: false },
   });
 
-  // 2) Restaurar Viernes (2026-09-04) a 2 canchas -> P1 recupera horario en Viernes.
+  // 2) Restaurar Viernes (2026-09-04) a 2 canchas -> P1 y P2 vuelven a su horario de antes de la lluvia.
   // Regla de aislamiento estricto: P3 y P4 de Sábado NO se modifican nunca y permanecen intactos.
   await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, null, '2026-09-04');
   const p1Rest = await prisma.partido.findUnique({ where: { id: p1.id } });
+  const p2Rest = await prisma.partido.findUnique({ where: { id: p2.id } });
   const p3Rest = await prisma.partido.findUnique({ where: { id: p3.id } });
   const p4Rest = await prisma.partido.findUnique({ where: { id: p4.id } });
 
   const okRestauracion =
-    p1Rest.fechaHora !== null &&
+    p1Rest.fechaHora?.getTime() === vie22.getTime() && p1Rest.canchaNumero === 2 &&
+    p2Rest.fechaHora?.getTime() === vie23_15.getTime() && p2Rest.canchaNumero === 2 &&
+    p3Rest.fechaHora?.getTime() === sab10.getTime() &&
+    p4Rest.fechaHora?.getTime() === sab10.getTime() &&
     !p1Rest.sinHorarioAsignado &&
     p3Rest.fechaHora !== null &&
     !p3Rest.sinHorarioAsignado &&

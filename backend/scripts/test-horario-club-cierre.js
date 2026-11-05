@@ -317,10 +317,10 @@ async function testB3_sabadoYConstante() {
 
 /**
  * (B4) Integración: lluvia el viernes (cierre 23:30, el sábado abre 10:00), 12 partidos y 1 cancha.
- * Entran 9 (18:00 a 04:00, fin 05:15); los otros 3 quedan sin horario, en partidosSinSlot y en la
- * bandeja de pendientes. Ninguno se mueve a otro día ni termina después del sábado 06:00.
+ * El viernes entran 4 (18:00 a 21:45, fin 23:00): ninguno termina después del cierre del club.
+ * Los otros 8 pasan al sábado desde las 10:00, en sus 4 canchas, sin que una pareja juegue dos a la vez.
  */
-async function testB4_viernesNoPasaDeLasSeis() {
+async function testB4_viernesHastaElCierreYPasaAlSabado() {
   const club = { ...CLUB_BASE, sabadoInicio: '10:00' };
   const t = (k) => vie(18, 75 * k);
   const zonas = [];
@@ -330,28 +330,33 @@ async function testB4_viernesNoPasaDeLasSeis() {
   await organizadorService.reprogramarPorReduccionCanchas(esc.org.id, esc.torneo.id, 1, null, '2026-09-04');
 
   const partidos = await prisma.partido.findMany({ where: { categoriaId: esc.cat.id } });
-  const limiteMs = vie(30, 0).getTime();
-  const agendados = partidos.filter((p) => p.fechaHora && !p.sinHorarioAsignado);
+  const cierreViernesMs = vie(23, 30).getTime();
   const sinHorario = partidos.filter((p) => !p.fechaHora || p.sinHorarioAsignado);
-  for (const p of agendados) {
-    const finMs = new Date(p.fechaHora).getTime() + DURACION_MS;
-    assert(finMs <= limiteMs, `Partido del viernes termina ${iso(finMs)}, después del sábado 06:00`);
-    assert(new Date(p.fechaHora).getTime() >= vie(18, 0).getTime(), `Partido movido antes del viernes 18:00: ${iso(p.fechaHora)}`);
+  assert(sinHorario.length === 0, `Ninguno queda sin horario; quedaron ${sinHorario.length}`);
+  const viernes = partidos.filter((p) => new Date(p.fechaHora).getTime() < sab(0, 0).getTime() + 6 * 3600 * 1000);
+  const sabado = partidos.filter((p) => !viernes.includes(p));
+  for (const p of viernes) {
+    const inicioMs = new Date(p.fechaHora).getTime();
+    assert(inicioMs + DURACION_MS <= cierreViernesMs, `Partido del viernes termina ${iso(inicioMs + DURACION_MS)}, después del cierre`);
+    assert(inicioMs >= vie(18, 0).getTime(), `Partido movido antes del viernes 18:00: ${iso(p.fechaHora)}`);
+    assert(p.canchaNumero === 1, 'El viernes solo queda la cancha 1');
   }
-  assert(
-    agendados.length === 9 && sinHorario.length === 3,
-    `Esperados 9 agendados y 3 sin horario; quedaron ${agendados.length} y ${sinHorario.length}`
-  );
-
-  const ov = await prisma.overrideCanchasDia.findUnique({
-    where: { torneoId_diaKey: { torneoId: esc.torneo.id, diaKey: '2026-09-04' } },
-  });
-  const mapa = typeof ov?.partidosSinSlot === 'string' ? JSON.parse(ov.partidosSinSlot) : ov?.partidosSinSlot || {};
-  const bandeja = await organizadorService.getPartidosSinHorarioTorneo(esc.org.id, esc.torneo.id);
-  const idsBandeja = new Set(bandeja.map((p) => p.id));
-  for (const p of sinHorario) {
-    assert(Object.prototype.hasOwnProperty.call(mapa, p.id), `Partido sin horario ${p.id} no figura en partidosSinSlot`);
-    assert(idsBandeja.has(p.id), `Partido sin horario ${p.id} no aparece en la bandeja de pendientes`);
+  assert(viernes.length === 4 && sabado.length === 8, `Esperados 4 el viernes y 8 el sábado; quedaron ${viernes.length} y ${sabado.length}`);
+  for (const p of sabado) {
+    const inicioMs = new Date(p.fechaHora).getTime();
+    assert(inicioMs >= sab(10, 0).getTime(), `Partido pasado al sábado antes de la apertura: ${iso(p.fechaHora)}`);
+    assert(p.canchaNumero >= 1 && p.canchaNumero <= 4, 'El sábado usa sus 4 canchas');
+  }
+  for (const a of partidos) {
+    for (const b of partidos) {
+      if (a.id >= b.id) continue;
+      const sa = new Date(a.fechaHora).getTime();
+      const sb = new Date(b.fechaHora).getTime();
+      if (!(sa < sb + DURACION_MS && sb < sa + DURACION_MS)) continue;
+      assert(a.canchaNumero !== b.canchaNumero, `Dos partidos en la cancha ${a.canchaNumero} a la vez (${iso(sa)})`);
+      const pa = [a.pareja1Id, a.pareja2Id];
+      assert(!pa.includes(b.pareja1Id) && !pa.includes(b.pareja2Id), `Una pareja juega dos partidos a la vez (${iso(sa)})`);
+    }
   }
 }
 
@@ -366,7 +371,7 @@ const TESTS = [
   ['B1', 'Tope del viernes de lluvia en el sábado 06:00', testB1_topeViernesSeisAm],
   ['B2', 'Tope del viernes en la apertura del sábado si es anterior a las 06:00', testB2_topeViernesAperturaTemprana],
   ['B3', 'Sábado hasta el domingo 06:00 y constante compartida', testB3_sabadoYConstante],
-  ['B4', 'Lluvia del viernes: lo que no entra antes de las 06:00 va a la bandeja', testB4_viernesNoPasaDeLasSeis],
+  ['B4', 'Lluvia del viernes: hasta el cierre del club y lo que no entra pasa al sábado', testB4_viernesHastaElCierreYPasaAlSabado],
 ];
 
 async function run() {

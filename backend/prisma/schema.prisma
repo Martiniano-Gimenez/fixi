@@ -77,6 +77,9 @@ model OverrideCanchasDia {
   isLluvia        Boolean  @default(true)
   activoDesde     DateTime @default(now())
   partidosSinSlot Json?    // Mapa { [partidoId]: motivoString }
+  // Horario de los partidos PENDIENTE de la jornada antes de la primera reducción:
+  // { [partidoId]: { fechaHora, canchaNumero, sinHorarioAsignado } }. Restaurar los devuelve ahí.
+  horariosAntesLluvia Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
