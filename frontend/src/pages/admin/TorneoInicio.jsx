@@ -134,6 +134,7 @@ export default function TorneoInicio() {
   };
 
   // "Rearmar" e "Iniciar dejando N pendientes": en la barra fija desde 768 px; en el celular, al final de la página.
+  const totalSinHorario = (conflictosBloqueo || []).reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0);
   const accionesSecundarias = (
     <>
       <button type="button" className="pm-button pm-danger-secondary" onClick={() => setConfirmarResorteoModalOpen(true)} disabled={ocupado || !revisionPreCheck || confirmacionAbierta}>
@@ -468,26 +469,17 @@ export default function TorneoInicio() {
       {confirmarEmergenciaModalOpen && conflictosBloqueo && (
         <div className="pm-overlay pm-confirm-overlay">
           <div className="pm-modal pc-modal pc-emergency" role="dialog" aria-modal="true" aria-labelledby="pc-emergency-title">
-            <div className="pm-header pc-danger-header">
-              <AlertTriangle size={24} />
+            <div className="pm-header pc-info-header">
+              <Info size={24} aria-hidden="true" />
               <h3 id="pc-emergency-title" className="pm-title pc-title">
-                ¿Iniciar torneo con partidos pendientes?
+                ¿Iniciar con {totalSinHorario} {totalSinHorario === 1 ? 'partido' : 'partidos'} sin horario?
               </h3>
             </div>
 
             <div className="pm-body">
-              <p className="pc-copy">
-                Estás por iniciar el torneo dejando{' '}
-                <strong className="pc-danger">
-                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0)}{' '}
-                  {conflictosBloqueo.reduce((acc, c) => acc + (c.partidosSinHorario?.length || 0), 0) === 1
-                    ? 'partido sin cancha ni horario asignado'
-                    : 'partidos sin cancha ni horario asignado'}
-                </strong>{' '}
-                en las siguientes categorías:
-              </p>
+              <p className="pc-copy">Estos partidos quedan sin horario:</p>
 
-              <div className="pc-notice pc-danger-notice">
+              <div className="pc-emergency-lista">
                 <ul className="pc-summary-list">
                   {conflictosBloqueo
                     .filter((c) => c.partidosSinHorario?.length > 0)
@@ -501,22 +493,22 @@ export default function TorneoInicio() {
               </div>
 
               <p className="pc-muted pc-spaced">
-                El torneo pasa a estar en curso. Vas a poder asignarles cancha y horario a estos partidos desde el torneo en vivo.
+                El torneo pasa a estar en curso. Les asignás horario desde Día de torneo.
               </p>
 
             </div>
-            <div className="pm-footer">
+            <div className="pm-footer pc-emergency-footer">
               <button
                 type="button"
                 className="pm-button"
                 onClick={() => setConfirmarEmergenciaModalOpen(false)}
                 disabled={iniciandoTorneo}
               >
-                Volver a intentar resolver
+                Seguir resolviendo
               </button>
               <button
                 type="button"
-                className="pm-button pm-primary pm-destructive"
+                className="pm-button pm-primary"
                 onClick={executeIniciarTorneoEmergencia}
                 disabled={iniciandoTorneo}
               >

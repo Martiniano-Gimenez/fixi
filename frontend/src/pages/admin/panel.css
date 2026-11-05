@@ -1140,6 +1140,14 @@ body:has(.panel) {
 }
 
 .panel .pc-emergency { max-width: 540px; }
+.panel .pc-info-header { align-items: flex-start; gap: var(--e-3); }
+.panel .pc-info-header > svg { flex-shrink: 0; color: var(--marca); }
+.panel .pc-emergency-lista { margin: var(--e-3) 0; padding: var(--e-3) var(--e-4); border-radius: var(--r-control); background: var(--superficie-2); color: var(--tinta); }
+.panel .pc-emergency-footer .pm-button { min-height: 44px; }
+@media (max-width: 767.98px) {
+  .panel .pc-emergency-footer { flex-direction: column-reverse; align-items: stretch; }
+  .panel .pc-emergency-footer .pm-button { width: 100%; max-width: 100%; white-space: normal; }
+}
 .panel .pc-redraw-modal { max-width: 480px; }
 .panel .pc-redraw-modal .pm-header { justify-content: flex-start; align-items: center; }
 .panel .pc-redraw-modal .pc-copy { margin: 0; }
