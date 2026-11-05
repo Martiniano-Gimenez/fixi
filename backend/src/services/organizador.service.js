@@ -1674,7 +1674,20 @@ async function getPartidosSinHorarioTorneo(organizadorId, torneoId) {
     },
     include: {
       categoria: { select: { id: true, nombre: true } },
-      zona: { select: { id: true, nombre: true } },
+      // Los partidos de la zona solo informan: el organizador los ve al asignar un horario.
+      zona: {
+        select: {
+          id: true,
+          nombre: true,
+          partidos: {
+            select: {
+              id: true, posicionEnRonda: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true, esBye: true,
+              pareja1: { select: { id: true, jugador1: true, jugador2: true } },
+              pareja2: { select: { id: true, jugador1: true, jugador2: true } },
+            },
+          },
+        },
+      },
       faseEliminatoria: { select: { id: true, nombre: true, ronda: true } },
       pareja1: {
         select: {

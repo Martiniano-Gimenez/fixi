@@ -1,31 +1,54 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { Clock, Star, Users, ChevronDown, ChevronUp, Loader2, AlertTriangle, X } from 'lucide-react';
-import { formatAjusteTiempo, formatDiaHorario, minutosCronologicosJornada, getSlotCalendario, formatSlotCalendario } from '../utils/dateUtils';
+import { ChevronRight, Clock, Loader2, AlertTriangle, Star, X } from 'lucide-react';
+import { formatDiaHorario, minutosCronologicosJornada, formatSlotCalendario, formatSlotCorto } from '../utils/dateUtils';
 import { rankearSlotsParaPartido } from '../utils/rankingSlots';
+import GrillaHorariosPartido from './GrillaHorariosPartido';
+import { FilaPartidoZona } from './ElegirHorarioPartido';
+import { describirHorarioPareja, detallePorPareja } from './grillaHorarios';
 
 const HORA_INICIO_NOCHE_DIECISEISAVOS = 18; // 18:00hs: inicio de franja nocturna post-zonas para Dieciseisavos
+const FASE_POR_RONDA = { 64: 'Treintaidosavos', 32: 'Dieciseisavos', 16: 'Octavos', 8: 'Cuartos', 4: 'Semifinal', 2: 'Final' };
+
+/** Horario cargado de una pareja a partir de sus inicios ("Viernes-18:00"): ventanas por jornada, de 75 min. */
+function horarioDeSlots(slotIds) {
+  if (!slotIds.length) return { cargado: false, ventanas: [] };
+  const orden = { Viernes: 0, Sabado: 1, Domingo: 2 };
+  const inicios = slotIds.map((id) => { const [dia, hora] = id.split('-'); return { dia, min: minutosCronologicosJornada(hora) }; })
+    .sort((a, b) => (orden[a.dia] ?? 3) - (orden[b.dia] ?? 3) || a.min - b.min);
+  const ventanas = [];
+  for (const i of inicios) {
+    const ultima = ventanas.at(-1);
+    if (ultima && ultima.dia === i.dia && i.min <= ultima.fin) ultima.fin = Math.max(ultima.fin, i.min + 75);
+    else ventanas.push({ dia: i.dia, desde: i.min, fin: i.min + 75 });
+  }
+  const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  return { cargado: true, ventanas: ventanas.map((v) => ({ dia: v.dia, desde: hhmm(v.desde), hasta: hhmm(v.fin) })) };
+}
+
+/** Lo que se le pide a una pareja para un horario, desde la distancia del ranking (minutos con signo; 999 = otro día). */
+function ampliacionDesdeDistancia(parejaId, dist) {
+  if (dist === 999) return { parejaId, diaNuevo: true, minutosAntes: 0, minutosDespues: 0 };
+  return { parejaId, diaNuevo: false, minutosAntes: dist < 0 ? -dist : 0, minutosDespues: dist > 0 ? dist : 0 };
+}
 
 export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose, onAssigned }) {
   const [loadingCanchas, setLoadingCanchas] = useState(false);
   const [dataCanchas, setDataCanchas] = useState(null);
   const [guardandoSlotId, setGuardandoSlotId] = useState(null);
   const [error, setError] = useState('');
-  const [showAlternativas, setShowAlternativas] = useState(false);
-  const [showTodosViables, setShowTodosViables] = useState(false);
+  const [verTodos, setVerTodos] = useState(false);
+  const [seleccion, setSeleccion] = useState(null);
   const [advertenciasAsignacion, setAdvertenciasAsignacion] = useState(null);
-
-  const [expandedSlotId, setExpandedSlotId] = useState(null);
 
   useEffect(() => {
     if (isOpen && torneoId) {
       cargarCanchasDisponibles();
       setGuardandoSlotId(null);
       setError('');
-      setShowAlternativas(false);
-      setShowTodosViables(false);
-      setExpandedSlotId(null);
+      setVerTodos(false);
+      setSeleccion(null);
       setAdvertenciasAsignacion(null);
     }
   }, [isOpen, torneoId, partido]);
@@ -40,7 +63,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       const res = await api.get(url);
       setDataCanchas(res);
     } catch (err) {
-      setError(err.message || 'Error al cargar canchas disponibles.');
+      setError(err.message || 'No pudimos buscar los horarios.');
     } finally {
       setLoadingCanchas(false);
     }
@@ -50,7 +73,6 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
 
   const slotsP1 = (partido.pareja1?.slotsSeleccionados || []).map((s) => s.slotId);
   const slotsP2 = (partido.pareja2?.slotsSeleccionados || []).map((s) => s.slotId);
-  const slotsEnComunOriginales = slotsP1.filter((s) => slotsP2.includes(s));
 
   const rawSlots = dataCanchas?.slots || [];
 
@@ -94,7 +116,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     const normalizar = (str) =>
       (str || '')
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[̀-ͯ]/g, '')
         .toLowerCase()
         .trim();
     return normalizar(fechaActualStr) === normalizar(formatSlotCalendario(s.slotId));
@@ -128,34 +150,19 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       return true;
     });
 
-  const slotsEnComunDisponibles = slotsEnComunOriginales.filter((id) =>
-    slotsValidos.some((s) => s.slotId === id)
-  );
-
   // Ranking inteligente idéntico a preCheck (solo necesario en fase de zonas con parejas definidas)
   const rankedSlots = (esPartidoEliminatoria || esSinParejasDefinidas) ? [] : rankearSlotsParaPartido(slotsValidos, slotsP1, slotsP2);
 
-  const heroOption = rankedSlots[0];
-  const alternativas = rankedSlots.slice(1, 6);
-  const restoAlternativasCount = Math.max(0, rankedSlots.length - 1);
-
-  const viernesNormales = slotsValidos.filter((s) => s.dia === 'Viernes' && !getSlotCalendario(s.slotId)?.esMadrugada);
-  const viernesMadrugada = slotsValidos.filter((s) => s.dia === 'Viernes' && getSlotCalendario(s.slotId)?.esMadrugada);
-  const sabadoNormales = slotsValidos.filter((s) => s.dia === 'Sabado' && !getSlotCalendario(s.slotId)?.esMadrugada);
-  const sabadoMadrugada = slotsValidos.filter((s) => s.dia === 'Sabado' && getSlotCalendario(s.slotId)?.esMadrugada);
-  const domingoViables = slotsValidos.filter((s) => s.dia === 'Domingo');
-
   const p1Nombre = partido.pareja1 ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}` : 'Pareja 1';
   const p2Nombre = partido.pareja2 ? `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}` : 'Pareja 2';
+  const conParejas = !esPartidoEliminatoria && !esSinParejasDefinidas;
 
   // Texto del cruce con fallbacks honestos para eliminatorias y zonas
   let cruceTexto = '';
   if (partido.pareja1 && partido.pareja2) {
-    cruceTexto = `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2} vs ${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}`;
+    cruceTexto = `${p1Nombre} vs ${p2Nombre}`;
   } else if (partido.pareja1 || partido.pareja2) {
-    const definida = partido.pareja1
-      ? `${partido.pareja1.jugador1} / ${partido.pareja1.jugador2}`
-      : `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}`;
+    const definida = partido.pareja1 ? p1Nombre : p2Nombre;
     const pendiente = partido.pareja1
       ? (partido.origenPareja2 || 'Esperando clasificado...')
       : (partido.origenPareja1 || 'Esperando clasificado...');
@@ -167,85 +174,54 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   }
 
   const contextoNombre = esPartidoEliminatoria
-    ? (partido.faseEliminatoria?.nombre || (partido.posicionEnRonda ? `Partido #${partido.posicionEnRonda}` : 'Playoffs'))
+    ? (FASE_POR_RONDA[partido.faseEliminatoria?.ronda] || partido.faseEliminatoria?.nombre || 'Cuadro')
     : (partido.zona?.nombre || 'Zona');
 
-  const agruparSlotsEnBloques = (slots) => {
-    if (!slots || slots.length === 0) return [];
-    const getTimeMs = (s) => (s.fechaIso ? new Date(s.fechaIso).getTime() : minutosCronologicosJornada(s.hora));
-    const sorted = [...slots].sort((a, b) => getTimeMs(a) - getTimeMs(b));
-    const bloques = [];
-    let bloqueActual = [sorted[0]];
+  // Nombres de las parejas del partido y de su zona (para "Partidos de la zona").
+  const nombres = new Map();
+  const sumarNombre = (pareja) => { if (pareja?.id) nombres.set(pareja.id, `${pareja.jugador1} / ${pareja.jugador2}`); };
+  sumarNombre(partido.pareja1);
+  sumarNombre(partido.pareja2);
+  for (const zp of partido.zona?.partidos || []) { sumarNombre(zp.pareja1); sumarNombre(zp.pareja2); }
 
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = sorted[i - 1];
-      const curr = sorted[i];
-      const diff =
-        curr.fechaIso && prev.fechaIso
-          ? (new Date(curr.fechaIso).getTime() - new Date(prev.fechaIso).getTime()) / (60 * 1000)
-          : minutosCronologicosJornada(curr.hora) - minutosCronologicosJornada(prev.hora);
+  // Horario de cada pareja, como en el pre-check.
+  const textoHorarios = conParejas ? [
+    { nombre: p1Nombre, slots: slotsP1 }, { nombre: p2Nombre, slots: slotsP2 },
+  ].map(({ nombre, slots }) => {
+    const horario = describirHorarioPareja(horarioDeSlots(slots));
+    return horario ? `${nombre} pueden ${horario}` : `${nombre}, sin horario cargado`;
+  }).join(' · ') : null;
 
-      // Salto discontinuo si la diferencia entre inicios de turno supera 90 minutos
-      if (diff > 90) {
-        bloques.push(bloqueActual);
-        bloqueActual = [curr];
-      } else {
-        bloqueActual.push(curr);
-      }
-    }
-    bloques.push(bloqueActual);
-    return bloques;
-  };
+  // Los otros partidos de la zona, por horario y sin cancha.
+  const otrosPartidos = conParejas ? (partido.zona?.partidos || [])
+    .filter((zp) => zp.id !== partido.id && !zp.esBye)
+    .map((zp) => {
+      const conHorario = Boolean(zp.fechaHora && zp.canchaNumero && !zp.sinHorarioAsignado);
+      return { ...zp, pareja1Id: zp.pareja1?.id || null, pareja2Id: zp.pareja2?.id || null,
+        fechaHora: conHorario ? zp.fechaHora : null, canchaNumero: conHorario ? zp.canchaNumero : null };
+    })
+    .sort((a, b) => (a.fechaHora ? 0 : 1) - (b.fechaHora ? 0 : 1) || +new Date(a.fechaHora || 0) - +new Date(b.fechaHora || 0) ||
+      (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0)) : [];
 
-  const renderSlotChip = (s) => {
-    const isApplying = guardandoSlotId === s.slotId;
-
-    return (
-      <button
-        key={s.slotId}
-        type="button"
-        disabled={Boolean(guardandoSlotId)}
-
-        className="pm-button pm-slot"
-        onClick={() => handleAsignar(s)}
-        title={`Asignar ${formatSlotCalendario(s.slotId)} (${s.canchasLibres?.length || 0} canchas libres)`}
-      >
-        {isApplying ? (
-          <>
-            <Loader2 size={10} className="pm-spinner" /> {s.hora}
-          </>
-        ) : (
-          `${s.hora} · Cancha ${s.canchasLibres[0]}`
-        )}
-      </button>
-    );
-  };
-
-  const renderDiaBloques = (diaNombre, slots) => {
-    if (!slots || slots.length === 0) return null;
-    const bloques = agruparSlotsEnBloques(slots);
-
-    return (
-      <div className="pm-day-block">
-        <div className="pm-day-label">
-          {diaNombre}:
-        </div>
-        <div className="pm-stack">
-          {bloques.map((bloque, bIdx) => (
-            <div key={bIdx} className="pm-stack">
-              {bIdx > 0 && (
-                <div
-                  className="pm-block-divider"
-                />
-              )}
-              <div className="pm-slot-grid">
-                {bloque.map(renderSlotChip)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+  // Opciones con la forma de la grilla del pre-check. En zona, el orden y el recomendado son los del ranking;
+  // una pareja sin horario cargado puede en cualquier horario, así que no se le pide nada.
+  const opciones = conParejas
+    ? rankedSlots.map((s) => {
+      const ampliacionPorPareja = [
+        s.addToP1 && slotsP1.length > 0 && ampliacionDesdeDistancia(partido.pareja1Id, s.distP1),
+        s.addToP2 && slotsP2.length > 0 && ampliacionDesdeDistancia(partido.pareja2Id, s.distP2),
+      ].filter(Boolean);
+      const parejasAAmpliar = ampliacionPorPareja.map((a) => a.parejaId);
+      return { ...s, clave: s.slotId, fechaHora: s.fechaIso || '', ampliacionPorPareja, parejasAAmpliar,
+        estado: parejasAAmpliar.length === 0 ? 'ENTRA' : parejasAAmpliar.length === 1 ? 'PEDIR_1' : 'PEDIR_VARIAS' };
+    })
+    : slotsValidos.map((s) => ({ ...s, clave: s.slotId, fechaHora: s.fechaIso || '', estado: 'ENTRA', parejasAAmpliar: [], ampliacionPorPareja: [] }))
+      .sort((a, b) => a.fechaHora.localeCompare(b.fechaHora));
+  const recomendado = opciones[0] || null;
+  const pedido = (opcion) => {
+    if (!conParejas) return 'horario libre';
+    if (!opcion.parejasAAmpliar.length) return 'entra en el horario de las dos parejas';
+    return detallePorPareja(opcion, nombres).map((d) => `${d.nombre}: ${d.texto}`).join(' · ');
   };
 
   const handleCerrarModal = () => {
@@ -265,7 +241,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     // Siempre asigna la primera cancha libre por orden numérico ascendente
     const cancha = opt.canchasLibres?.[0];
     if (!cancha) {
-      setError('No hay cancha libre disponible para este horario.');
+      setError('No hay cancha libre en este horario.');
       setGuardandoSlotId(null);
       return;
     }
@@ -282,92 +258,13 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         onClose();
       }
     } catch (err) {
-      setError(err.message || 'Error al asignar horario y cancha.');
+      setError(err.message || 'No pudimos asignar el horario.');
     } finally {
       setGuardandoSlotId(null);
     }
   };
 
-  const renderOptionRow = (opt, isHero = false) => {
-    const isThisApplying = guardandoSlotId === opt.slotId;
-    const isExpanded = expandedSlotId === opt.slotId;
-    const isEstrellaMutua = !opt.addToP1 && !opt.addToP2;
-    const isCasiEstrellaDoble = opt.addToP1 && opt.addToP2;
-    const isEstrellaClasica = !isEstrellaMutua && !isCasiEstrellaDoble;
-
-    let textDetails = null;
-    if (isCasiEstrellaDoble) {
-      textDetails = `${p1Nombre} ${formatAjusteTiempo(opt.distP1)} · ${p2Nombre} ${formatAjusteTiempo(opt.distP2)}`;
-    } else if (isEstrellaClasica) {
-      const parejaQueEstira = opt.addToP1 ? p1Nombre : p2Nombre;
-      const distQueEstira = opt.addToP1 ? opt.distP1 : opt.distP2;
-      textDetails = `${parejaQueEstira} ${formatAjusteTiempo(distQueEstira)}`;
-    } else if (isEstrellaMutua) {
-      textDetails = 'Dentro de la disponibilidad original de ambas parejas';
-    }
-
-    return (
-      <div
-        key={opt.slotId}
-        onClick={() => setExpandedSlotId((prev) => (prev === opt.slotId ? null : opt.slotId))}
-        className={`pm-option${isHero ? ' is-hero' : ''}`}
-      >
-        <div
-          className="pm-option-row"
-        >
-          <div
-            className="pm-option-info"
-          >
-            {isCasiEstrellaDoble ? (
-              <Users size={14} className="pm-brand-icon" />
-            ) : (
-              <Star size={14} className="pm-brand-icon" />
-            )}
-            <strong className="pm-strong">
-              {formatSlotCalendario(opt.slotId)}
-            </strong>
-            <span className="pm-muted">
-              Cancha {opt.canchasLibres[0]} · {opt.canchasLibres.length} libres
-            </span>
-            <ChevronDown
-              size={12}
-              className={`pm-chevron${isExpanded ? ' is-expanded' : ''}`}
-            />
-          </div>
-
-          <div className="pm-option-action">
-            <button
-              type="button"
-
-              disabled={Boolean(guardandoSlotId)}
-              className={`pm-button${isHero ? ' pm-primary' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAsignar(opt);
-              }}
-            >
-              {isThisApplying ? (
-                <>
-                  <Loader2 size={11} className="pm-spinner" /> Asignando…
-                </>
-              ) : (
-                'Asignar'
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Detalle desplegable con disclosure progresivo */}
-        {isExpanded && textDetails && (
-          <div
-            className="pm-option-details"
-          >
-            {textDetails}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const ocupado = Boolean(guardandoSlotId);
 
   return (
     <div
@@ -378,124 +275,68 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
         }
       }}
     >
-      <div className="pm-modal pm-schedule" role="dialog" aria-modal="true" aria-label="Horario y cancha">
-        {/* Header */}
+      <div className="pm-modal pm-schedule" role="dialog" aria-modal="true" aria-labelledby="pm-schedule-title">
         <div className="pm-header">
           <div>
-            <h3 className="pm-title">
-              {partido.fechaHora ? 'Reprogramar horario y cancha' : 'Asignar horario y cancha libre'}
-            </h3>
-            <span className="pm-muted">
-              {partido.categoria?.nombre} · {contextoNombre}
-            </span>
+            <h3 id="pm-schedule-title" className="pm-title">{partido.fechaHora ? 'Reprogramar horario' : 'Asignar horario'}</h3>
+            <span className="pm-muted">{partido.categoria?.nombre} · {contextoNombre}</span>
           </div>
-          <button type="button" onClick={handleCerrarModal} className="pm-button pm-close" aria-label="Cerrar horario y cancha">
+          <button type="button" onClick={handleCerrarModal} className="pm-button pm-close" aria-label="Cerrar">
             <X size={18} />
           </button>
         </div>
 
         <div className="pm-body">
-        {/* Info del partido */}
-        <div className="pm-match-info">
-          <div className="pm-strong">
-            {cruceTexto}
-          </div>
-
-          <div className="pm-match-meta">
+          <div className="pm-match-info">
+            <div className="pm-strong">{cruceTexto}</div>
             {partido.fechaHora && (
-              <div
-                className="pm-current-time"
-              >
-                <Clock size={12} className="pm-brand-icon" />
-                <span>
-                  <strong className="pm-strong">Actualmente:</strong>{' '}
-                  <span className="pm-strong">
-                    {formatDiaHorario(partido.fechaHora)}
-                    {partido.canchaNumero && ` · Cancha ${partido.canchaNumero}`}
-                  </span>
-                </span>
-              </div>
+              <p className="pm-current-time">
+                <Clock size={12} className="pm-brand-icon" aria-hidden="true" />
+                <span>Actualmente: {formatDiaHorario(partido.fechaHora).toLowerCase()}</span>
+              </p>
             )}
-
-            {!esPartidoEliminatoria && !esSinParejasDefinidas && (
-              slotsEnComunOriginales.length > 0 && slotsEnComunDisponibles.length === 0 ? (
-                <div
-                  className="pm-alert pm-match-notice"
-                  title="Coincidían en disponibilidad pero las canchas están 100% ocupadas en esos turnos"
-                >
-                  <AlertTriangle size={12} className="pm-icon" />
-                  <span>Coincidían en {slotsEnComunOriginales.length} {slotsEnComunOriginales.length === 1 ? 'turno' : 'turnos'} pero sin canchas libres</span>
-                </div>
-              ) : slotsEnComunOriginales.length === 0 ? (
-                <div
-                  className="pm-alert pm-match-notice"
-                  title="Ambas parejas no tienen ninguna ventana horaria en común declarada"
-                >
-                  <Users size={12} className="pm-icon" />
-                  <span>Sin coincidencia horaria directa</span>
-                </div>
-              ) : null
-            )}
-
-            {esSinParejasDefinidas && (
-              <div
-                className="pm-alert pm-match-notice"
-              >
-                <Clock size={12} className="pm-icon" />
-                <span>Cruce pendiente de resultados previos. Podés fijar o cambiar su horario y cancha anticipadamente.</span>
-              </div>
+            {textoHorarios && <p className="pc-horarios-parejas">{textoHorarios}</p>}
+            {otrosPartidos.length > 0 && (
+              <section className="pc-propuesta-partidos" aria-label="Partidos de la zona">
+                <h5 className="pc-propuesta-partidos-title">Partidos de la zona</h5>
+                <ul className="pc-propuesta-partidos-list">
+                  {otrosPartidos.map((zp) => (
+                    <li key={zp.id} className="pc-propuesta-partido">
+                      <FilaPartidoZona partido={zp} nombres={nombres} mostrarCancha={false} badge={zp.fechaHora ? null : 'sin horario'} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
             )}
           </div>
-        </div>
 
-        {error && (
-          <div className="pm-alert">
-            {error}
-          </div>
-        )}
+          {error && <div className="pm-alert" role="alert">{error}</div>}
 
-        {/* Contenido principal */}
-        {advertenciasAsignacion ? (
-          <div className="pm-stack">
-            <div
-              className="pm-alert"
-            >
+          {advertenciasAsignacion ? (
+            <div className="pm-alert">
               <div className="pm-alert-heading">
                 <AlertTriangle size={18} className="pm-icon" />
-                <strong className="pm-strong">
-                  Horario asignado con advertencias
-                </strong>
+                <strong className="pm-strong">Horario asignado con advertencias</strong>
               </div>
               <ul className="pm-warning-list">
                 {advertenciasAsignacion.advertencias.map((adv, idx) => (
-                  <li key={idx} className="pm-warning-item">
-                    {adv.mensaje}
-                  </li>
+                  <li key={idx} className="pm-warning-item">{adv.mensaje}</li>
                 ))}
               </ul>
             </div>
-          </div>
-        ) : (
-          <div className="pm-stack">
-          {loadingCanchas ? (
-            <div className="pm-loading">
-              <Loader2 size={18} className="pm-spinner" /> Consultando canchas y disponibilidad en tiempo real...
+          ) : loadingCanchas ? (
+            <div className="pm-loading" role="status">
+              <Loader2 size={18} className="pm-spinner" /> Buscando horarios…
             </div>
-          ) : slotsValidos.length === 0 ? (
-            <div
-              className="pm-alert pm-empty"
-            >
+          ) : !recomendado ? (
+            <div className="pm-alert pm-empty">
               <AlertTriangle size={22} className="pm-icon" />
               <div>
-                <strong className="pm-strong">
-                  {esPartidoEliminatoria
-                    ? 'No hay turnos con cancha disponible para este cruce de playoffs'
-                    : 'No hay turnos disponibles donde haya cancha libre y ambas parejas no estén jugando'}
-                </strong>
+                <strong className="pm-strong">No hay horarios libres para este partido</strong>
                 <p className="pm-alert-copy">
                   {esPartidoEliminatoria
-                    ? 'Todas las canchas del club están 100% ocupadas en los horarios correspondientes a esta fase.'
-                    : 'En todos los turnos del torneo las canchas están 100% ocupadas por otros partidos o alguna de las dos parejas ya tiene un partido asignado en simultáneo.'}
+                    ? 'Las canchas están ocupadas en todos los horarios de esta fase.'
+                    : 'En todos los horarios las canchas están ocupadas o alguna de las dos parejas ya juega otro partido.'}
                 </p>
                 {!esPartidoEliminatoria && (
                   <div className="pm-block">
@@ -503,109 +344,62 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                       to={`/admin/torneos/${torneoId}/categorias/${partido.categoriaId || partido.categoria?.id}/parejas`}
                       className="pm-inline-link"
                     >
-                      Ir a Gestionar Parejas de {partido.categoria?.nombre || 'la Categoría'} →
+                      Ir a las parejas de {partido.categoria?.nombre || 'la categoría'} →
                     </Link>
                   </div>
                 )}
               </div>
             </div>
-          ) : (esPartidoEliminatoria || esSinParejasDefinidas) ? (
-            /* Vista simplificada para Eliminatorias / Bracket o Partidos sin parejas confirmadas: lista plana directa sin Hero ficticio */
-            <div className="pm-stack">
-              <div className="pm-day-label">
-                Turnos con cancha libre para este partido ({slotsValidos.length}):
-              </div>
-              <div
-                className="pm-slot-group"
-              >
-                {esPartidoZona && viernesNormales.length > 0 && renderDiaBloques('Viernes', viernesNormales)}
-                {esPartidoZona && viernesMadrugada.length > 0 && renderDiaBloques('Sábado (madrugada)', viernesMadrugada)}
-                {esPartidoZona && sabadoNormales.length > 0 && renderDiaBloques('Sábado', sabadoNormales)}
-                {esPartidoZona && sabadoMadrugada.length > 0 && renderDiaBloques('Domingo (madrugada)', sabadoMadrugada)}
-                {esDieciseisavos && sabadoNormales.length > 0 && renderDiaBloques('Sábado (noche)', sabadoNormales)}
-                {esDieciseisavos && sabadoMadrugada.length > 0 && renderDiaBloques('Domingo (madrugada)', sabadoMadrugada)}
-                {domingoViables.length > 0 && renderDiaBloques('Domingo', domingoViables)}
-              </div>
-            </div>
           ) : (
-            /* Vista clásica para Partidos de Zona con ranking de cercanía y disponibilidad */
-            <div className="pm-stack pm-schedule-options">
-              {/* Sugerencia Óptima (Hero) */}
-              <div className="pm-recommendation">
-                <div
-                  className="pm-recommendation-label"
-                >
-                  <Star size={11} className="pm-brand-icon" /> Mejor opción
-                </div>
-                {renderOptionRow(heroOption, true)}
+            <div className="pm-asignar">
+              <div className="pm-asignar-recomendado">
+                <p className="pc-horarios-recomendado-texto">
+                  <Star size={16} aria-hidden="true" />
+                  <span className="pc-horarios-recomendado-cuerpo">
+                    <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)}
+                      {conParejas && recomendado.estado === 'ENTRA' && ' · entra en el horario de las dos parejas'}</span>
+                    {conParejas && recomendado.estado !== 'ENTRA' && (
+                      <span className="pc-horarios-recomendado-detalle">{pedido(recomendado)}</span>
+                    )}
+                  </span>
+                </p>
+                <button type="button" className="pm-button pm-primary" disabled={ocupado} onClick={() => handleAsignar(recomendado)}>
+                  {guardandoSlotId === recomendado.slotId
+                    ? <><Loader2 size={14} className="pm-spinner" aria-hidden="true" /> Asignando…</>
+                    : 'Asignar este horario'}
+                </button>
               </div>
-
-              {/* Alternativas (#2..N) */}
-              {restoAlternativasCount > 0 && (
-                <div>
-                  <button
-                    type="button"
-
-                    className="pm-text-button"
-                    onClick={() => setShowAlternativas((prev) => !prev)}
-                  >
-                    {showAlternativas ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                    <span>
-                      {showAlternativas
-                        ? 'Ocultar alternativas'
-                        : `Ver alternativas (${alternativas.length})`}
-                    </span>
-                  </button>
-
-                  {showAlternativas && (
-                    <div className="pm-stack">
-                      {alternativas.map((opt) => renderOptionRow(opt, false))}
+              <button type="button" className="pc-horarios-plegar pc-horarios-ver-todos" aria-expanded={verTodos}
+                aria-controls="pm-asignar-grilla" disabled={ocupado} onClick={() => { setVerTodos((v) => !v); setSeleccion(null); }}>
+                <ChevronRight size={14} aria-hidden="true" className={verTodos ? 'is-open' : ''} />
+                <span>Ver todos los horarios ({opciones.length})</span>
+              </button>
+              {verTodos && (
+                <div id="pm-asignar-grilla">
+                  <GrillaHorariosPartido opciones={opciones} seleccion={seleccion} onSeleccion={setSeleccion} describir={pedido}
+                    nombres={nombres} fijando={ocupado} onCambioDia={() => setSeleccion(null)}
+                    recomendadoClave={recomendado.clave} sinRecomendado soloDiasConHorarios />
+                  {seleccion && (
+                    <div className="pm-asignar-confirmacion" role="group" aria-label="Confirmar horario">
+                      <p className="pc-manual-copy" role="status" aria-atomic="true">{formatSlotCorto(seleccion.slotId)} · {pedido(seleccion)}</p>
+                      <div className="pc-manual-actions">
+                        <button type="button" className="pc-manual-button" disabled={ocupado} onClick={() => handleAsignar(seleccion)}>
+                          {guardandoSlotId === seleccion.slotId ? 'Asignando…' : 'Confirmar'}
+                        </button>
+                        <button type="button" className="pc-manual-button" disabled={ocupado} onClick={() => setSeleccion(null)}>Cancelar</button>
+                      </div>
                     </div>
                   )}
                 </div>
               )}
-
-              {/* Salida de último recurso: Grilla completa del club (Accionable en 1-click) */}
-              <div className="pm-other-slots">
-                <button
-                  type="button"
-
-                  className="pm-text-button"
-                  onClick={() => setShowTodosViables((prev) => !prev)}
-                >
-                  {showTodosViables
-                    ? 'Ocultar todos los turnos del club'
-                    : `+ Ver todos los turnos con cancha libre del club (${slotsValidos.length})`}
-                </button>
-
-                {showTodosViables && (
-                  <div
-                    className="pm-slot-group"
-                  >
-                    {viernesNormales.length > 0 && renderDiaBloques('Viernes', viernesNormales)}
-                    {viernesMadrugada.length > 0 && renderDiaBloques('Sábado (madrugada)', viernesMadrugada)}
-                    {sabadoNormales.length > 0 && renderDiaBloques('Sábado', sabadoNormales)}
-                    {sabadoMadrugada.length > 0 && renderDiaBloques('Domingo (madrugada)', sabadoMadrugada)}
-                    {domingoViables.length > 0 && renderDiaBloques('Domingo', domingoViables)}
-                  </div>
-                )}
-              </div>
             </div>
           )}
-          </div>
-        )}
-
         </div>
-        {/* Footer */}
         <div className="pm-footer">
           {advertenciasAsignacion ? (
-            <button type="button" className="pm-button pm-primary" onClick={handleCerrarModal}>
-              Entendido
-            </button>
+            <button type="button" className="pm-button pm-primary" onClick={handleCerrarModal}>Entendido</button>
           ) : (
-            <button type="button" className="pm-button" onClick={handleCerrarModal} disabled={Boolean(guardandoSlotId)}>
-              Cerrar
-            </button>
+            <button type="button" className="pm-button" onClick={handleCerrarModal} disabled={ocupado}>Cerrar</button>
           )}
         </div>
       </div>

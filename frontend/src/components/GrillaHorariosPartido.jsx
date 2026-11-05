@@ -3,10 +3,20 @@ import { ChevronRight, Star } from 'lucide-react';
 import { formatSlotCorto } from '../utils/dateUtils';
 import { agruparInicios, detallePorPareja, esSecundario, filasVisibles, moverCelda } from './grillaHorarios';
 
-export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion, describir, fijando, onCambioDia, nombres = new Map(), esDefinicion = false }) {
+const NOMBRE_DIA = { Viernes: 'viernes', Sabado: 'sábado', Domingo: 'domingo' };
+
+/**
+ * Grilla de horarios de un partido. Para reusarla fuera del pre-check (Día de torneo):
+ * - recomendadoClave: el recomendado lo decide quien la usa (si no, se calcula como en el pre-check).
+ * - sinRecomendado: no muestra su propia línea de recomendado ni la pliega: quien la usa arma esa parte.
+ * - soloDiasConHorarios: oculta las jornadas sin ningún horario.
+ */
+export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion, describir, fijando, onCambioDia, nombres = new Map(), esDefinicion = false,
+  recomendadoClave = null, sinRecomendado = false, soloDiasConHorarios = false }) {
   const id = useId();
   const raiz = useRef(null);
-  const dias = agruparInicios(opciones);
+  const dias = agruparInicios(opciones).filter((d) => !soloDiasConHorarios ||
+    d.filas.some((f) => f.celdas.some((o) => o && o.estado !== 'NO_DISPONIBLE')));
   const [diaActivo, setDiaActivo] = useState(() => dias.find((d) => d.filas.length)?.dia || 'Viernes');
   const [foco, setFoco] = useState({});
   const [desplegados, setDesplegados] = useState({});
@@ -14,7 +24,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
   const cambiarDia = (dia) => { setDiaActivo(dia); onCambioDia(); };
   const enfocar = (opcion) => raiz.current?.querySelector(`[data-clave="${opcion.clave}"]`)?.focus();
   const disponibles = opciones.filter((o) => o.estado !== 'NO_DISPONIBLE');
-  const recomendado = [...disponibles].sort((a, b) =>
+  const recomendado = disponibles.find((o) => o.clave === recomendadoClave) || [...disponibles].sort((a, b) =>
     Number(b.estado === 'ENTRA') - Number(a.estado === 'ENTRA') ||
     (a.diasNuevos ?? 0) - (b.diasNuevos ?? 0) ||
     (a.minutosAmpliacion ?? 0) - (b.minutosAmpliacion ?? 0) ||
@@ -40,7 +50,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
   );
   // Sin ningún horario que entre ni que pida a una sola pareja, la grilla no ayuda a decidir: queda plegada.
   const hayUtiles = disponibles.some((o) => o.estado === 'ENTRA' || o.estado === 'PEDIR_1');
-  const grillaVisible = hayUtiles || verTodos;
+  const grillaVisible = sinRecomendado || hayUtiles || verTodos;
   const elegirRecomendado = () => {
     const dia = recomendado.slotId.split('-')[0];
     setDiaActivo(dia);
@@ -50,7 +60,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
 
   return (
     <div className="pc-horarios" ref={raiz}>
-      {hayUtiles ? (
+      {sinRecomendado ? null : hayUtiles ? (
         <button type="button" className="pc-horarios-recomendado" disabled={fijando} onClick={elegirRecomendado}>
           <Star size={16} aria-hidden="true" />
           {textoRecomendado}
@@ -128,7 +138,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
                 : !hayHorarios ? <p className="pc-manual-copy">Sin horarios posibles en esta jornada.</p> : (
                 <>
                   {visibles.length > 0 && (
-                    <div role="grid" id={`${id}-grilla-${dia}`} aria-label={`Inicios del ${dia === 'Viernes' ? 'viernes' : 'sábado'}`}
+                    <div role="grid" id={`${id}-grilla-${dia}`} aria-label={`Inicios del ${NOMBRE_DIA[dia] || dia}`}
                       aria-colcount={4} aria-describedby={`${id}-ayuda`}>
                       {visibles.map(renderizarFila)}
                     </div>

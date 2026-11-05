@@ -1,5 +1,9 @@
+const ETIQUETA_DIA = { Viernes: 'vie', Sabado: 'sáb', Domingo: 'dom' };
+
+/** Inicios por jornada: viernes y sábado siempre; el domingo solo si hay inicios ese día (partidos del cuadro). */
 export function agruparInicios(opciones) {
-  return ['Viernes', 'Sabado'].map((dia) => {
+  const conDomingo = opciones.some((o) => o.slotId.startsWith('Domingo-'));
+  return ['Viernes', 'Sabado', ...(conDomingo ? ['Domingo'] : [])].map((dia) => {
     const horas = new Map();
     for (const opcion of [...opciones].sort((a, b) => a.fechaHora.localeCompare(b.fechaHora))) {
       const [jornada, hora] = opcion.slotId.split('-');
@@ -8,7 +12,7 @@ export function agruparInicios(opciones) {
       if (!horas.has(hh)) horas.set(hh, { hora: hh, celdas: [null, null, null, null] });
       horas.get(hh).celdas[Number(mm) / 15] = opcion;
     }
-    return { dia, etiqueta: dia === 'Viernes' ? 'vie' : 'sáb', filas: [...horas.values()] };
+    return { dia, etiqueta: ETIQUETA_DIA[dia], filas: [...horas.values()] };
   });
 }
 
@@ -48,7 +52,7 @@ export function filasVisibles(filas, { conSecundarios = true } = {}) {
   return visibles;
 }
 
-const DIA_CORTO = { Viernes: 'vie', Sabado: 'sáb' };
+const DIA_CORTO = { Viernes: 'vie', Sabado: 'sáb', Domingo: 'dom' };
 const horaCorta = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return m ? `${h}:${String(m).padStart(2, '0')}` : `${h}`; };
 
 /** "2 h", "45 min", "1 h 15 min". */

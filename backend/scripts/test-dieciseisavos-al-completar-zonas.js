@@ -24,6 +24,7 @@ const prisma = require('../src/lib/prisma');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const zonaService = require('../src/services/zona.service');
 const partidoService = require('../src/services/partido.service');
+const organizadorService = require('../src/services/organizador.service');
 const { generarEliminatoria } = require('../src/services/faseEliminatoria.service');
 const scheduler = require('../src/services/eliminatoriaScheduler.service');
 const { parseFechaLocal } = require('../src/utils/dateUtils');
@@ -119,6 +120,11 @@ async function d1_programa_al_completar() {
   const r32Antes = await dieciseisavos(A);
   if (r32Antes.length !== 8 || !r32Antes.every(sinHorario)) throw new Error('El escenario no dejó los 8 dieciseisavos sin horario');
   const antes = await todos(ctx.torneo.id);
+  // La bandeja de pendientes trae los partidos de la zona (para el modal de asignar horario).
+  const bandeja = await organizadorService.getPartidosSinHorarioTorneo(ctx.org.id, ctx.torneo.id);
+  const deZona = bandeja.find((p) => p.id === destinos[0].id);
+  if (deZona?.zona?.partidos?.length !== 3) problemas.push(`La bandeja trae ${deZona?.zona?.partidos?.length} partidos de la zona, no 3`);
+  else if (!deZona.zona.partidos.every((p) => p.pareja1?.jugador1 && p.pareja2?.jugador1)) problemas.push('Faltan los nombres de las parejas de la zona');
 
   const primero = await partidoService.asignarHorarioManual(ctx.org.id, destinos[0].id, destinos[0]);
   if (primero.dieciseisavosProgramados !== 0) problemas.push(`Con un partido de zona pendiente informó ${primero.dieciseisavosProgramados}`);

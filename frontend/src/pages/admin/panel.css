@@ -487,6 +487,16 @@ body:has(.panel) {
 .panel .pm-current-time { display: flex; align-items: center; gap: var(--e-2); color: var(--tinta-2); font-size: var(--t-13); }
 .panel .pm-match-notice { display: flex; align-items: flex-start; gap: var(--e-2); width: 100%; }
 .panel .pm-schedule .pm-body > .pm-alert { margin-bottom: var(--e-3); }
+/* Asignar horario (Día de torneo): mismo armado que el pre-check, sin cancha. */
+.panel .pm-schedule .pc-horarios-parejas { margin: var(--e-2) 0 0; }
+.panel .pm-schedule .pc-propuesta-partidos { margin: var(--e-3) 0 0; }
+.panel .pm-asignar { display: grid; gap: var(--e-3); min-width: 0; margin-top: var(--e-4); }
+.panel .pm-asignar-recomendado { display: grid; gap: var(--e-3); justify-items: start; min-width: 0; }
+.panel .pm-asignar-recomendado .pm-button { min-height: 44px; max-width: 100%; white-space: normal; }
+.panel .pm-asignar-confirmacion { display: grid; gap: var(--e-2); margin-top: var(--e-3); padding: var(--e-3); border-radius: var(--r-control); background: var(--superficie-2); }
+@media (max-width: 767.98px) {
+  .panel .pm-asignar-recomendado { justify-items: stretch; }
+}
 .panel .pm-day-block { min-width: 0; }
 .panel .pm-day-label { font-size: var(--t-13); font-weight: 600; color: var(--tinta-2); margin-bottom: var(--e-2); }
 .panel .pm-block-divider { border-top: 1px dashed var(--linea-fuerte); margin-block: var(--e-1); }
