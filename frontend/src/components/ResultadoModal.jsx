@@ -182,9 +182,9 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
   const p2Name = partido.pareja2 ? `${partido.pareja2.jugador1} / ${partido.pareja2.jugador2}` : 'Pareja 2';
 
   const getTitle = () => {
-    if (isFinished) return 'Editar Resultado';
-    if (isEnCurso) return 'Actualizar Partido';
-    return 'Cargar Resultado';
+    if (isFinished) return 'Editar resultado';
+    if (isEnCurso) return 'Actualizar resultado';
+    return 'Cargar resultado';
   };
 
   const getSubtitle = () => {
@@ -311,7 +311,7 @@ export default function ResultadoModal({ partido, onClose, onSuccess, onSaved })
                 <div key={idx} className={`pm-set${isDisabled ? ' is-disabled' : ''}`}>
                   <div className="pm-set-heading">
                     <span className="pm-set-label">
-                      Set {idx + 1} <span className="pm-set-note">{idx === 2 && isSet3DisabledByWin && '(No necesario)'}</span>
+                      Set {idx + 1}
                     </span>
                   </div>
 

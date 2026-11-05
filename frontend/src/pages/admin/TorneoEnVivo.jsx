@@ -29,6 +29,9 @@ import ResultadoModal from '../../components/ResultadoModal';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { formatDiaHorario, formatDiaNombre, formatHora, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
 
+/** "7ma Damas · Zona C" o "7ma · Dieciseisavos de Final". */
+const contextoPartido = (p) => [p.categoria, p.zona || p.fase].filter(Boolean).join(' · ');
+
 export default function TorneoEnVivo() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -342,6 +345,28 @@ export default function TorneoEnVivo() {
       return info?.key === activeTabDay;
     });
   }, [data?.proximosPartidos, esModoTodo, activeTabDay, horariosClub]);
+
+  // Próximos agrupados por hora. En la pestaña de un día, la madrugada (hasta las 6) cuenta para ese día y
+  // se aclara ("01:30 · madrugada del sábado"); en "Todo el torneo" el título lleva el día ("vie 15:00").
+  const proximosPorHora = useMemo(() => {
+    const grupos = [];
+    for (const p of proximosFiltrados) {
+      const clave = p.fechaHora ? new Date(p.fechaHora).toISOString() : 'sin-horario';
+      let grupo = grupos.find((g) => g.clave === clave);
+      if (!grupo) {
+        const hora = p.fechaHora ? formatHora(p.fechaHora) : 'Sin horario';
+        const esMadrugada = p.fechaHora && Number(hora.slice(0, 2)) < 6;
+        const diaReal = p.fechaHora ? formatDiaNombre(p.fechaHora) : '';
+        const titulo = !p.fechaHora ? hora
+          : esModoTodo ? `${diaReal.slice(0, 3).toLowerCase()} ${hora}`
+            : esMadrugada ? `${hora} · madrugada del ${diaReal.toLowerCase()}` : hora;
+        grupo = { clave, titulo, partidos: [] };
+        grupos.push(grupo);
+      }
+      grupo.partidos.push(p);
+    }
+    return grupos;
+  }, [proximosFiltrados, esModoTodo]);
 
   // Partidos finalizados filtrados
   const finalizadosFiltrados = useMemo(() => {
@@ -1167,150 +1192,77 @@ export default function TorneoEnVivo() {
         </div>
       )}
 
-      {/* ─── 6. Resumen Estadístico ───────────────────────────────── */}
-      <div
-        className="dt-stats"
-      >
-        <div
-          className="dt-stat"
-        >
-          <div className="dt-stat-value">{resumenContextual.totalPartidos}</div>
-          <div className="dt-muted">
-            {esModoTodo ? 'Total Torneo' : `Partidos ${activeJornadaInfo?.diaNombre || ''}`}
-          </div>
-        </div>
-
-        <div
-          className="dt-stat dt-stat-live"
-        >
-          <div className="dt-stat-value">
-            {resumenContextual.enCurso}
-          </div>
-          <div className="dt-muted">En juego</div>
-        </div>
-
-        <div
-          className="dt-stat"
-        >
-          <div className="dt-stat-value">
-            {resumenContextual.pendientesConHorario}
-          </div>
-          <div className="dt-muted">Programados</div>
-        </div>
-
-        <div
-          className="dt-stat"
-        >
-          <div className="dt-stat-value">
-            {resumenContextual.finalizados}
-          </div>
-          <div className="dt-muted">Finalizados</div>
-        </div>
-
+      {/* ─── 6. Resumen ───────────────────────────────────────────── */}
+      <p className="dt-resumen">
+        <span>{resumenContextual.totalPartidos || 0} {resumenContextual.totalPartidos === 1 ? 'partido' : 'partidos'}</span>
+        <span aria-hidden="true"> · </span>
+        <span className="dt-resumen-vivo">{resumenContextual.enCurso || 0} en juego</span>
+        <span aria-hidden="true"> · </span>
+        <span>{resumenContextual.finalizados || 0} {resumenContextual.finalizados === 1 ? 'finalizado' : 'finalizados'}</span>
         {resumenContextual.pendientesSinHorario > 0 && (
-          <div
-            className="dt-stat dt-stat-danger"
-          >
-            <div className="dt-stat-value">
-              {resumenContextual.pendientesSinHorario}
-            </div>
-            <div className="dt-muted">Sin horario</div>
-          </div>
+          <>
+            <span aria-hidden="true"> · </span>
+            <span className="dt-resumen-alerta">{resumenContextual.pendientesSinHorario} sin horario</span>
+          </>
         )}
-      </div>
+      </p>
 
       {/* ─── 7. Partidos en Curso y Próximos ──────────────────────── */}
-      <div
-        className={`dt-match-columns${partidosEnCursoFiltrados.length === 0 ? ' is-empty' : ''}`}
-      >
-        {/* Partidos en Juego */}
-        <div>
-          <h3
-            className={`dt-section-title dt-live-title${partidosEnCursoFiltrados.length === 0 ? ' is-empty' : ''}`}
-          >
-            <Flame
-              size={partidosEnCursoFiltrados.length === 0 ? 16 : 18}
-              className={partidosEnCursoFiltrados.length === 0 ? 'dt-muted-icon' : 'dt-live-icon'}
-            />
-            Partidos en juego ({partidosEnCursoFiltrados.length})
-          </h3>
-
-          {partidosEnCursoFiltrados.length > 0 && (
+      <div className={`dt-match-columns${partidosEnCursoFiltrados.length === 0 ? ' is-empty' : ''}`}>
+        {/* Partidos en juego: solo si hay alguno (en el celular quedan arriba de próximos) */}
+        {partidosEnCursoFiltrados.length > 0 && (
+          <div>
+            <h3 className="dt-section-title dt-live-title">
+              <Flame size={18} className="dt-live-icon" />
+              Partidos en juego ({partidosEnCursoFiltrados.length})
+            </h3>
             <div className="dt-match-list">
               {partidosEnCursoFiltrados.map((p) => {
                 const sets = p.sets || [];
                 const resultadoStr = sets.length > 0
                   ? sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')
                   : null;
-
                 return (
-                  <div
-                    key={p.id}
-                    className="dt-match-card dt-current-match"
-                  >
-                    <div className="dt-match-top">
-                      <div className="dt-match-badges">
-                        <span
-                          className="dt-badge dt-neutral"
-                        >
-                          Cancha {p.canchaNumero}
-                        </span>
-                        {resultadoStr && (
-                          <span
-                            className="dt-badge dt-neutral"
-                          >
-                            Parcial: {resultadoStr}
-                          </span>
-                        )}
-                      </div>
-                      <span className="dt-muted">
-                        {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''}
-                      </span>
+                  <div key={p.id} className="dt-match-card dt-compact dt-current-match">
+                    <div className="dt-compact-info">
+                      <p className="dt-pair-names">
+                        <span className="dt-pair-name">{p.pareja1}</span>{' '}
+                        <span className="dt-versus">vs</span>{' '}
+                        <span className="dt-pair-name">{p.pareja2}</span>
+                      </p>
+                      <p className="dt-muted">{contextoPartido(p)}</p>
+                      <p className="dt-muted dt-compact-extra">
+                        Empezó a las <span className="dt-num">{formatHora(p.horaInicio)}</span>
+                        {resultadoStr && <> · Parcial <span className="dt-num">{resultadoStr}</span></>}
+                      </p>
                     </div>
-
-                    <div className="dt-pair-name">
-                      {p.pareja1}
-                    </div>
-                    <div className="dt-versus">vs</div>
-                    <div className="dt-pair-name">
-                      {p.pareja2}
-                    </div>
-
-                    <div
-                      className="dt-match-footer"
-                    >
-                      <span>
-                        Inicio: {formatHora(p.horaInicio)}
-                      </span>
-                      <div className="dt-actions">
-                        <button
-                          type="button"
-                          onClick={() => handleCambiarEstado(p.id, 'PENDIENTE')}
-                          disabled={updatingPartidoId === p.id}
-                          title="Revertir a Pendiente (sacar de la cancha)"
-                          className="dt-button"
-                        >
-                          <RotateCcw size={13} />
-                          Revertir
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
-                          className="dt-button dt-button-blue"
-                        >
-                          <ClipboardList size={14} />
-                          {sets.length > 0 ? 'Actualizar resultado' : 'Cargar resultado'}
-                        </button>
-                      </div>
+                    <div className="dt-card-actions">
+                      <button
+                        type="button"
+                        onClick={() => handleCambiarEstado(p.id, 'PENDIENTE')}
+                        disabled={updatingPartidoId === p.id}
+                        className="dt-button"
+                      >
+                        <RotateCcw size={13} aria-hidden="true" />
+                        Quitar de en juego
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
+                        className="dt-button dt-button-blue"
+                      >
+                        <ClipboardList size={14} aria-hidden="true" />
+                        {sets.length > 0 ? 'Actualizar resultado' : 'Cargar resultado'}
+                      </button>
                     </div>
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Próximos Partidos */}
+        {/* Próximos partidos, agrupados por hora */}
         <div>
           <div className="dt-section-heading">
             <h3 className="dt-section-title">
@@ -1320,79 +1272,59 @@ export default function TorneoEnVivo() {
           </div>
 
           {proximosFiltrados.length === 0 ? (
-            <div
-              className="dt-empty"
-            >
+            <div className="dt-empty">
               {esDomingo
                 ? 'Los partidos del domingo se agendarán automáticamente cuando se completen las zonas y se asignen los clasificados.'
                 : 'No hay partidos programados para esta jornada.'}
             </div>
           ) : (
-            <div className="dt-match-list">
-              {proximosFiltrados.map((p) => (
-                <div key={p.id} className="dt-match-card dt-upcoming-match">
-                  <div className="dt-upcoming-main">
-                    <div className="dt-grow">
-                      <div
-                        className="dt-pair-names"
-                      >
-                        <span className="dt-pair-name">{p.pareja1}</span>
-                        <span className="dt-versus">vs</span>
-                        <span className="dt-pair-name">{p.pareja2}</span>
-                      </div>
-                      <div className="dt-muted">
-                        {p.categoria} {p.zona ? `• ${p.zona}` : p.fase ? `• ${p.fase}` : ''}
-                      </div>
-                    </div>
-
-                    <div className="dt-match-schedule">
-                      <div
-                        className="dt-badge dt-neutral"
-                      >
-                        Cancha {p.canchaNumero}
-                      </div>
-                      <div className="dt-match-time">
-                        {formatDiaHorario(p.fechaHora)}
-                      </div>
-                      {(p.minutosDespuesDelCierre || 0) > 0 && (
-                        <div
-                          title="Agendado después del cierre del club por Modo Lluvia"
-                          className="dt-badge dt-after-hours"
-                        >
-                          <Moon size={11} />
-                          +{p.minutosDespuesDelCierre} min tras cierre
+            <div className="dt-hour-groups">
+              {proximosPorHora.map((grupo) => (
+                <section key={grupo.clave} className="dt-hour-group" aria-label={grupo.titulo}>
+                  <h4 className="dt-hour-title">{grupo.titulo}</h4>
+                  <div className="dt-match-list">
+                    {grupo.partidos.map((p) => (
+                      <div key={p.id} className="dt-match-card dt-compact dt-upcoming-match">
+                        <div className="dt-compact-info">
+                          <p className="dt-pair-names">
+                            <span className="dt-pair-name">{p.pareja1}</span>{' '}
+                            <span className="dt-versus">vs</span>{' '}
+                            <span className="dt-pair-name">{p.pareja2}</span>
+                          </p>
+                          <p className="dt-muted">{contextoPartido(p)}</p>
+                          {(p.minutosDespuesDelCierre || 0) > 0 && (
+                            <p className="dt-badge dt-after-hours" title="Agendado después del cierre del club por Modo Lluvia">
+                              <Moon size={11} aria-hidden="true" />
+                              +{p.minutosDespuesDelCierre} min tras cierre
+                            </p>
+                          )}
                         </div>
-                      )}
-                    </div>
+                        <div className="dt-card-actions">
+                          {/* Marcar en juego: solo con las dos parejas definidas */}
+                          {p.pareja1Id && p.pareja2Id && (
+                            <button
+                              type="button"
+                              onClick={() => handleCambiarEstado(p.id, 'EN_CURSO')}
+                              disabled={updatingPartidoId === p.id}
+                              className="dt-button dt-play-button"
+                            >
+                              <Play size={13} fill="currentColor" aria-hidden="true" />
+                              <span>En juego</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
+                            className="dt-button"
+                          >
+                            <ClipboardList size={14} aria-hidden="true" />
+                            <span>Resultado</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-
-                  <div className="dt-card-actions">
-                    {/* Botón iniciar partido (Marcar En Juego): solo con las dos parejas definidas */}
-                    {p.pareja1Id && p.pareja2Id && (
-                      <button
-                        type="button"
-                        onClick={() => handleCambiarEstado(p.id, 'EN_CURSO')}
-                        disabled={updatingPartidoId === p.id}
-                        title="Marcar como En Juego (ingresó a la cancha)"
-                        className="dt-button dt-play-button"
-                      >
-                        <Play size={13} fill="currentColor" />
-                        <span>En juego</span>
-                      </button>
-                    )}
-
-                    {/* Botón cargar resultado inline */}
-                    <button
-                      type="button"
-                      onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
-                      title="Cargar resultado"
-                      className="dt-button"
-                    >
-                      <ClipboardList size={14} />
-                      <span>Resultado</span>
-                    </button>
-                  </div>
-                </div>
+                </section>
               ))}
             </div>
           )}
@@ -1405,19 +1337,18 @@ export default function TorneoEnVivo() {
           <button
             type="button"
             onClick={() => setFinalizadosExpanded((prev) => !prev)}
+            aria-expanded={finalizadosExpanded}
             className={`dt-finished-toggle${finalizadosExpanded ? ' is-expanded' : ''}`}
           >
             <span className="dt-section-title">
               <Trophy size={18} className="dt-muted-icon" />
-              Partidos finalizados {activeJornadaInfo ? `(${activeJornadaInfo.diaNombre})` : ''} ({finalizadosFiltrados.length})
+              {activeJornadaInfo ? `Finalizados del ${activeJornadaInfo.diaNombre.toLowerCase()}` : 'Finalizados'} ({finalizadosFiltrados.length})
             </span>
             {finalizadosExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
 
           {finalizadosExpanded && (
-            <div
-              className="dt-finished-list"
-            >
+            <div className="dt-finished-list">
               {finalizadosFiltrados.map((p, idx) => {
                 const sets = p.sets || [];
                 const resultadoStr = sets.length > 0
@@ -1434,40 +1365,25 @@ export default function TorneoEnVivo() {
                   >
                     <div className="dt-grow">
                       <div className="dt-pair-names dt-finished-names">
-                        <span
-                          className={`dt-pair-name${isP1Winner ? ' is-winner' : ' is-loser'}`}
-                        >
-                          {p.pareja1}
-                        </span>
-                        <span className="dt-versus">vs</span>
-                        <span
-                          className={`dt-pair-name${isP2Winner ? ' is-winner' : ' is-loser'}`}
-                        >
-                          {p.pareja2}
-                        </span>
+                        <span className={`dt-pair-name${isP1Winner ? ' is-winner' : ' is-loser'}`}>{p.pareja1}</span>{' '}
+                        <span className="dt-versus">vs</span>{' '}
+                        <span className={`dt-pair-name${isP2Winner ? ' is-winner' : ' is-loser'}`}>{p.pareja2}</span>
                       </div>
                       <div className="dt-muted">
-                        {p.categoria}{p.zona ? ` • ${p.zona}` : p.fase ? ` • ${p.fase}` : ''}
-                        {p.canchaNumero && ` • C${p.canchaNumero}`}
-                        {p.fechaHora && ` • ${formatDiaHorario(p.fechaHora)}`}
+                        {contextoPartido(p)}
+                        {p.fechaHora && <> · <span className="dt-num">{formatDiaHorario(p.fechaHora)}</span></>}
                       </div>
                     </div>
 
                     <div className="dt-finished-actions">
-                      <div
-                        className="dt-score"
-                      >
-                        {resultadoStr}
-                      </div>
-
-                      {/* Editar resultado finalizado */}
+                      <div className="dt-score">{resultadoStr}</div>
                       <button
                         type="button"
                         onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
-                        title="Editar resultado"
-                        className="dt-button dt-icon-button"
+                        className="dt-button"
                       >
-                        <ClipboardList size={14} />
+                        <ClipboardList size={14} aria-hidden="true" />
+                        Editar
                       </button>
                     </div>
                   </div>
