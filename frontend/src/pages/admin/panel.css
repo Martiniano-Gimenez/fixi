@@ -1144,6 +1144,8 @@ body:has(.panel) {
 .panel .pc-info-header > svg { flex-shrink: 0; color: var(--marca); }
 .panel .pc-emergency-lista { margin: var(--e-3) 0; padding: var(--e-3) var(--e-4); border-radius: var(--r-control); background: var(--superficie-2); color: var(--tinta); }
 .panel .pc-emergency-footer .pm-button { min-height: 44px; }
+.panel .pc-emergency .pm-header { justify-content: flex-start; align-items: center; }
+.panel .pc-emergency .pc-summary-list { margin: 0; padding-left: 0; list-style: none; }
 @media (max-width: 767.98px) {
   .panel .pc-emergency-footer { flex-direction: column-reverse; align-items: stretch; }
   .panel .pc-emergency-footer .pm-button { width: 100%; max-width: 100%; white-space: normal; }
