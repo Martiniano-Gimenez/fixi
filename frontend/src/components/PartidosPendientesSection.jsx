@@ -242,7 +242,7 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                             onClick={() => setPartidoParaAsignar(p)}
                           >
                             <Clock size={13} />
-                            Asignar horario y cancha →
+                            Asignar horario →
                           </button>
                         </div>
                       </div>
