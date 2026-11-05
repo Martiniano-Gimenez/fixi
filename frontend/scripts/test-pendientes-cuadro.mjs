@@ -23,6 +23,8 @@ try {
     { id: 's', categoria, zona: null, faseEliminatoria: { id: 'g', nombre: 'Octavos de Final', ronda: 16 }, slotsViablesCount: 4,
       pareja1: null, pareja2: null, origenPareja1: null, origenPareja2: null },
   ];
+  // Como llega del backend: los del cuadro (sin zona) primero.
+  pendientes.push(pendientes.shift());
   globalThis.fetch = async (url) => {
     if (String(url).endsWith('/partidos-sin-horario')) return new Response(JSON.stringify(pendientes));
     throw Error(`Petición no interceptada ${url}`);
@@ -36,6 +38,7 @@ try {
     fase: t.querySelector('.pm-badge').textContent.trim(),
     parejas: [...t.querySelector('.pm-pair-names').children].map((e) => e.textContent.trim()).join(' '),
   }));
+  assert.deepEqual(tarjetas.map((t) => t.fase), ['Zona F', 'Dieciseisavos', 'Octavos'], 'Primero los de zona, después el cuadro');
   const zona = tarjetas.find((t) => t.fase === 'Zona F');
   assert.ok(zona, 'El partido de zona sigue mostrando su zona');
   assert.equal(zona.parejas, 'Coria / Giuliani vs Mendoza / Ávalos');

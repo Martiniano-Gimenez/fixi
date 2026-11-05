@@ -66,6 +66,14 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
     // 2. Mayor cantidad de partidos críticos (<=1 turno)
     // 3. Mayor cantidad total de partidos pendientes
     // 4. Orden alfabético por nombre
+    // Dentro de cada categoría: primero los partidos de zona (por zona), después los del cuadro por fase.
+    for (const g of map.values()) {
+      g.partidos.sort((a, b) =>
+        Number(Boolean(a.faseEliminatoriaId || a.faseEliminatoria)) - Number(Boolean(b.faseEliminatoriaId || b.faseEliminatoria)) ||
+        (b.faseEliminatoria?.ronda || 0) - (a.faseEliminatoria?.ronda || 0) ||
+        (a.zona?.nombre || '').localeCompare(b.zona?.nombre || '', 'es', { numeric: true }));
+    }
+
     const grupos = Array.from(map.values()).sort((a, b) => {
       if (a.minSlotsViables !== b.minSlotsViables) {
         return a.minSlotsViables - b.minSlotsViables;
