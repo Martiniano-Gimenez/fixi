@@ -511,6 +511,7 @@ body:has(.panel) {
 /* Pendientes: las acciones de cada partido son secundarias. */
 .panel .pm-pending { min-width: 0; padding: var(--e-5); border-radius: var(--r-panel); background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra-2); font: var(--t-14)/1.5 var(--f); font-variant-numeric: tabular-nums; }
 .panel .pm-pending-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--e-3); padding-bottom: var(--e-3); margin-bottom: var(--e-4); border-bottom: 1px solid var(--linea); }
+.panel .pm-pending-aviso { margin: 0 0 var(--e-3); padding: var(--e-3) var(--e-4); border-radius: var(--r-control); background: var(--marca-suave); color: var(--tinta); font-size: var(--t-14); overflow-wrap: anywhere; }
 .panel .pm-heading-main { display: flex; align-items: flex-start; gap: var(--e-2); min-width: 0; }
 .panel .pm-heading-main > .pm-icon { color: var(--alerta); }
 .panel .pm-pending-title { margin: 0; font: 700 var(--t-17)/1.4 var(--f); color: var(--tinta); }

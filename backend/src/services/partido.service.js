@@ -884,11 +884,49 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
     },
   });
 
+  // Si con este horario la categoría completó los horarios de sus zonas, se programan sus dieciseisavos.
+  const dieciseisavosProgramados = partido.zonaId
+    ? await programarDieciseisavosAlCompletarZonas(organizadorId, partido.categoriaId, torneo.id)
+    : 0;
+
   return {
     message: 'Horario y cancha asignados correctamente.',
     partido: updated,
     advertencias,
+    dieciseisavosProgramados,
   };
+}
+
+const sinHorario = { OR: [{ fechaHora: null }, { canchaNumero: null }, { sinHorarioAsignado: true }] };
+
+/**
+ * Programa los dieciseisavos de una categoría cuando ya no le quedan partidos de zona sin horario.
+ * Usa programarHorariosEliminatorias, que respeta lo que ya tiene horario. Si falla, solo lo registra:
+ * el horario asignado a mano ya quedó guardado y los dieciseisavos siguen pendientes como antes.
+ * @returns {Promise<number>} cuántos dieciseisavos pasaron de sin horario a programados
+ */
+async function programarDieciseisavosAlCompletarZonas(organizadorId, categoriaId, torneoId) {
+  try {
+    const zonaSinHorario = await prisma.partido.count({
+      where: { categoriaId, zonaId: { not: null }, esBye: false, ...sinHorario },
+    });
+    if (zonaSinHorario > 0) return 0;
+    const dieciseisavos = { categoriaId, esBye: false, faseEliminatoria: { ronda: { gte: 32 } } };
+    const pendientes = await prisma.partido.findMany({ where: { ...dieciseisavos, ...sinHorario }, select: { id: true } });
+    if (!pendientes.length) return 0;
+    const scheduler = require('./eliminatoriaScheduler.service');
+    await prisma.$transaction(
+      (tx) => scheduler.programarHorariosEliminatorias(organizadorId, torneoId, categoriaId, tx),
+      { timeout: 60_000 },
+    );
+    const siguenPendientes = await prisma.partido.count({
+      where: { id: { in: pendientes.map((p) => p.id) }, ...sinHorario },
+    });
+    return pendientes.length - siguenPendientes;
+  } catch (err) {
+    console.error('[asignarHorarioManual] No se pudieron programar los dieciseisavos:', err.message);
+    return 0;
+  }
 }
 
 /**
@@ -1017,4 +1055,5 @@ module.exports = {
   asignarHorarioManual,
   updateEstado,
   verificarYAutoAsignarEliminatoria,
+  programarDieciseisavosAlCompletarZonas,
 };

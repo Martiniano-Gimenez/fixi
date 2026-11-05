@@ -9,6 +9,8 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
   const [error, setError] = useState('');
   const [partidoParaAsignar, setPartidoParaAsignar] = useState(null);
   const [expandedCategorias, setExpandedCategorias] = useState(new Set());
+  // Al completar los horarios de las zonas de una categoría, el backend programa sus dieciseisavos.
+  const [avisoDieciseisavos, setAvisoDieciseisavos] = useState('');
 
   const fetchPartidosPendientes = useCallback(async () => {
     if (!torneoId) return;
@@ -75,12 +77,16 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
     return grupos;
   }, [partidosPendientes]);
 
+  const aviso = avisoDieciseisavos ? (
+    <p className="pm-pending-aviso" role="status">{avisoDieciseisavos}</p>
+  ) : null;
+
   if (loading && partidosPendientes.length === 0) {
-    return null;
+    return aviso;
   }
 
   if (partidosPendientes.length === 0) {
-    return null;
+    return aviso;
   }
 
   const allExpanded = gruposCategorias.length > 0 && expandedCategorias.size === gruposCategorias.length;
@@ -107,6 +113,7 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
 
   return (
     <div className="pm-pending">
+      {aviso}
       {/* Encabezado */}
       <div
         className="pm-pending-header"
@@ -243,7 +250,13 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
           partido={partidoParaAsignar}
           torneoId={torneoId}
           onClose={() => setPartidoParaAsignar(null)}
-          onAssigned={() => {
+          onAssigned={(res) => {
+            const programados = res?.dieciseisavosProgramados || 0;
+            setAvisoDieciseisavos(programados > 0
+              ? programados === 1
+                ? `Se programó 1 dieciseisavos de ${res.partido?.categoria?.nombre || 'la categoría'}.`
+                : `Se programaron los ${programados} dieciseisavos de ${res.partido?.categoria?.nombre || 'la categoría'}.`
+              : '');
             fetchPartidosPendientes();
             if (onPartidosActualizados) onPartidosActualizados();
           }}

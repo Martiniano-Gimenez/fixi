@@ -73,6 +73,7 @@ const TEST_SUITES = [
   'test-armado-zonas-reparacion.js',
   'test-inscripcion-publica.js',
   'test-optimizador-precheck.js',
+  'test-dieciseisavos-al-completar-zonas.js',
 ];
 
 /**
