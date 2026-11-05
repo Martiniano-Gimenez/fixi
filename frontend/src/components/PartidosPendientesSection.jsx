@@ -3,6 +3,9 @@ import { api } from '../api/client';
 import { AlertTriangle, ChevronDown, ChevronUp, Clock, Layers, AlertCircle } from 'lucide-react';
 import AsignarHorarioModal from './AsignarHorarioModal';
 
+const FASE_POR_RONDA = { 64: 'Treintaidosavos', 32: 'Dieciseisavos', 16: 'Octavos', 8: 'Cuartos', 4: 'Semifinal', 2: 'Final' };
+const nombreFase = (fase) => (fase ? FASE_POR_RONDA[fase.ronda] || fase.nombre : null);
+
 export default function PartidosPendientesSection({ torneoId, torneoEstado, onPartidosActualizados }) {
   const [partidosPendientes, setPartidosPendientes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -190,8 +193,9 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
               {isExpanded && (
                 <div className="pm-pending-grid">
                   {grupo.partidos.map((p) => {
-                    const p1Nombre = p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : 'Por definirse';
-                    const p2Nombre = p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : 'Por definirse';
+                    // En los partidos del cuadro, sin parejas todavía, se muestra de dónde vienen ("2º Zona J").
+                    const p1Nombre = p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : p.origenPareja1 || 'Por definirse';
+                    const p2Nombre = p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : p.origenPareja2 || 'Por definirse';
                     const viables = p.slotsViablesCount ?? 0;
                     const esCritico = viables <= 1;
 
@@ -205,7 +209,7 @@ export default function PartidosPendientesSection({ torneoId, torneoEstado, onPa
                             <span
                               className="pm-badge"
                             >
-                              {p.zona?.nombre || 'Zona'}
+                              {p.zona?.nombre || nombreFase(p.faseEliminatoria) || 'Zona'}
                             </span>
                           </div>
 
