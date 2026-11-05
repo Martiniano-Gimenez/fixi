@@ -1147,6 +1147,8 @@ body:has(.panel) {
 .panel .pc-emergency-footer .pm-button { min-height: 44px; }
 .panel .pc-emergency .pm-header { justify-content: flex-start; align-items: center; }
 .panel .pc-emergency .pc-summary-list { margin: 0; padding-left: 0; list-style: none; }
+.panel .pc-emergency .pc-summary-list > li + li { margin-top: var(--e-2); }
+.panel .pc-emergency-nota { display: block; color: var(--tinta-2); font-size: var(--t-13); overflow-wrap: anywhere; }
 @media (max-width: 767.98px) {
   .panel .pc-emergency-footer { flex-direction: column-reverse; align-items: stretch; }
   .panel .pc-emergency-footer .pm-button { width: 100%; max-width: 100%; white-space: normal; }

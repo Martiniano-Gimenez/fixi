@@ -92,6 +92,10 @@ function crearServicioPropuestas({ prisma, preCheckSessions, planesCache, preChe
     const parejasPorId = new Map(estado.torneo.categorias.flatMap((c) => c.parejas).map((p) => [p.id, p]));
     for (const conflicto of respuesta.conflictos || []) {
       const categoria = sesion.categoriasPlan.find((c) => c.categoriaId === conflicto.categoriaId);
+      // Solo informa: con más de 16 clasificados el cuadro es de 32 y la categoría juega dieciseisavos
+      // (misma regla de potencias que generarEliminatoria).
+      const clasificados = (categoria?.zonas || []).reduce((n, z) => n + (z.clasifican || 0), 0);
+      conflicto.juegaDieciseisavos = clasificados > 16;
       for (const pendiente of conflicto.partidosSinHorario || []) {
         const zona = categoria?.zonas.find((z) => z.id === pendiente.zonaId);
         if (!zona) continue;

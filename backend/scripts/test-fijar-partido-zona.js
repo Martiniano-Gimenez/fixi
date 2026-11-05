@@ -345,6 +345,7 @@ async function testZonaNoManual() {
   assert.equal(conflicto.partidosZona.filter((p) => p.estado === 'FIJO').length, 2);
   assert.deepEqual(conflicto.parejasZona.map((p) => p.id).sort(), [...zona(c).parejaIds].sort());
   assert.ok(conflicto.parejasZona.every((p) => / \/ /.test(p.nombre)));
+  assert.equal(pre.conflictos.find((cat) => cat.categoriaId === c.cat.id).juegaDieciseisavos, false, 'Una zona sola no juega dieciseisavos');
   const previos = zona(c).partidos.filter((p) => !p.sinHorarioAsignado);
   assert.equal(previos.length, 2);
   const horariosPrevios = previos.map((p) => [p.posicionEnRonda, horario(p)]);

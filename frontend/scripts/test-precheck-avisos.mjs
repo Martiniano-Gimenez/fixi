@@ -19,7 +19,7 @@ try {
   const partido = { zonaId: 'z', zona: 'Zona A', posicionEnRonda: 1, motivo: 'HORARIO_QUITADO',
     pareja1Id: 'p1', pareja1: 'Caruso / Vallejos', pareja2Id: 'p2', pareja2: 'Dávila / Arrieta', opcionesResolucion: [{}] };
   const pre = { revision: 'r1', bloqueado: true, sesionReiniciada: false,
-    conflictos: [{ categoriaId: 'c', nombreCategoria: '7ma Damas', partidosSinHorario: [partido] }] };
+    planEmergenciaId: 'pe', conflictos: [{ categoriaId: 'c', nombreCategoria: '7ma Damas', juegaDieciseisavos: true, partidosSinHorario: [partido] }] };
   let prechecks = 0, cierres = 0, fallarCierre = true, liberarCierre;
   const eventos = [];
   globalThis.fetch = async (url, opts = {}) => {
@@ -56,6 +56,12 @@ try {
   assert.ok([...final.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Rearmar zonas desde cero'));
   assert.ok(document.querySelector('.pc-page-bar .pc-page-secondary'), 'Desde 768 px siguen en la barra');
   assert.equal(document.querySelectorAll('.pc-page-bar .pm-primary').length, 1, 'Un solo botón principal');
+  // Modal de iniciar con pendientes: avisa que los dieciseisavos se programan al asignar esos horarios
+  await click(boton('Iniciar dejando 1 pendientes'));
+  assert.match(document.querySelector('.pc-emergency-title, #pc-emergency-title').textContent, /¿Iniciar con 1 partido sin horario\?/);
+  assert.equal(document.querySelector('.pc-emergency-nota').textContent, 'Sus dieciseisavos se programan cuando les asignes horario a este partido.');
+  await click(boton('Seguir resolviendo'));
+  assert.ok(!document.querySelector('.pc-emergency'));
   await click(boton('Resolver de a uno'));
   for (let i = 0; i < 50 && !document.querySelector('.pc-resolver .pc-zona-rivales'); i++) {
     await act(async () => new Promise((r) => setTimeout(r, 20)));

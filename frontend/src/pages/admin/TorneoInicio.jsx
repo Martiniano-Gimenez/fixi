@@ -487,6 +487,11 @@ export default function TorneoInicio() {
                       <li key={c.categoriaId}>
                         <strong>{c.nombreCategoria}:</strong> {c.partidosSinHorario.length}{' '}
                         {c.partidosSinHorario.length === 1 ? 'partido' : 'partidos'}
+                        {c.juegaDieciseisavos && (
+                          <span className="pc-emergency-nota">
+                            Sus dieciseisavos se programan cuando les asignes horario a {c.partidosSinHorario.length === 1 ? 'este partido' : 'estos partidos'}.
+                          </span>
+                        )}
                       </li>
                     ))}
                 </ul>
