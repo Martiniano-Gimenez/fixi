@@ -82,22 +82,22 @@ const columna = (el) => el.parentElement.getAttribute('aria-colindex');
 const filaDe = (el) => el.closest('[role="row"]');
 assert.equal(inicio('16'), null);
 assert.equal(document.querySelector('.pc-horarios-hueco'), null);
-assert.deepEqual([inicio('13'), inicio('13', '30'), inicio('13', '45'), inicio('14', '15'), inicio('14', '45')].map(columna),
-  ['1', '2', '3', '1', '2'], 'Una fila por hora, seguidos desde la izquierda');
-assert.equal(filaDe(inicio('13')).children.length, 3, 'Sin lugares vacíos en la fila');
+assert.deepEqual([inicio('13'), inicio('13', '30'), inicio('13', '45'), inicio('14', '15'), inicio('14', '45'), inicio('00')].map(columna),
+  ['1', '2', '3', '4', '1', '2'], 'Lista corrida de a 4, sin agrupar por hora');
+assert.equal(filaDe(inicio('13')).children.length, 4, 'Filas completas de a 4');
+assert.equal(filaDe(inicio('14', '45')), filaDe(inicio('00')), 'Sin cortar la fila al cambiar de hora');
 assert.ok(inicio('13').classList.contains('is-pedir_1') && inicio('13', '45').classList.contains('is-entra'), 'El estilo distingue el estado');
-assert.ok(filaDe(inicio('00')).classList.contains('is-salto'), 'Más espacio donde se saltan horas');
-assert.ok(!filaDe(inicio('14', '15')).classList.contains('is-salto'), 'Horas seguidas sin espacio extra');
+assert.equal(document.querySelector('.is-salto'), null, 'Sin espacio extra entre saltos de hora');
 assert.match(inicio('00').getAttribute('aria-label'), /^sáb 00:00 · ENTRA/);
 await tecla(inicio('13'), 'ArrowRight'); assert.equal(document.activeElement.dataset.clave, 'Viernes-13:30');
-await tecla(inicio('13', '45'), 'ArrowRight'); assert.equal(document.activeElement.dataset.clave, 'Viernes-14:15', 'Sigue en la fila siguiente');
-await tecla(inicio('13'), 'ArrowDown'); assert.equal(document.activeElement.dataset.clave, 'Viernes-14:15');
+await tecla(inicio('14', '15'), 'ArrowRight'); assert.equal(document.activeElement.dataset.clave, 'Viernes-14:45', 'Sigue en la fila siguiente');
+await tecla(inicio('13'), 'ArrowDown'); assert.equal(document.activeElement.dataset.clave, 'Viernes-14:45', 'Abajo, de a 4');
+await tecla(inicio('00'), 'ArrowUp'); assert.equal(document.activeElement.dataset.clave, 'Viernes-13:30', 'Arriba, de a 4');
 await tecla(inicio('14', '45'), 'ArrowRight'); assert.equal(document.activeElement.dataset.clave, 'Viernes-00:00', 'Salta los plegados');
 assert.equal(inicio('15'), null);
 await click(verMas); assert.ok(inicio('15')); assert.equal(verMas.getAttribute('aria-expanded'), 'true');
-assert.ok(!filaDe(inicio('15')).classList.contains('is-salto'));
 assert.ok(inicio('15').classList.contains('is-pedir_varias'));
-await tecla(inicio('14', '45'), 'ArrowRight'); assert.equal(document.activeElement.dataset.clave, 'Viernes-15:00', 'Desplegados, quedan en su hora');
+await tecla(inicio('14', '45'), 'ArrowRight'); assert.equal(document.activeElement.dataset.clave, 'Viernes-15:00', 'Desplegados, quedan en orden en la lista corrida');
 await click(verMas); assert.equal(inicio('15'), null);
 await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, esDefinicion: true })));
 assert.match(document.querySelector('.pc-horarios-recomendado').textContent, /entra en el horario de las cuatro parejas/);
@@ -183,5 +183,5 @@ await act(async () => root.render(React.createElement(Grilla, { ...propsGrilla, 
 assert.equal(document.querySelector('[role="status"]').textContent, 'Se habilita cuando los dos primeros partidos tengan horario.');
 assert.equal(document.querySelector('[role="grid"]'), null);
 await act(async()=>root.unmount());
-console.log('PASS DOM: horario de cada pareja, recomendado y confirmación con detalle por pareja, estrella, grilla sin títulos ni huecos, salto de horas, ver más por día, teclado, doble envío y 409; peticiones interceptadas');
+console.log('PASS DOM: horario de cada pareja, recomendado y confirmación con detalle por pareja, estrella, grilla corrida de a 4 sin títulos ni huecos, ver más por día, teclado, doble envío y 409; peticiones interceptadas');
 }finally{await server.close();dom.window.close();}

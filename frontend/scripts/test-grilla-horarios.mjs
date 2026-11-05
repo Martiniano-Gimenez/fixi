@@ -44,23 +44,21 @@ assert.equal(describirHorarioPareja({ cargado: true, ventanas: [{ dia: 'Viernes'
 assert.equal(describirHorarioPareja({ cargado: false, ventanas: [{ dia: 'Viernes', desde: '09:00', hasta: '23:00' }] }), null,
   'Sin horario cargado');
 
-// Grilla sin huecos: los horarios de cada hora quedan juntos a la izquierda
+// Grilla corrida: los horarios de cada día van seguidos, de a 4 por fila
 const sueltos = [opcion('Viernes-18:15', '2026-11-06T21:15:00Z'), opcion('Viernes-18:30', '2026-11-06T21:30:00Z', 'NO_DISPONIBLE'),
   opcion('Viernes-18:45', '2026-11-06T21:45:00Z', 'PEDIR_VARIAS'), opcion('Viernes-19:00', '2026-11-06T22:00:00Z', 'PEDIR_VARIAS'),
   opcion('Viernes-22:30', '2026-11-07T01:30:00Z', 'PEDIR_1'), opcion('Viernes-23:00', '2026-11-07T02:00:00Z'),
   opcion('Viernes-00:15', '2026-11-07T03:15:00Z')];
 const [conHuecos] = agruparInicios(sueltos);
 const filasTodas = filasVisibles(conHuecos.filas);
-assert.deepEqual(filasTodas.map((f) => [f.hora, f.celdas.map((c) => c?.slotId.split('-')[1] ?? null), f.salto]), [
-  ['18', ['18:15', '18:45', null, null], false],
-  ['19', ['19:00', null, null, null], false],
-  ['22', ['22:30', null, null, null], true],
-  ['23', ['23:00', null, null, null], false],
-  ['00', ['00:15', null, null, null], false],
-], 'Sin huecos ni horas vacías; marca el salto de 19 a 22 y la trasnoche sigue a las 23');
-assert.deepEqual(filasVisibles(conHuecos.filas, { conSecundarios: false }).map((f) => [f.hora, f.salto]),
-  [['18', false], ['22', true], ['23', false], ['00', false]], 'Plegados los que piden a varias, el salto se calcula sobre lo visible');
+assert.deepEqual(filasTodas.map((f) => [f.hora, f.celdas.map((c) => c?.slotId.split('-')[1] ?? null)]), [
+  ['18:15', ['18:15', '18:45', '19:00', '22:30']],
+  ['23:00', ['23:00', '00:15', null, null]],
+], 'Lista corrida de a 4, sin agrupar por hora; la trasnoche sigue a las 23');
+assert.deepEqual(filasVisibles(conHuecos.filas, { conSecundarios: false }).map((f) => f.celdas.map((c) => c?.slotId.split('-')[1] ?? null)),
+  [['18:15', '22:30', '23:00', '00:15']], 'Plegados los que piden a varias');
 assert.ok(esSecundario({ estado: 'PEDIR_VARIAS' }) && !esSecundario({ estado: 'PEDIR_1' }) && !esSecundario({ estado: 'ENTRA' }));
 assert.equal(moverCelda(filasTodas, 0, 0, 'ArrowRight').slotId, 'Viernes-18:45', 'Las flechas siguen funcionando');
-assert.equal(moverCelda(filasTodas, 1, 0, 'ArrowDown').slotId, 'Viernes-22:30', 'Bajan por encima del salto');
+assert.equal(moverCelda(filasTodas, 0, 1, 'ArrowDown').slotId, 'Viernes-00:15', 'Abajo, de a 4');
+assert.equal(moverCelda(filasTodas, 0, 3, 'ArrowRight').slotId, 'Viernes-23:00', 'Sigue en la fila siguiente');
 console.log('PASS: cronología, trasnoche, jornadas, huecos, navegación por teclado, por qué no entra, detalle por pareja y filas visibles');

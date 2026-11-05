@@ -133,6 +133,20 @@ export default function TorneoInicio() {
     }
   };
 
+  // "Rearmar" e "Iniciar dejando N pendientes": en la barra fija desde 768 px; en el celular, al final de la página.
+  const accionesSecundarias = (
+    <>
+      <button type="button" className="pm-button pm-danger-secondary" onClick={() => setConfirmarResorteoModalOpen(true)} disabled={ocupado || !revisionPreCheck || confirmacionAbierta}>
+        Rearmar zonas desde cero
+      </button>
+      {totalConflictos > 0 && !conflictosBloqueo.some((c) => c.partidosSinHorario.some((p) => p.motivo === 'ZONA_MANUAL_INCOMPLETA')) && Boolean(planEmergenciaId) && (
+        <button type="button" className="pm-button" onClick={() => setConfirmarEmergenciaModalOpen(true)} disabled={ocupado || confirmacionAbierta}>
+          Iniciar dejando {totalConflictos} pendientes
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="pc-page" ref={paginaRef}>
       <Link to={`/admin/torneos/${id}`} className="pc-page-back">
@@ -420,21 +434,12 @@ export default function TorneoInicio() {
             Guardaste cambios. Volvé a verificar los horarios.
           </span>
         )}
-
+        <div className="pc-page-secondary pc-page-secondary-final">{accionesSecundarias}</div>
       </section>
 
       <footer className="pc-page-bar" ref={barraRef}>
         <div className="pc-page-actions">
-          <div className="pc-page-secondary">
-            <button type="button" className="pm-button pm-danger-secondary" onClick={() => setConfirmarResorteoModalOpen(true)} disabled={ocupado || !revisionPreCheck || confirmacionAbierta}>
-              Rearmar zonas desde cero
-            </button>
-            {totalConflictos > 0 && !conflictosBloqueo.some((c) => c.partidosSinHorario.some((p) => p.motivo === 'ZONA_MANUAL_INCOMPLETA')) && Boolean(planEmergenciaId) && (
-              <button type="button" className="pm-button" onClick={() => setConfirmarEmergenciaModalOpen(true)} disabled={ocupado || confirmacionAbierta}>
-                Iniciar dejando {totalConflictos} pendientes
-              </button>
-            )}
-          </div>
+          <div className="pc-page-secondary">{accionesSecundarias}</div>
           <button type="button" className="pm-button pm-primary" disabled={ocupado || confirmacionAbierta || Boolean(error)}
             onClick={() => preCheckAprobado ? setIniciarModalOpen(true) : handlePreCheckInicio(true)}>
             {preCheckAprobado ? <Play size={16} aria-hidden="true" /> : <RefreshCw size={16} className={verificandoInicio ? 'pc-spin' : ''} aria-hidden="true" />}

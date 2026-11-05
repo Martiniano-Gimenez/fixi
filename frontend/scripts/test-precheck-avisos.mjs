@@ -49,6 +49,13 @@ try {
   assert.match(aviso.textContent, /La inscripción sigue abierta\. Si se anota otra pareja, vas a tener que rearmar las zonas y se pierden los horarios fijados\./);
   assert.ok(aviso.compareDocumentPosition(document.querySelector('.pc-conflict-list')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   assert.ok(!boton('Cerrar inscripción').classList.contains('pm-primary'));
+  // Celular: las acciones secundarias también están al final de la página, fuera de la barra fija (el CSS elige cuál se ve).
+  const final = document.querySelector('.pc-page-secondary-final');
+  assert.ok(final && !final.closest('.pc-page-bar'), 'Al final de la página, sin quedar fijas');
+  assert.ok(final.compareDocumentPosition(document.querySelector('.pc-conflict-list')) & dom.window.Node.DOCUMENT_POSITION_PRECEDING, 'Debajo de las categorías');
+  assert.ok([...final.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Rearmar zonas desde cero'));
+  assert.ok(document.querySelector('.pc-page-bar .pc-page-secondary'), 'Desde 768 px siguen en la barra');
+  assert.equal(document.querySelectorAll('.pc-page-bar .pm-primary').length, 1, 'Un solo botón principal');
   await click(boton('Resolver de a uno'));
   for (let i = 0; i < 50 && !document.querySelector('.pc-resolver .pc-zona-rivales'); i++) {
     await act(async () => new Promise((r) => setTimeout(r, 20)));

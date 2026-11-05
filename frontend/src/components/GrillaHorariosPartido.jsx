@@ -96,9 +96,9 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
           const primera = visibles.flatMap((f) => f.celdas).find(Boolean);
           const claveFoco = visibles.some((f) => f.celdas.some((o) => o?.clave === foco[dia])) ? foco[dia] : primera?.clave;
           const renderizarFila = (fila) => (
-            <div key={fila.hora} role="row" className={`pc-horarios-fila${fila.salto ? ' is-salto' : ''}`}>
+            <div key={fila.hora} role="row" className="pc-horarios-fila">
               {fila.celdas.map((opcion, columna) => {
-                if (!opcion) return null; // los horarios van juntos a la izquierda: solo quedan lugares libres al final
+                if (!opcion) return null; // lista corrida de a 4: solo la última fila puede quedar incompleta
                 return (
                   <div key={columna} role="gridcell" aria-colindex={columna + 1} aria-selected={seleccion?.clave === opcion.clave}>
                     <button type="button" data-clave={opcion.clave}

@@ -34,19 +34,16 @@ export function moverCelda(filas, fila, columna, tecla) {
 export const esSecundario = (opcion) => opcion.estado !== 'ENTRA' && opcion.estado !== 'PEDIR_1';
 
 /**
- * Filas visibles de un día, una por hora. Saca los horarios no disponibles (y los secundarios si van plegados),
- * junta los que quedan desde la izquierda y omite las horas vacías. `salto` marca la fila que viene después de
- * una hora salteada (la trasnoche sigue a las 23).
- * @returns {{ hora: string, celdas: (object|null)[], salto: boolean }[]}
+ * Filas visibles de un día: los horarios disponibles (sin los secundarios si van plegados), en orden y seguidos,
+ * de a 4 por fila, sin agrupar por hora. `hora` es el primer horario de la fila y sirve de clave.
+ * @returns {{ hora: string, celdas: (object|null)[] }[]}
  */
 export function filasVisibles(filas, { conSecundarios = true } = {}) {
+  const inicios = filas.flatMap((f) => f.celdas)
+    .filter((o) => o && o.estado !== 'NO_DISPONIBLE' && (conSecundarios || !esSecundario(o)));
   const visibles = [];
-  for (const fila of filas) {
-    const inicios = fila.celdas.filter((o) => o && o.estado !== 'NO_DISPONIBLE' && (conSecundarios || !esSecundario(o)));
-    if (!inicios.length) continue;
-    const anterior = visibles.at(-1);
-    visibles.push({ hora: fila.hora, celdas: [0, 1, 2, 3].map((i) => inicios[i] ?? null),
-      salto: Boolean(anterior) && (Number(anterior.hora) + 1) % 24 !== Number(fila.hora) });
+  for (let i = 0; i < inicios.length; i += 4) {
+    visibles.push({ hora: inicios[i].slotId.split('-')[1], celdas: [0, 1, 2, 3].map((j) => inicios[i + j] ?? null) });
   }
   return visibles;
 }

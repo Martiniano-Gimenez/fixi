@@ -1131,6 +1131,13 @@ body:has(.panel) {
   .panel .pc-page-actions > .pm-primary { margin-left: 0; }
   .panel .pc-page-actions .pm-button { font-size: var(--t-13); }
 }
+/* Celular: la barra fija lleva solo el botón principal; las otras acciones van al final de la página. */
+.panel .pc-page-secondary-final { display: none; }
+@media (max-width: 767.98px) {
+  .panel .pc-page-bar .pc-page-secondary { display: none; }
+  .panel .pc-page-secondary-final { display: flex; flex-direction: column; align-items: stretch; gap: var(--e-2); margin-top: var(--e-5); }
+  .panel .pc-page-secondary-final .pm-button { min-height: 44px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+}
 
 .panel .pc-emergency { max-width: 540px; }
 .panel .pc-redraw-modal { max-width: 480px; }
@@ -1259,7 +1266,6 @@ body:has(.panel) {
 .panel .pc-horarios-inicio.is-selected { outline: 2px solid var(--tinta); outline-offset: 1px; }
 .panel .pc-horarios-inicio:focus-visible { outline: 3px solid var(--marca); outline-offset: 2px; }
 .panel .pc-horarios-inicio:disabled { cursor: wait; }
-.panel .pc-horarios-fila.is-salto { margin-top: var(--e-5); }
 .panel .pc-horarios-plegar { display: flex; align-items: center; gap: var(--e-1); width: 100%; margin: 0; padding: 0; border: 0; border-radius: var(--r-control); background: transparent; color: var(--tinta-2); font: 400 var(--t-12)/1.5 var(--f); text-align: left; overflow-wrap: anywhere; }
 .panel .pc-horarios-plegar > span { min-width: 0; }
 .panel .pc-horarios-ver-mas { max-width: 336px; margin-top: var(--e-2); }
