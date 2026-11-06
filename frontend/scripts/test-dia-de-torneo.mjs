@@ -89,6 +89,7 @@ try {
   assert.deepEqual(enviosLluvia, [{ canchasDisponiblesOverride: 4, diaKey: '2026-11-06' }]);
   const banner = document.querySelector('.dt-feedback');
   assert.ok(banner, 'Aparece el banner de reprogramación');
+  assert.match(banner.textContent, /Tapia \/ Nieva \(7ma Damas\)/, 'Espacio entre las parejas y la categoría');
   assert.equal([...banner.querySelector('.dt-change-times').children].map((s) => s.textContent.trim()).join(' '), 'vie 19:00 → sáb 10:15');
   assert.ok(!/Cancha|\bC\d/.test(banner.textContent), 'El banner de lluvia no muestra canchas');
   for (let i = 0; i < 50 && !document.querySelector('.dt-ghost-match'); i++) await act(async () => new Promise((r) => setTimeout(r, 20)));

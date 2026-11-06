@@ -339,9 +339,9 @@ async function main() {
   const p5_1 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 1, jugador1: 'P1', jugador2: 'P2' } });
   const p5_2 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 2, jugador1: 'P3', jugador2: 'P4' } });
   const p5_3 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 3, jugador1: 'P5', jugador2: 'P6' } });
-  const p5_4 = await prisma.pareja.create({ data: { categoriaId: cat5.id, orden: 4, jugador1: 'P7', jugador2: 'P8' } });
 
-  // Partido con horario fijado a las 10:00 AM
+  // Partido fijado a la apertura. Comparte pareja con el recuperado: así se prueba el orden de
+  // asignación sin confundirlo con un hueco anterior que el partido sin horario puede aprovechar.
   const pConHorario = await prisma.partido.create({
     data: {
       categoriaId: cat5.id,
@@ -350,7 +350,7 @@ async function main() {
       pareja1Id: p5_1.id,
       pareja2Id: p5_2.id,
       estado: 'PENDIENTE',
-      fechaHora: new Date('2026-09-11T13:00:00.000Z'), // 10:00 AM local
+      fechaHora: new Date('2026-09-11T11:00:00.000Z'), // 08:00 AM local
       canchaNumero: 1,
     },
   });
@@ -361,8 +361,8 @@ async function main() {
       categoriaId: cat5.id,
       zonaId: zona5.id,
       posicionEnRonda: 2,
-      pareja1Id: p5_3.id,
-      pareja2Id: p5_4.id,
+      pareja1Id: p5_1.id,
+      pareja2Id: p5_3.id,
       estado: 'PENDIENTE',
       fechaHora: null,
       canchaNumero: null,

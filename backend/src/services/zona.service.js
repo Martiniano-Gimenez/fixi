@@ -1345,7 +1345,8 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
  *   (una pareja sin horarios ese día no pone piso) y todos terminan antes del cierre del club del viernes.
  *   Lo que no entra pasa al sábado: earliest-fit desde la apertura, en canchas libres, sin mover los
  *   partidos del sábado. Si tampoco entra, queda sin horario.
- * - Sábado: desde la apertura hasta el límite de trasnoche (dayLimitMs).
+ * - Viernes y sábado: al reducir canchas, el horario previo a esta corrida también es un piso.
+ * - Sábado: desde el piso de cada partido hasta el límite de trasnoche (dayLimitMs).
  * - opciones.pisoAhoraMs: nada se acomoda antes de ese momento (la hora actual redondeada a 15 min).
  */
 async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null, overrideTimestamp = null, opciones = {}) {
@@ -1859,6 +1860,12 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       if (esR32(partido)) {
         minSearchMs = Math.max(minSearchMs, sabNightStartMs);
       }
+    }
+
+    // Al reducir canchas se conservan los horarios ya avisados como piso. Se usa el horario de esta
+    // corrida (también en una segunda reducción), no el registro original reservado para restaurar.
+    if (!esRestauracionTotal && origStartMs !== null) {
+      minSearchMs = Math.max(minSearchMs, origStartMs);
     }
 
     // Viernes con lluvia: nadie juega antes del inicio de su disponibilidad del viernes y todo termina

@@ -746,13 +746,17 @@ async function testModoDiaTorneo() {
     'FALLÓ TEST D: canchasDisponiblesOverride no es 4 tras reducción del viernes'
   );
 
-  // Snapshot de los partidos del viernes tras su reprogramación
-  const partidosViernesSnapshot = await prisma.partido.findMany({
+  // Snapshot de los que siguen en el viernes: los que pasaron al sábado por lluvia sí pueden
+  // reprogramarse con la reducción del sábado, respetando el horario que tienen en esa jornada.
+  const partidosPostViernes = await prisma.partido.findMany({
     where: {
       categoria: { torneoId: torneo.id },
       id: { notIn: [pD_Sabado1.id, pD_Sabado2.id] },
     },
   });
+  const partidosViernesSnapshot = partidosPostViernes.filter((p) =>
+    !p.fechaHora || getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubTest).key === kVie
+  );
 
   // PASO 2: El organizador NUNCA restaura las canchas el viernes.
   // El torneo queda con overrideActivoDesde = Viernes 18:00 en DB.

@@ -918,7 +918,7 @@ export default function TorneoEnVivo() {
                       <div>
                         <strong>{c.pareja1}</strong> vs <strong>{c.pareja2}</strong>
                         <span className="dt-muted">
-                          ({c.categoria})
+                          {' '}({c.categoria})
                         </span>
                       </div>
                       <div className="dt-change-times">

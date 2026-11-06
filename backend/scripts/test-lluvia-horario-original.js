@@ -1,7 +1,7 @@
 'use strict';
 
 // Modo lluvia: el viernes nadie juega antes del inicio de su disponibilidad y todo termina antes del cierre;
-// lo que no entra pasa al sábado. El sábado se apila desde la apertura. Nada queda antes de la hora actual.
+// lo que no entra pasa al sábado. Ningún pendiente se adelanta respecto de su horario previo a cada reducción.
 // Se guarda el horario de antes de la lluvia (solo la primera reducción) y restaurar lo devuelve.
 const { ensureTestDb } = require('./utils/testEnvGuard');
 const assert = require('assert');
@@ -116,9 +116,60 @@ function verificarSinChoques(partidos, etiqueta) {
   }
 }
 
+function verificarSinAdelantos(antes, despues, etiqueta) {
+  const actuales = new Map(despues.map((p) => [p.id, p]));
+  for (const previo of antes) {
+    if (previo.estado !== 'PENDIENTE' || !previo.fechaHora || previo.sinHorarioAsignado) continue;
+    const actual = actuales.get(previo.id);
+    if (!actual.fechaHora) continue;
+    assert.ok(actual.fechaHora.getTime() >= previo.fechaHora.getTime(),
+      `${etiqueta}: ${previo.id} se adelantó de ${previo.fechaHora.toISOString()} a ${actual.fechaHora.toISOString()}`);
+  }
+}
+
+async function probarViernesConHuecoPrevio() {
+  const org = await prisma.organizador.create({
+    data: { nombre: 'Club con hueco', email: 'lluvia-hueco@padel.test', passwordHash: 'x', cantidadCanchas: 6, ...HORARIOS },
+  });
+  const torneo = await prisma.torneo.create({
+    data: { nombre: 'Viernes con hueco', slug: 'lluvia-hueco', fecha: local(13, 12), estado: 'EN_CURSO', organizadorId: org.id },
+  });
+  const cat = await prisma.categoria.create({ data: { torneoId: torneo.id, nombre: '7ma', estado: 'EN_CURSO' } });
+  // Hay canchas libres desde las 18:00 y las parejas están disponibles, pero ya se les avisó 19:30.
+  // Sin el piso por horario previo, los seis partidos se adelantan al reducir a cuatro canchas.
+  for (let i = 0; i < 6; i++) {
+    const zona = await prisma.zona.create({ data: { categoriaId: cat.id, nombre: `Zona ${i + 1}`, clasifican: 1 } });
+    const ids = [];
+    for (let j = 0; j < 2; j++) {
+      const pareja = await prisma.pareja.create({ data: {
+        categoriaId: cat.id, jugador1: `H${i}${j}a`, jugador2: `H${i}${j}b`, orden: i * 2 + j + 1,
+        slotsSeleccionados: { create: slotsViernesDesde(18, 0).map((slotId) => ({ slotId })) },
+      } });
+      ids.push(pareja.id);
+    }
+    await prisma.partido.create({ data: {
+      categoriaId: cat.id, zonaId: zona.id, posicionEnRonda: 1, pareja1Id: ids[0], pareja2Id: ids[1],
+      estado: 'PENDIENTE', fechaHora: local(13, 19, 30), canchaNumero: i + 1, sinHorarioAsignado: false,
+    } });
+  }
+  const inicial = await leerPartidos(torneo.id);
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 4, JUEVES, VIE);
+  const conCuatro = await leerPartidos(torneo.id);
+  assert.ok(conCuatro.every((p) => p.fechaHora && !p.sinHorarioAsignado), 'Los seis partidos entran con cuatro canchas');
+  verificarSinAdelantos(inicial, conCuatro, 'Viernes con hueco 6→4');
+  assert.strictEqual(conCuatro.filter((p) => p.fechaHora > local(13, 19, 30)).length, 2, 'Dos partidos se atrasan con cuatro canchas');
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 3, JUEVES, VIE);
+  const conTres = await leerPartidos(torneo.id);
+  assert.ok(conTres.every((p) => p.fechaHora && !p.sinHorarioAsignado), 'Los seis partidos entran con tres canchas');
+  verificarSinAdelantos(conCuatro, conTres, 'Viernes con hueco 4→3');
+  verificarSinChoques(conTres, 'Viernes con hueco 4→3');
+  console.log('OK viernes con hueco 6→4→3: los horarios avisados son pisos, aunque haya lugar antes');
+}
+
 async function main() {
   await ensureTestDb();
   await canchasOverridesService.loadFromDb();
+  await probarViernesConHuecoPrevio();
   const { org, torneo, parejas } = await crearEscenario();
   const reducir = (canchas, diaKey, ahora) => organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, canchas, ahora, diaKey);
 
@@ -130,6 +181,7 @@ async function main() {
   // ── 1. Viernes 6 → 4 ──────────────────────────────────────────────────────────────────────────────
   await reducir(4, VIE, JUEVES);
   let partidos = await leerPartidos(torneo.id);
+  verificarSinAdelantos(inicial, partidos, 'Viernes 6→4');
   const porId = (lista) => new Map(lista.map((p) => [p.id, p]));
   let actuales = porId(partidos);
   const pasaronAlSabado = [];
@@ -163,7 +215,7 @@ async function main() {
     assert.strictEqual(registroViernes[p.id].fechaHora, p.fechaHora.toISOString());
     assert.strictEqual(registroViernes[p.id].canchaNumero, p.canchaNumero);
   }
-  console.log(`OK viernes 6→4: piso por parejas, cierre a las 00:00 y ${pasaronAlSabado.length} partidos pasan al sábado sin choques`);
+  console.log(`OK viernes 6→4: piso por horario previo y parejas, cierre a las 00:00 y ${pasaronAlSabado.length} partidos pasan al sábado sin choques`);
 
   // ── 2. Un partido termina durante la lluvia ───────────────────────────────────────────────────────
   // Uno que la lluvia movió dentro del viernes: puede ocupar el horario original de otros
@@ -174,7 +226,9 @@ async function main() {
   await prisma.partido.update({ where: { id: finalizado.id }, data: { estado: 'FINALIZADO', ganadorId: finalizado.pareja1Id } });
 
   // ── 3. Viernes 4 → 3: el registro de la primera reducción se conserva ─────────────────────────────
+  const conCuatroViernes = await leerPartidos(torneo.id);
   await reducir(3, VIE, JUEVES);
+  verificarSinAdelantos(conCuatroViernes, await leerPartidos(torneo.id), 'Viernes 4→3');
   assert.deepStrictEqual(await leerRegistro(torneo.id, VIE), registroViernes, 'Una segunda reducción no pisa el registro');
   verificarSinChoques(await leerPartidos(torneo.id), 'Viernes 4→3');
   console.log('OK viernes 4→3: conserva el registro de la primera reducción');
@@ -222,21 +276,31 @@ async function main() {
   verificarSinChoques(partidos, 'Restaurar viernes');
   console.log(`OK restaurar viernes: ${volvieron} vuelven a su horario, incluidos los que habían pasado al sábado; ${desplazados} ${desplazados === 1 ? "va" : "van"} más tarde por el finalizado, que no cambia`);
 
-  // ── 5. Sábado 6 → 4: se apila desde la apertura ───────────────────────────────────────────────────
+  // ── 5. Sábado 6 → 4 → 3: cada reducción usa el horario inmediatamente anterior ───────────────────
+  const antesSabado = partidos;
   await reducir(4, SAB, JUEVES);
   partidos = await leerPartidos(torneo.id);
+  verificarSinAdelantos(antesSabado, partidos, 'Sábado 6→4');
   const delSabado = partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && jornada(p.fechaHora) === SAB);
   assert.deepStrictEqual(delSabado.map((p) => hhmm(p.fechaHora.getTime())).sort(),
-    ['08:00', '08:00', '08:00', '08:00', '09:15', '09:15', '09:15', '09:15', '10:30'], 'Sábado: se apila desde la apertura');
+    ['08:00', '08:00', '08:00', '08:00', '09:15', '10:00', '10:00', '10:00', '10:30'], 'Sábado: respeta los turnos de las 10:00 aunque haya huecos antes');
   assert.ok(delSabado.every((p) => p.canchaNumero <= 4));
   verificarSinChoques(partidos, 'Sábado 6→4');
+  const registroSabado = await leerRegistro(torneo.id, SAB);
+  const conCuatroSabado = partidos;
+  assert.ok(delSabado.some((p) => p.fechaHora > sabadoAntes.find((s) => s.id === p.id).fechaHora), 'La primera reducción atrasa partidos');
+  await reducir(3, SAB, JUEVES);
+  partidos = await leerPartidos(torneo.id);
+  verificarSinAdelantos(conCuatroSabado, partidos, 'Sábado 4→3');
+  verificarSinChoques(partidos, 'Sábado 4→3');
+  assert.deepStrictEqual(await leerRegistro(torneo.id, SAB), registroSabado, 'El registro del sábado tampoco se pisa');
   await reducir(null, SAB, JUEVES);
   partidos = await leerPartidos(torneo.id);
   actuales = porId(partidos);
   for (const s of sabadoAntes) {
     assert.strictEqual(actuales.get(s.id).fechaHora.getTime(), s.fechaHora.getTime(), 'Restaurar el sábado devuelve su horario');
   }
-  console.log('OK sábado 6→4: se apila desde las 08:00; restaurar lo devuelve');
+  console.log('OK sábado 6→4→3: no se adelanta respecto del horario previo a cada reducción; restaurar lo devuelve');
 
   // ── 6. Nada antes de la hora actual ───────────────────────────────────────────────────────────────
   const sabado905 = local(14, 9, 5);
