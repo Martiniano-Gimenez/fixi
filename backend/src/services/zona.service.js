@@ -1343,11 +1343,12 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
  * En situación de emergencia (lluvia) se apila sin mirar la disponibilidad de las parejas, con estas reglas:
  * - Viernes: ningún partido empieza antes del inicio de la disponibilidad del viernes de sus dos parejas
  *   (una pareja sin horarios ese día no pone piso) y todos terminan antes del cierre del club del viernes.
- *   Lo que no entra pasa al sábado: earliest-fit desde max(apertura, próximo pendiente), sin mover los
- *   partidos del sábado. Si tampoco entra, queda sin horario.
+ *   Lo que no entra pasa al sábado desde la apertura o, si empezó, max(apertura, próximo pendiente),
+ *   sin mover los partidos del sábado. Si tampoco entra, queda sin horario.
  * - Viernes y sábado: al reducir canchas, el horario previo a esta corrida también es un piso.
  * - Sábado: desde el piso de cada partido hasta el límite de trasnoche (dayLimitMs).
- * - El próximo pendiente con horario de cada jornada, tomado antes de mover nada, es su piso.
+ * - Si la jornada empezó (FINALIZADO o EN_CURSO), su próximo pendiente con horario es el piso;
+ *   si no empezó, se llena desde la apertura. Se toma el estado antes de mover nada.
  */
 async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null, overrideTimestamp = null) {
   const db = externalTx || prisma;
@@ -1408,10 +1409,14 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
   });
 
   // Foto previa a la reprogramación: también fija el piso del sábado que recibe partidos del viernes.
+  const jornadasEmpezadas = new Set(todosLosPartidos
+    .filter((p) => !p.esBye && p.fechaHora && (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO'))
+    .map((p) => getDiaCalendarioConTrasnoche(p.fechaHora, organizador)?.key));
   const proximoPorJornada = new Map();
   for (const p of todosLosPartidos) {
     if (p.estado !== 'PENDIENTE' || p.esBye || !p.fechaHora || p.sinHorarioAsignado) continue;
     const key = getDiaCalendarioConTrasnoche(p.fechaHora, organizador)?.key;
+    if (!jornadasEmpezadas.has(key)) continue;
     const inicio = new Date(p.fechaHora).getTime();
     proximoPorJornada.set(key, Math.min(proximoPorJornada.get(key) ?? Infinity, inicio));
   }
@@ -1927,7 +1932,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       }
     }
 
-    // Lo que no entra el viernes pasa al sábado: desde max(apertura, próximo pendiente), en las canchas
+    // Lo que no entra el viernes pasa al sábado desde la apertura o, si empezó, su próximo pendiente; en las canchas
     // libres del sábado y sin que una pareja juegue dos a la vez. Un partido de zona termina antes del primer
     // dieciseisavos de su categoría.
     if (bestCandidate === null && lluviaViernes && !ronda1SinHorario) {
@@ -2083,6 +2088,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
  * Restaura una jornada (viernes o sábado) después de la lluvia. Cada partido PENDIENTE del registro
  * horariosAntesLluvia vuelve a su horario de antes de la lluvia si no es anterior al próximo pendiente de
  * su jornada original (excluyendo el registro) y la cancha y las dos parejas están libres.
+ * Si la jornada no empezó (sin FINALIZADO ni EN_CURSO), se toma su apertura como piso.
  * Si no se puede, earliest-fit desde max(ese horario, próximo pendiente)
  * en su jornada original (el viernes hasta el cierre del club; el sábado hasta el límite de trasnoche).
  * Solo se toma una alternativa que adelante el horario actual; si no hay lugar, se conserva.
@@ -2129,14 +2135,17 @@ async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, reg
 
   const aRestaurar = partidos.filter((p) => p.estado === 'PENDIENTE' && registro[p.id]);
   const idsRestaurar = new Set(aRestaurar.map((p) => p.id));
+  const jornadaEmpezada = partidos.some((p) => !p.esBye && p.fechaHora
+    && (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO')
+    && getDiaCalendarioConTrasnoche(p.fechaHora, organizador)?.key === diaKey);
   // Se toma antes de mover nada y sin contar los pendientes que vuelven desde el registro.
   const proximoJornadaMs = partidos.reduce((minimo, p) => {
     if (p.estado !== 'PENDIENTE' || idsRestaurar.has(p.id) || p.esBye || !p.fechaHora || p.sinHorarioAsignado) return minimo;
     if (getDiaCalendarioConTrasnoche(p.fechaHora, organizador)?.key !== diaKey) return minimo;
     return Math.min(minimo, new Date(p.fechaHora).getTime());
   }, Infinity);
-  // Sin otro pendiente en la jornada original, se puede volver desde su apertura.
-  const pisoJornadaMs = proximoJornadaMs === Infinity ? inicioJornadaMs : proximoJornadaMs;
+  // Sin empezar o sin otro pendiente en la jornada original, se puede volver desde su apertura.
+  const pisoJornadaMs = jornadaEmpezada && proximoJornadaMs !== Infinity ? proximoJornadaMs : inicioJornadaMs;
 
   // Ocupación: todo lo que tiene horario y no se restaura (finalizados, en juego y los demás pendientes)
   const canchas = new Map();

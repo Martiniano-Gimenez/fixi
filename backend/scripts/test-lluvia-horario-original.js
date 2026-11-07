@@ -209,7 +209,64 @@ async function probarIndependenciaDelReloj() {
   console.log('OK reloj independiente y restaurar todo: mañana del viernes, tarde del sábado, torneo pasado y sin mock');
 }
 
-async function probarPisoProximoPendiente() {
+async function probarJornadasSinEmpezar() {
+  const { org, torneo, parejas } = await crearEscenario();
+  let inicial = await leerPartidos(torneo.id);
+  const sabado = inicial.filter((p) => jornada(p.fechaHora) === SAB);
+  for (const p of sabado) {
+    await prisma.partido.update({ where: { id: p.id }, data: { fechaHora: new Date(p.fechaHora.getTime() + 2 * 60 * 60 * 1000) } });
+  }
+  inicial = await leerPartidos(torneo.id);
+  const idsViernes = new Set(inicial.filter((p) => jornada(p.fechaHora) === VIE).map((p) => p.id));
+  assert.strictEqual(Math.min(...inicial.filter((p) => jornada(p.fechaHora) === SAB).map((p) => p.fechaHora.getTime())), local(14, 10).getTime());
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 3, local(14, 17, 43), VIE);
+  const reducidos = await leerPartidos(torneo.id);
+  assert.ok(reducidos.every((p) => p.fechaHora && !p.sinHorarioAsignado), 'Con tres canchas todos entran entre viernes y sábado');
+  const pasan = reducidos.filter((p) => idsViernes.has(p.id) && jornada(p.fechaHora) === SAB);
+  assert.ok(pasan.length > 0);
+  assert.strictEqual(Math.min(...pasan.map((p) => p.fechaHora.getTime())), APERTURA_SABADO,
+    'Sin empezar el sábado se aprovecha la apertura a las 08:00, aunque el primer pendiente sea a las 10:00');
+  verificarSinAdelantos(inicial, reducidos, 'Jornadas sin empezar');
+  verificarSinChoques(reducidos, 'Pase a sábado sin empezar');
+  for (const p of inicial.filter((p) => jornada(p.fechaHora) === SAB)) {
+    assert.deepStrictEqual(reducidos.find((n) => n.id === p.id), p, 'El sábado permanece intacto');
+  }
+  // Otro pendiente del viernes fuera del registro no impide recuperar los originales: el viernes tampoco empezó.
+  const referencia = sabado.find((p) => p.canchaNumero === 2);
+  const ajeno = await prisma.partido.create({ data: {
+    categoriaId: referencia.categoriaId, zonaId: referencia.zonaId, posicionEnRonda: 2,
+    pareja1Id: referencia.pareja1Id, pareja2Id: referencia.pareja2Id,
+    estado: 'PENDIENTE', fechaHora: local(13, 23), canchaNumero: 6, sinHorarioAsignado: false,
+  } });
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, null, local(14, 17, 43), VIE);
+  const restaurados = await leerPartidos(torneo.id);
+  verificarSinAtrasos(reducidos, restaurados);
+  assert.deepStrictEqual(fotoHorarios(restaurados.filter((p) => p.id !== ajeno.id)), fotoHorarios(inicial),
+    'Restaurar una jornada sin empezar usa la apertura aunque otro pendiente ajeno al registro sea posterior');
+  assert.deepStrictEqual(restaurados.find((p) => p.id === ajeno.id), ajeno);
+  verificarSinChoques(restaurados, 'Restaurar jornada sin empezar');
+
+  // Recuperar un partido sin horario al reducir también debe aprovechar el hueco anterior al primer pendiente.
+  await prisma.partido.delete({ where: { id: ajeno.id } });
+  const viernes = inicial.filter((p) => idsViernes.has(p.id));
+  const aperturaViernes = local(13, 18).getTime();
+  const recuperado = viernes.find((p) => p.fechaHora.getTime() === aperturaViernes
+    && [p.pareja1Id, p.pareja2Id].every((id) => parejas.get(id) === null || parejas.get(id) <= aperturaViernes));
+  for (const p of viernes) {
+    await prisma.partido.update({ where: { id: p.id }, data: p.id === recuperado.id
+      ? { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true }
+      : { fechaHora: new Date(p.fechaHora.getTime() + 2 * 60 * 60 * 1000) } });
+  }
+  await canchasOverridesService.setOverrideDia(torneo.id, VIE, 5, JUEVES, { [recuperado.id]: 'Sin cancha activa libre disponible en ese horario' });
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 3, local(14, 17, 43), VIE);
+  const conRecuperado = await leerPartidos(torneo.id);
+  assert.strictEqual(conRecuperado.find((p) => p.id === recuperado.id).fechaHora?.getTime(), local(13, 18).getTime(),
+    'Al reducir una jornada sin empezar, el partido sin horario puede usar la apertura anterior al próximo pendiente');
+  verificarSinChoques(conRecuperado, 'Reducir jornada sin empezar');
+  console.log('OK jornadas sin empezar: pase desde las 08:00, reducción desde apertura y restauración de originales');
+}
+
+async function probarPisoProximoPendiente(estadoSabado) {
   const { org, torneo } = await crearEscenario();
   const inicial = await leerPartidos(torneo.id);
   const finalizados = inicial.filter((p) => jornada(p.fechaHora) === VIE && p.fechaHora <= local(13, 18));
@@ -220,6 +277,9 @@ async function probarPisoProximoPendiente() {
   for (const p of inicial.filter((p) => jornada(p.fechaHora) === SAB)) {
     await prisma.partido.update({ where: { id: p.id }, data: { fechaHora: new Date(p.fechaHora.getTime() + 4 * 60 * 60 * 1000) } });
   }
+  const jugadoSabado = inicial.find((p) => jornada(p.fechaHora) === SAB && p.canchaNumero === 2);
+  await prisma.partido.update({ where: { id: jugadoSabado.id },
+    data: { estado: estadoSabado, fechaHora: local(14, 10, 45) } });
   const previo = await leerPartidos(torneo.id);
   const proximoViernes = Math.min(...previo.filter((p) => p.estado === 'PENDIENTE' && jornada(p.fechaHora) === VIE).map((p) => p.fechaHora.getTime()));
   const recuperado = previo.find((p) => p.estado === 'PENDIENTE' && jornada(p.fechaHora) === VIE);
@@ -243,7 +303,7 @@ async function probarPisoProximoPendiente() {
     assert.deepStrictEqual(fotoHorarios(despues.filter((n) => n.id === p.id)), fotoHorarios([p]), 'Finalizados y sábado intactos');
   }
   verificarSinChoques(despues, 'Piso próximo pendiente');
-  console.log('OK próximo pendiente: finalizados hasta las 18:00, recuperación sin horario y pase desde el próximo del sábado');
+  console.log(`OK próximo pendiente: viernes iniciado y sábado ${estadoSabado} hasta las 12:00, sin adelantar al próximo pendiente`);
 }
 
 async function probarRestauracionConTurnosRetenidos() {
@@ -313,7 +373,9 @@ async function main() {
   await canchasOverridesService.loadFromDb();
   await probarViernesConHuecoPrevio();
   await probarIndependenciaDelReloj();
-  await probarPisoProximoPendiente();
+  await probarJornadasSinEmpezar();
+  await probarPisoProximoPendiente('FINALIZADO');
+  await probarPisoProximoPendiente('EN_CURSO');
   await probarRestauracionConTurnosRetenidos();
   let { org, torneo, parejas } = await crearEscenario();
   const reducir = (canchas, diaKey, ahora) => organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, canchas, ahora, diaKey);
