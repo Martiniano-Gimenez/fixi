@@ -1162,8 +1162,8 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
   }
 
   // P1 y P2 en Viernes (22:00 y 23:15) Cancha 2 (PENDIENTE).
-  // Al reducir Viernes a 1 cancha no entran el viernes y pasan al sábado (abre 01:45), antes de P3 y P4,
-  // que siguen en Sábado 10:00.
+  // Al reducir Viernes a 1 cancha no entran el viernes. El próximo pendiente del sábado es P3/P4 a las
+  // 10:00: ese piso impide ubicar P1/P2 antes de sus definiciones, por lo que quedan sin horario.
   const vie22 = new Date(2026, 8, 4, 22, 0, 0, 0);
   const vie23_15 = new Date(2026, 8, 4, 23, 15, 0, 0);
   const sab10 = new Date(2026, 8, 5, 10, 0, 0, 0);
@@ -1225,7 +1225,7 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
     },
   });
 
-  // 1) Reducir Viernes (2026-09-04) a 1 cancha -> P1 y P2 pasan al sábado antes de las 10:00, P3/P4 siguen en Sábado 10:00
+  // 1) Reducir Viernes a 1 cancha -> P1/P2 sin horario; P3/P4 siguen en Sábado 10:00.
   await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 1, null, '2026-09-04');
   const p1Red = await prisma.partido.findUnique({ where: { id: p1.id } });
   const p2Red = await prisma.partido.findUnique({ where: { id: p2.id } });
@@ -1233,15 +1233,11 @@ async function reproRestaurarViernesDesplazaP3P4Sabado(registrarResultado) {
   const p4Red = await prisma.partido.findUnique({ where: { id: p4.id } });
   const ovVieRed = canchasOverridesService.getCanchasDia(torneo.id, '2026-09-04', 2);
 
-  const horariosMB = { viernesInicio: '22:00', viernesFin: '01:45', sabadoInicio: '01:45', sabadoFin: '22:00' };
-  const pasoAlSabadoAntesDeP3P4 = (p) => Boolean(p.fechaHora) && !p.sinHorarioAsignado &&
-    getDiaCalendarioConTrasnoche(p.fechaHora, horariosMB).key === '2026-09-05' &&
-    p.fechaHora.getTime() + DURACION_PARTIDO_MIN * 60 * 1000 <= sab10.getTime();
   const okReduccion =
-    pasoAlSabadoAntesDeP3P4(p1Red) &&
-    pasoAlSabadoAntesDeP3P4(p2Red) &&
-    !ovVieRed.partidosSinSlot?.[p1.id] &&
-    !ovVieRed.partidosSinSlot?.[p2.id] &&
+    p1Red.fechaHora === null && p1Red.sinHorarioAsignado && p1Red.canchaNumero === null &&
+    p2Red.fechaHora === null && p2Red.sinHorarioAsignado && p2Red.canchaNumero === null &&
+    Boolean(ovVieRed.partidosSinSlot?.[p1.id]) &&
+    Boolean(ovVieRed.partidosSinSlot?.[p2.id]) &&
     p3Red.fechaHora?.getTime() === sab10.getTime() &&
     p4Red.fechaHora?.getTime() === sab10.getTime() &&
     p3Red.fechaHora !== null &&

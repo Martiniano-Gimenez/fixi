@@ -2464,14 +2464,6 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     timestampOverride = new Date();
   }
 
-  // Hora actual (mockTimestamp en tests) redondeada hacia arriba a 15 min: nada se acomoda antes.
-  // Con el torneo ya terminado no hay piso (no hay nada que jugar después de ahora).
-  const TICK_MS = 15 * 60 * 1000;
-  const ahoraMs = mockTimestamp ? new Date(mockTimestamp).getTime() : Date.now();
-  const domingoTorneo = clavesJornadasTorneo(requireTorneoFecha(torneo))[2];
-  const finTorneoMs = getDiaCalendarioConTrasnoche(parseFechaLocal(domingoTorneo), horariosClubObj).dayLimitMs;
-  const pisoAhoraMs = ahoraMs > finTorneoMs ? null : Math.ceil(ahoraMs / TICK_MS) * TICK_MS;
-
   // Día lógico de la operación. Restaurar todo (sin jornada) no tiene un día propio: recorre cada override.
   const diaOverrideTs = diaKey ? parseFechaLocal(diaKey) : (diaKeyJornada ? timestampOverride : null);
 
@@ -2606,7 +2598,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
             };
           } else if (leerJson(ov.horariosAntesLluvia)) {
             dayRes = await restaurarHorariosAntesLluvia(
-              organizadorId, torneoId, ov.diaKey, leerJson(ov.horariosAntesLluvia), tx, { pisoAhoraMs }
+              organizadorId, torneoId, ov.diaKey, leerJson(ov.horariosAntesLluvia), tx
             );
           } else {
             // Override sin registro (creado antes de guardar el horario de antes de la lluvia)
@@ -2615,8 +2607,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
               torneoId,
               canchasClub,
               tx,
-              diaTs,
-              { pisoAhoraMs }
+              diaTs
             );
           }
 
@@ -2640,8 +2631,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
           torneoId,
           overrideNum,
           tx,
-          diaOverrideTs,
-          { pisoAhoraMs }
+          diaOverrideTs
         );
       }
     } else if (esRestauracion && !esDomingo) {
@@ -2651,8 +2641,8 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       });
       const registro = leerJson(ov?.horariosAntesLluvia);
       res = registro
-        ? await restaurarHorariosAntesLluvia(organizadorId, torneoId, overrideDiaKey, registro, tx, { pisoAhoraMs })
-        : await asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideNum, tx, diaOverrideTs, { pisoAhoraMs });
+        ? await restaurarHorariosAntesLluvia(organizadorId, torneoId, overrideDiaKey, registro, tx)
+        : await asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideNum, tx, diaOverrideTs);
     } else if (esDomingo) {
       // En Domingo todas las fases son eliminatorias/playoffs.
       // Delegamos en programarHorariosEliminatorias con las canchas reducidas y descansos reales.
@@ -2679,8 +2669,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         torneoId,
         overrideNum,
         tx,             // externalTx: operaciones sobre db.partido dentro de tx
-        diaOverrideTs,  // overrideTimestamp para scopear al día lógico correspondiente
-        { pisoAhoraMs }
+        diaOverrideTs   // overrideTimestamp para scopear al día lógico correspondiente
       );
     }
 

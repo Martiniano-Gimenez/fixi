@@ -1343,15 +1343,14 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
  * En situación de emergencia (lluvia) se apila sin mirar la disponibilidad de las parejas, con estas reglas:
  * - Viernes: ningún partido empieza antes del inicio de la disponibilidad del viernes de sus dos parejas
  *   (una pareja sin horarios ese día no pone piso) y todos terminan antes del cierre del club del viernes.
- *   Lo que no entra pasa al sábado: earliest-fit desde la apertura, en canchas libres, sin mover los
+ *   Lo que no entra pasa al sábado: earliest-fit desde max(apertura, próximo pendiente), sin mover los
  *   partidos del sábado. Si tampoco entra, queda sin horario.
  * - Viernes y sábado: al reducir canchas, el horario previo a esta corrida también es un piso.
  * - Sábado: desde el piso de cada partido hasta el límite de trasnoche (dayLimitMs).
- * - opciones.pisoAhoraMs: nada se acomoda antes de ese momento (la hora actual redondeada a 15 min).
+ * - El próximo pendiente con horario de cada jornada, tomado antes de mover nada, es su piso.
  */
-async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null, overrideTimestamp = null, opciones = {}) {
+async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCanchas, externalTx = null, overrideTimestamp = null) {
   const db = externalTx || prisma;
-  const pisoAhoraMs = opciones.pisoAhoraMs || null;
 
   const torneo = await db.torneo.findUnique({
     where: { id: torneoId },
@@ -1407,6 +1406,15 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       pareja2: { select: { id: true, jugador1: true, jugador2: true, resolucionManual: true, slotsSeleccionados: { select: { slotId: true } } } },
     },
   });
+
+  // Foto previa a la reprogramación: también fija el piso del sábado que recibe partidos del viernes.
+  const proximoPorJornada = new Map();
+  for (const p of todosLosPartidos) {
+    if (p.estado !== 'PENDIENTE' || p.esBye || !p.fechaHora || p.sinHorarioAsignado) continue;
+    const key = getDiaCalendarioConTrasnoche(p.fechaHora, organizador)?.key;
+    const inicio = new Date(p.fechaHora).getTime();
+    proximoPorJornada.set(key, Math.min(proximoPorJornada.get(key) ?? Infinity, inicio));
+  }
 
   function isMiniBracketRonda2(p) {
     return Boolean(
@@ -1878,8 +1886,9 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
     }
     const limiteBusquedaMs = lluviaViernes && cierreViernesMs ? Math.min(dayLimitMs, cierreViernesMs) : dayLimitMs;
 
-    // Nada se acomoda antes de la hora actual
-    if (pisoAhoraMs) minSearchMs = Math.max(minSearchMs, pisoAhoraMs);
+    if (!esRestauracionTotal) {
+      minSearchMs = Math.max(minSearchMs, proximoPorJornada.get(origDiaInfo.key) ?? sessionDayStartMs);
+    }
 
     // Ajustar minSearchMs al tick de 15 minutos más cercano hacia arriba
     minSearchMs = redondearArriba(minSearchMs);
@@ -1918,7 +1927,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       }
     }
 
-    // Lo que no entra el viernes pasa al sábado: desde la apertura, sin mirar disponibilidad, en las canchas
+    // Lo que no entra el viernes pasa al sábado: desde max(apertura, próximo pendiente), en las canchas
     // libres del sábado y sin que una pareja juegue dos a la vez. Un partido de zona termina antes del primer
     // dieciseisavos de su categoría.
     if (bestCandidate === null && lluviaViernes && !ronda1SinHorario) {
@@ -1926,8 +1935,7 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
         canchasOverridesService.getCanchasDia(torneoId, sabadoInfo.key, canchasClub).canchas,
         canchasClub
       );
-      let pisoSabado = satDayStartMs;
-      if (pisoAhoraMs) pisoSabado = Math.max(pisoSabado, pisoAhoraMs);
+      let pisoSabado = Math.max(satDayStartMs, proximoPorJornada.get(sabadoInfo.key) ?? satDayStartMs);
       if (isMiniBracketR2) pisoSabado = Math.max(pisoSabado, getRonda1InfoZona(partido.zonaId, partido.id).maxEndMs);
       let limiteSabado = sabadoInfo.dayLimitMs;
       const primerR32 = partido.zonaId ? primerR32PorCategoria.get(partido.categoriaId) : undefined;
@@ -2073,15 +2081,16 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
 
 /**
  * Restaura una jornada (viernes o sábado) después de la lluvia. Cada partido PENDIENTE del registro
- * horariosAntesLluvia vuelve a su horario de antes de la lluvia si no es anterior a la hora actual y la
- * cancha y las dos parejas están libres. Si no se puede, earliest-fit desde max(ese horario, hora actual)
+ * horariosAntesLluvia vuelve a su horario de antes de la lluvia si no es anterior al próximo pendiente de
+ * su jornada original (excluyendo el registro) y la cancha y las dos parejas están libres.
+ * Si no se puede, earliest-fit desde max(ese horario, próximo pendiente)
  * en su jornada original (el viernes hasta el cierre del club; el sábado hasta el límite de trasnoche).
- * Lo que no entra queda sin horario. FINALIZADO, EN_CURSO y los partidos fuera del registro no se tocan.
+ * Solo se toma una alternativa que adelante el horario actual; si no hay lugar, se conserva.
+ * FINALIZADO, EN_CURSO y los partidos fuera del registro no se tocan.
  * Los P3/P4 de MINI_BRACKET quedan después de la ronda 1 de su zona y los dieciseisavos después de las zonas.
  */
-async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, registro, externalTx = null, opciones = {}) {
+async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, registro, externalTx = null) {
   const db = externalTx || prisma;
-  const pisoAhoraMs = opciones.pisoAhoraMs || null;
 
   const torneo = await db.torneo.findUnique({ where: { id: torneoId }, include: { organizador: true } });
   if (!torneo || torneo.organizadorId !== organizadorId) {
@@ -2120,25 +2129,39 @@ async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, reg
 
   const aRestaurar = partidos.filter((p) => p.estado === 'PENDIENTE' && registro[p.id]);
   const idsRestaurar = new Set(aRestaurar.map((p) => p.id));
+  // Se toma antes de mover nada y sin contar los pendientes que vuelven desde el registro.
+  const proximoJornadaMs = partidos.reduce((minimo, p) => {
+    if (p.estado !== 'PENDIENTE' || idsRestaurar.has(p.id) || p.esBye || !p.fechaHora || p.sinHorarioAsignado) return minimo;
+    if (getDiaCalendarioConTrasnoche(p.fechaHora, organizador)?.key !== diaKey) return minimo;
+    return Math.min(minimo, new Date(p.fechaHora).getTime());
+  }, Infinity);
+  // Sin otro pendiente en la jornada original, se puede volver desde su apertura.
+  const pisoJornadaMs = proximoJornadaMs === Infinity ? inicioJornadaMs : proximoJornadaMs;
 
   // Ocupación: todo lo que tiene horario y no se restaura (finalizados, en juego y los demás pendientes)
   const canchas = new Map();
   for (let c = 1; c <= canchasClub; c++) canchas.set(c, []);
   const parejas = new Map();
   function ocupar(p, startMs, cancha) {
-    if (cancha && canchas.has(cancha)) canchas.get(cancha).push([startMs, startMs + DURACION_MS]);
+    if (cancha && canchas.has(cancha)) canchas.get(cancha).push([startMs, startMs + DURACION_MS, p.id]);
     for (const pid of [p.pareja1Id, p.pareja2Id]) {
       if (!pid) continue;
       if (!parejas.has(pid)) parejas.set(pid, []);
-      parejas.get(pid).push([startMs, startMs + DURACION_MS]);
+      parejas.get(pid).push([startMs, startMs + DURACION_MS, p.id]);
     }
   }
   for (const p of partidos) {
     if (idsRestaurar.has(p.id) || p.esBye || !p.fechaHora || p.sinHorarioAsignado) continue;
     ocupar(p, new Date(p.fechaHora).getTime(), p.canchaNumero);
   }
-  const libre = (lista, s) => !(lista || []).some(([a, b]) => s < b && s + DURACION_MS > a);
-  const parejasLibres = (p, s) => [p.pareja1Id, p.pareja2Id].every((pid) => !pid || libre(parejas.get(pid), s));
+  function liberar(p) {
+    for (const [c, lista] of canchas) canchas.set(c, lista.filter(([, , id]) => id !== p.id));
+    for (const pid of [p.pareja1Id, p.pareja2Id]) {
+      if (parejas.has(pid)) parejas.set(pid, parejas.get(pid).filter(([, , id]) => id !== p.id));
+    }
+  }
+  const libre = (lista, s, excluirId = null) => !(lista || []).some(([a, b, id]) => id !== excluirId && s < b && s + DURACION_MS > a);
+  const parejasLibres = (p, s) => [p.pareja1Id, p.pareja2Id].every((pid) => !pid || libre(parejas.get(pid), s, p.id));
 
   // Inicio efectivo de un partido: el nuevo si ya se restauró, undefined si todavía falta ubicarlo
   const ubicados = new Map();
@@ -2183,42 +2206,71 @@ async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, reg
     ubicados.set(p.id, startMs);
     nuevos.set(p.id, { fechaHora: new Date(startMs), canchaNumero: cancha, sinHorarioAsignado: false });
   }
+  const inicioActual = (p) => p.fechaHora && !p.sinHorarioAsignado ? new Date(p.fechaHora).getTime() : null;
+  function conservar(p) {
+    const actual = inicioActual(p);
+    if (actual !== null) ocupar(p, actual, p.canchaNumero);
+    ubicados.set(p.id, actual);
+    nuevos.set(p.id, { fechaHora: p.fechaHora, canchaNumero: p.canchaNumero, sinHorarioAsignado: p.sinHorarioAsignado });
+  }
 
   // 1. Vuelven a su horario original los que pueden
-  const sinLugar = [];
+  const sinLugar = new Set();
   for (const p of orden) {
     const original = registro[p.id];
     const s = inicioOriginal(p);
     if (s === null) {
-      ubicados.set(p.id, null);
-      nuevos.set(p.id, {
-        fechaHora: original.fechaHora ? new Date(original.fechaHora) : null,
-        canchaNumero: original.canchaNumero ?? null,
-        sinHorarioAsignado: Boolean(original.sinHorarioAsignado),
-      });
+      conservar(p);
       continue;
     }
     const piso = pisoDependencias(p);
     const cancha = original.canchaNumero;
     if (
       piso !== undefined && s >= piso &&
-      (!pisoAhoraMs || s >= pisoAhoraMs) &&
+      s >= pisoJornadaMs && (inicioActual(p) === null || s <= inicioActual(p)) &&
       cancha && canchas.has(cancha) &&
       libre(canchas.get(cancha), s) && parejasLibres(p, s)
     ) {
       fijar(p, s, cancha);
     } else {
-      sinLugar.push(p);
+      sinLugar.add(p.id);
     }
   }
 
-  // 2. El resto: earliest-fit desde max(horario original, hora actual) en su jornada
-  for (const p of sinLugar) {
+  // Reservar los turnos actuales de quienes no pudieron volver. Si bloquean una vuelta propuesta,
+  // se descarta esa propuesta y se reserva también su turno actual, hasta estabilizar la ocupación.
+  // Esto permite volver en bloque a los originales sin perder la posibilidad de quedarse donde estaban.
+  for (const p of orden) {
+    if (sinLugar.has(p.id)) conservar(p);
+  }
+  let revisar = true;
+  while (revisar) {
+    revisar = false;
+    for (const p of orden) {
+      if (sinLugar.has(p.id) || inicioOriginal(p) === null) continue;
+      const n = nuevos.get(p.id);
+      const s = n.fechaHora.getTime();
+      const piso = pisoDependencias(p);
+      if (piso === undefined || s < piso || !libre(canchas.get(n.canchaNumero), s, p.id) || !parejasLibres(p, s)) {
+        liberar(p);
+        conservar(p);
+        sinLugar.add(p.id);
+        revisar = true;
+      }
+    }
+  }
+
+  // 2. El resto: earliest-fit en su jornada, solo si adelanta el turno actual.
+  for (const p of orden) {
+    if (!sinLugar.has(p.id)) continue;
+    liberar(p);
     const preferida = registro[p.id].canchaNumero;
     const ordenCanchas = [...canchas.keys()].sort((a, b) => (a === preferida ? -1 : b === preferida ? 1 : a - b));
-    let T = redondearArriba(Math.max(inicioOriginal(p), pisoAhoraMs || 0, pisoDependencias(p) || 0, inicioJornadaMs));
+    const piso = pisoDependencias(p);
+    let T = redondearArriba(Math.max(inicioOriginal(p), pisoJornadaMs, piso || 0, inicioJornadaMs));
     let elegido = null;
-    for (; elegido === null && T + DURACION_MS <= limiteMs; T += TICK_MS) {
+    for (; piso !== undefined && elegido === null && T + DURACION_MS <= limiteMs
+      && (inicioActual(p) === null || T < inicioActual(p)); T += TICK_MS) {
       if (!parejasLibres(p, T)) continue;
       const c = ordenCanchas.find((n) => libre(canchas.get(n), T));
       if (c) elegido = { T, cancha: c };
@@ -2226,8 +2278,7 @@ async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, reg
     if (elegido) {
       fijar(p, elegido.T, elegido.cancha);
     } else {
-      ubicados.set(p.id, null);
-      nuevos.set(p.id, { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true });
+      conservar(p);
     }
   }
 

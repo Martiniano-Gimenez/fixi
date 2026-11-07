@@ -14,7 +14,7 @@ const DURACION_MS = 75 * 60 * 1000;
 const VIE = '2026-11-13';
 const SAB = '2026-11-14';
 const local = (dia, h, m = 0) => new Date(2026, 10, dia, h, m, 0, 0); // noviembre = 10
-const JUEVES = local(12, 12); // "ahora" antes del torneo: sin piso
+const JUEVES = local(12, 12); // La hora de invocación nunca es un piso.
 const HORARIOS = { viernesInicio: '18:00', viernesFin: '00:00', sabadoInicio: '08:00', sabadoFin: '02:00', domingoInicio: '08:00', domingoFin: '23:00' };
 const CIERRE_VIERNES = local(14, 0).getTime();
 const APERTURA_SABADO = local(14, 8).getTime();
@@ -29,12 +29,14 @@ function slotsViernesDesde(h, m) {
   return lista;
 }
 
+let numeroEscenario = 0;
 async function crearEscenario() {
+  const sufijo = ++numeroEscenario;
   const org = await prisma.organizador.create({
-    data: { nombre: 'Club Lluvia Original', email: 'lluvia-original@padel.test', passwordHash: 'x', cantidadCanchas: 6, ...HORARIOS },
+    data: { nombre: 'Club Lluvia Original', email: `lluvia-original-${sufijo}@padel.test`, passwordHash: 'x', cantidadCanchas: 6, ...HORARIOS },
   });
   const torneo = await prisma.torneo.create({
-    data: { nombre: 'Lluvia original', slug: 'lluvia-original', fecha: local(13, 12), estado: 'EN_CURSO', organizadorId: org.id },
+    data: { nombre: 'Lluvia original', slug: `lluvia-original-${sufijo}`, fecha: local(13, 12), estado: 'EN_CURSO', organizadorId: org.id },
   });
   const cat = await prisma.categoria.create({ data: { torneoId: torneo.id, nombre: '5ta', estado: 'EN_CURSO' } });
   const cat6 = await prisma.categoria.create({ data: { torneoId: torneo.id, nombre: '6ta', estado: 'EN_CURSO' } });
@@ -166,16 +168,159 @@ async function probarViernesConHuecoPrevio() {
   console.log('OK viernes con hueco 6→4→3: los horarios avisados son pisos, aunque haya lugar antes');
 }
 
+const fotoHorarios = (partidos) => partidos.map((p) => [p.id, p.fechaHora?.toISOString() ?? null, p.canchaNumero, p.sinHorarioAsignado]);
+function verificarSinAtrasos(antes, despues) {
+  const actuales = new Map(despues.map((p) => [p.id, p]));
+  for (const p of antes) {
+    if (p.estado !== 'PENDIENTE' || !p.fechaHora || p.sinHorarioAsignado) continue;
+    const n = actuales.get(p.id);
+    assert.ok(n.fechaHora && !n.sinHorarioAsignado, 'Restaurar nunca pierde un horario actual');
+    assert.ok(n.fechaHora <= p.fechaHora, 'Restaurar nunca atrasa un partido');
+  }
+}
+
+async function probarIndependenciaDelReloj() {
+  const { org, torneo } = await crearEscenario();
+  const inicial = await leerPartidos(torneo.id);
+  const reducir = (n, ahora, dia = VIE) => organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, n, ahora, dia);
+  let referencia;
+  // Incluye antes, durante y después del torneo y el camino real sin mockTimestamp.
+  for (const ahora of [local(13, 9), local(14, 17, 43), local(20, 18), null]) {
+    await reducir(4, ahora);
+    const reducidos = await leerPartidos(torneo.id);
+    assert.ok(reducidos.every((p) => p.fechaHora && !p.sinHorarioAsignado), 'La hora no deja partidos sin horario');
+    if (referencia) assert.deepStrictEqual(fotoHorarios(reducidos), referencia, 'Reducir no depende del reloj');
+    referencia = fotoHorarios(reducidos);
+    assert.ok(reducidos.some((p) => jornada(p.fechaHora) === SAB && jornada(inicial.find((o) => o.id === p.id).fechaHora) === VIE));
+    await reducir(null, ahora);
+    const restaurados = await leerPartidos(torneo.id);
+    verificarSinAtrasos(reducidos, restaurados);
+    assert.deepStrictEqual(fotoHorarios(restaurados), fotoHorarios(inicial), 'Todos vuelven al original, incluidos los que pasaron al sábado');
+    assert.strictEqual(await leerRegistro(torneo.id, VIE), null);
+    verificarSinChoques(restaurados, 'Restauración independiente del reloj');
+  }
+  // Restaurar todo sigue recuperando los registros de ambas jornadas y limpia base y caché.
+  await reducir(4, local(14, 17, 43));
+  await reducir(4, local(14, 17, 43), SAB);
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, null);
+  assert.deepStrictEqual(fotoHorarios(await leerPartidos(torneo.id)), fotoHorarios(inicial));
+  assert.strictEqual(await prisma.overrideCanchasDia.count({ where: { torneoId: torneo.id } }), 0);
+  assert.deepStrictEqual(canchasOverridesService.getOverridesTorneo(torneo.id), {});
+  console.log('OK reloj independiente y restaurar todo: mañana del viernes, tarde del sábado, torneo pasado y sin mock');
+}
+
+async function probarPisoProximoPendiente() {
+  const { org, torneo } = await crearEscenario();
+  const inicial = await leerPartidos(torneo.id);
+  const finalizados = inicial.filter((p) => jornada(p.fechaHora) === VIE && p.fechaHora <= local(13, 18));
+  // Terminaron a las 18:00: hay un hueco real hasta el próximo pendiente de las 19:15.
+  await prisma.partido.updateMany({ where: { id: { in: finalizados.map((p) => p.id) } },
+    data: { estado: 'FINALIZADO', fechaHora: local(13, 16, 45) } });
+  // El sábado ya avanzó hasta las 12:00; los huecos de la mañana no son candidatos al pase.
+  for (const p of inicial.filter((p) => jornada(p.fechaHora) === SAB)) {
+    await prisma.partido.update({ where: { id: p.id }, data: { fechaHora: new Date(p.fechaHora.getTime() + 4 * 60 * 60 * 1000) } });
+  }
+  const previo = await leerPartidos(torneo.id);
+  const proximoViernes = Math.min(...previo.filter((p) => p.estado === 'PENDIENTE' && jornada(p.fechaHora) === VIE).map((p) => p.fechaHora.getTime()));
+  const recuperado = previo.find((p) => p.estado === 'PENDIENTE' && jornada(p.fechaHora) === VIE);
+  await prisma.partido.update({ where: { id: recuperado.id }, data: { fechaHora: null, canchaNumero: null, sinHorarioAsignado: true } });
+  await canchasOverridesService.setOverrideDia(torneo.id, VIE, 5, JUEVES, { [recuperado.id]: 'Sin cancha activa libre disponible en ese horario' });
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, 2, local(14, 17, 43), VIE);
+  const despues = await leerPartidos(torneo.id);
+  const idsViernes = new Set(previo.filter((p) => p.estado === 'PENDIENTE' && jornada(p.fechaHora) === VIE).map((p) => p.id));
+  const pasan = [];
+  for (const p of despues.filter((p) => idsViernes.has(p.id))) {
+    assert.ok(p.fechaHora && !p.sinHorarioAsignado);
+    if (jornada(p.fechaHora) === VIE) assert.ok(p.fechaHora.getTime() >= proximoViernes, 'Nada antes del próximo pendiente del viernes');
+    else {
+      pasan.push(p);
+      assert.ok(p.fechaHora >= local(14, 12), 'Pase al sábado desde su próximo pendiente, aunque haya huecos antes');
+    }
+  }
+  assert.ok(pasan.length > 0);
+  assert.ok(despues.find((p) => p.id === recuperado.id).fechaHora.getTime() >= proximoViernes, 'El pendiente sin horario también respeta el piso');
+  for (const p of previo.filter((p) => p.estado === 'FINALIZADO' || jornada(p.fechaHora) === SAB)) {
+    assert.deepStrictEqual(fotoHorarios(despues.filter((n) => n.id === p.id)), fotoHorarios([p]), 'Finalizados y sábado intactos');
+  }
+  verificarSinChoques(despues, 'Piso próximo pendiente');
+  console.log('OK próximo pendiente: finalizados hasta las 18:00, recuperación sin horario y pase desde el próximo del sábado');
+}
+
+async function probarRestauracionConTurnosRetenidos() {
+  const org = await prisma.organizador.create({ data: {
+    nombre: 'Club Restauración', email: 'restauracion-piso@padel.test', passwordHash: 'x', cantidadCanchas: 6, ...HORARIOS,
+  } });
+  const torneo = await prisma.torneo.create({ data: {
+    nombre: 'Turnos retenidos', slug: 'restauracion-piso', fecha: local(13, 12), estado: 'EN_CURSO', organizadorId: org.id,
+  } });
+  const cat = await prisma.categoria.create({ data: { torneoId: torneo.id, nombre: '5ta', estado: 'EN_CURSO' } });
+  const zona = await prisma.zona.create({ data: { categoriaId: cat.id, nombre: 'Zona A', clasifican: 2 } });
+  const registro = {};
+  let orden = 0;
+  async function partido(actual, cancha, original = undefined, estado = 'PENDIENTE') {
+    const ids = [];
+    for (let j = 0; j < 2; j++) {
+      const p = await prisma.pareja.create({ data: { categoriaId: cat.id, jugador1: `J${++orden}`, jugador2: 'Compañero', orden } });
+      ids.push(p.id);
+    }
+    const p = await prisma.partido.create({ data: {
+      categoriaId: cat.id, zonaId: zona.id, pareja1Id: ids[0], pareja2Id: ids[1], estado,
+      fechaHora: actual, canchaNumero: actual ? cancha : null, sinHorarioAsignado: !actual,
+    } });
+    if (original !== undefined) registro[p.id] = {
+      fechaHora: original?.toISOString() ?? null, canchaNumero: original ? cancha : null, sinHorarioAsignado: !original,
+    };
+    return p;
+  }
+  const adelanta = await partido(local(13, 20), 1, local(13, 18));
+  const conserva = await partido(local(13, 19), 2, local(13, 18));
+  const originalPosterior = await partido(local(13, 20, 45), 3, local(13, 21));
+  const sinHorario = await partido(null, 4, local(13, 18));
+  const sinOriginal = await partido(local(13, 20), 5, null);
+  const noEntra = await partido(null, 4, local(13, 23));
+  const bloqueadoPorRetenido = await partido(local(13, 22), 3, local(13, 20));
+  const evitaRetenido = await partido(local(13, 21), 2, local(13, 18, 45));
+  // Único pendiente ajeno al registro: define el próximo a las 19:30, aunque el registro tenga las 19:00.
+  await partido(local(13, 19, 30), 6);
+  for (let c = 1; c <= 6; c++) await partido(local(13, 23), c, undefined, c === 1 ? 'EN_CURSO' : 'FINALIZADO');
+  await canchasOverridesService.setOverrideDia(torneo.id, VIE, 4, JUEVES, {}, null, registro);
+  const antes = await leerPartidos(torneo.id);
+  await organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, null, local(14, 17, 43), VIE);
+  const despues = await leerPartidos(torneo.id);
+  const porId = new Map(despues.map((p) => [p.id, p]));
+  const inicio = (p) => porId.get(p.id).fechaHora?.getTime() ?? null;
+  assert.strictEqual(inicio(adelanta), local(13, 19, 30).getTime(), 'Earliest-fit desde próximo ajeno al registro');
+  assert.strictEqual(inicio(conserva), conserva.fechaHora.getTime(), 'No acepta una alternativa posterior ni igual al actual');
+  assert.strictEqual(inicio(originalPosterior), originalPosterior.fechaHora.getTime(), 'Ni siquiera el original puede atrasar el actual');
+  assert.strictEqual(inicio(sinHorario), local(13, 19, 30).getTime(), 'Sin horario puede tomar un lugar desde el próximo');
+  assert.strictEqual(inicio(sinOriginal), sinOriginal.fechaHora.getTime(), 'Original nulo no borra el horario actual');
+  assert.strictEqual(inicio(noEntra), null, 'Sin horario y sin lugar sigue sin horario');
+  assert.strictEqual(inicio(bloqueadoPorRetenido), local(13, 20, 15).getTime(), 'Una vuelta original bloqueada usa earliest-fit sin invadir el turno retenido');
+  assert.strictEqual(porId.get(bloqueadoPorRetenido.id).canchaNumero, 2);
+  assert.strictEqual(inicio(evitaRetenido), local(13, 19, 30).getTime(), 'Earliest-fit aprovecha otra cancha libre');
+  assert.strictEqual(porId.get(evitaRetenido.id).canchaNumero, 3);
+  verificarSinAtrasos(antes, despues);
+  verificarSinChoques(despues, 'Restauración con turnos retenidos');
+  for (const p of antes.filter((p) => p.estado !== 'PENDIENTE' || !registro[p.id])) {
+    assert.deepStrictEqual(despues.find((n) => n.id === p.id), p, 'Finalizados, en curso y fuera del registro intactos');
+  }
+  assert.strictEqual(await leerRegistro(torneo.id, VIE), null);
+  console.log('OK restaurar: próximo excluye registro, earliest-fit, reservas de turnos actuales y originales nulos');
+}
+
 async function main() {
   await ensureTestDb();
   await canchasOverridesService.loadFromDb();
   await probarViernesConHuecoPrevio();
-  const { org, torneo, parejas } = await crearEscenario();
+  await probarIndependenciaDelReloj();
+  await probarPisoProximoPendiente();
+  await probarRestauracionConTurnosRetenidos();
+  let { org, torneo, parejas } = await crearEscenario();
   const reducir = (canchas, diaKey, ahora) => organizadorService.reprogramarPorReduccionCanchas(org.id, torneo.id, canchas, ahora, diaKey);
 
   const inicial = await leerPartidos(torneo.id);
   const delViernes = inicial.filter((p) => jornada(p.fechaHora) === VIE);
-  const sabadoAntes = inicial.filter((p) => jornada(p.fechaHora) === SAB);
+  let sabadoAntes = inicial.filter((p) => jornada(p.fechaHora) === SAB);
   assert.strictEqual(delViernes.length, 23);
 
   // ── 1. Viernes 6 → 4 ──────────────────────────────────────────────────────────────────────────────
@@ -234,8 +379,10 @@ async function main() {
   console.log('OK viernes 4→3: conserva el registro de la primera reducción');
 
   // ── 4. Restaurar el viernes ───────────────────────────────────────────────────────────────────────
-  await reducir(null, VIE, JUEVES);
+  const antesRestaurar = await leerPartidos(torneo.id);
+  await reducir(null, VIE, local(14, 17, 43));
   partidos = await leerPartidos(torneo.id);
+  verificarSinAtrasos(antesRestaurar, partidos);
   actuales = porId(partidos);
   assert.strictEqual(await leerRegistro(torneo.id, VIE), null, 'Se borra el override con su registro');
   const f = actuales.get(finalizado.id);
@@ -253,30 +400,33 @@ async function main() {
   for (const o of delViernes) {
     if (o.id === finalizado.id) continue;
     const p = actuales.get(o.id);
-    if (!chocaConFinalizado(o)) {
-      assert.strictEqual(p.fechaHora.getTime(), o.fechaHora.getTime(), `Vuelve a su horario original (${hhmm(o.fechaHora.getTime())})`);
-      assert.strictEqual(p.canchaNumero, o.canchaNumero);
+    if (p.fechaHora.getTime() === o.fechaHora.getTime() && p.canchaNumero === o.canchaNumero) {
+      assert.ok(!chocaConFinalizado(o), 'No se restaura sobre el finalizado');
       volvieron++;
     } else {
-      // Si no puede volver: después de su horario original, en el viernes y antes del cierre; si no entra, sin horario
-      if (p.fechaHora) {
-        assert.ok(p.fechaHora.getTime() >= o.fechaHora.getTime(), 'Si no puede volver, va después de su horario original');
+      // Un turno retenido también puede bloquear el original: se adelanta si hay lugar o conserva el actual.
+      const previo = antesRestaurar.find((m) => m.id === p.id);
+      assert.ok(p.fechaHora.getTime() >= o.fechaHora.getTime(), 'Si no puede volver, respeta el horario original como piso');
+      if (p.fechaHora.getTime() < previo.fechaHora.getTime()) {
         assert.strictEqual(jornada(p.fechaHora), VIE, 'En su jornada original');
         assert.ok(p.fechaHora.getTime() + DURACION_MS <= CIERRE_VIERNES, 'Antes del cierre del viernes');
-      } else {
-        assert.strictEqual(p.sinHorarioAsignado, true);
       }
       desplazados++;
     }
   }
   assert.ok(desplazados >= 1, 'El finalizado ocupa el horario original de al menos un partido');
-  assert.ok(pasaronAlSabado.filter((id) => id !== finalizado.id).every((id) => !actuales.get(id).fechaHora || jornada(actuales.get(id).fechaHora) === VIE),
-    'Los que habían pasado al sábado vuelven al viernes');
+  assert.ok(pasaronAlSabado.filter((id) => id !== finalizado.id).every((id) => jornada(actuales.get(id).fechaHora) === VIE
+    || actuales.get(id).fechaHora.getTime() === antesRestaurar.find((p) => p.id === id).fechaHora.getTime()),
+    'Los que habían pasado al sábado vuelven al viernes o conservan su turno si ya no hay lugar');
   assert.ok(volvieron >= 18, `La mayoría vuelve exacto a su horario (${volvieron})`);
   verificarSinChoques(partidos, 'Restaurar viernes');
-  console.log(`OK restaurar viernes: ${volvieron} vuelven a su horario, incluidos los que habían pasado al sábado; ${desplazados} ${desplazados === 1 ? "va" : "van"} más tarde por el finalizado, que no cambia`);
+  console.log(`OK restaurar viernes: ${volvieron} vuelven al horario y cancha originales; ${desplazados} buscan lugar sin atrasarse ni perder su horario; el finalizado no cambia`);
 
   // ── 5. Sábado 6 → 4 → 3: cada reducción usa el horario inmediatamente anterior ───────────────────
+  // Escenario independiente: la restauración anterior puede conservar un turno del viernes en el sábado.
+  ({ org, torneo } = await crearEscenario());
+  partidos = await leerPartidos(torneo.id);
+  sabadoAntes = partidos.filter((p) => jornada(p.fechaHora) === SAB);
   const antesSabado = partidos;
   await reducir(4, SAB, JUEVES);
   partidos = await leerPartidos(torneo.id);
@@ -302,32 +452,33 @@ async function main() {
   }
   console.log('OK sábado 6→4→3: no se adelanta respecto del horario previo a cada reducción; restaurar lo devuelve');
 
-  // ── 6. Nada antes de la hora actual ───────────────────────────────────────────────────────────────
+  // ── 6. Sábado y viernes usan el próximo pendiente aunque el reloj marque más tarde ───────────────
+  const antesSabadoConReloj = partidos;
   const sabado905 = local(14, 9, 5);
   await reducir(4, SAB, sabado905);
   partidos = await leerPartidos(torneo.id);
   const pendientesSab = partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && jornada(p.fechaHora) === SAB);
-  assert.ok(pendientesSab.every((p) => p.fechaHora.getTime() >= local(14, 9, 15).getTime()), 'Sábado: nada antes de las 09:15');
-  assert.strictEqual(Math.min(...pendientesSab.map((p) => p.fechaHora.getTime())), local(14, 9, 15).getTime());
+  assert.strictEqual(Math.min(...pendientesSab.map((p) => p.fechaHora.getTime())), local(14, 8).getTime(), 'Sábado: se parte del próximo pendiente a las 08:00');
+  verificarSinAdelantos(antesSabadoConReloj, partidos, 'Sábado con reloj adelantado');
   await reducir(null, SAB, sabado905);
   partidos = await leerPartidos(torneo.id);
   const tras = partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && jornada(p.fechaHora) === SAB);
-  assert.ok(tras.every((p) => p.fechaHora.getTime() >= local(14, 9, 15).getTime()), 'Al restaurar, lo que ya pasó no vuelve antes de la hora actual');
-  verificarSinChoques(partidos, 'Sábado con hora actual');
+  assert.strictEqual(Math.min(...tras.map((p) => p.fechaHora.getTime())), local(14, 8).getTime());
+  verificarSinChoques(partidos, 'Sábado con próximo pendiente');
 
   const viernes1940 = local(13, 19, 40);
   await reducir(4, VIE, viernes1940);
   partidos = await leerPartidos(torneo.id);
   const pendientesVie = partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && jornada(p.fechaHora) === VIE);
   assert.ok(pendientesVie.length > 0);
-  assert.ok(pendientesVie.every((p) => p.fechaHora.getTime() >= local(13, 19, 45).getTime()), 'Viernes: nada antes de las 19:45');
-  verificarSinChoques(partidos, 'Viernes con hora actual');
+  assert.strictEqual(Math.min(...pendientesVie.map((p) => p.fechaHora.getTime())), local(13, 18).getTime(), 'Viernes: el reloj no reemplaza al próximo pendiente');
+  verificarSinChoques(partidos, 'Viernes con próximo pendiente');
+  const antesUltimaRestauracion = partidos;
   await reducir(null, VIE, viernes1940);
   partidos = await leerPartidos(torneo.id);
-  assert.ok(partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && jornada(p.fechaHora) === VIE)
-    .every((p) => p.fechaHora.getTime() >= local(13, 19, 45).getTime()), 'Restaurar el viernes tampoco pone nada antes de la hora actual');
-  verificarSinChoques(partidos, 'Restaurar viernes con hora actual');
-  console.log('OK hora actual: nada se acomoda antes de la hora actual redondeada a 15 min');
+  verificarSinAtrasos(antesUltimaRestauracion, partidos);
+  verificarSinChoques(partidos, 'Restaurar viernes con próximo pendiente');
+  console.log('OK casos del viejo piso de hora actual actualizados a próximo pendiente');
 
   console.log('\nPASS test-lluvia-horario-original');
 }
