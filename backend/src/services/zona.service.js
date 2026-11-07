@@ -1341,8 +1341,8 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
  * aplicando Compactación Continua Earliest-Fit ordenada cronológicamente por horario original.
  * Garantiza que los partidos FINALIZADO y EN_CURSO queden 100% fijos como ocupación inmutable en sus canchas y horarios originales.
  * En situación de emergencia (lluvia) se apila sin mirar la disponibilidad de las parejas, con estas reglas:
- * - Viernes: ningún partido empieza antes del inicio de la disponibilidad del viernes de sus dos parejas
- *   (una pareja sin horarios ese día no pone piso) y todos terminan antes del cierre del club del viernes.
+ * - Viernes: los partidos sin horario previo respetan el inicio de la disponibilidad de sus dos parejas
+ *   (una pareja sin horarios ese día no pone piso); todos terminan antes del cierre del club del viernes.
  *   Lo que no entra pasa al sábado desde la apertura o, si empezó, max(apertura, próximo pendiente),
  *   sin mover los partidos del sábado. Si tampoco entra, queda sin horario.
  * - Viernes y sábado: al reducir canchas, el horario previo a esta corrida también es un piso.
@@ -1881,10 +1881,11 @@ async function asignarHorariosModoLluviaMCF(organizadorId, torneoId, overrideCan
       minSearchMs = Math.max(minSearchMs, origStartMs);
     }
 
-    // Viernes con lluvia: nadie juega antes del inicio de su disponibilidad del viernes y todo termina
-    // antes del cierre del club. En la restauración sin registro previo se conserva el comportamiento anterior.
+    // Viernes con lluvia: el inicio de las parejas solo pone piso a los partidos sin horario previo.
+    // Los que ya tienen horario conservan ese acuerdo como piso. Todos terminan antes del cierre del club.
+    // En la restauración sin registro previo se conserva el comportamiento anterior.
     const lluviaViernes = isFriday && !esRestauracionTotal && !esR32(partido);
-    if (lluviaViernes) {
+    if (lluviaViernes && origStartMs === null) {
       const pisosParejas = [inicioViernesPareja(partido.pareja1), inicioViernesPareja(partido.pareja2)]
         .filter((v) => v !== null);
       if (pisosParejas.length > 0) minSearchMs = Math.max(minSearchMs, ...pisosParejas);
