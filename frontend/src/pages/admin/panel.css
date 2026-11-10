@@ -251,7 +251,6 @@ body:has(.panel) {
 .panel .dt-blue { color: var(--marca-hover); background: var(--marca-suave); }
 .panel .dt-neutral { color: var(--tinta-2); background: var(--superficie-2); }
 .panel .dt-dot { display: inline-block; width: 6px; height: 6px; flex: none; border-radius: 50%; }
-.panel .dt-blue-dot { background: var(--marca); }
 .panel .dt-live-dot { background: var(--vivo); }
 .panel .dt-days { display: flex; flex-wrap: wrap; gap: var(--e-2); margin-bottom: var(--e-5); }
 .panel .dt-day {
@@ -265,19 +264,20 @@ body:has(.panel) {
 .panel .dt-day-count { padding: 0 var(--e-1); border-radius: var(--r-dato); background: var(--superficie-2); color: var(--tinta-2); font-size: var(--t-12); font-weight: 600; }
 .panel .dt-rain-icon { color: var(--marca-hover); }
 
-.panel .dt-courts-card, .panel .dt-notice, .panel .dt-brackets, .panel .dt-stat, .panel .dt-match-card, .panel .dt-finished {
+.panel .dt-notice, .panel .dt-brackets, .panel .dt-stat, .panel .dt-match-card, .panel .dt-finished {
   min-width: 0; background: var(--superficie); border-radius: var(--r-tarjeta); box-shadow: var(--sombra-2);
 }
-.panel .dt-courts-card, .panel .dt-brackets { padding: var(--e-5); margin-bottom: var(--e-5); }
-.panel .dt-courts-layout { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--e-4); }
-.panel .dt-courts-info { flex: 1 1 260px; min-width: 0; }
-.panel .dt-courts-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); margin-bottom: var(--e-1); }
-.panel .dt-courts-count { font-size: var(--t-20); font-weight: 700; color: var(--tinta); }
-.panel .dt-rain-summary { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2) var(--e-4); }
-.panel .dt-rain-label { display: inline-flex; align-items: center; gap: var(--e-2); font-weight: 600; color: var(--marca); }
-.panel .dt-courts-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--e-2); max-width: 100%; margin-left: auto; }
-.panel .dt-courts-actions > .dt-button { grid-column: 1; }
-.panel .dt-stepper { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; border-radius: var(--r-control); background: var(--superficie-2); box-shadow: inset 0 0 0 1px var(--linea-fuerte); }
+.panel .dt-brackets { padding: var(--e-5); margin-bottom: var(--e-5); }
+.panel .dt-courts-footer { margin-top: var(--e-6); }
+.panel .dt-courts-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2) var(--e-4); min-width: 0; padding-block: var(--e-3); scroll-margin-top: 100px; }
+.panel .dt-courts-count { font-weight: 600; color: var(--tinta-2); white-space: nowrap; }
+.panel .dt-weather-notice { padding: var(--e-3) var(--e-4); margin-bottom: var(--e-5); border-radius: var(--r-control); background: var(--superficie-2); color: var(--tinta-2); }
+.panel .dt-rain-summary { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); }
+.panel .dt-rain-summary > span { min-width: 0; overflow-wrap: anywhere; }
+.panel .dt-rain-summary > .dt-inline-link { margin-block: -12px; }
+.panel .dt-weather-notice > .dt-after-hours:first-child { margin-top: 0; }
+.panel .dt-courts-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); min-width: 0; max-width: 100%; }
+.panel .dt-stepper { display: flex; flex: 0 0 auto; align-items: center; border-radius: var(--r-control); background: var(--superficie-2); box-shadow: inset 0 0 0 1px var(--linea-fuerte); }
 .panel .dt-step-button { display: grid; place-items: center; min-height: 44px; min-width: 44px; border-radius: var(--r-control); color: var(--tinta); font-size: var(--t-20); font-weight: 600; transition: transform .2s var(--curva); }
 .panel .dt-step-button:active:not(:disabled) { transform: scale(.92); }
 .panel .dt-step-value { min-width: 32px; text-align: center; font-size: var(--t-17); font-weight: 700; color: var(--tinta); }
@@ -357,11 +357,11 @@ body:has(.panel) {
 .panel .dt-pair-name.is-loser { color: var(--gris); font-weight: 400; }
 .panel .dt-finished-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); }
 .panel .dt-score { font-size: var(--t-13); font-weight: 700; color: var(--tinta); background: var(--superficie-2); padding: var(--e-1) var(--e-2); border-radius: var(--r-dato); }
-.panel .dt-pending-space { margin-top: var(--e-10); }
+.panel .dt-pending-space { margin-top: var(--e-10); scroll-margin-top: 100px; }
 /* Día de torneo compacto: resumen en una línea, tarjetas de una línea y próximos agrupados por hora. */
 .panel .dt-resumen { margin: 0 0 var(--e-5); color: var(--tinta-2); font-size: var(--t-15); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .panel .dt-resumen-vivo { color: var(--vivo-texto); font-weight: 600; }
-.panel .dt-resumen-alerta { color: var(--alerta-texto); font-weight: 600; }
+.panel .dt-resumen-alerta { display: inline-block; padding-block: 12px; margin-block: -12px; min-height: 44px; color: var(--alerta-texto); font-weight: 600; text-decoration: underline; }
 .panel .dt-num, .panel .dt-hour-title, .panel .dt-score { font-variant-numeric: tabular-nums; }
 .panel .dt-compact { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--e-3); padding: var(--e-3) var(--e-4); }
 .panel .dt-compact-info { min-width: 0; }
@@ -396,11 +396,11 @@ body:has(.panel) {
   .panel .dt-title { font-size: var(--t-20); }
   .panel .dt-heading > .dt-actions { width: 100%; }
   .panel .dt-heading > .dt-actions .dt-button { flex: 1; }
+  .panel .dt-heading > .dt-actions .dt-refresh { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }
+  .panel .dt-refresh-label { display: none; }
   .panel .dt-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .panel .dt-day { padding-inline: var(--e-2); font-size: var(--t-13); gap: var(--e-1); }
-  .panel .dt-courts-card, .panel .dt-brackets { padding: var(--e-4); }
-  .panel .dt-courts-layout { display: block; }
-  .panel .dt-courts-actions { margin-top: var(--e-3); width: 100%; }
+  .panel .dt-brackets { padding: var(--e-4); }
   .panel .dt-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .panel .dt-other-live { flex-wrap: wrap; }
   .panel .dt-finished-actions { width: 100%; justify-content: flex-end; }

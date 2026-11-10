@@ -44,6 +44,12 @@ export default function TorneoEnVivo() {
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [ahora, setAhora] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalo = setInterval(() => setAhora(Date.now()), 60000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   // Selector de canchas para override
   const [targetCanchas, setTargetCanchas] = useState(1);
@@ -328,6 +334,12 @@ export default function TorneoEnVivo() {
     });
   }, [data?.partidosEnCurso, esModoTodo, activeTabDay, horariosClub]);
 
+  // Orden visual estable: los empates conservan el orden recibido.
+  const partidosEnCursoOrdenados = useMemo(
+    () => [...partidosEnCursoFiltrados].sort((a, b) => new Date(a.horaInicio) - new Date(b.horaInicio)),
+    [partidosEnCursoFiltrados]
+  );
+
   // Partidos en curso en otra jornada
   const partidosEnCursoOtraJornada = useMemo(() => {
     if (esModoTodo) return [];
@@ -518,7 +530,7 @@ export default function TorneoEnVivo() {
     }
   }
 
-  // Aviso de partidos que terminan después del cierre del club (en la tarjeta de canchas)
+  // Segundo renglón del aviso contextual, también visible sin lluvia.
   const avisoFueraDeHorario = fueraDeHorarioFiltrados.length > 0 ? (
     <p
       className="dt-after-hours"
@@ -567,14 +579,6 @@ export default function TorneoEnVivo() {
           <div>
             <div className="dt-title-row">
               <h1 className="dt-title">Día de torneo</h1>
-              <span
-                className="dt-badge dt-blue"
-              >
-                <span
-                  className="dt-dot dt-blue-dot"
-                />
-                En vivo
-              </span>
             </div>
             <p className="dt-muted">
               {torneo.nombre}
@@ -600,10 +604,12 @@ export default function TorneoEnVivo() {
             type="button"
             onClick={() => fetchEnVivoData(true)}
             disabled={refreshing}
-            className="dt-button"
+            className="dt-button dt-refresh"
+            aria-label={refreshing ? 'Actualizando…' : 'Actualizar ahora'}
+            title={refreshing ? 'Actualizando…' : 'Actualizar ahora'}
           >
-            <RefreshCw size={14} className={refreshing ? 'dt-spin' : ''} />
-            {refreshing ? 'Actualizando…' : 'Actualizar ahora'}
+            <RefreshCw size={14} className={refreshing ? 'dt-spin' : ''} aria-hidden="true" />
+            <span className="dt-refresh-label">{refreshing ? 'Actualizando…' : 'Actualizar ahora'}</span>
           </button>
         </div>
       </div>
@@ -716,232 +722,21 @@ export default function TorneoEnVivo() {
         </div>
       )}
 
-      {/* ─── 2. Barra de Control de Canchas ───────────────────────── */}
-      {/* En "TODO" no se reduce ni se restaura: solo un resumen de las jornadas con lluvia */}
-      {esModoTodo ? (
-        (anyDayHasLluvia || avisoFueraDeHorario) && (
-          <div
-            className="dt-courts-card"
-          >
-            {anyDayHasLluvia && (
-              <div className="dt-rain-summary">
-                <span
-                  className="dt-rain-label"
-                >
-                  <CloudRain size={14} />
-                  Modo lluvia
-                </span>
-                {diasConLluvia.map((d) => (
-                  <span key={d.key} className="dt-muted">
-                    {d.nombre}: {d.canchas} de {canchasClub} canchas
-                  </span>
-                ))}
-              </div>
-            )}
-            {avisoFueraDeHorario}
-          </div>
-        )
-      ) : (
-      <div
-        className="dt-courts-card"
-      >
-        <div className="dt-courts-layout">
-          {/* Info de canchas activas */}
-          <div className="dt-courts-info">
-            <div className="dt-courts-title">
-              <span className="dt-strong">
-                Canchas activas {activeJornadaInfo ? `(${activeJornadaInfo.diaNombre})` : ''}:
+      {/* Aviso contextual de lluvia y cierre del club */}
+      {((esModoTodo ? anyDayHasLluvia : isTabBajoOverride) || avisoFueraDeHorario) && (
+        <div className="dt-weather-notice">
+          {(esModoTodo ? anyDayHasLluvia : isTabBajoOverride) && (
+            <div className="dt-rain-summary">
+              <CloudRain size={16} className="dt-rain-icon" aria-hidden="true" />
+              <span>
+                Lluvia: {esModoTodo
+                  ? diasConLluvia.map((d, index) => `${d.nombre.toLowerCase()} ${d.canchas} de ${canchasClub}${index === 0 ? ' canchas' : ''}`).join(' · ')
+                  : `${canchasActivasContextuales} de ${canchasClub} canchas el ${diaLluviaNombre?.toLowerCase()}`}.
               </span>
-              <span
-                className="dt-courts-count"
-              >
-                {canchasActivasContextuales} / {canchasClub}
-              </span>
-              {isTabBajoOverride ? (
-                <span
-                  className="dt-badge dt-blue"
-                >
-                  <CloudRain size={13} />
-                  Modo lluvia{diaLluviaNombre ? ` (${diaLluviaNombre})` : ''}
-                </span>
-              ) : anyDayHasLluvia ? (
-                <span
-                  className="dt-badge dt-neutral"
-                >
-                  <CloudRain size={13} />
-                  Lluvia en otra jornada
-                </span>
-              ) : (
-                <span
-                  className="dt-badge dt-neutral"
-                >
-                  <Sun size={13} />
-                  Normal
-                </span>
-              )}
-            </div>
-            {(isTabBajoOverride || anyDayHasLluvia) && (
-              <p className="dt-muted">
-                {isTabBajoOverride
-                  ? 'Partidos de esta jornada reprogramados sobre las canchas disponibles.'
-                  : 'Modo Lluvia activo en otra jornada. En esta jornada todas las canchas están habilitadas.'}
-              </p>
-            )}
-            {avisoFueraDeHorario}
-          </div>
-
-          {/* Selector y Acciones */}
-          <div className="dt-courts-actions">
-            {/* Botón Restaurar todas: Solo visible si la solapa actual está bajo override */}
-            {isTabBajoOverride && (
-              <button
-                type="button"
-                onClick={() => setConfirmRestaurarOpen(true)}
-                disabled={actionLoading}
-                className="dt-button"
-              >
-                <Sun size={15} className="dt-icon" />
-                Restaurar todas ({canchasClub})
-              </button>
-            )}
-
-            {/* Botón Reducir: Se compara contra canchasActivasContextuales */}
-            {targetCanchas < canchasActivasContextuales && (
-              <button
-                type="button"
-                onClick={() => setConfirmReducirOpen(true)}
-                disabled={actionLoading}
-                className="dt-button dt-button-blue"
-              >
-                <CloudRain size={15} />
-                Reducir a {targetCanchas} {targetCanchas === 1 ? 'cancha' : 'canchas'}
-              </button>
-            )}
-
-            {/* Control +/- (anclado a la derecha para mantener posición estable del cursor) */}
-            <div
-              className="dt-stepper"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setTargetCanchas((prev) => Math.max(1, prev - 1));
-                  setUserTouchedTarget(true);
-                }}
-                disabled={targetCanchas <= 1 || actionLoading}
-                className="dt-step-button"
-                aria-label="Reducir cantidad de canchas"
-              >
-                −
-              </button>
-              <span
-                className="dt-step-value"
-              >
-                {targetCanchas}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setTargetCanchas((prev) => Math.min(canchasClub, prev + 1));
-                  setUserTouchedTarget(true);
-                }}
-                disabled={targetCanchas >= canchasClub || actionLoading}
-                className="dt-step-button"
-                aria-label="Aumentar cantidad de canchas"
-              >
-                +
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      )}
-
-      {/* ─── 3. Banner de Feedback Post-Reprogramación ──────────────── */}
-      {isFeedbackVisible && (
-        <div
-          className="dt-notice dt-feedback"
-        >
-          <button
-            type="button"
-            onClick={() => setFeedbackReprogramacion(null)}
-            className="dt-button dt-icon-button dt-dismiss"
-            title="Cerrar aviso"
-            aria-label="Cerrar aviso"
-          >
-            <X size={18} />
-          </button>
-
-          <div className="dt-section-heading dt-feedback-heading">
-            <CheckCircle2 size={22} className="dt-brand-icon" />
-            <h3 className="dt-section-title">
-              Reprogramación por modo lluvia completada
-              {feedbackDiaNombre && ` — ${feedbackDiaNombre}`}
-            </h3>
-          </div>
-
-          <p className="dt-feedback-copy">
-            Se ajustaron los partidos pendientes respetando el orden relativo original.
-            {' '}
-            <strong className="dt-strong">
-              {feedbackReprogramacion.partidosReprogramados} partido(s) modificaron su horario
-            </strong>
-            {feedbackReprogramacion.partidosSinCambio > 0 && `, ${feedbackReprogramacion.partidosSinCambio} mantuvieron su horario`}
-            {feedbackReprogramacion.partidosSinHorarioNuevo > 0 && (
-              <span className="dt-danger-text">
-                {`, ${feedbackReprogramacion.partidosSinHorarioNuevo} quedaron sin horario disponible`}
-              </span>
-            )}
-            .
-          </p>
-
-          {feedbackReprogramacion.cambios && feedbackReprogramacion.cambios.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setFeedbackExpanded((prev) => !prev)}
-                className="dt-text-button"
-              >
-                {feedbackExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                {feedbackExpanded ? 'Ocultar detalle de cambios' : `Ver detalle de ${feedbackReprogramacion.cambios.length} cambios de horario`}
-              </button>
-
-              {feedbackExpanded && (
-                <div
-                  className="dt-change-list"
-                >
-                  {feedbackReprogramacion.cambios.map((c, idx) => (
-                    <div
-                      key={c.partidoId || idx}
-                      className="dt-change"
-                    >
-                      <div>
-                        <strong>{c.pareja1}</strong> vs <strong>{c.pareja2}</strong>
-                        <span className="dt-muted">
-                          {' '}({c.categoria})
-                        </span>
-                      </div>
-                      <div className="dt-change-times">
-                        <span className="dt-old-time dt-num">
-                          {c.antes.fechaHora ? diaHoraCorto(c.antes.fechaHora) : 'Sin horario'}
-                        </span>
-                        <span aria-hidden="true">→</span>
-                        {c.despues.fechaHora ? (
-                          <span className="dt-new-time dt-num">
-                            {diaHoraCorto(c.despues.fechaHora)}
-                          </span>
-                        ) : (
-                          <span className="dt-danger-text">
-                            Sin horario disponible
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {!esModoTodo && <a href="#dt-canchas" className="dt-inline-link">Cambiar</a>}
             </div>
           )}
+          {avisoFueraDeHorario}
         </div>
       )}
 
@@ -972,7 +767,7 @@ export default function TorneoEnVivo() {
           </div>
 
           <p className="dt-notice-copy">
-            No se pudieron reprogramar solos. Asignales horario desde Pendientes.
+            Reasignales horario desde su categoría.
           </p>
 
           {fantasmaExpanded && (
@@ -1189,13 +984,13 @@ export default function TorneoEnVivo() {
       <p className="dt-resumen">
         <span>{resumenContextual.totalPartidos || 0} {resumenContextual.totalPartidos === 1 ? 'partido' : 'partidos'}</span>
         <span aria-hidden="true"> · </span>
-        <span className="dt-resumen-vivo">{resumenContextual.enCurso || 0} en juego</span>
+        <span className={resumenContextual.enCurso > 0 ? 'dt-resumen-vivo' : undefined}>{resumenContextual.enCurso || 0} en juego</span>
         <span aria-hidden="true"> · </span>
         <span>{resumenContextual.finalizados || 0} {resumenContextual.finalizados === 1 ? 'finalizado' : 'finalizados'}</span>
         {resumenContextual.pendientesSinHorario > 0 && (
           <>
             <span aria-hidden="true"> · </span>
-            <span className="dt-resumen-alerta">{resumenContextual.pendientesSinHorario} sin horario</span>
+            <a href="#partidos-pendientes-section" className="dt-resumen-alerta">{resumenContextual.pendientesSinHorario} sin horario</a>
           </>
         )}
       </p>
@@ -1210,8 +1005,13 @@ export default function TorneoEnVivo() {
               Partidos en juego ({partidosEnCursoFiltrados.length})
             </h3>
             <div className="dt-match-list">
-              {partidosEnCursoFiltrados.map((p) => {
+              {partidosEnCursoOrdenados.map((p) => {
                 const sets = p.sets || [];
+                const minutosDesdeInicio = Math.floor((ahora - new Date(p.horaInicio).getTime()) / 60000);
+                const tiempoTranscurrido = minutosDesdeInicio < 0 ? null
+                  : minutosDesdeInicio === 0 ? 'recién'
+                    : minutosDesdeInicio < 60 ? `hace ${minutosDesdeInicio} min`
+                      : `hace ${Math.floor(minutosDesdeInicio / 60)} h ${minutosDesdeInicio % 60} min`;
                 const resultadoStr = sets.length > 0
                   ? sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')
                   : null;
@@ -1225,7 +1025,8 @@ export default function TorneoEnVivo() {
                       </p>
                       <p className="dt-muted">{contextoPartido(p)}</p>
                       <p className="dt-muted dt-compact-extra">
-                        Empezó a las <span className="dt-num">{formatHora(p.horaInicio)}</span>
+                        Empezó <span className="dt-num">{formatHora(p.horaInicio)}</span>
+                        {tiempoTranscurrido && <> · {tiempoTranscurrido}</>}
                         {resultadoStr && <> · Parcial <span className="dt-num">{resultadoStr}</span></>}
                       </p>
                     </div>
@@ -1387,6 +1188,169 @@ export default function TorneoEnVivo() {
         </div>
       )}
 
+      {/* Canchas al final de la jornada, después de Finalizados */}
+      {!esModoTodo && (
+        <div className="dt-courts-footer">
+          {/* Feedback de la jornada, junto a los controles */}
+          {isFeedbackVisible && (
+            <div
+              className="dt-notice dt-feedback"
+            >
+              <button
+                type="button"
+                onClick={() => setFeedbackReprogramacion(null)}
+                className="dt-button dt-icon-button dt-dismiss"
+                title="Cerrar aviso"
+                aria-label="Cerrar aviso"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="dt-section-heading dt-feedback-heading">
+                <CheckCircle2 size={22} className="dt-brand-icon" />
+                <h3 className="dt-section-title">
+                  Reprogramación por modo lluvia completada
+                  {feedbackDiaNombre && ` — ${feedbackDiaNombre}`}
+                </h3>
+              </div>
+
+              <p className="dt-feedback-copy">
+                Se ajustaron los partidos pendientes respetando el orden relativo original.
+                {' '}
+                <strong className="dt-strong">
+                  {feedbackReprogramacion.partidosReprogramados} partido(s) modificaron su horario
+                </strong>
+                {feedbackReprogramacion.partidosSinCambio > 0 && `, ${feedbackReprogramacion.partidosSinCambio} mantuvieron su horario`}
+                {feedbackReprogramacion.partidosSinHorarioNuevo > 0 && (
+                  <span className="dt-danger-text">
+                    {`, ${feedbackReprogramacion.partidosSinHorarioNuevo} quedaron sin horario disponible`}
+                  </span>
+                )}
+                .
+              </p>
+
+              {feedbackReprogramacion.cambios && feedbackReprogramacion.cambios.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackExpanded((prev) => !prev)}
+                    className="dt-text-button"
+                  >
+                    {feedbackExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {feedbackExpanded ? 'Ocultar detalle de cambios' : `Ver detalle de ${feedbackReprogramacion.cambios.length} cambios de horario`}
+                  </button>
+
+                  {feedbackExpanded && (
+                    <div
+                      className="dt-change-list"
+                    >
+                      {feedbackReprogramacion.cambios.map((c, idx) => (
+                        <div
+                          key={c.partidoId || idx}
+                          className="dt-change"
+                        >
+                          <div>
+                            <strong>{c.pareja1}</strong> vs <strong>{c.pareja2}</strong>
+                            <span className="dt-muted">
+                              {' '}({c.categoria})
+                            </span>
+                          </div>
+                          <div className="dt-change-times">
+                            <span className="dt-old-time dt-num">
+                              {c.antes.fechaHora ? diaHoraCorto(c.antes.fechaHora) : 'Sin horario'}
+                            </span>
+                            <span aria-hidden="true">→</span>
+                            {c.despues.fechaHora ? (
+                              <span className="dt-new-time dt-num">
+                                {diaHoraCorto(c.despues.fechaHora)}
+                              </span>
+                            ) : (
+                              <span className="dt-danger-text">
+                                Sin horario disponible
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div id="dt-canchas" className="dt-courts-row">
+            <span className="dt-strong">
+              Canchas{activeJornadaInfo ? ` del ${activeJornadaInfo.diaNombre.toLowerCase()}` : ''}
+            </span>
+            <span className="dt-courts-count">{canchasActivasContextuales} de {canchasClub}</span>
+            {/* Selector y Acciones */}
+            <div className="dt-courts-actions">
+              {/* Botón Restaurar todas: Solo visible si la solapa actual está bajo override */}
+              {isTabBajoOverride && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmRestaurarOpen(true)}
+                  disabled={actionLoading}
+                  className="dt-button"
+                >
+                  <Sun size={15} className="dt-icon" />
+                  Restaurar las {canchasClub} canchas
+                </button>
+              )}
+
+              {/* Control +/- */}
+              <div
+                className="dt-stepper"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetCanchas((prev) => Math.max(1, prev - 1));
+                    setUserTouchedTarget(true);
+                  }}
+                  disabled={targetCanchas <= 1 || actionLoading}
+                  className="dt-step-button"
+                  aria-label="Reducir cantidad de canchas"
+                >
+                  −
+                </button>
+                <span
+                  className="dt-step-value"
+                >
+                  {targetCanchas}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetCanchas((prev) => Math.min(canchasClub, prev + 1));
+                    setUserTouchedTarget(true);
+                  }}
+                  disabled={targetCanchas >= canchasClub || actionLoading}
+                  className="dt-step-button"
+                  aria-label="Aumentar cantidad de canchas"
+                >
+                  +
+                </button>
+              </div>
+              {/* Botón Reducir: Se compara contra canchasActivasContextuales */}
+              {targetCanchas < canchasActivasContextuales && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmReducirOpen(true)}
+                  disabled={actionLoading}
+                  className="dt-button dt-button-blue"
+                >
+                  <CloudRain size={15} />
+                  Reducir a {targetCanchas} {targetCanchas === 1 ? 'cancha' : 'canchas'}
+                </button>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
       </div>
 
       {/* ─── Partidos Pendientes de Horario ─────────────────────────── */}
@@ -1402,8 +1366,12 @@ export default function TorneoEnVivo() {
       <ConfirmModal
         isOpen={confirmReducirOpen}
         title={`¿Reducir a ${targetCanchas} ${targetCanchas === 1 ? 'cancha activa' : 'canchas activas'}?`}
-        message="Los partidos pendientes de esta jornada se acomodan en las canchas habilitadas, uno detrás de otro. El viernes nadie juega antes de su horario de inicio; lo que no entre pasa al sábado."
-        confirmText={actionLoading ? 'Reprogramando...' : 'Reducir y reprogramar'}
+        message={esViernes
+          ? 'Los partidos pendientes del viernes se acomodan en las canchas habilitadas, uno detrás de otro, hasta el cierre del club. Ninguno se adelanta. Lo que no entre pasa al sábado.'
+          : esSabado
+            ? 'Los partidos pendientes del sábado se acomodan en las canchas habilitadas, uno detrás de otro. Ninguno se adelanta. Los que no entren quedan sin horario.'
+            : 'Los partidos pendientes del domingo se vuelven a programar en las canchas habilitadas, con los descansos entre rondas. Los que no entren quedan sin horario.'}
+        confirmText={actionLoading ? 'Reprogramando…' : 'Reducir y reprogramar'}
         onConfirm={handleReducir}
         onCancel={() => setConfirmReducirOpen(false)}
         isDanger={true}
@@ -1413,8 +1381,10 @@ export default function TorneoEnVivo() {
       <ConfirmModal
         isOpen={confirmRestaurarOpen}
         title="¿Restaurar todas las canchas del club?"
-        message={`Vuelven a estar habilitadas las ${canchasClub} canchas. Los partidos pendientes vuelven a su horario de antes de la lluvia, salvo los que ya no entren.`}
-        confirmText={actionLoading ? 'Restaurando...' : 'Restaurar canchas'}
+        message={esDomingo
+          ? `Vuelven a estar habilitadas las ${canchasClub} canchas y los partidos pendientes del domingo se vuelven a programar con todas.`
+          : `Vuelven a estar habilitadas las ${canchasClub} canchas. Los partidos pendientes vuelven a su horario de antes de la lluvia o al más cercano que esté libre. Ninguno se atrasa.`}
+        confirmText={actionLoading ? 'Restaurando…' : 'Restaurar canchas'}
         onConfirm={handleRestaurar}
         onCancel={() => setConfirmRestaurarOpen(false)}
         isDanger={false}
