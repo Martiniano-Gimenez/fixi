@@ -26,6 +26,7 @@ import {
 import { api } from '../../api/client';
 import ConfirmModal from '../../components/ConfirmModal';
 import ResultadoModal from '../../components/ResultadoModal';
+import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import PartidosPendientesSection from '../../components/PartidosPendientesSection';
 import { formatDiaHorario, formatDiaNombre, formatHora, getDiaCalendarioConTrasnoche } from '../../utils/dateUtils';
 
@@ -72,6 +73,7 @@ export default function TorneoEnVivo() {
 
   // ResultadoModal
   const [partidoParaResultado, setPartidoParaResultado] = useState(null);
+  const [partidoParaHorario, setPartidoParaHorario] = useState(null);
 
   // Sección de finalizados colapsada por default
   const [finalizadosExpanded, setFinalizadosExpanded] = useState(false);
@@ -560,6 +562,27 @@ export default function TorneoEnVivo() {
     };
   }
 
+  function buildPartidoParaHorario(p) {
+    return {
+      id: p.id,
+      estado: p.estado,
+      fechaHora: p.fechaHora,
+      canchaNumero: p.canchaNumero,
+      pareja1Id: p.pareja1Id,
+      pareja2Id: p.pareja2Id,
+      pareja1: p.pareja1Obj,
+      pareja2: p.pareja2Obj,
+      origenPareja1: p.pareja1Obj ? null : p.pareja1,
+      origenPareja2: p.pareja2Obj ? null : p.pareja2,
+      categoriaId: p.categoriaId,
+      categoria: { id: p.categoriaId, nombre: p.categoria },
+      zonaId: p.zonaId,
+      zona: p.zonaId ? { id: p.zonaId, nombre: p.zona } : null,
+      faseEliminatoriaId: p.faseEliminatoriaId,
+      faseEliminatoria: p.faseEliminatoria,
+    };
+  }
+
 
   return (
     <div className="dt-container">
@@ -767,7 +790,7 @@ export default function TorneoEnVivo() {
           </div>
 
           <p className="dt-notice-copy">
-            Reasignales horario desde su categoría.
+            Elegiles un horario nuevo.
           </p>
 
           {fantasmaExpanded && (
@@ -788,12 +811,13 @@ export default function TorneoEnVivo() {
                       {p.fechaHora && <> · <span className="dt-num">{diaHoraCorto(p.fechaHora)}</span></>}
                     </div>
                   </div>
-                  <Link
-                    to={`/admin/torneos/${id}/categorias/${p.categoriaId}`}
+                  <button
+                    type="button"
+                    onClick={() => setPartidoParaHorario(buildPartidoParaHorario(p))}
                     className="dt-button dt-button-blue"
                   >
-                    Reasignar horario <ExternalLink size={12} />
-                  </Link>
+                    Reasignar horario <Clock size={14} aria-hidden="true" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -1093,7 +1117,7 @@ export default function TorneoEnVivo() {
                             </p>
                           )}
                         </div>
-                        <div className="dt-card-actions">
+                        <div className="dt-card-actions dt-upcoming-actions">
                           {/* Marcar en juego: solo con las dos parejas definidas */}
                           {p.pareja1Id && p.pareja2Id && (
                             <button
@@ -1113,6 +1137,15 @@ export default function TorneoEnVivo() {
                           >
                             <ClipboardList size={14} aria-hidden="true" />
                             <span>Resultado</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPartidoParaHorario(buildPartidoParaHorario(p))}
+                            className="dt-button dt-schedule-button"
+                            aria-label="Cambiar horario"
+                            title="Cambiar horario"
+                          >
+                            <Clock size={16} aria-hidden="true" />
                           </button>
                         </div>
                       </div>
@@ -1389,6 +1422,19 @@ export default function TorneoEnVivo() {
         onCancel={() => setConfirmRestaurarOpen(false)}
         isDanger={false}
       />
+
+      {partidoParaHorario && (
+        <AsignarHorarioModal
+          isOpen={Boolean(partidoParaHorario)}
+          partido={partidoParaHorario}
+          torneoId={id}
+          onClose={() => setPartidoParaHorario(null)}
+          onAssigned={() => {
+            setPartidoParaHorario(null);
+            fetchAndResetPolling();
+          }}
+        />
+      )}
 
       {/* ─── ResultadoModal (Próximos y Finalizados) ─────────────────── */}
       {partidoParaResultado && (

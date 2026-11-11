@@ -371,12 +371,16 @@ body:has(.panel) {
 .panel .dt-compact-extra { margin-top: var(--e-1); font-size: var(--t-13); }
 .panel .dt-compact .dt-after-hours { display: inline-flex; margin-top: var(--e-1); }
 .panel .dt-compact .dt-card-actions { justify-content: flex-end; padding-top: 0; border-top: 0; }
+.panel .dt-schedule-button { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }
 .panel .dt-hour-groups { display: grid; gap: var(--e-5); }
 .panel .dt-hour-title { margin: 0 0 var(--e-2); color: var(--tinta); font-size: var(--t-15); font-weight: 700; }
 @media (max-width: 767.98px) {
   .panel .dt-compact { grid-template-columns: minmax(0, 1fr); }
   .panel .dt-compact .dt-card-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); }
   .panel .dt-compact .dt-card-actions .dt-button { width: 100%; }
+  .panel .dt-compact .dt-upcoming-actions { grid-template-columns: minmax(0, 1fr) 44px; }
+  .panel .dt-compact .dt-upcoming-actions:has(.dt-play-button) { grid-template-columns: repeat(2, minmax(0, 1fr)) 44px; }
+  .panel .dt-upcoming-actions > .dt-button:not(.dt-schedule-button) { padding-inline: var(--e-2); }
 }
 .panel .dt-loading { min-height: 60vh; display: grid; place-items: center; padding: var(--e-5); }
 .panel .dt-center { text-align: center; }
