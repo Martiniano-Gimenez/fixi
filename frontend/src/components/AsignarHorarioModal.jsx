@@ -378,7 +378,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                 <div id="pm-asignar-grilla">
                   <GrillaHorariosPartido opciones={opciones} seleccion={seleccion} onSeleccion={setSeleccion} describir={pedido}
                     nombres={nombres} fijando={ocupado} onCambioDia={() => setSeleccion(null)}
-                    recomendadoClave={recomendado.clave} sinRecomendado soloDiasConHorarios />
+                    recomendadoClave={recomendado.clave} sinRecomendado soloDiasConHorarios sinPlegar />
                   {seleccion && (
                     <div className="pm-asignar-confirmacion" role="group" aria-label="Confirmar horario">
                       <p className="pc-manual-copy" role="status" aria-atomic="true">{formatSlotCorto(seleccion.slotId)} · {pedido(seleccion)}</p>

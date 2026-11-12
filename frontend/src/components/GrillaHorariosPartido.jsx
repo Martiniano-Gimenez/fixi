@@ -10,9 +10,10 @@ const NOMBRE_DIA = { Viernes: 'viernes', Sabado: 'sábado', Domingo: 'domingo' }
  * - recomendadoClave: el recomendado lo decide quien la usa (si no, se calcula como en el pre-check).
  * - sinRecomendado: no muestra su propia línea de recomendado ni la pliega: quien la usa arma esa parte.
  * - soloDiasConHorarios: oculta las jornadas sin ningún horario.
+ * - sinPlegar: muestra todos los horarios de cada jornada, sin un plegado por día.
  */
 export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion, describir, fijando, onCambioDia, nombres = new Map(), esDefinicion = false,
-  recomendadoClave = null, sinRecomendado = false, soloDiasConHorarios = false }) {
+  recomendadoClave = null, sinRecomendado = false, soloDiasConHorarios = false, sinPlegar = false }) {
   const id = useId();
   const raiz = useRef(null);
   const dias = agruparInicios(opciones).filter((d) => !soloDiasConHorarios ||
@@ -98,7 +99,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
           // Con horarios que entran o que piden a una sola pareja, los que piden a varias quedan plegados
           // en un único "Ver más horarios" al final del día.
           const secundarios = originales.flatMap((f) => f.celdas).filter((o) => o && o.estado !== 'NO_DISPONIBLE' && esSecundario(o));
-          const pliega = hayUtiles && secundarios.length > 0;
+          const pliega = !sinPlegar && hayUtiles && secundarios.length > 0;
           const abierto = Boolean(desplegados[dia] ||
             (seleccion?.clave === recomendado.clave && secundarios.some((o) => o.clave === recomendado.clave)));
           const visibles = filasVisibles(originales, { conSecundarios: !pliega || abierto });
@@ -143,6 +144,9 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
                       {visibles.map(renderizarFila)}
                     </div>
                   )}
+                  {pliega && !abierto && visibles.length === 0 && (
+                    <p className="pc-manual-copy">Ninguno entra en el horario de las parejas.</p>
+                  )}
                   {pliega && (
                     <button type="button" className="pc-horarios-plegar pc-horarios-ver-mas" aria-expanded={abierto}
                       aria-controls={`${id}-grilla-${dia}`} disabled={fijando} onClick={() => {
@@ -151,7 +155,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
                         if (!abierto) setFoco((prev) => ({ ...prev, [dia]: secundarios[0].clave }));
                       }}>
                       <ChevronRight size={14} aria-hidden="true" className={abierto ? 'is-open' : ''} />
-                      <span>Ver más horarios ({secundarios.length})</span>
+                      <span>{abierto ? 'Ver menos horarios' : `Ver más horarios (${secundarios.length})`}</span>
                     </button>
                   )}
                 </>
