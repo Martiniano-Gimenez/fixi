@@ -261,22 +261,21 @@ body:has(.panel) {
 }
 .panel .dt-day:active { transform: scale(.97); }
 .panel .dt-day.is-active { color: var(--marca-hover); background: var(--marca-suave); font-weight: 600; box-shadow: inset 0 0 0 1px var(--marca); }
-.panel .dt-day-count { padding: 0 var(--e-1); border-radius: var(--r-dato); background: var(--superficie-2); color: var(--tinta-2); font-size: var(--t-12); font-weight: 600; }
 .panel .dt-rain-icon { color: var(--marca-hover); }
 
 .panel .dt-notice, .panel .dt-brackets, .panel .dt-stat, .panel .dt-match-card, .panel .dt-finished {
   min-width: 0; background: var(--superficie); border-radius: var(--r-tarjeta); box-shadow: var(--sombra-2);
 }
 .panel .dt-brackets { padding: var(--e-5); margin-bottom: var(--e-5); }
-.panel .dt-courts-footer { margin-top: var(--e-6); }
-.panel .dt-courts-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2) var(--e-4); min-width: 0; padding-block: var(--e-3); scroll-margin-top: 100px; }
-.panel .dt-courts-count { font-weight: 600; color: var(--tinta-2); white-space: nowrap; }
 .panel .dt-weather-notice { padding: var(--e-3) var(--e-4); margin-bottom: var(--e-5); border-radius: var(--r-control); background: var(--superficie-2); color: var(--tinta-2); }
 .panel .dt-rain-summary { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); }
 .panel .dt-rain-summary > span { min-width: 0; overflow-wrap: anywhere; }
 .panel .dt-rain-summary > .dt-inline-link { margin-block: -12px; }
 .panel .dt-weather-notice > .dt-after-hours:first-child { margin-top: 0; }
-.panel .dt-courts-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); min-width: 0; max-width: 100%; }
+.panel .pm-modal.dt-courts-modal { max-width: 520px; }
+.panel .dt-courts-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-4); overflow-wrap: anywhere; }
+.panel .dt-courts-option { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-3); min-width: 0; }
+.panel .dt-courts-option > .pm-button { width: 100%; }
 .panel .dt-stepper { display: flex; flex: 0 0 auto; align-items: center; border-radius: var(--r-control); background: var(--superficie-2); box-shadow: inset 0 0 0 1px var(--linea-fuerte); }
 .panel .dt-step-button { display: grid; place-items: center; min-height: 44px; min-width: 44px; border-radius: var(--r-control); color: var(--tinta); font-size: var(--t-20); font-weight: 600; transition: transform .2s var(--curva); }
 .panel .dt-step-button:active:not(:disabled) { transform: scale(.92); }
@@ -398,8 +397,8 @@ body:has(.panel) {
 @media (max-width: 600px) {
   .panel .dt-container { padding: var(--e-5) var(--e-3) var(--e-10); }
   .panel .dt-title { font-size: var(--t-20); }
-  .panel .dt-heading > .dt-actions { width: 100%; }
-  .panel .dt-heading > .dt-actions .dt-button { flex: 1; }
+  .panel .dt-heading > .dt-actions { width: 100%; flex-wrap: nowrap; }
+  .panel .dt-heading > .dt-actions .dt-button { flex: 1; min-width: 0; padding-inline: var(--e-2); gap: var(--e-1); }
   .panel .dt-heading > .dt-actions .dt-refresh { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }
   .panel .dt-refresh-label { display: none; }
   .panel .dt-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
