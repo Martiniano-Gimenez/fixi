@@ -395,8 +395,6 @@ body:has(.panel) {
 @media (max-width: 600px) {
   .panel .dt-container { padding: var(--e-5) var(--e-3) var(--e-10); }
   .panel .dt-title { font-size: var(--t-20); }
-  .panel .dt-courts-modal .pm-footer:has(> :nth-child(3)) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .panel .dt-courts-modal .pm-footer > .pm-primary:nth-child(3) { grid-column: 1 / -1; }
   .panel .dt-heading > .dt-actions { width: 100%; flex-wrap: nowrap; }
   .panel .dt-heading > .dt-actions .dt-button { flex: 1; min-width: 0; padding-inline: var(--e-2); gap: var(--e-1); }
   .panel .dt-heading > .dt-actions .dt-refresh { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }

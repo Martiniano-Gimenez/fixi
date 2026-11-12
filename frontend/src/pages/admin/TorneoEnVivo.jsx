@@ -1433,21 +1433,26 @@ export default function TorneoEnVivo() {
                     ? 'Los partidos pendientes del sábado se acomodan en las canchas habilitadas, uno detrás de otro. Ninguno se adelanta. Los que no entren quedan sin horario.'
                     : 'Los partidos pendientes del domingo se vuelven a programar en las canchas habilitadas, con los descansos entre rondas. Los que no entren quedan sin horario.'}</p>
               )}
-              {isTabBajoOverride && (
+              {isTabBajoOverride && targetCanchas === canchasClub && (
                 <p>{esDomingo
                   ? `Vuelven a estar habilitadas las ${canchasClub} canchas y los partidos pendientes del domingo se vuelven a programar con todas.`
                   : `Vuelven a estar habilitadas las ${canchasClub} canchas. Los partidos pendientes vuelven a su horario de antes de la lluvia o al más cercano que esté libre, también los que cambiaste a mano. Ninguno se atrasa.`}</p>
               )}
-              {!isTabBajoOverride && targetCanchas >= canchasActivasContextuales && (
-                <p>Bajá el número para reducir canchas por lluvia.</p>
+              {targetCanchas === canchasActivasContextuales && (
+                <p>{isTabBajoOverride
+                  ? `Bajá el número para reducir más canchas o subilo a ${canchasClub} para restaurar todas.`
+                  : 'Bajá el número para reducir canchas por lluvia.'}</p>
+              )}
+              {isTabBajoOverride && targetCanchas > canchasActivasContextuales && targetCanchas < canchasClub && (
+                <p>Solo se puede volver a todas las canchas: subí hasta {canchasClub}.</p>
               )}
             </div>
             <div className="pm-footer">
               <button type="button" className="pm-button pm-grow" onClick={cerrarModalCanchas} disabled={actionLoading}>Cancelar</button>
-              {isTabBajoOverride && (
+              {isTabBajoOverride && targetCanchas === canchasClub && (
                 <button
                   type="button"
-                  className={`pm-button pm-grow${targetCanchas < canchasActivasContextuales ? '' : ' pm-primary'}`}
+                  className="pm-button pm-grow pm-primary"
                   onClick={() => ejecutarAccionCanchas('restaurar')}
                   disabled={actionLoading}
                 >
