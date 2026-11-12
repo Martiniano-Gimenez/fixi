@@ -1416,7 +1416,7 @@ export default function TorneoEnVivo() {
         title="¿Restaurar todas las canchas del club?"
         message={esDomingo
           ? `Vuelven a estar habilitadas las ${canchasClub} canchas y los partidos pendientes del domingo se vuelven a programar con todas.`
-          : `Vuelven a estar habilitadas las ${canchasClub} canchas. Los partidos pendientes vuelven a su horario de antes de la lluvia o al más cercano que esté libre. Ninguno se atrasa.`}
+          : `Vuelven a estar habilitadas las ${canchasClub} canchas. Los partidos pendientes vuelven a su horario de antes de la lluvia o al más cercano que esté libre, también los que cambiaste a mano. Ninguno se atrasa.`}
         confirmText={actionLoading ? 'Restaurando…' : 'Restaurar canchas'}
         onConfirm={handleRestaurar}
         onCancel={() => setConfirmRestaurarOpen(false)}

@@ -3040,6 +3040,14 @@ A continuación se detalla el trabajo realizado, organizado por áreas temática
 
 ---
 
+## 92. Aclaración al restaurar canchas (11/11/2026)
+
+- **Decisión de producto:** Restaurar no respeta los cambios manuales hechos durante la lluvia: vuelven al horario de antes de la lluvia.
+- El mensaje de confirmación de restaurar canchas del viernes y sábado en Día de torneo ahora aclara «también los que cambiaste a mano». Los partidos pendientes vuelven al horario anterior a la lluvia o al más cercano que esté libre; ninguno se atrasa.
+- Se documentó la regla en `CONTEXT.md`. Sin cambios de lógica; el mensaje del domingo se conserva.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
 El desarrollo de la aplicación se gestionó mediante un ciclo iterativo de 90 sesiones de trabajo, sumando un aproximado total de entre 272 y 326 horas de programación, refactorización, depuración y testeo (las horas indicadas por sesión corresponden a estimaciones aproximadas de esfuerzo, no a mediciones cronometradas exactas).
