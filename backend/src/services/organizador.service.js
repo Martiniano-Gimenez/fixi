@@ -2004,9 +2004,13 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     ],
   });
 
-  function formatPareja(p, origen) {
+  function formatPareja(p, origen, faseAnterior, posicion) {
     if (p) return `${p.jugador1} / ${p.jugador2}`;
     if (origen) return origen;
+    if (faseAnterior) {
+      const nombre = (faseAnterior.nombre || '').replace(/\s+de\s+Final$/i, '').trim();
+      return `Ganador ${nombre} #${posicion}`;
+    }
     return 'Por definirse';
   }
 
@@ -2145,13 +2149,18 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   let pendientesConHorarioCount = 0;
   let pendientesSinHorarioCount = 0;
 
+  const fasesPorCategoriaYRonda = new Map(categoriasTorneo.flatMap((cat) =>
+    cat.fasesEliminatorias.map((fase) => [`${cat.id}:${fase.ronda}`, fase])));
+
   for (const p of partidos) {
     if (esPartidoByeEnVivo(p)) {
       continue;
     }
 
-    const p1Nombre = formatPareja(p.pareja1, p.origenPareja1);
-    const p2Nombre = formatPareja(p.pareja2, p.origenPareja2);
+    const faseAnterior = p.faseEliminatoria
+      ? fasesPorCategoriaYRonda.get(`${p.categoriaId}:${p.faseEliminatoria.ronda * 2}`) : null;
+    const p1Nombre = formatPareja(p.pareja1, p.origenPareja1, faseAnterior, 2 * p.posicionEnRonda - 1);
+    const p2Nombre = formatPareja(p.pareja2, p.origenPareja2, faseAnterior, 2 * p.posicionEnRonda);
     const formatted = {
       id: p.id,
       categoriaId: p.categoriaId,
@@ -2163,10 +2172,12 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       fase: p.faseEliminatoria?.nombre || null,
       pareja1Id: p.pareja1Id,
       pareja1: p1Nombre,
+      pareja1Definida: Boolean(p.pareja1Id),
       // Objeto raw para ResultadoModal (espera { jugador1, jugador2 })
       pareja1Obj: p.pareja1 || null,
       pareja2Id: p.pareja2Id,
       pareja2: p2Nombre,
+      pareja2Definida: Boolean(p.pareja2Id),
       pareja2Obj: p.pareja2 || null,
       fechaHora: p.fechaHora,
       canchaNumero: p.canchaNumero,

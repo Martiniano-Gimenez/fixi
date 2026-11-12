@@ -931,9 +931,9 @@ export default function TorneoEnVivo() {
                 >
                   <div>
                     <div className="dt-pair-names">
-                      <span className="dt-pair-name">{p.pareja1}</span>
+                      <span className={`dt-pair-name${(p.pareja1Definida ?? Boolean(p.pareja1Id)) ? '' : ' is-placeholder'}`}>{p.pareja1}</span>
                       <span className="dt-versus">vs</span>
-                      <span className="dt-pair-name">{p.pareja2}</span>
+                      <span className={`dt-pair-name${(p.pareja2Definida ?? Boolean(p.pareja2Id)) ? '' : ' is-placeholder'}`}>{p.pareja2}</span>
                     </div>
                     <div className="dt-muted">
                       {contextoPartido(p)}
@@ -1081,7 +1081,7 @@ export default function TorneoEnVivo() {
 
 
                     {/* Progreso de Zonas */}
-                    {cat.totalPartidosZona > 0 && (
+                    {cat.totalPartidosZona > 0 && !cat.zonasFinalizadas && (
                       <div className="dt-progress">
                         <div className="dt-progress-label">
                           <span>Zonas</span>
@@ -1235,9 +1235,9 @@ export default function TorneoEnVivo() {
                       <div key={p.id} className="dt-match-card dt-compact dt-upcoming-match">
                         <div className="dt-compact-info">
                           <p className="dt-pair-names">
-                            <span className="dt-pair-name">{p.pareja1}</span>{' '}
+                            <span className={`dt-pair-name${(p.pareja1Definida ?? Boolean(p.pareja1Id)) ? '' : ' is-placeholder'}`}>{p.pareja1}</span>{' '}
                             <span className="dt-versus">vs</span>{' '}
-                            <span className="dt-pair-name">{p.pareja2}</span>
+                            <span className={`dt-pair-name${(p.pareja2Definida ?? Boolean(p.pareja2Id)) ? '' : ' is-placeholder'}`}>{p.pareja2}</span>
                           </p>
                           <p className="dt-muted">{contextoPartido(p)}</p>
                           {(p.minutosDespuesDelCierre || 0) > 0 && (
@@ -1260,14 +1260,16 @@ export default function TorneoEnVivo() {
                               <span>En juego</span>
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
-                            className="dt-button"
-                          >
-                            <ClipboardList size={14} aria-hidden="true" />
-                            <span>Resultado</span>
-                          </button>
+                          {p.pareja1Id && p.pareja2Id && (
+                            <button
+                              type="button"
+                              onClick={() => setPartidoParaResultado(buildPartidoParaModal(p))}
+                              className="dt-button"
+                            >
+                              <ClipboardList size={14} aria-hidden="true" />
+                              <span>Resultado</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setPartidoParaHorario(buildPartidoParaHorario(p))}
