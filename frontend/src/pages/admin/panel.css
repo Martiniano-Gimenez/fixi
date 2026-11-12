@@ -274,8 +274,6 @@ body:has(.panel) {
 .panel .dt-weather-notice > .dt-after-hours:first-child { margin-top: 0; }
 .panel .pm-modal.dt-courts-modal { max-width: 520px; }
 .panel .dt-courts-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-4); overflow-wrap: anywhere; }
-.panel .dt-courts-option { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e-3); min-width: 0; }
-.panel .dt-courts-option > .pm-button { width: 100%; }
 .panel .dt-stepper { display: flex; flex: 0 0 auto; align-items: center; border-radius: var(--r-control); background: var(--superficie-2); box-shadow: inset 0 0 0 1px var(--linea-fuerte); }
 .panel .dt-step-button { display: grid; place-items: center; min-height: 44px; min-width: 44px; border-radius: var(--r-control); color: var(--tinta); font-size: var(--t-20); font-weight: 600; transition: transform .2s var(--curva); }
 .panel .dt-step-button:active:not(:disabled) { transform: scale(.92); }
@@ -397,6 +395,8 @@ body:has(.panel) {
 @media (max-width: 600px) {
   .panel .dt-container { padding: var(--e-5) var(--e-3) var(--e-10); }
   .panel .dt-title { font-size: var(--t-20); }
+  .panel .dt-courts-modal .pm-footer:has(> :nth-child(3)) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .panel .dt-courts-modal .pm-footer > .pm-primary:nth-child(3) { grid-column: 1 / -1; }
   .panel .dt-heading > .dt-actions { width: 100%; flex-wrap: nowrap; }
   .panel .dt-heading > .dt-actions .dt-button { flex: 1; min-width: 0; padding-inline: var(--e-2); gap: var(--e-1); }
   .panel .dt-heading > .dt-actions .dt-refresh { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }

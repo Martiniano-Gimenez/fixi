@@ -59,6 +59,7 @@ export default function TorneoEnVivo() {
   const [canchasModalOpen, setCanchasModalOpen] = useState(false);
   const canchasModalRef = useRef(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [accionCanchas, setAccionCanchas] = useState(null);
 
   // Feedback post-reprogramación
   const [feedbackReprogramacion, setFeedbackReprogramacion] = useState(null);
@@ -457,6 +458,15 @@ export default function TorneoEnVivo() {
       }
     }
   }, [activeTabDay, canchasActivasContextuales, data, userTouchedTarget]);
+
+  const ejecutarAccionCanchas = async (accion) => {
+    setAccionCanchas(accion);
+    try {
+      await (accion === 'reducir' ? handleReducir() : handleRestaurar());
+    } finally {
+      setAccionCanchas(null);
+    }
+  };
 
   const cerrarModalCanchas = () => {
     if (actionLoading) return;
@@ -1417,40 +1427,45 @@ export default function TorneoEnVivo() {
                 </button>
               </div>
               {targetCanchas < canchasActivasContextuales && (
-                <div className="dt-courts-option">
-                  <p>{esViernes
-                    ? 'Los partidos pendientes del viernes se acomodan en las canchas habilitadas, uno detrás de otro, hasta el cierre del club. Ninguno se adelanta. Lo que no entre pasa al sábado.'
-                    : esSabado
-                      ? 'Los partidos pendientes del sábado se acomodan en las canchas habilitadas, uno detrás de otro. Ninguno se adelanta. Los que no entren quedan sin horario.'
-                      : 'Los partidos pendientes del domingo se vuelven a programar en las canchas habilitadas, con los descansos entre rondas. Los que no entren quedan sin horario.'}</p>
-                  <button type="button" className="pm-button pm-primary" onClick={handleReducir} disabled={actionLoading}>
-                    <CloudRain size={16} aria-hidden="true" />
-                    {actionLoading ? 'Reprogramando…' : `Reducir a ${targetCanchas} ${targetCanchas === 1 ? 'cancha' : 'canchas'}`}
-                  </button>
-                </div>
+                <p>{esViernes
+                  ? 'Los partidos pendientes del viernes se acomodan en las canchas habilitadas, uno detrás de otro, hasta el cierre del club. Ninguno se adelanta. Lo que no entre pasa al sábado.'
+                  : esSabado
+                    ? 'Los partidos pendientes del sábado se acomodan en las canchas habilitadas, uno detrás de otro. Ninguno se adelanta. Los que no entren quedan sin horario.'
+                    : 'Los partidos pendientes del domingo se vuelven a programar en las canchas habilitadas, con los descansos entre rondas. Los que no entren quedan sin horario.'}</p>
               )}
               {isTabBajoOverride && (
-                <div className="dt-courts-option">
-                  <p>{esDomingo
-                    ? `Vuelven a estar habilitadas las ${canchasClub} canchas y los partidos pendientes del domingo se vuelven a programar con todas.`
-                    : `Vuelven a estar habilitadas las ${canchasClub} canchas. Los partidos pendientes vuelven a su horario de antes de la lluvia o al más cercano que esté libre, también los que cambiaste a mano. Ninguno se atrasa.`}</p>
-                  <button
-                    type="button"
-                    className={`pm-button${targetCanchas < canchasActivasContextuales ? '' : ' pm-primary'}`}
-                    onClick={handleRestaurar}
-                    disabled={actionLoading}
-                  >
-                    <Sun size={16} aria-hidden="true" />
-                    {actionLoading ? 'Restaurando…' : `Restaurar las ${canchasClub} canchas`}
-                  </button>
-                </div>
+                <p>{esDomingo
+                  ? `Vuelven a estar habilitadas las ${canchasClub} canchas y los partidos pendientes del domingo se vuelven a programar con todas.`
+                  : `Vuelven a estar habilitadas las ${canchasClub} canchas. Los partidos pendientes vuelven a su horario de antes de la lluvia o al más cercano que esté libre, también los que cambiaste a mano. Ninguno se atrasa.`}</p>
               )}
               {!isTabBajoOverride && targetCanchas >= canchasActivasContextuales && (
                 <p>Bajá el número para reducir canchas por lluvia.</p>
               )}
             </div>
             <div className="pm-footer">
-              <button type="button" className="pm-button" onClick={cerrarModalCanchas} disabled={actionLoading}>Cancelar</button>
+              <button type="button" className="pm-button pm-grow" onClick={cerrarModalCanchas} disabled={actionLoading}>Cancelar</button>
+              {isTabBajoOverride && (
+                <button
+                  type="button"
+                  className={`pm-button pm-grow${targetCanchas < canchasActivasContextuales ? '' : ' pm-primary'}`}
+                  onClick={() => ejecutarAccionCanchas('restaurar')}
+                  disabled={actionLoading}
+                >
+                  <Sun size={16} aria-hidden="true" />
+                  {accionCanchas === 'restaurar' ? 'Restaurando…' : `Restaurar las ${canchasClub} canchas`}
+                </button>
+              )}
+              {targetCanchas < canchasActivasContextuales && (
+                <button
+                  type="button"
+                  className="pm-button pm-grow pm-primary"
+                  onClick={() => ejecutarAccionCanchas('reducir')}
+                  disabled={actionLoading}
+                >
+                  <CloudRain size={16} aria-hidden="true" />
+                  {accionCanchas === 'reducir' ? 'Reprogramando…' : `Reducir a ${targetCanchas} ${targetCanchas === 1 ? 'cancha' : 'canchas'}`}
+                </button>
+              )}
             </div>
           </div>
         </div>
