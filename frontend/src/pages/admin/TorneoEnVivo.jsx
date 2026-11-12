@@ -41,7 +41,6 @@ export default function TorneoEnVivo() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [ahora, setAhora] = useState(() => Date.now());
@@ -98,7 +97,6 @@ export default function TorneoEnVivo() {
   const fetchEnVivoData = useCallback(
     async (isSilent = false) => {
       if (!isSilent) setLoading(true);
-      else setRefreshing(true);
       try {
         const res = await api.get(`/torneos/${id}/en-vivo`);
         setData(res);
@@ -107,7 +105,6 @@ export default function TorneoEnVivo() {
         setError(err.message || 'Error al cargar el estado en vivo del torneo');
       } finally {
         setLoading(false);
-        setRefreshing(false);
       }
     },
     [id]
@@ -686,17 +683,6 @@ export default function TorneoEnVivo() {
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => fetchEnVivoData(true)}
-            disabled={refreshing}
-            className="dt-button dt-refresh"
-            aria-label={refreshing ? 'Actualizando…' : 'Actualizar ahora'}
-            title={refreshing ? 'Actualizando…' : 'Actualizar ahora'}
-          >
-            <RefreshCw size={14} className={refreshing ? 'dt-spin' : ''} aria-hidden="true" />
-            <span className="dt-refresh-label">{refreshing ? 'Actualizando…' : 'Actualizar ahora'}</span>
-          </button>
         </div>
       </div>
 

@@ -397,8 +397,6 @@ body:has(.panel) {
   .panel .dt-title { font-size: var(--t-20); }
   .panel .dt-heading > .dt-actions { width: 100%; flex-wrap: nowrap; }
   .panel .dt-heading > .dt-actions .dt-button { flex: 1; min-width: 0; padding-inline: var(--e-2); gap: var(--e-1); }
-  .panel .dt-heading > .dt-actions .dt-refresh { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; }
-  .panel .dt-refresh-label { display: none; }
   .panel .dt-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .panel .dt-day { padding-inline: var(--e-2); font-size: var(--t-13); gap: var(--e-1); }
   .panel .dt-brackets { padding: var(--e-4); }
