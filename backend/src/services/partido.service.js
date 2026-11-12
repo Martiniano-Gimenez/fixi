@@ -242,8 +242,35 @@ function validarSetPadel(gamesP1, gamesP2, setNum) {
 }
 
 /**
- * Cargar el resultado parcial o total de un partido (sets).
+ * Evita iniciar otro partido de una pareja que ya está en juego, dentro de la transacción.
  */
+async function validarParejasEnJuego(db, partido) {
+  const parejaIds = [partido.pareja1Id, partido.pareja2Id].filter(Boolean);
+  const otro = await db.partido.findFirst({
+    where: {
+      id: { not: partido.id },
+      estado: 'EN_CURSO',
+      OR: [{ pareja1Id: { in: parejaIds } }, { pareja2Id: { in: parejaIds } }],
+    },
+    orderBy: [{ fechaHora: 'asc' }, { id: 'asc' }],
+    select: {
+      pareja1: { select: { id: true, jugador1: true, jugador2: true } },
+      pareja2: { select: { id: true, jugador1: true, jugador2: true } },
+      categoria: { select: { nombre: true } },
+      zona: { select: { nombre: true } },
+      faseEliminatoria: { select: { nombre: true } },
+    },
+  });
+  if (!otro) return;
+
+  const pareja = [otro.pareja1, otro.pareja2].find((p) => p && parejaIds.includes(p.id));
+  const contexto = [otro.categoria.nombre, otro.zona?.nombre || otro.faseEliminatoria?.nombre].filter(Boolean).join(' · ');
+  const error = new Error(`${pareja.jugador1} / ${pareja.jugador2} ya está jugando otro partido (${contexto}). Cargá ese resultado o quitalo de en juego primero.`);
+  error.statusCode = 400;
+  throw error;
+}
+
+/** Cargar el resultado parcial o total de un partido (sets). */
 async function cargarResultado(organizadorId, partidoId, data) {
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
   const { sets } = data;
@@ -304,6 +331,9 @@ async function cargarResultado(organizadorId, partidoId, data) {
   }
 
   await prisma.$transaction(async (tx) => {
+    if (nuevoEstado === 'EN_CURSO' && partido.estado !== 'EN_CURSO') {
+      await validarParejasEnJuego(tx, partido);
+    }
     // Reemplazar todos los sets con los nuevos
     await tx.setPartido.deleteMany({ where: { partidoId } });
 
@@ -974,6 +1004,9 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
 
   let updated;
   await prisma.$transaction(async (tx) => {
+    if (nuevoEstado === 'EN_CURSO') {
+      await validarParejasEnJuego(tx, partido);
+    }
     // Si se revierte a PENDIENTE, limpiamos cualquier set parcial cargado
     if (nuevoEstado === 'PENDIENTE') {
       await tx.setPartido.deleteMany({ where: { partidoId } });

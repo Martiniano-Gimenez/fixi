@@ -333,6 +333,9 @@ export default function TorneoEnVivo() {
     });
   }, [data?.partidosEnCurso, esModoTodo, activeTabDay, horariosClub]);
 
+  const parejasEnJuego = useMemo(() => new Set((data?.partidosEnCurso || [])
+    .flatMap((p) => [p.pareja1Id, p.pareja2Id]).filter(Boolean)), [data?.partidosEnCurso]);
+
   // Orden visual estable: los empates conservan el orden recibido.
   const partidosEnCursoOrdenados = useMemo(
     () => [...partidosEnCursoFiltrados].sort((a, b) => new Date(a.enJuegoDesde || a.horaInicio) - new Date(b.enJuegoDesde || b.horaInicio)),
@@ -1248,8 +1251,10 @@ export default function TorneoEnVivo() {
                           )}
                         </div>
                         <div className="dt-card-actions dt-upcoming-actions">
-                          {/* Marcar en juego: solo con las dos parejas definidas */}
-                          {p.pareja1Id && p.pareja2Id && (
+                          {/* Se consideran los partidos en juego de todas las jornadas. */}
+                          {parejasEnJuego.has(p.pareja1Id) || parejasEnJuego.has(p.pareja2Id) ? (
+                            <span className="dt-muted dt-playing-note">Ya está jugando</span>
+                          ) : p.pareja1Id && p.pareja2Id && (
                             <button
                               type="button"
                               onClick={() => handleCambiarEstado(p.id, 'EN_CURSO')}

@@ -113,6 +113,71 @@ async function testEnJuegoDesde(organizadorId, torneoId) {
   }
 }
 
+async function testParejasEnJuego(organizadorId, torneoId) {
+  const categoria = await prisma.categoria.create({
+    data: { torneoId, nombre: '7ma Damas', estado: 'EN_CURSO', parejas: { create: [
+      { jugador1: 'Dávila', jugador2: 'Arrieta', orden: 1 },
+      { jugador1: 'Tapia', jugador2: 'Nieva', orden: 2 },
+      ...[3, 4, 5, 6].map((orden) => ({ jugador1: `Libre ${orden} A`, jugador2: `Libre ${orden} B`, orden })),
+    ] } },
+    include: { parejas: { orderBy: { orden: 'asc' } } },
+  });
+  try {
+    const [a, b, c, d, e, f] = categoria.parejas;
+    const zona = await prisma.zona.create({ data: { categoriaId: categoria.id, nombre: 'Zona C', formato: 'ROUND_ROBIN', clasifican: 2 } });
+    const crear = (p1, p2, extra = {}) => prisma.partido.create({ data: {
+      categoriaId: categoria.id, pareja1Id: p1.id, pareja2Id: p2.id, fechaHora: new Date('2026-11-08T15:00:00.000Z'),
+      canchaNumero: 1, ...extra,
+    } });
+    const bloqueante = await crear(a, b, { zonaId: zona.id, fechaHora: new Date('2026-11-06T15:00:00.000Z') });
+    await partidoService.updateEstado(organizadorId, bloqueante.id, 'EN_CURSO');
+    const candidatos = [];
+    for (const [p1, p2] of [[a, c], [c, a], [b, c], [c, b]]) candidatos.push(await crear(p1, p2));
+    // Un rechazo tampoco puede borrar sets que ya estuvieran guardados.
+    await prisma.setPartido.create({ data: { partidoId: candidatos[0].id, numero: 1, gamesPareja1: 6, gamesPareja2: 4 } });
+    const parcial = { sets: [{ gamesPareja1: 6, gamesPareja2: 4 }] };
+    const completo = { sets: [...parcial.sets, { gamesPareja1: 6, gamesPareja2: 3 }] };
+    const leer = (id) => prisma.partido.findUnique({ where: { id }, include: { sets: { orderBy: { numero: 'asc' } } } });
+    const rechazarSinCambios = async (partido, accion, nombre, contexto = 'Zona C') => {
+      const antes = await leer(partido.id);
+      await assert.rejects(accion, {
+        statusCode: 400,
+        message: `${nombre} ya está jugando otro partido (7ma Damas · ${contexto}). Cargá ese resultado o quitalo de en juego primero.`,
+      });
+      assert.deepStrictEqual(await leer(partido.id), antes, 'El rechazo conserva estado, inicio real, ganador, horario y sets');
+    };
+    for (let i = 0; i < candidatos.length; i++) {
+      const partido = candidatos[i];
+      const nombre = i < 2 ? 'Dávila / Arrieta' : 'Tapia / Nieva';
+      await rechazarSinCambios(partido, () => partidoService.updateEstado(organizadorId, partido.id, 'EN_CURSO'), nombre);
+      await rechazarSinCambios(partido, () => partidoService.cargarResultado(organizadorId, partido.id, parcial), nombre);
+    }
+    const libre = await crear(d, e);
+    await partidoService.updateEstado(organizadorId, libre.id, 'EN_CURSO');
+    assert.strictEqual((await leer(libre.id)).estado, 'EN_CURSO', 'Las otras parejas pueden jugar');
+    const inicio = (await leer(bloqueante.id)).enJuegoDesde;
+    await partidoService.cargarResultado(organizadorId, bloqueante.id, parcial);
+    assert.strictEqual((await leer(bloqueante.id)).enJuegoDesde.toISOString(), inicio.toISOString(), 'El mismo partido ya en juego acepta parciales');
+    await partidoService.cargarResultado(organizadorId, libre.id, parcial);
+    await partidoService.cargarResultado(organizadorId, candidatos[0].id, completo);
+    assert.strictEqual((await leer(candidatos[0].id)).estado, 'FINALIZADO', 'Un resultado completo no se bloquea');
+    await rechazarSinCambios(candidatos[0], () => partidoService.cargarResultado(organizadorId, candidatos[0].id, parcial), 'Dávila / Arrieta');
+
+    await partidoService.updateEstado(organizadorId, bloqueante.id, 'PENDIENTE');
+    await partidoService.cargarResultado(organizadorId, candidatos[1].id, parcial);
+    assert.strictEqual((await leer(candidatos[1].id)).estado, 'EN_CURSO', 'La pareja liberada puede iniciar con un parcial');
+    await partidoService.updateEstado(organizadorId, candidatos[1].id, 'PENDIENTE');
+    const fase = await prisma.faseEliminatoria.create({ data: { categoriaId: categoria.id, nombre: 'Semifinales', ronda: 4 } });
+    const cruce = await crear(b, f, { faseEliminatoriaId: fase.id });
+    await partidoService.updateEstado(organizadorId, cruce.id, 'EN_CURSO');
+    await rechazarSinCambios(candidatos[2], () => partidoService.updateEstado(organizadorId, candidatos[2].id, 'EN_CURSO'), 'Tapia / Nieva', 'Semifinales');
+    await rechazarSinCambios(candidatos[3], () => partidoService.cargarResultado(organizadorId, candidatos[3].id, parcial), 'Tapia / Nieva', 'Semifinales');
+    console.log('✓ Parejas en juego: ambos lados, cualquier jornada, zona/fase, rechazo sin escrituras y casos permitidos');
+  } finally {
+    await prisma.categoria.delete({ where: { id: categoria.id } });
+  }
+}
+
 async function testModoDiaTorneo() {
   await ensureTestDb();
   console.log('🧪 Iniciando test automatizado de Modo Día de Torneo...');
@@ -207,6 +272,7 @@ async function testModoDiaTorneo() {
   console.log('✅ Torneo y categorías iniciados con asignación de horarios en 6 canchas');
 
   await testEnJuegoDesde(organizador.id, torneo.id);
+  await testParejasEnJuego(organizador.id, torneo.id);
 
   // 6. Test GET /en-vivo inicial
   let estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
@@ -281,11 +347,17 @@ async function testModoDiaTorneo() {
   console.log('✅ Verificado: Partidos EN_CURSO y FINALIZADO se mantuvieron intactos');
 
   // 9. Test de Bloqueo: Si ponemos un partido EN_CURSO en Cancha 4 (vía updateEstado) e intentamos reducir a 3
-  await prisma.partido.update({
-    where: { id: partidosCat4ta[2].id },
-    data: { canchaNumero: 4 },
+  // Otra categoría garantiza que no repita una pareja del partido que ya está en juego.
+  const pBloqueoCancha = await prisma.partido.findFirst({
+    where: { categoriaId: cat6ta.id, estado: 'PENDIENTE' },
+    orderBy: { fechaHora: 'asc' },
   });
-  await partidoService.updateEstado(organizador.id, partidosCat4ta[2].id, 'EN_CURSO');
+  assert.ok(pBloqueoCancha);
+  await prisma.partido.update({
+    where: { id: pBloqueoCancha.id },
+    data: { canchaNumero: 4, fechaHora: pEnCurso.fechaHora },
+  });
+  await partidoService.updateEstado(organizador.id, pBloqueoCancha.id, 'EN_CURSO');
 
   console.log('🔒 Probando bloqueo al reducir cuando hay partido EN_CURSO en cancha afectada...');
   try {
@@ -301,7 +373,7 @@ async function testModoDiaTorneo() {
 
   // 9b. Test de Revertir a PENDIENTE (vía updateEstado)
   console.log('🔄 Probando reversión de estado EN_CURSO a PENDIENTE...');
-  const resRevertir = await partidoService.updateEstado(organizador.id, partidosCat4ta[2].id, 'PENDIENTE');
+  const resRevertir = await partidoService.updateEstado(organizador.id, pBloqueoCancha.id, 'PENDIENTE');
   if (resRevertir.partido.estado !== 'PENDIENTE') {
     throw new Error('FALLÓ EL TEST: No se pudo revertir el partido a PENDIENTE');
   }
@@ -727,7 +799,13 @@ async function testModoDiaTorneo() {
   // 1. Una lectura intensiva de getEstadoEnVivo (findMany con includes de categorías, zonas, parejas, sets)
   // 2. Una escritura transaccional de reprogramarPorReduccionCanchas (prisma.$transaction con scheduler MCF y update de torneo)
   // 3. Una mutación puntual de updateEstado sobre un partido
-  const pTestConc = pendientesViernesPost[1];
+  const enJuegoConcurrencia = await prisma.partido.findMany({
+    where: { categoria: { torneoId: torneo.id }, estado: 'EN_CURSO' },
+    select: { pareja1Id: true, pareja2Id: true },
+  });
+  const ocupadasConcurrencia = new Set(enJuegoConcurrencia.flatMap((p) => [p.pareja1Id, p.pareja2Id]));
+  const pTestConc = pendientesViernesPost.find((p) => !ocupadasConcurrencia.has(p.pareja1Id) && !ocupadasConcurrencia.has(p.pareja2Id));
+  assert.ok(pTestConc, 'El caso de concurrencia usa parejas libres');
   const t0 = Date.now();
   const [resRead, resReducir, resUpdateEstado] = await Promise.all([
     organizadorService.getEstadoEnVivo(organizador.id, torneo.id),
