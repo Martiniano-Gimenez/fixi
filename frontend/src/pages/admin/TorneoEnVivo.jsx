@@ -363,8 +363,7 @@ export default function TorneoEnVivo() {
     });
   }, [data?.proximosPartidos, esModoTodo, activeTabDay, horariosClub]);
 
-  // Próximos agrupados por hora. En la pestaña de un día, la madrugada (hasta las 6) cuenta para ese día y
-  // se aclara ("01:30 · madrugada del sábado"); en "Todo el torneo" el título lleva el día ("vie 15:00").
+  // Próximos agrupados por hora; en "Todo el torneo" el título lleva el día ("vie 15:00").
   const proximosPorHora = useMemo(() => {
     const grupos = [];
     for (const p of proximosFiltrados) {
@@ -372,11 +371,10 @@ export default function TorneoEnVivo() {
       let grupo = grupos.find((g) => g.clave === clave);
       if (!grupo) {
         const hora = p.fechaHora ? formatHora(p.fechaHora) : 'Sin horario';
-        const esMadrugada = p.fechaHora && Number(hora.slice(0, 2)) < 6;
         const diaReal = p.fechaHora ? formatDiaNombre(p.fechaHora) : '';
         const titulo = !p.fechaHora ? hora
           : esModoTodo ? `${diaReal.slice(0, 3).toLowerCase()} ${hora}`
-            : esMadrugada ? `${hora} · madrugada del ${diaReal.toLowerCase()}` : hora;
+            : hora;
         grupo = { clave, titulo, partidos: [] };
         grupos.push(grupo);
       }
