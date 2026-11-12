@@ -335,7 +335,7 @@ export default function TorneoEnVivo() {
 
   // Orden visual estable: los empates conservan el orden recibido.
   const partidosEnCursoOrdenados = useMemo(
-    () => [...partidosEnCursoFiltrados].sort((a, b) => new Date(a.horaInicio) - new Date(b.horaInicio)),
+    () => [...partidosEnCursoFiltrados].sort((a, b) => new Date(a.enJuegoDesde || a.horaInicio) - new Date(b.enJuegoDesde || b.horaInicio)),
     [partidosEnCursoFiltrados]
   );
 
@@ -1160,11 +1160,12 @@ export default function TorneoEnVivo() {
             <div className="dt-match-list">
               {partidosEnCursoOrdenados.map((p) => {
                 const sets = p.sets || [];
-                const minutosDesdeInicio = Math.floor((ahora - new Date(p.horaInicio).getTime()) / 60000);
-                const tiempoTranscurrido = minutosDesdeInicio < 0 ? null
+                const minutosDesdeInicio = p.enJuegoDesde
+                  ? Math.max(0, Math.floor((ahora - new Date(p.enJuegoDesde).getTime()) / 60000)) : null;
+                const tiempoTranscurrido = minutosDesdeInicio === null ? null
                   : minutosDesdeInicio === 0 ? 'recién'
-                    : minutosDesdeInicio < 60 ? `hace ${minutosDesdeInicio} min`
-                      : `hace ${Math.floor(minutosDesdeInicio / 60)} h ${minutosDesdeInicio % 60} min`;
+                    : minutosDesdeInicio < 60 ? `${minutosDesdeInicio} min`
+                      : `${Math.floor(minutosDesdeInicio / 60)} h${minutosDesdeInicio % 60 ? ` ${minutosDesdeInicio % 60} min` : ''}`;
                 const resultadoStr = sets.length > 0
                   ? sets.map((s) => `${s.gamesPareja1}-${s.gamesPareja2}`).join(' / ')
                   : null;
@@ -1178,7 +1179,7 @@ export default function TorneoEnVivo() {
                       </p>
                       <p className="dt-muted">{contextoPartido(p)}</p>
                       <p className="dt-muted dt-compact-extra">
-                        Empezó <span className="dt-num">{formatHora(p.horaInicio)}</span>
+                        {p.enJuegoDesde ? 'En juego desde' : 'Programado'} <span className="dt-num">{formatHora(p.enJuegoDesde || p.horaInicio)}</span>
                         {tiempoTranscurrido && <> · {tiempoTranscurrido}</>}
                         {resultadoStr && <> · Parcial <span className="dt-num">{resultadoStr}</span></>}
                       </p>

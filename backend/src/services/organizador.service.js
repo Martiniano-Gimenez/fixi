@@ -2172,6 +2172,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
       canchaNumero: p.canchaNumero,
       sinHorarioAsignado: p.sinHorarioAsignado,
       estado: p.estado,
+      enJuegoDesde: p.enJuegoDesde,
       sets: p.sets || [],
       // Minutos que el partido termina después del cierre del club (Modo Lluvia). Solo admin, nunca en la vista pública.
       minutosDespuesDelCierre: p.fechaHora ? minutosDespuesDelCierre(p.fechaHora, organizador) : 0,

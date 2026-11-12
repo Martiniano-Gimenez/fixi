@@ -192,6 +192,7 @@ model Partido {
   origenPareja2      String?   // Ej: "1°A", "2°B"
   ganadorId          String?   // Nullable hasta que se juegue
   estado             String    @default("PENDIENTE") // "PENDIENTE" | "EN_CURSO" | "FINALIZADO"
+  enJuegoDesde       DateTime?
   fechaHora          DateTime?
   canchaNumero       Int?
   sinHorarioAsignado Boolean   @default(false)

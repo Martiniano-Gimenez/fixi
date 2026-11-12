@@ -33,6 +33,86 @@ function assertCanchasPorDia(estadoEnVivo, esperado, canchasClub, mensaje) {
   }
 }
 
+// Casos del cronómetro real, dentro de la suite registrada en npm test y sobre test.db.
+async function testEnJuegoDesde(organizadorId, torneoId) {
+  const categoria = await prisma.categoria.create({
+    data: { torneoId, nombre: 'Prueba enJuegoDesde', estado: 'EN_CURSO', parejas: { create: [
+      { jugador1: 'Inicio A1', jugador2: 'Inicio A2', orden: 1 },
+      { jugador1: 'Inicio B1', jugador2: 'Inicio B2', orden: 2 },
+    ] } },
+    include: { parejas: { orderBy: { orden: 'asc' } } },
+  });
+  try {
+    const fechaHora = new Date('2026-11-06T16:45:00.000Z');
+    const partido = await prisma.partido.create({ data: {
+      categoriaId: categoria.id, pareja1Id: categoria.parejas[0].id, pareja2Id: categoria.parejas[1].id,
+      fechaHora, canchaNumero: 1,
+    } });
+    const leer = () => prisma.partido.findUnique({ where: { id: partido.id } });
+    const parcial = { sets: [{ gamesPareja1: 6, gamesPareja2: 4 }] };
+    const completo = { sets: [...parcial.sets, { gamesPareja1: 6, gamesPareja2: 3 }] };
+    const inicioActual = async (accion) => {
+      const antes = Date.now();
+      await accion();
+      const despues = Date.now();
+      const actual = await leer();
+      assert.strictEqual(actual.estado, 'EN_CURSO');
+      assert.ok(actual.enJuegoDesde instanceof Date, 'La entrada a En juego tiene inicio real');
+      assert.ok(actual.enJuegoDesde.getTime() >= antes && actual.enJuegoDesde.getTime() <= despues,
+        'El inicio real corresponde a esta acción, no al horario programado');
+      assert.strictEqual(actual.fechaHora.toISOString(), fechaHora.toISOString(), 'No cambia el horario programado');
+      return actual.enJuegoDesde.toISOString();
+    };
+    assert.strictEqual((await leer()).enJuegoDesde, null, 'Un pendiente nuevo no tiene inicio');
+    const marcado = await inicioActual(() => partidoService.updateEstado(organizadorId, partido.id, 'EN_CURSO'));
+    let vivo = await organizadorService.getEstadoEnVivo(organizadorId, torneoId);
+    let enJuego = vivo.partidosEnCurso.find((p) => p.id === partido.id);
+    assert.strictEqual(enJuego.enJuegoDesde.toISOString(), marcado, 'En-vivo expone el inicio real');
+    assert.strictEqual(enJuego.horaInicio.toISOString(), fechaHora.toISOString(), 'horaInicio mantiene su contrato');
+    await assert.rejects(() => partidoService.updateEstado(organizadorId, partido.id, 'EN_CURSO'), { statusCode: 400 });
+    assert.strictEqual((await leer()).enJuegoDesde.toISOString(), marcado, 'Un intento inválido no reinicia el reloj');
+    await partidoService.cargarResultado(organizadorId, partido.id, parcial);
+    assert.strictEqual((await leer()).enJuegoDesde.toISOString(), marcado, 'Un parcial en juego conserva el inicio');
+
+    await partidoService.updateEstado(organizadorId, partido.id, 'PENDIENTE');
+    assert.strictEqual((await leer()).enJuegoDesde, null, 'Quitar de En juego limpia el inicio');
+    assert.strictEqual(await prisma.setPartido.count({ where: { partidoId: partido.id } }), 0);
+    vivo = await organizadorService.getEstadoEnVivo(organizadorId, torneoId);
+    assert.strictEqual(vivo.proximosPartidos.find((p) => p.id === partido.id).enJuegoDesde, null);
+    await inicioActual(() => partidoService.cargarResultado(organizadorId, partido.id, parcial));
+
+    await partidoService.updateEstado(organizadorId, partido.id, 'PENDIENTE');
+    const previo = new Date('2026-11-05T15:02:00.000Z');
+    await prisma.partido.update({ where: { id: partido.id }, data: { enJuegoDesde: previo } });
+    await partidoService.cargarResultado(organizadorId, partido.id, parcial);
+    assert.strictEqual((await leer()).enJuegoDesde.toISOString(), previo.toISOString(), 'Un parcial con inicio previo no lo pisa');
+    await partidoService.cargarResultado(organizadorId, partido.id, completo);
+    assert.strictEqual((await leer()).estado, 'FINALIZADO');
+    assert.strictEqual((await leer()).enJuegoDesde.toISOString(), previo.toISOString(), 'Finalizar conserva el inicio');
+    await partidoService.cargarResultado(organizadorId, partido.id, parcial);
+    assert.strictEqual((await leer()).estado, 'EN_CURSO');
+    assert.strictEqual((await leer()).enJuegoDesde.toISOString(), previo.toISOString(), 'Reabrir con parcial conserva el inicio previo');
+    await partidoService.cargarResultado(organizadorId, partido.id, completo);
+    await partidoService.borrarResultado(organizadorId, partido.id);
+    assert.strictEqual((await leer()).estado, 'PENDIENTE');
+    assert.strictEqual((await leer()).enJuegoDesde, null, 'Borrar el resultado limpia el inicio');
+
+    await prisma.partido.update({ where: { id: partido.id }, data: { estado: 'EN_CURSO' } });
+    await partidoService.cargarResultado(organizadorId, partido.id, parcial);
+    assert.strictEqual((await leer()).enJuegoDesde, null, 'Un parcial no inventa el inicio de un partido antiguo ya en juego');
+    vivo = await organizadorService.getEstadoEnVivo(organizadorId, torneoId);
+    enJuego = vivo.partidosEnCurso.find((p) => p.id === partido.id);
+    assert.strictEqual(enJuego.enJuegoDesde, null, 'En-vivo permite distinguir los partidos antiguos');
+    await partidoService.updateEstado(organizadorId, partido.id, 'PENDIENTE');
+    await partidoService.cargarResultado(organizadorId, partido.id, completo);
+    assert.strictEqual((await leer()).enJuegoDesde, null, 'Cargar un resultado completo no inventa un inicio');
+    await inicioActual(() => partidoService.cargarResultado(organizadorId, partido.id, parcial));
+    console.log('✓ enJuegoDesde: marcar/quitar, parciales con/sin inicio, finalizar/reabrir, borrar y compatibilidad en-vivo');
+  } finally {
+    await prisma.categoria.delete({ where: { id: categoria.id } });
+  }
+}
+
 async function testModoDiaTorneo() {
   await ensureTestDb();
   console.log('🧪 Iniciando test automatizado de Modo Día de Torneo...');
@@ -125,6 +205,8 @@ async function testModoDiaTorneo() {
     data: { estado: 'EN_CURSO' },
   });
   console.log('✅ Torneo y categorías iniciados con asignación de horarios en 6 canchas');
+
+  await testEnJuegoDesde(organizador.id, torneo.id);
 
   // 6. Test GET /en-vivo inicial
   let estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);

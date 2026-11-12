@@ -322,6 +322,9 @@ async function cargarResultado(organizadorId, partidoId, data) {
       data: {
         estado: nuevoEstado,
         ganadorId,
+        // Un parcial puede iniciar un pendiente o reabrir un finalizado; no inventar el inicio de uno ya en juego.
+        enJuegoDesde: nuevoEstado === 'EN_CURSO' && partido.estado !== 'EN_CURSO' && !partido.enJuegoDesde
+          ? new Date() : undefined,
       },
     });
   });
@@ -451,6 +454,7 @@ async function borrarResultado(organizadorId, partidoId) {
       data: {
         estado: 'PENDIENTE',
         ganadorId: null,
+        enJuegoDesde: null,
       },
     });
   });
@@ -977,7 +981,7 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
 
     updated = await tx.partido.update({
       where: { id: partidoId },
-      data: { estado: nuevoEstado },
+      data: { estado: nuevoEstado, enJuegoDesde: nuevoEstado === 'EN_CURSO' ? new Date() : null },
       include: {
         categoria: { select: { id: true, nombre: true } },
         zona: { select: { id: true, nombre: true } },
