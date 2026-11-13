@@ -192,17 +192,13 @@ export default function CategoriaDetail() {
               </h1>
               <span className="cd-state">{estadoLabel(categoria.estado)}</span>
             </div>
-
-            <p className="cd-tournament">
-              Torneo: <strong className="cd-strong">{categoria.torneo?.nombre}</strong>
-            </p>
           </div>
 
           {/* Acciones principales de la categoría */}
           <div className="cd-header-actions">
             <Link
               to={`/admin/torneos/${torneoId || categoria.torneoId}/categorias/${id}/parejas`}
-              className="pm-button pm-primary"
+              className="pm-button"
             >
               <Users size={16} /> Parejas ({parejas.length})
             </Link>

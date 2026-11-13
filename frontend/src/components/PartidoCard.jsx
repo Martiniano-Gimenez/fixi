@@ -1,4 +1,4 @@
-import { Edit2, Play, Plus, Clock, Trophy, AlertTriangle } from 'lucide-react';
+import { ClipboardList, Clock, AlertTriangle } from 'lucide-react';
 import { formatDiaHorario } from '../utils/dateUtils';
 import { sinResultado } from '../pages/public/publico/utilidades';
 
@@ -37,7 +37,7 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
       <span
         className="cd-match-winner"
       >
-        <Trophy size={14} className="cd-trophy" /> {name}
+        {name}
       </span>
     ) : (
       name
@@ -62,7 +62,7 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
       onClick={handleClick}
       className={`cd-match-card${handleClick ? ' is-clickable' : ''}`}
     >
-      <div className={`cd-match-header ${handleClick || (partido.estado === 'PENDIENTE' && onReprogramar) ? 'has-actions' : ''}`}>
+      <div className="cd-match-header">
         <div className="cd-match-info">
           <span
             className={`cd-match-status${isEnCurso ? ' is-live' : ''}`}
@@ -88,92 +88,84 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
           )}
           {partido.canchaNumero && <span className="cd-match-court">Cancha {partido.canchaNumero}</span>}
         </div>
-
-        {handleClick || (partido.estado === 'PENDIENTE' && onReprogramar) ? (
-          <div className="cd-match-actions">
-            {partido.estado === 'PENDIENTE' && onReprogramar && (
-              <button
-                type="button"
-
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReprogramar(partido);
-                }}
-                title={partido.fechaHora ? "Reprogramar horario" : "Asignar horario"}
-                className="pm-button cd-match-button"
-              >
-                <Clock size={11} /> {partido.fechaHora ? 'Reprogramar' : 'Asignar horario'}
-              </button>
-            )}
-            {handleClick ? (
-              <button
-                type="button"
-
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleClick();
-                }}
-                className="pm-button cd-match-button"
-              >
-                {isFinalizado ? (
-                  <>
-                    <Edit2 size={11} /> Editar
-                  </>
-                ) : isEnCurso ? (
-                  <>
-                    <Plus size={11} /> Cargar set
-                  </>
-                ) : (
-                  <>
-                    <Play size={11} /> Cargar resultado
-                  </>
-                )}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
       <div className="cd-match-pairs">
-        <div className={`cd-match-name${isFinalizado && partido.ganadorId !== partido.pareja1Id ? ' is-loser' : ''}`}>{p1Name}</div>
-        <div className={`cd-match-name${isFinalizado && partido.ganadorId !== partido.pareja2Id ? ' is-loser' : ''}`}>{p2Name}</div>
-
-        {hasScore ? (
-          <div className="cd-match-sets">
-            {partido.sets.map((s, idx) => {
-              const p1Won = s.gamesPareja1 > s.gamesPareja2;
-              const p2Won = s.gamesPareja2 > s.gamesPareja1;
-              return (
+        <div className="cd-match-pair">
+          <div className={`cd-match-name${isFinalizado && partido.ganadorId !== partido.pareja1Id ? ' is-loser' : ''}`}>{p1Name}</div>
+          {hasScore && (
+            <div className="cd-match-games">
+              {partido.sets.map((s, idx) => (
                 <span
                   key={idx}
-                  className="cd-set-score"
+                  className={`cd-game${s.gamesPareja1 > s.gamesPareja2 ? ' is-winner' : ''}`}
+                  title={`Set ${s.numero ?? idx + 1}: ${s.gamesPareja1} games`}
                 >
-                  <span
-                    className={`cd-game${p1Won ? ' is-winner' : ''}`}
-                  >
-                    {s.gamesPareja1}
-                  </span>
-                  {' - '}
-                  <span
-                    className={`cd-game${p2Won ? ' is-winner' : ''}`}
-                  >
-                    {s.gamesPareja2}
-                  </span>
+                  {s.gamesPareja1}
                 </span>
-              );
-            })}
-          </div>
-        ) : sinResultado(partido) ? (
-          <div
-            className="cd-no-score"
-          >
-            Sin resultado cargado
-          </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="cd-match-pair">
+          <div className={`cd-match-name${isFinalizado && partido.ganadorId !== partido.pareja2Id ? ' is-loser' : ''}`}>{p2Name}</div>
+          {hasScore && (
+            <div className="cd-match-games">
+              {partido.sets.map((s, idx) => (
+                <span
+                  key={idx}
+                  className={`cd-game${s.gamesPareja2 > s.gamesPareja1 ? ' is-winner' : ''}`}
+                  title={`Set ${s.numero ?? idx + 1}: ${s.gamesPareja2} games`}
+                >
+                  {s.gamesPareja2}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!hasScore && (sinResultado(partido) ? (
+          <div className="cd-no-score">Sin resultado cargado</div>
         ) : (
           <div className="cd-placeholder">vs</div>
-        )}
-
+        ))}
       </div>
+
+      {handleClick || (partido.estado === 'PENDIENTE' && onReprogramar) ? (
+        <div className="cd-match-actions">
+          {partido.estado === 'PENDIENTE' && onReprogramar && (
+            <button
+              type="button"
+
+              onClick={(e) => {
+                e.stopPropagation();
+                onReprogramar(partido);
+              }}
+              title={partido.fechaHora ? 'Cambiar horario' : 'Asignar horario'}
+              aria-label={partido.fechaHora ? 'Cambiar horario' : 'Asignar horario'}
+              className="pm-button cd-match-button"
+            >
+              <Clock size={14} /> {partido.fechaHora ? 'Cambiar horario' : 'Asignar horario'}
+            </button>
+          )}
+          {handleClick ? (
+            <button
+              type="button"
+
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClick();
+              }}
+              className="pm-button cd-match-button"
+              title={isFinalizado ? 'Editar resultado' : isEnCurso ? 'Actualizar resultado' : 'Cargar resultado'}
+              aria-label={isFinalizado ? 'Editar resultado' : isEnCurso ? 'Actualizar resultado' : 'Cargar resultado'}
+            >
+              <ClipboardList size={14} />
+              {isFinalizado ? 'Editar resultado' : isEnCurso ? 'Actualizar resultado' : 'Cargar resultado'}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
