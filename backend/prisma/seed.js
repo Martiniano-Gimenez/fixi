@@ -1,15 +1,72 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const prisma = new PrismaClient();
 
-const zonaService = require('../src/services/zona.service');
+const organizadorService = require('../src/services/organizador.service');
 const partidoService = require('../src/services/partido.service');
+const canchasOverridesService = require('../src/services/canchasOverrides.service');
+const { generarSlotsDia } = require('../src/services/slots.service');
+
+// Datos de demo: todos los nombres son ficticios.
+const CATEGORIAS = [
+  {
+    nombre: '4ta Caballeros',
+    parejas: [
+      ['Martín Leone', 'Juan Ponce'], ['Lucas Fernández', 'Diego Amaya'], ['Pablo Ruarte', 'Fede Longo'],
+      ['Gastón Silva', 'Nico Romero'], ['Ale Benítez', 'Maxi López'], ['Leo Díaz', 'Tomi Ruiz'],
+      ['Santi Rivero', 'Joaco Vidal'], ['Mati Godoy', 'Bruno Paredes'], ['Franco Ibarra', 'Lauti Soria'],
+      ['Agus Peralta', 'Facu Ledesma'], ['Rami Toledo', 'Nacho Vera'], ['Emi Bravo', 'Tincho Escobar'],
+    ],
+  },
+  {
+    nombre: '6ta Caballeros',
+    parejas: [
+      ['Facu Méndez', 'Santi Nieva'], ['Ema Ortiz', 'Matías Tapia'], ['Ramiro Castro', 'Bautista Herrera'],
+      ['Franco Mendoza', 'Gonzalo Vargas'], ['Joaquín Flores', 'Agustín Morales'], ['Ignacio Roldán', 'Bruno Cabrera'],
+      ['Tomás Aguirre', 'Lucio Correa'], ['Dante Molina', 'Iván Salinas'], ['Marcos Zapata', 'Julián Bustos'],
+    ],
+  },
+  {
+    nombre: '7ma Damas',
+    parejas: [
+      ['Sofi Acuña', 'Cami Luna'], ['Juli Cáceres', 'Flor Gauna'], ['Male Ojeda', 'Vicky Suárez'],
+      ['Agus Domínguez', 'Lu Pacheco'], ['Pili Rojas', 'Meli Torres'], ['Caro Varela', 'Anto Zárate'],
+      ['Guada Mansilla', 'Mica Rearte'], ['Belu Ferraro', 'Jose Galli'],
+    ],
+  },
+];
+
+// Disponibilidades típicas de una inscripción; cada pareja toma una de la lista.
+const DISPONIBILIDADES = [
+  [['Viernes', '18:00', '23:30'], ['Sabado', '09:00', '13:00']],
+  [['Viernes', '20:00', '23:30'], ['Sabado', '14:00', '20:00']],
+  [['Sabado', '09:00', '20:00']],
+  [['Viernes', '16:00', '22:00']],
+  [['Viernes', '19:00', '23:30'], ['Sabado', '16:00', '21:00']],
+  [['Sabado', '12:00', '21:00']],
+];
+
+const SETS_DEMO = [
+  [[6, 4], [6, 3]],
+  [[4, 6], [7, 5], [6, 2]],
+  [[6, 2], [6, 2]],
+  [[7, 6], [3, 6], [6, 4]],
+  [[6, 1], [6, 4]],
+];
+
+// Próximo viernes a las 12:00 de Argentina, para que la demo siempre muestre un torneo por jugarse.
+function proximoViernes() {
+  const hoy = new Date();
+  const dias = (5 - hoy.getUTCDay() + 7) % 7 || 7;
+  return new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate() + dias, 15, 0, 0));
+}
 
 async function main() {
-  console.log('🌱 Iniciando seed...');
+  console.log('🌱 Iniciando seed de demo...');
 
   // 1. Limpiar base de datos
+  await prisma.precheckPlan.deleteMany();
+  await prisma.overrideCanchasDia.deleteMany();
   await prisma.setPartido.deleteMany();
   await prisma.partido.deleteMany();
   await prisma.faseEliminatoria.deleteMany();
@@ -25,128 +82,98 @@ async function main() {
   const passwordHash = await bcrypt.hash('123456', 10);
   const organizador = await prisma.organizador.create({
     data: {
-      nombre: 'Club Padel Central',
+      nombre: 'Club Pádel Central',
       email: 'demo@padel.com',
       passwordHash,
-      cantidadCanchas: 3,
+      cantidadCanchas: 4,
       viernesInicio: '14:00',
-      viernesFin: '23:00',
+      viernesFin: '23:59',
       sabadoInicio: '09:00',
-      sabadoFin: '21:00',
-      domingoInicio: '08:00',
+      sabadoFin: '23:59',
+      domingoInicio: '09:00',
       domingoFin: '21:00',
     },
   });
-  console.log(`✅ Organizador creado: demo@padel.com (PW: 123456)`);
+  console.log('✅ Organizador creado: demo@padel.com (PW: 123456)');
 
-  // 3. Crear Torneo (Evento)
-  const slug = 'torneo-padel-pro-2026-' + crypto.randomBytes(3).toString('hex');
+  // 3. Crear Torneo, categorías y parejas con su disponibilidad
   const torneo = await prisma.torneo.create({
     data: {
-      nombre: 'Torneo Pádel Pro 2026',
-      fecha: new Date('2026-10-09T15:00:00.000Z'), // 9 de octubre de 2026 (Viernes al mediodía ART)
+      nombre: 'Torneo de demo',
+      fecha: proximoViernes(),
       estado: 'BORRADOR',
-      slug,
+      slug: 'torneo-demo',
       organizadorId: organizador.id,
     },
   });
-  console.log(`✅ Torneo creado: ${torneo.nombre}`);
 
-  // 4. Crear Categorías (4ta y 6ta)
-  const cat4ta = await prisma.categoria.create({
-    data: {
-      torneoId: torneo.id,
-      nombre: '4ta Caballeros',
-      estado: 'BORRADOR',
-    },
-  });
-
-  const cat6ta = await prisma.categoria.create({
-    data: {
-      torneoId: torneo.id,
-      nombre: '6ta Caballeros',
-      estado: 'BORRADOR',
-    },
-  });
-  console.log(`✅ Categorías creadas: 4ta y 6ta`);
-
-  // 5. Crear Parejas (6 para 4ta y 6 para 6ta)
-  const nombres4ta = [
-    ['Martin Leone', 'Juan Ponce'],
-    ['Lucas Fernandez', 'Diego Amaya'],
-    ['Pablo Ruarte', 'Fede Longo'],
-    ['Gaston Silva', 'Nico Romero'],
-    ['Ale Benitez', 'Maxi Lopez'],
-    ['Leo Diaz', 'Tomi Ruiz'],
-  ];
-
-  for (let i = 0; i < nombres4ta.length; i++) {
-    await prisma.pareja.create({
-      data: {
-        categoriaId: cat4ta.id,
-        jugador1: nombres4ta[i][0],
-        jugador2: nombres4ta[i][1],
-        orden: i + 1,
-      },
+  let indiceDisponibilidad = 0;
+  for (const { nombre, parejas } of CATEGORIAS) {
+    const categoria = await prisma.categoria.create({
+      data: { torneoId: torneo.id, nombre, estado: 'BORRADOR' },
     });
-  }
-
-  const nombres6ta = [
-    ['Facu Mendez', 'Santi Nieva'],
-    ['Ema Ortiz', 'Matias Tapia'],
-    ['Ramiro Castro', 'Bautista Herrera'],
-    ['Franco Mendoza', 'Gonzalo Vargas'],
-    ['Joaquin Flores', 'Agustin Morales'],
-    ['Ignacio Roldán', 'Bruno Cabrera'],
-  ];
-
-  for (let i = 0; i < nombres6ta.length; i++) {
-    await prisma.pareja.create({
-      data: {
-        categoriaId: cat6ta.id,
-        jugador1: nombres6ta[i][0],
-        jugador2: nombres6ta[i][1],
-        orden: i + 1,
-      },
-    });
-  }
-  console.log(`✅ 12 Parejas creadas en 4ta y 6ta`);
-
-  // 6. Iniciar Categoría 4ta (Genera zonas y partidos)
-  console.log(`⚙️ Iniciando categoría 4ta (sorteo de zonas)...`);
-  await zonaService.iniciarCategoria(organizador.id, cat4ta.id);
-  console.log(`✅ Zonas generadas`);
-
-  // 7. Cargar algunos resultados de prueba en 4ta
-  const partidos = await prisma.partido.findMany({
-    where: { categoriaId: cat4ta.id, zonaId: { not: null } },
-    take: 2,
-  });
-
-  if (partidos.length > 0) {
-    const resultadosMock = [
-      [{ gamesPareja1: 6, gamesPareja2: 4 }, { gamesPareja1: 7, gamesPareja2: 5 }],
-      [{ gamesPareja1: 4, gamesPareja2: 6 }, { gamesPareja1: 6, gamesPareja2: 2 }, { gamesPareja1: 6, gamesPareja2: 3 }],
-    ];
-
-    console.log(`⚙️ Cargando resultados de prueba en 4ta...`);
-    for (let i = 0; i < partidos.length; i++) {
-      await partidoService.cargarResultado(organizador.id, partidos[i].id, {
-        sets: resultadosMock[i],
+    for (let i = 0; i < parejas.length; i++) {
+      const ventanas = DISPONIBILIDADES[indiceDisponibilidad++ % DISPONIBILIDADES.length];
+      const slotIds = ventanas.flatMap(([dia, desde, hasta]) => generarSlotsDia(dia, desde, hasta));
+      await prisma.pareja.create({
+        data: {
+          categoriaId: categoria.id,
+          jugador1: parejas[i][0],
+          jugador2: parejas[i][1],
+          orden: i + 1,
+          slotsSeleccionados: { create: slotIds.map((slotId) => ({ slotId })) },
+        },
       });
     }
-    console.log(`✅ Resultados cargados`);
+    console.log(`✅ ${nombre}: ${parejas.length} parejas`);
   }
 
+  // 4. Iniciar el torneo con el mismo flujo que el panel: pre-check, zonas y horarios automáticos
+  console.log('⚙️ Iniciando el torneo (armado de zonas y horarios)...');
+  await canchasOverridesService.loadFromDb(); // el servidor la hidrata al arrancar
+  await organizadorService.iniciarTorneoMultiCategoria(organizador.id, torneo.id);
+  const programados = await prisma.partido.count({
+    where: { categoria: { torneoId: torneo.id }, fechaHora: { not: null } },
+  });
+  console.log(`✅ Torneo iniciado: ${programados} partidos con horario`);
+
+  // 5. Cargar resultados de los primeros partidos de zona de cada categoría
+  const categorias = await prisma.categoria.findMany({ where: { torneoId: torneo.id }, orderBy: { nombre: 'asc' } });
+  let cargados = 0;
+  for (const categoria of categorias) {
+    const partidos = await prisma.partido.findMany({
+      where: {
+        categoriaId: categoria.id,
+        zonaId: { not: null },
+        estado: 'PENDIENTE',
+        fechaHora: { not: null },
+        pareja1Id: { not: null },
+        pareja2Id: { not: null },
+      },
+      orderBy: [{ fechaHora: 'asc' }, { canchaNumero: 'asc' }],
+      take: 3,
+    });
+    for (const partido of partidos) {
+      const sets = SETS_DEMO[cargados++ % SETS_DEMO.length].map(([gamesPareja1, gamesPareja2]) => ({ gamesPareja1, gamesPareja2 }));
+      await partidoService.cargarResultado(organizador.id, partido.id, { sets });
+    }
+  }
+  console.log(`✅ ${cargados} resultados cargados`);
+
   console.log('🎉 Seed finalizado con éxito!');
-  console.log('👉 Iniciá sesión con demo@padel.com / 123456');
+  console.log('👉 Panel: iniciá sesión con demo@padel.com / 123456');
+  console.log('👉 Vista pública: /torneo/torneo-demo');
 }
 
+// organizador.service deja un setInterval de limpieza de caché que mantiene vivo el proceso:
+// se sale de forma explícita al terminar.
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
+  .then(async () => {
     await prisma.$disconnect();
+    process.exit(0);
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
   });
