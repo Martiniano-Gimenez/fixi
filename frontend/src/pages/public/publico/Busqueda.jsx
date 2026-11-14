@@ -287,7 +287,9 @@ export default function Busqueda({
         <div className="pv-busqueda-cuerpo">
           {!hayBusqueda && (
             <p className="pv-busqueda-guia">
-              Escribí al menos dos letras.
+              {textoLimpio
+                ? 'Escribí al menos dos letras.'
+                : 'Escribí el apellido o nombre de un jugador para ver sus partidos.'}
             </p>
           )}
 
