@@ -323,7 +323,9 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
         {enJuego.length > 0 && (
           <section className="pv-seccion" aria-labelledby="t-en-juego">
             <h2 id="t-en-juego">{vivos.length ? 'En juego y próximos' : 'Próximos partidos'}</h2>
-            <ListaAnimada items={enJuego} clave={claveTarjeta} className="pv-lista grilla" render={tarjeta(true)} />
+            <ListaAnimada items={enJuego} clave={claveTarjeta} className="pv-lista grilla" render={(p) => (
+              <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia seguidaId={seguidaId} origenes={origenes} atrasado={false} />
+            )} />
           </section>
         )}
         <section {...c('pv-seccion', 3)} id="zonas" aria-labelledby="t-zonas">
