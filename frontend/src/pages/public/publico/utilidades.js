@@ -68,11 +68,11 @@ export function partidoCoincide(p, q, origenes = null) {
   return normalizar(nombres).includes(n);
 }
 
-// "Sáb 13:30"; sin día cuando la vista ya está filtrada por día
+// "Sábado 13:30"; sin día cuando la vista ya está filtrada por día
 export function horaPartido(fechaHora, conDia = true) {
   if (!fechaHora) return null;
   const hora = formatHora(fechaHora);
-  return conDia ? `${formatDiaNombre(fechaHora).slice(0, 3)} ${hora}` : hora;
+  return conDia ? `${formatDiaNombre(fechaHora)} ${hora}` : hora;
 }
 
 // Etiqueta de un partido de zona (mini-bracket: qué partido es)

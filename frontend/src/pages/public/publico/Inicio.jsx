@@ -92,7 +92,7 @@ export default function Inicio({ torneo, categorias, fechas, seguidas, hrefCateg
                             </span>
                           )}
                           {e.proximo ? (
-                            <span>Próximo: <b className="num">{horaPartido(e.proximo.fechaHora).toLowerCase()}</b></span>
+                            <span>Próximo: <b className="num">{horaPartido(e.proximo.fechaHora)}</b></span>
                           ) : (
                             <span>Sin partidos programados</span>
                           )}
