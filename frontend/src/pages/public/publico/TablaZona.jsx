@@ -8,17 +8,17 @@ const ALTO_FILA = 52;
  * Cada fila se ubica con translateY: cuando cambia el orden, se desliza a su nueva posición.
  * children: lo que va al pie de la tarjeta (por ejemplo, "Ver partidos").
  */
-export default function TablaZona({ zona, seguidaId, busqueda, children }) {
+export default function TablaZona({ zona, seguidaId, busqueda, children, mostrarClasifican = true }) {
   const filas = zona.tabla || [];
   const q = normalizar(busqueda);
   return (
     <section className="pv-tabla" aria-label={`Posiciones de la ${zona.nombre}`}>
       <div className="pv-tabla-cab">
         <h3>{zona.nombre}</h3>
-        <span className="pv-clasif-ref">
+        {mostrarClasifican && <span className="pv-clasif-ref">
           <i aria-hidden="true" />
           Clasifican {zona.clasifican}
-        </span>
+        </span>}
       </div>
       <div className="pv-t-grid pv-t-head" aria-hidden="true">
         <span>#</span>

@@ -18,7 +18,7 @@ const HASH_RONDA = { 32: 'dieciseisavos', 16: 'octavos', 8: 'cuartos', 4: 'semi'
 const porHoraAsignada = (a, b) => a.fechaHora && b.fechaHora ? porHorario(a, b)
   : a.fechaHora ? -1 : b.fechaHora ? 1 : (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
 
-export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId, animar, actualizacion, seccionInicial, torneoEstado }) {
+export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId, animar, actualizacion, seccionInicial, torneoEstado, torneoNombre }) {
   const id = useId();
   const location = useLocation();
   const navigate = useNavigate();
@@ -29,6 +29,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   const partidos = useMemo(() => partidosDeCategoria(cat), [cat]);
   const etapas = useMemo(() => etapasDe(cat), [cat]);
   const zonas = cat.zonas || [];
+  const clasificacionUniforme = zonas.length > 0 && zonas.every((z) => z.clasifican === zonas[0].clasifican);
   const eliminatoria = cat.eliminatoria || [];
   const dias = useMemo(() => diasDelTorneo([cat]), [cat]);
   const hoy = diaDeHoy(dias, ahora);
@@ -79,6 +80,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   // ─── Encabezado ───
   const encabezado = (
     <div className="pv-envolver pv-cat-cab">
+      <p {...c('pv-club', 0)}>{torneoNombre}</p>
       <h1 {...c('', 0)}>{cat.nombre}</h1>
       {!e.preparacion && (
         <>
@@ -141,14 +143,17 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
 
   const vistaZonas = (
     <>
-      <h2 className="pv-fase-titulo">Zonas <small>{zonas.length} {zonas.length === 1 ? 'zona' : 'zonas'}{cat.totalParejas ? `, ${cat.totalParejas} parejas` : ''}</small></h2>
+      <h2 className="pv-fase-titulo">Zonas <small>
+        {zonas.length} {zonas.length === 1 ? 'zona' : 'zonas'}{cat.totalParejas ? `, ${cat.totalParejas} parejas` : ''}
+        {clasificacionUniforme && <>{' · '}<span className="pv-clasif-ref"><i aria-hidden="true" />clasifican {zonas[0].clasifican} por zona</span></>}
+      </small></h2>
       <Segmentado items={[{ key: 'posiciones', label: 'Posiciones' }, { key: 'partidos', label: 'Partidos' }]}
         activo={vistaZona} onCambiar={setVistaZona} etiqueta="Vista de zonas" idBase={`${id}-zonas`} />
       {['posiciones', 'partidos'].map((vista, i) => (
         <div key={vista} id={`${id}-zonas-panel-${vista}`} role="tabpanel" aria-labelledby={`${id}-zonas-tab-${vista}`}
           hidden={vistaZona !== i} tabIndex={0} className="pv-zonas-panel">
           {vistaZona === i && (i === 0 ? (
-            <div className="pv-zonas">{zonas.map((z) => <TablaZona key={z.id} zona={z} seguidaId={seguidaId} />)}</div>
+            <div className="pv-zonas">{zonas.map((z) => <TablaZona key={z.id} zona={z} seguidaId={seguidaId} mostrarClasifican={!clasificacionUniforme} />)}</div>
           ) : vistaPartidosZona)}
         </div>
       ))}

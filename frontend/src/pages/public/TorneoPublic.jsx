@@ -442,6 +442,7 @@ export default function TorneoPublic() {
           <Categoria
             key={categoria.id}
             categoria={categoria}
+            torneoNombre={torneo.nombre}
             torneoEstado={torneo.estado}
             seguidaId={favs[categoria.id] || null}
             isMobile={isMobile}
