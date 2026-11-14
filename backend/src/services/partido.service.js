@@ -525,164 +525,82 @@ async function updateFechaHora(organizadorId, partidoId, fechaHora) {
 }
 
 async function updateBracketMatch(organizadorId, partidoId, data) {
-  const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  await getPartidoAndVerifyPermisos(organizadorId, partidoId);
 
-  if (!partido.faseEliminatoriaId) {
-    const error = new Error('El partido no pertenece a una fase eliminatoria.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (partido.estado === 'FINALIZADO') {
-    const error = new Error('No se puede editar un partido que ya finalizó.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (partido.esBye) {
-    const error = new Error('No se pueden editar cruces de un partido pase directo (BYE).');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const { origenPareja1, origenPareja2, liberarEnOtros } = data;
-
-  const nuevoOrigen1 = origenPareja1 !== undefined ? (origenPareja1 || null) : partido.origenPareja1;
-  const nuevoOrigen2 = origenPareja2 !== undefined ? (origenPareja2 || null) : partido.origenPareja2;
-
-  if (nuevoOrigen1 && nuevoOrigen2 && nuevoOrigen1 === nuevoOrigen2) {
-    const error = new Error('No podés asignar el mismo origen en ambos lados del partido.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  // Detectar colisiones con otros partidos de la misma ronda
-  let partidosEnConflicto = [];
-  if (nuevoOrigen1 || nuevoOrigen2) {
-    const otrosPartidos = await prisma.partido.findMany({
-      where: {
-        faseEliminatoriaId: partido.faseEliminatoriaId,
-        id: { not: partidoId },
-      },
-    });
-
-    partidosEnConflicto = otrosPartidos.filter((p) => {
-      const match1 = nuevoOrigen1 && (p.origenPareja1 === nuevoOrigen1 || p.origenPareja2 === nuevoOrigen1);
-      const match2 = nuevoOrigen2 && (p.origenPareja1 === nuevoOrigen2 || p.origenPareja2 === nuevoOrigen2);
-      return match1 || match2;
-    });
-
-    // Si algún partido en colisión está FINALIZADO, nunca se puede modificar
-    for (const p of partidosEnConflicto) {
-      if (p.estado === 'FINALIZADO') {
-        const error = new Error(
-          `No se puede mover el origen porque el Partido #${p.posicionEnRonda} ya está finalizado.`
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-    }
-
-    // Si hay colisión y no se autorizó la liberación, arrojar error descriptivo
-    if (partidosEnConflicto.length > 0 && !liberarEnOtros) {
-      const primerConflicto = partidosEnConflicto[0];
-      const origenConflictivo =
-        (nuevoOrigen1 && (primerConflicto.origenPareja1 === nuevoOrigen1 || primerConflicto.origenPareja2 === nuevoOrigen1))
-          ? nuevoOrigen1
-          : nuevoOrigen2;
-      const error = new Error(
-        `El origen "${origenConflictivo}" ya está asignado en el Partido #${primerConflicto.posicionEnRonda} de esta ronda.`
-      );
-      error.statusCode = 400;
+  return prisma.$transaction(async (tx) => {
+    const partido = await tx.partido.findUnique({ where: { id: partidoId } });
+    if (!partido) {
+      const error = new Error('Partido no encontrado.');
+      error.statusCode = 404;
       throw error;
     }
-  }
+    const rechazar = (mensaje) => {
+      const error = new Error(mensaje);
+      error.statusCode = 400;
+      throw error;
+    };
+    const validarEditable = (p, actual = false) => {
+      if (p.estado === 'FINALIZADO') rechazar(actual
+        ? 'No se puede editar un partido que ya finalizó.'
+        : `No se puede mover el origen porque el Partido #${p.posicionEnRonda} ya está finalizado.`);
+      if (p.estado === 'EN_CURSO') rechazar(actual
+        ? 'No se puede editar un partido que está en juego.'
+        : `No se puede mover el origen porque el Partido #${p.posicionEnRonda} está en juego.`);
+      if (p.esBye) rechazar('No se pueden editar cruces de un partido pase directo (BYE).');
+    };
+    if (!partido.faseEliminatoriaId) rechazar('El partido no pertenece a una fase eliminatoria.');
+    validarEditable(partido, true);
 
-  // Preparar update del partido actual
-  const updateDataActual = {};
-  let pareja1IdActual = partido.pareja1Id;
-  let pareja2IdActual = partido.pareja2Id;
+    const { origenPareja1, origenPareja2, liberarEnOtros } = data;
+    const nuevos = [
+      origenPareja1 === undefined ? partido.origenPareja1 : origenPareja1 || null,
+      origenPareja2 === undefined ? partido.origenPareja2 : origenPareja2 || null,
+    ];
+    if (nuevos[0] && nuevos[0] === nuevos[1]) rechazar('No podés asignar el mismo origen en ambos lados del partido.');
 
-  if (origenPareja1 !== undefined) {
-    updateDataActual.origenPareja1 = nuevoOrigen1;
-    if (!nuevoOrigen1) {
-      pareja1IdActual = null;
-    }
-  }
-  if (origenPareja2 !== undefined) {
-    updateDataActual.origenPareja2 = nuevoOrigen2;
-    if (!nuevoOrigen2) {
-      pareja2IdActual = null;
-    }
-  }
+    const originales = await tx.partido.findMany({ where: { faseEliminatoriaId: partido.faseEliminatoriaId } });
+    const partidos = originales.map((p) => ({ ...p }));
+    const actual = partidos.find((p) => p.id === partidoId);
+    const lugares = partidos.flatMap((p) => [1, 2].map((lado) => ({ partido: p, lado })));
 
-  // Si hay partidos en conflicto y liberarEnOtros está activo, ejecutar transacción atómica
-  if (partidosEnConflicto.length > 0 && liberarEnOtros) {
-    return await prisma.$transaction(async (tx) => {
-      // Liberar en los partidos en conflicto y rastrear parejas físicas a transferir
-      for (const p of partidosEnConflicto) {
-        const updateConflicto = {};
-        if (nuevoOrigen1 && p.origenPareja1 === nuevoOrigen1) {
-          updateConflicto.origenPareja1 = null;
-          if (p.pareja1Id) {
-            pareja1IdActual = p.pareja1Id;
-            updateConflicto.pareja1Id = null;
-          }
+    // Resolver ambos lugares sobre el plan, antes de escribir. Un origen desplazado puede
+    // elegirse para el segundo lugar: los intercambios encadenados conservan cada origen.
+    for (const lado of [1, 2]) {
+      if (data[`origenPareja${lado}`] === undefined) continue;
+      const origen = `origenPareja${lado}`, pareja = `pareja${lado}Id`, elegido = nuevos[lado - 1];
+      if (actual[origen] === elegido && elegido) continue;
+      const fuentes = elegido ? lugares.filter((l) =>
+        l.partido[`origenPareja${l.lado}`] === elegido && !(l.partido.id === partidoId && l.lado === lado)) : [];
+      if (fuentes.length > 1) rechazar(`El origen "${elegido}" está repetido en esta ronda. Revisá los cruces.`);
+      const fuente = fuentes[0];
+      if (fuente) {
+        if (fuente.partido.id !== partidoId) {
+          validarEditable(fuente.partido);
+          if (!liberarEnOtros) rechazar(`El origen "${elegido}" ya está asignado en el Partido #${fuente.partido.posicionEnRonda} de esta ronda.`);
         }
-        if (nuevoOrigen1 && p.origenPareja2 === nuevoOrigen1) {
-          updateConflicto.origenPareja2 = null;
-          if (p.pareja2Id) {
-            pareja1IdActual = p.pareja2Id;
-            updateConflicto.pareja2Id = null;
-          }
-        }
-        if (nuevoOrigen2 && p.origenPareja1 === nuevoOrigen2) {
-          updateConflicto.origenPareja1 = null;
-          if (p.pareja1Id) {
-            pareja2IdActual = p.pareja1Id;
-            updateConflicto.pareja1Id = null;
-          }
-        }
-        if (nuevoOrigen2 && p.origenPareja2 === nuevoOrigen2) {
-          updateConflicto.origenPareja2 = null;
-          if (p.pareja2Id) {
-            pareja2IdActual = p.pareja2Id;
-            updateConflicto.pareja2Id = null;
-          }
-        }
-
-        await tx.partido.update({
-          where: { id: p.id },
-          data: updateConflicto,
-        });
+        const origenFuente = `origenPareja${fuente.lado}`, parejaFuente = `pareja${fuente.lado}Id`;
+        const origenSaliente = actual[origen], parejaSaliente = actual[pareja];
+        actual[origen] = elegido;
+        actual[pareja] = fuente.partido[parejaFuente];
+        fuente.partido[origenFuente] = origenSaliente;
+        fuente.partido[parejaFuente] = parejaSaliente;
+      } else {
+        actual[origen] = elegido;
+        actual[pareja] = null;
       }
+    }
 
-      updateDataActual.pareja1Id = pareja1IdActual;
-      updateDataActual.pareja2Id = pareja2IdActual;
-
-      const updated = await tx.partido.update({
-        where: { id: partidoId },
-        data: updateDataActual,
-      });
-
-      return updated;
-    });
-  }
-
-  // Sin colisiones: actualizar directamente
-  if (origenPareja1 !== undefined && !nuevoOrigen1) {
-    updateDataActual.pareja1Id = null;
-  }
-  if (origenPareja2 !== undefined && !nuevoOrigen2) {
-    updateDataActual.pareja2Id = null;
-  }
-
-  const updated = await prisma.partido.update({
-    where: { id: partidoId },
-    data: updateDataActual,
+    let actualizado = partido;
+    const campos = ['origenPareja1', 'origenPareja2', 'pareja1Id', 'pareja2Id'];
+    for (const p of partidos) {
+      const anterior = originales.find((original) => original.id === p.id);
+      const cambios = Object.fromEntries(campos.filter((campo) => p[campo] !== anterior[campo]).map((campo) => [campo, p[campo]]));
+      if (!Object.keys(cambios).length) continue;
+      const guardado = await tx.partido.update({ where: { id: p.id }, data: cambios });
+      if (p.id === partidoId) actualizado = guardado;
+    }
+    return actualizado;
   });
-
-  return updated;
 }
 
 async function getPartidosByCategoria(organizadorId, categoriaId, filters = {}) {

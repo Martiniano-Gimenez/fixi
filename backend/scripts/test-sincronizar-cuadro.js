@@ -6,6 +6,100 @@ const partidoService = require('../src/services/partido.service');
 const organizadorService = require('../src/services/organizador.service');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const crypto = require('crypto');
+const assert = require('node:assert/strict');
+
+async function testIntercambioCruces(organizadorId, torneoId) {
+  const categoria = await prisma.categoria.create({ data: { torneoId, nombre: 'Intercambio de octavos', estado: 'EN_CURSO',
+    parejas: { create: Array.from({ length: 6 }, (_, i) => ({ orden: i + 1, jugador1: `Pareja ${i + 1}`, jugador2: 'Intercambio' })) },
+  }, include: { parejas: { orderBy: { orden: 'asc' } } } });
+  try {
+    const fase = await prisma.faseEliminatoria.create({ data: { categoriaId: categoria.id, nombre: 'Octavos de Final', ronda: 16 } });
+    const [a, b, c, d, e, f] = categoria.parejas;
+    const bases = [
+      { posicionEnRonda: 1, origenPareja1: '1° Zona A', origenPareja2: '1° Zona B', pareja1Id: a.id, pareja2Id: b.id },
+      { posicionEnRonda: 8, origenPareja1: '2° Zona A', origenPareja2: '2° Zona B', pareja1Id: c.id, pareja2Id: d.id },
+      { posicionEnRonda: 2, origenPareja1: '1° Zona C', origenPareja2: '2° Zona C', pareja1Id: e.id, pareja2Id: f.id },
+    ];
+    const partidos = [];
+    for (const base of bases) partidos.push(await prisma.partido.create({ data: {
+      ...base, categoriaId: categoria.id, faseEliminatoriaId: fase.id,
+      fechaHora: new Date('2026-11-08T15:00:00.000Z'), canchaNumero: 1, horarioManual: true,
+    } }));
+    const [actual, otro, testigo] = partidos;
+    const leer = () => prisma.partido.findMany({ where: { categoriaId: categoria.id }, orderBy: { posicionEnRonda: 'asc' }, include: { sets: true } });
+    const restaurar = async () => {
+      for (let i = 0; i < partidos.length; i++) await prisma.partido.update({ where: { id: partidos[i].id }, data: { ...bases[i], estado: 'PENDIENTE' } });
+    };
+    for (const ladoActual of [1, 2]) for (const ladoOtro of [1, 2]) {
+      await restaurar();
+      const antes = await leer();
+      await partidoService.updateBracketMatch(organizadorId, actual.id, {
+        [`origenPareja${ladoActual}`]: otro[`origenPareja${ladoOtro}`], liberarEnOtros: true,
+      });
+      const despues = await leer();
+      const esperado = structuredClone(antes);
+      const p = esperado.find((r) => r.id === actual.id), q = esperado.find((r) => r.id === otro.id);
+      for (const campo of ['origenPareja', 'pareja']) {
+        const cp = campo === 'pareja' ? `pareja${ladoActual}Id` : `origenPareja${ladoActual}`;
+        const cq = campo === 'pareja' ? `pareja${ladoOtro}Id` : `origenPareja${ladoOtro}`;
+        [p[cp], q[cq]] = [q[cq], p[cp]];
+      }
+      assert.deepEqual(despues, esperado, 'Se intercambian ambos lados con sus parejas, sin cambiar otros campos ni partidos');
+    }
+
+    await restaurar();
+    await prisma.partido.update({ where: { id: actual.id }, data: { origenPareja1: null, pareja1Id: null } });
+    await partidoService.updateBracketMatch(organizadorId, actual.id, { origenPareja1: otro.origenPareja2, liberarEnOtros: true });
+    let p = await prisma.partido.findUnique({ where: { id: actual.id } });
+    let q = await prisma.partido.findUnique({ where: { id: otro.id } });
+    assert.equal(p.origenPareja1, otro.origenPareja2); assert.equal(p.pareja1Id, d.id);
+    assert.equal(q.origenPareja2, null); assert.equal(q.pareja2Id, null, 'El origen de un lugar vacío deja vacío al otro');
+
+    await restaurar();
+    await prisma.partido.update({ where: { id: otro.id }, data: { pareja1Id: null } });
+    await partidoService.updateBracketMatch(organizadorId, actual.id, { origenPareja1: otro.origenPareja1, liberarEnOtros: true });
+    assert.equal((await prisma.partido.findUnique({ where: { id: actual.id } })).pareja1Id, null, 'Un origen sin clasificado no arrastra la pareja vieja');
+
+    for (const estado of ['FINALIZADO', 'EN_CURSO']) for (const id of [actual.id, otro.id]) {
+      await restaurar(); await prisma.partido.update({ where: { id }, data: { estado } });
+      const antes = await leer();
+      await assert.rejects(() => partidoService.updateBracketMatch(organizadorId, actual.id, {
+        origenPareja1: otro.origenPareja1, liberarEnOtros: true,
+      }), { statusCode: 400 });
+      assert.deepEqual(await leer(), antes, 'Un partido finalizado o en juego bloquea toda la operación');
+    }
+    await restaurar();
+    let antes = await leer();
+    await assert.rejects(() => partidoService.updateBracketMatch(organizadorId, actual.id, { origenPareja1: otro.origenPareja1 }), { statusCode: 400 });
+    assert.deepEqual(await leer(), antes, 'Sin confirmación no se mueve un origen ajeno');
+    await assert.rejects(() => partidoService.updateBracketMatch(organizadorId, actual.id, { origenPareja1: actual.origenPareja2 }), { statusCode: 400 });
+
+    await partidoService.updateBracketMatch(organizadorId, actual.id, {
+      origenPareja1: otro.origenPareja2, origenPareja2: otro.origenPareja1, liberarEnOtros: true,
+    });
+    p = await prisma.partido.findUnique({ where: { id: actual.id } }); q = await prisma.partido.findUnique({ where: { id: otro.id } });
+    assert.deepEqual([p.origenPareja1, p.origenPareja2, q.origenPareja1, q.origenPareja2], [bases[1].origenPareja2, bases[1].origenPareja1, bases[0].origenPareja2, bases[0].origenPareja1]);
+    assert.deepEqual([p.pareja1Id, p.pareja2Id, q.pareja1Id, q.pareja2Id], [d.id, c.id, b.id, a.id]);
+
+    await restaurar();
+    await partidoService.updateBracketMatch(organizadorId, actual.id, {
+      origenPareja1: otro.origenPareja1, origenPareja2: actual.origenPareja1, liberarEnOtros: true,
+    });
+    p = await prisma.partido.findUnique({ where: { id: actual.id } }); q = await prisma.partido.findUnique({ where: { id: otro.id } });
+    assert.deepEqual([p.origenPareja1, p.origenPareja2, q.origenPareja1], [bases[1].origenPareja1, bases[0].origenPareja1, bases[0].origenPareja2]);
+    assert.deepEqual([p.pareja1Id, p.pareja2Id, q.pareja1Id], [c.id, a.id, b.id], 'Los intercambios encadenados no duplican orígenes ni parejas');
+
+    await restaurar(); antes = await leer();
+    const transaction = prisma.$transaction;
+    prisma.$transaction = (fn, ...args) => transaction.call(prisma, async (tx) => { await fn(tx); throw new Error('Fallo simulado antes del commit'); }, ...args);
+    try {
+      await assert.rejects(() => partidoService.updateBracketMatch(organizadorId, actual.id, { origenPareja1: otro.origenPareja1, liberarEnOtros: true }), /Fallo simulado/);
+    } finally { prisma.$transaction = transaction; }
+    assert.deepEqual(await leer(), antes, 'El rollback conserva los dos partidos enteros');
+    assert.deepEqual(await prisma.partido.findUnique({ where: { id: testigo.id } }), testigo);
+    console.log('  ✅ Intercambio de octavos: ambos lados, lugar vacío, parejas, bloqueos, encadenados y rollback.');
+  } finally { await prisma.categoria.delete({ where: { id: categoria.id } }); }
+}
 
 async function testSincronizarCuadro() {
   await ensureTestDb();
@@ -648,6 +742,7 @@ async function testSincronizarCuadro() {
     console.log(`  ✅ [f.4] displayPareja1 en Octavos es un objeto válido: "${p1OctavosApi.displayPareja1.jugador1} / ${p1OctavosApi.displayPareja1.jugador2}" (id: ${p1OctavosApi.displayPareja1.id}).`);
     console.log('  ✅ [f.4] Al finalizar la zona, el ganador del BYE avanzó y se muestra en Octavos.');
 
+    await testIntercambioCruces(organizador.id, torneo.id);
     console.log('\n🎉 ¡TODAS LAS ASSECIONES DE SINCRONIZACIÓN DE CUADRO PASARON EXITOSAMENTE!');
   } finally {
     try {
