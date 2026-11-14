@@ -3165,9 +3165,45 @@ Las entradas 93 y 94 agrupan temáticamente 23 de los 24 commits de `48da50b..49
 
 ---
 
+## 97. Cuadro: marcador, horarios e intercambio de cruces (14/11/2026)
+
+### 1. Problema y objetivo
+- Las tarjetas del cuadro tenían acciones poco visibles, separaban el resultado de las parejas y ocupaban demasiado alto. El chip «Esperando» y las pestañas de rondas en varias filas agregaban ruido en celular.
+- El modal de horario compartido necesitaba aprovechar el ancho de escritorio sin dejar espacio vacío al plegarse. Editar un cruce traía el origen elegido, pero dejaba vacío el otro partido aunque la posición editada ya tuviera un origen: debía intercambiarlos.
+
+### 2. Cuadro compacto y acciones visibles
+- **Tarjetas tipo marcador:** estado y día/hora arriba; una fila por pareja, con games por set en columnas a la derecha; acciones abajo. La pareja 1 sigue arriba, el ganador destacado, el perdedor en gris y los games ganadores de cada set en negrita, con números tabulares. Se redujeron el alto y los espacios sin achicar las áreas táctiles de 44 px. Las líneas del cuadro siguen alineadas y `BracketLines` no se modificó.
+- **Acciones con texto:** «Asignar horario» / «Cambiar horario» con `Clock`, «Cargar resultado» / «Editar resultado» con `ClipboardList` cuando están las dos parejas, y «Editar cruce» como acción secundaria. Se mantuvo el clic existente en la tarjeta, con botones visibles y nombres accesibles coherentes. Ningún texto muestra el número de cancha.
+- **Menos ruido:** se retiró el chip «Esperando», se dejó el `#N` chico porque identifica los cruces de origen y se cambió «BYE» por «Pasa directo». Se normalizaron «Octavos de final», «Cuartos de final» e «Ir a Día de torneo». El link de volver quedó solo arriba e «Ir a Día de torneo» pasó a las acciones, junto al estado de la categoría y como botón común.
+- **Una fila de rondas en celular:** hasta 767 px, pestañas de 44 px con «Octavos», «Cuartos», «Semis» y «Final», más «16avos» / «32avos» si corresponden. El nombre completo queda en `aria-label`; en escritorio se mantienen los títulos completos de columna.
+
+### 3. Modal de horario y decisión sobre descansos
+- **Una presentación compartida:** desde cuadro, categoría y Día de torneo, el título es «Asignar horario» o «Cambiar horario». Los días van completos y en minúscula en la recomendación, disponibilidad, selección, otros partidos y grilla, respetando el día civil de la trasnoche. Se actualizaron únicamente los textos esperados del test del modal, con autorización.
+- **Ancho útil sin alto fijo:** en escritorio, el modal tiene más ancho y toma el alto de su contenido, con un máximo que no supera la pantalla. Plegado queda compacto. La grilla usa columnas automáticas y recorre los horarios de izquierda a derecha y de arriba abajo; reemplaza los tres bloques de columnas del primer ajuste. Con una sola jornada se ve solo el título; con varias se conservan las pestañas. El pre-check mantiene su presentación, su plegado y sus textos.
+- **Decisión:** el modal no valida los descansos entre rondas: los decide el organizador y el backend solo avisa después de guardar. Las advertencias se muestran sin deshacer la asignación, con «Entendido», y también se pueden consultar desde «Revisar horario». Se conservan las validaciones bloqueantes de estado, jornada, lluvia y colisiones; la decisión se refiere a los descansos.
+
+### 4. Editar cruce intercambia las posiciones
+- **Intercambio atómico:** al elegir un origen que está en otro partido de la misma ronda, ese lugar recibe el origen que tenía la posición editada. Los IDs de las parejas acompañan a sus orígenes. Si el lugar editado estaba vacío, el otro queda vacío. La lectura, la validación y las escrituras de ambos partidos se resuelven en una sola transacción; un fallo revierte todo, sin cambiar horarios, estados ni resultados.
+- **Bloqueos y confirmación:** no se puede editar si cualquiera de los partidos involucrados está finalizado o en juego. Se mantiene el control de permisos, orígenes duplicados y colisiones sin `liberarEnOtros: true`. El modal deshabilita las opciones bloqueadas y «Sin definir / vacío» pasó a «Sin definir».
+- **Aviso informativo:** anticipa qué se intercambia con «1° Zona A pasa al Partido #8 y 2° Zona A viene a este partido.», en un bloque neutro. Si el otro lugar queda vacío, lo aclara. El aviso también refleja los intercambios encadenados, sin prometer una liberación distinta de lo que se guarda.
+
+### 5. Verificación registrada
+- Cuadro de «Impares Noviembre», con datos falsos en el navegador para nombres largos, tres sets y partidos en juego, revisado a 320, 375 y 1440 px sin desbordes. Se comprobaron las líneas de escritorio y las pestañas en una fila, incluidas rondas adicionales. Los envíos se interceptaron, sin modificar `dev.db`.
+- El modal compartido se verificó desde cuadro, categoría y Día de torneo en esos tres anchos, con una jornada y con varias, incluido sábado. En escritorio, el modal plegado quedó entre 417 y 445 px de alto; al abrir la grilla, se comprobó el orden continuo y el uso del ancho. El pre-check se revisó por separado sin cambios.
+- `test-grilla-horarios.mjs`, `test-elegir-horario.mjs` y `test-asignar-horario-modal.mjs` pasaron. El build del frontend compiló y el lint conservó los mismos 7 avisos. Las 53 suites del backend pasaron en ambos commits de horario e intercambio. `test-sincronizar-cuadro.js` cubre intercambios entre lados de octavos, lugar vacío, traslado de parejas, bloqueos por finalizado o en juego, cambios simultáneos y encadenados, partidos ajenos intactos y rollback.
+- Esta entrada registra las verificaciones de los cambios; la actualización documental no requirió volver a ejecutar build ni tests.
+
+### 6. Commits incluidos
+- Tarjetas y textos del cuadro: `3b194c5`, `e58a4db`.
+- Rondas en una fila: `34b98ff`.
+- Modal de horario y grilla continua: `e545dc0`, `e391020`.
+- Intercambio de cruces: `420ec78`.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El registro reúne 96 sesiones o entradas temáticas de trabajo. Las primeras 95 tienen un total aproximado de entre 304 y 373 horas de programación, refactorización, depuración, documentación y testeo; la entrada 96 queda sin estimación de horas y no se suma a ese total. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 95 agrega entre 8 y 12 horas estimadas por el alcance de los cambios y sus pruebas. Las filas 91 a 95 agregan entre 32,25 y 46,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 304,25 a 372,5 horas. Se redondea a horas enteras. Las entradas 93 a 95 agrupan trabajo de varios días, no sesiones cronometradas únicas; no se estimó el esfuerzo por la distancia entre fechas de commits.
+El registro reúne 97 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 318 y 394 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. Se completó la estimación pendiente de la entrada 96 con entre 8 y 12 horas y se estimaron entre 6 y 9 horas para la 97, según el alcance y las pruebas registradas. Las filas 91 a 97 agregan entre 46,25 y 67,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 318,25 a 393,5 horas. Se redondea a horas enteras. Las entradas temáticas pueden agrupar varios pedidos o días; no se estimó el esfuerzo por la distancia entre fechas de commits.
 
 | Sesión | Tiempo estimado (estimación, no medición) | Temas cubiertos |
 |--------|-------------------------------------------|------------------|
@@ -3266,8 +3302,9 @@ El registro reúne 96 sesiones o entradas temáticas de trabajo. Las primeras 95
 | **93** | ~8 a 12 horas (estimación) | Horarios por pareja, motivos y opciones del pre-check, diseño móvil, pendientes ordenados, dieciseisavos automáticos y confirmación de inicio. |
 | **94** | ~10 a 14 horas (estimación) | Vista compacta de Día de torneo, reglas y pruebas de lluvia/restauración, controles al final, tiempo transcurrido y cambio de horario desde la pantalla. |
 | **95** | ~8 a 12 horas (estimación) | Modal de canchas con una acción por vez, encabezado simplificado, grilla con un solo Ver todos en el modal, cronómetro real y migración con backup, cruces claros y bloqueo de parejas en dos partidos en juego, con pruebas. |
-| **96** | Sin estimar | Tarjetas tipo marcador, número de cancha oculto, posiciones compactas en celular, limpieza del cronómetro y referencias de lluvia al reiniciar, errores en la página y camino para rearmar. |
-| **Total estimado (1 a 95)** | **~304 a 373 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación de las sesiones 91 a 95. |
+| **96** | ~8 a 12 horas (estimación) | Tarjetas tipo marcador, número de cancha oculto, posiciones compactas en celular, limpieza del cronómetro y referencias de lluvia al reiniciar, errores en la página y camino para rearmar. |
+| **97** | ~6 a 9 horas (estimación) | Cuadro tipo marcador, acciones con texto, rondas en una fila, modal de horario amplio y compacto con grilla continua e intercambio transaccional de cruces, con pruebas y documentación. |
+| **Total estimado (1 a 97)** | **~318 a 394 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación de las sesiones 91 a 97. |
 
 > **Nota:** esta tabla cubre las sesiones o entradas de codificación, depuración, pruebas y documentación técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
 
