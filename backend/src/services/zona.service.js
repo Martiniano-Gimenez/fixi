@@ -2385,7 +2385,7 @@ async function limpiarResultadosZonas(organizadorId, categoriaId) {
 
       await tx.partido.updateMany({
         where: { id: { in: partidoIds } },
-        data: { estado: 'PENDIENTE', ganadorId: null },
+        data: { estado: 'PENDIENTE', ganadorId: null, enJuegoDesde: null },
       });
 
       const zonasMiniBracket = await tx.zona.findMany({

@@ -2033,6 +2033,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     select: {
       id: true,
       nombre: true,
+      estado: true,
       zonas: {
         select: {
           id: true,
@@ -2064,6 +2065,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   const categoriasInfo = [];
 
   for (const cat of categoriasTorneo) {
+    if (cat.estado === 'BORRADOR') continue;
     let totalPartidosZona = 0;
     let partidosZonaFinalizados = 0;
 

@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma');
+const canchasOverridesService = require('./canchasOverrides.service');
 
 async function getCategoriaById(organizadorId, categoriaId, tx = null) {
   const db = tx || prisma;
@@ -145,7 +146,37 @@ async function reiniciarCategoria(organizadorId, categoriaId) {
     throw new Error('La categoría ya está en estado BORRADOR.');
   }
 
-  await prisma.$transaction(async (tx) => {
+  const overridesActualizados = await prisma.$transaction(async (tx) => {
+    const partidos = await tx.partido.findMany({
+      where: { categoriaId: categoria.id },
+      select: { id: true },
+    });
+    const partidoIds = new Set(partidos.map((p) => p.id));
+    const quitarPartidos = (registro) => {
+      let datos = registro;
+      if (typeof registro === 'string') {
+        try { datos = JSON.parse(registro); } catch { return undefined; }
+      }
+      if (!datos || typeof datos !== 'object' || Array.isArray(datos)) return undefined;
+      const restantes = Object.entries(datos).filter(([id]) => !partidoIds.has(id));
+      if (restantes.length === Object.keys(datos).length) return undefined;
+      const limpio = Object.fromEntries(restantes);
+      return typeof registro === 'string' ? JSON.stringify(limpio) : limpio;
+    };
+    const overrides = await tx.overrideCanchasDia.findMany({ where: { torneoId: categoria.torneoId } });
+    const actualizados = [];
+    for (const override of overrides) {
+      const horariosAntesLluvia = quitarPartidos(override.horariosAntesLluvia);
+      const partidosSinSlot = quitarPartidos(override.partidosSinSlot);
+      if (horariosAntesLluvia === undefined && partidosSinSlot === undefined) continue;
+      const actualizado = await tx.overrideCanchasDia.update({
+        where: { id: override.id },
+        data: { horariosAntesLluvia, partidosSinSlot, updatedAt: override.updatedAt },
+      });
+      // La caché solo guarda partidosSinSlot; se actualiza después del commit.
+      if (partidosSinSlot !== undefined) actualizados.push(actualizado);
+    }
+
     await tx.partido.deleteMany({
       where: { categoriaId: categoria.id },
     });
@@ -167,7 +198,16 @@ async function reiniciarCategoria(organizadorId, categoriaId) {
       where: { categoriaId: categoria.id },
       data: { resolucionManual: false },
     });
+    return actualizados;
   });
+
+  for (const override of overridesActualizados) {
+    canchasOverridesService.applyCacheMutation('SET', {
+      ...override,
+      partidosSinSlot: typeof override.partidosSinSlot === 'string'
+        ? JSON.parse(override.partidosSinSlot) : override.partidosSinSlot,
+    });
+  }
 
   return { message: 'Categoría reiniciada con éxito' };
 }

@@ -8,6 +8,7 @@ const organizadorService = require('../src/services/organizador.service');
 const zonaService = require('../src/services/zona.service');
 const torneoService = require('../src/services/torneo.service');
 const partidoService = require('../src/services/partido.service');
+const categoriaService = require('../src/services/categoria.service');
 const { parseFechaLocal, getDiaCalendarioConTrasnoche, clavesJornadasTorneo } = require('../src/utils/dateUtils');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const assert = require('assert');
@@ -178,6 +179,126 @@ async function testParejasEnJuego(organizadorId, torneoId) {
   }
 }
 
+async function testLimpiarReiniciarCategoria(organizadorId) {
+  const torneo = await prisma.torneo.create({ data: {
+    organizadorId, nombre: 'Limpieza de categoría', slug: crypto.randomUUID(),
+    estado: 'EN_CURSO', fecha: new Date('2026-11-06T15:00:00.000Z'),
+  } });
+  try {
+    const crearCategoria = (nombre, estado = 'EN_CURSO') => prisma.categoria.create({ data: {
+      torneoId: torneo.id, nombre, estado, parejas: { create: [
+        { jugador1: 'Pareja A', jugador2: nombre, orden: 1, resolucionManual: true,
+          slotsSeleccionados: { create: { slotId: 'Viernes-18:00' } } },
+        { jugador1: 'Pareja B', jugador2: nombre, orden: 2 },
+      ] },
+    }, include: { parejas: { orderBy: { orden: 'asc' }, include: { slotsSeleccionados: true } } } });
+    const categoria = await crearCategoria('Limpiar y reiniciar');
+    const testigo = await crearCategoria('Testigo');
+    const borrador = await crearCategoria('Borrador con restos', 'BORRADOR');
+    const terminada = await crearCategoria('Terminada', 'FINALIZADO');
+    const zona = await prisma.zona.create({ data: { categoriaId: categoria.id, nombre: 'Zona A' } });
+    const fechaHora = new Date('2026-11-06T21:00:00.000Z');
+    const inicio = new Date('2026-11-06T21:05:00.000Z');
+    const partido = await prisma.partido.create({ data: {
+      categoriaId: categoria.id, zonaId: zona.id, pareja1Id: categoria.parejas[0].id,
+      pareja2Id: categoria.parejas[1].id, estado: 'EN_CURSO', enJuegoDesde: inicio,
+      fechaHora, canchaNumero: 2, horarioManual: true,
+      sets: { create: { numero: 1, gamesPareja1: 6, gamesPareja2: 4 } },
+    } });
+    await zonaService.limpiarResultadosZonas(organizadorId, categoria.id);
+    const limpio = await prisma.partido.findUnique({ where: { id: partido.id }, include: { sets: true } });
+    assert.strictEqual(limpio.estado, 'PENDIENTE');
+    assert.strictEqual(limpio.enJuegoDesde, null, 'Limpiar borra el inicio real');
+    assert.deepStrictEqual(limpio.sets, []);
+    assert.strictEqual(limpio.fechaHora.toISOString(), fechaHora.toISOString());
+    assert.strictEqual(limpio.canchaNumero, 2);
+    assert.strictEqual(limpio.horarioManual, true);
+    const antesDelParcial = Date.now();
+    await partidoService.cargarResultado(organizadorId, partido.id, { sets: [{ gamesPareja1: 6, gamesPareja2: 4 }] });
+    const parcial = await prisma.partido.findUnique({ where: { id: partido.id } });
+    assert.ok(parcial.enJuegoDesde.getTime() >= antesDelParcial, 'Un parcial después de limpiar inicia un cronómetro nuevo');
+
+    // Un borrador con datos residuales tampoco debe ofrecer Generar cuadro ni asignar clasificados.
+    let partidoTestigo;
+    for (const cat of [testigo, borrador]) {
+      const z = await prisma.zona.create({ data: { categoriaId: cat.id, nombre: 'Zona lista' } });
+      const p = await prisma.partido.create({ data: { categoriaId: cat.id, zonaId: z.id, estado: 'FINALIZADO' } });
+      if (cat.id === testigo.id) partidoTestigo = p;
+      await prisma.faseEliminatoria.create({ data: {
+        categoriaId: cat.id, nombre: 'Final', ronda: 2,
+        partidos: { create: { categoriaId: cat.id, posicionEnRonda: 1 } },
+      } });
+    }
+    const fase = await prisma.faseEliminatoria.create({ data: { categoriaId: categoria.id, nombre: 'Final', ronda: 2 } });
+    const cruce = await prisma.partido.create({ data: { categoriaId: categoria.id, faseEliminatoriaId: fase.id } });
+    const registro = { fechaHora: fechaHora.toISOString(), canchaNumero: 2, sinHorarioAsignado: false };
+    const mapa = { [partido.id]: registro, [cruce.id]: registro, [partidoTestigo.id]: registro };
+    const motivos = { [partido.id]: 'SIN_CANCHA', [cruce.id]: 'SIN_TURNO', [partidoTestigo.id]: 'CONSERVAR' };
+    const fechaRegistro = new Date('2026-11-05T10:00:00.000Z');
+    const crearOverride = (diaKey, horariosAntesLluvia, partidosSinSlot) => prisma.overrideCanchasDia.create({ data: {
+      torneoId: torneo.id, diaKey, canchas: 3, isLluvia: true, activoDesde: fechaRegistro,
+      createdAt: fechaRegistro, updatedAt: fechaRegistro, horariosAntesLluvia, partidosSinSlot,
+    } });
+    await crearOverride('2026-11-06', mapa, motivos);
+    await crearOverride('2026-11-07', JSON.stringify({ [cruce.id]: registro }), JSON.stringify(motivos));
+    await crearOverride('2026-11-08', undefined, { [partido.id]: 'SIN_CANCHA' });
+    await canchasOverridesService.loadFromDb();
+    const leerOverrides = () => prisma.overrideCanchasDia.findMany({ where: { torneoId: torneo.id }, orderBy: { diaKey: 'asc' } });
+    const originales = await leerOverrides();
+    const cacheOriginal = structuredClone(canchasOverridesService.getOverridesTorneo(torneo.id));
+
+    // Provocar un fallo antes del commit: ni la base ni la caché deben quedar a medio reiniciar.
+    const servicioPrisma = require('../src/lib/prisma');
+    const transaccion = servicioPrisma.$transaction;
+    servicioPrisma.$transaction = (fn, ...args) => transaccion.call(servicioPrisma, async (tx) => {
+      await fn(tx);
+      throw new Error('Fallo simulado antes del commit');
+    }, ...args);
+    try {
+      await assert.rejects(() => categoriaService.reiniciarCategoria(organizadorId, categoria.id), /Fallo simulado/);
+    } finally {
+      servicioPrisma.$transaction = transaccion;
+    }
+    assert.deepStrictEqual(await leerOverrides(), originales, 'El fallo revierte los registros de lluvia');
+    assert.deepStrictEqual(canchasOverridesService.getOverridesTorneo(torneo.id), cacheOriginal, 'No se toca la caché antes del commit');
+    assert.ok(await prisma.partido.findUnique({ where: { id: partido.id } }), 'El fallo revierte la eliminación');
+
+    await categoriaService.reiniciarCategoria(organizadorId, categoria.id);
+    const actualizados = await leerOverrides();
+    const parsear = (valor) => typeof valor === 'string' ? JSON.parse(valor) : valor;
+    for (let i = 0; i < originales.length; i++) {
+      const original = originales[i], actual = actualizados[i];
+      const quitar = (valor) => valor == null ? valor : Object.fromEntries(Object.entries(parsear(valor))
+        .filter(([id]) => ![partido.id, cruce.id].includes(id)));
+      const esperado = { ...original };
+      for (const campo of ['horariosAntesLluvia', 'partidosSinSlot']) {
+        const valor = quitar(original[campo]);
+        esperado[campo] = typeof original[campo] === 'string' ? JSON.stringify(valor) : valor;
+      }
+      assert.deepStrictEqual(actual, esperado, 'Solo se quitan los IDs de la categoría, sin cambiar metadatos ni otros valores');
+      const cache = canchasOverridesService.getOverridesTorneo(torneo.id)[actual.diaKey];
+      assert.deepStrictEqual(cache, { ...cacheOriginal[actual.diaKey], partidosSinSlot: parsear(actual.partidosSinSlot) });
+    }
+    assert.deepStrictEqual(await prisma.partido.findUnique({ where: { id: partidoTestigo.id } }), partidoTestigo);
+    const reiniciada = await prisma.categoria.findUnique({ where: { id: categoria.id }, include: {
+      parejas: { orderBy: { orden: 'asc' }, include: { slotsSeleccionados: true } }, zonas: true, partidos: true, fasesEliminatorias: true,
+    } });
+    assert.strictEqual(reiniciada.estado, 'BORRADOR');
+    assert.deepStrictEqual(reiniciada.parejas, categoria.parejas.map((p) => ({ ...p, resolucionManual: false })));
+    for (const campo of ['zonas', 'partidos', 'fasesEliminatorias']) assert.deepStrictEqual(reiniciada[campo], []);
+    const vivo = await organizadorService.getEstadoEnVivo(organizadorId, torneo.id);
+    for (const lista of [vivo.categorias, vivo.categoriasListasParaEliminatoria]) {
+      assert.ok(!lista.some((c) => [categoria.id, borrador.id].includes(c.id)), 'Los borradores quedan fuera del bloque eliminatorio');
+      assert.ok(lista.some((c) => c.id === testigo.id), 'Se conservan las categorías en curso');
+    }
+    assert.ok(vivo.categorias.some((c) => c.id === terminada.id), 'Se conservan las categorías finalizadas');
+    console.log('✅ Limpiar y reiniciar: cronómetro nuevo, lluvia y caché depuradas tras commit, rollback íntegro y borradores fuera de eliminatoria.');
+  } finally {
+    await prisma.torneo.delete({ where: { id: torneo.id } });
+    await canchasOverridesService.loadFromDb();
+  }
+}
+
 async function testModoDiaTorneo() {
   await ensureTestDb();
   console.log('🧪 Iniciando test automatizado de Modo Día de Torneo...');
@@ -273,6 +394,7 @@ async function testModoDiaTorneo() {
 
   await testEnJuegoDesde(organizador.id, torneo.id);
   await testParejasEnJuego(organizador.id, torneo.id);
+  await testLimpiarReiniciarCategoria(organizador.id);
 
   // 6. Test GET /en-vivo inicial
   let estadoEnVivo = await organizadorService.getEstadoEnVivo(organizador.id, torneo.id);
