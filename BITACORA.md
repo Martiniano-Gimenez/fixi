@@ -1,7 +1,7 @@
 # Bitácora de Práctica Profesional Supervisada
 **Proyecto:** Sistema de Gestión de Torneos de Pádel
 
-A continuación se detalla el trabajo realizado, organizado por áreas temáticas de desarrollo. Cada entrada describe su etapa histórica: las reglas vigentes de lluvia y la presentación actual de Día de torneo y del pre-check están en las entradas 93 a 95 y en `CONTEXT.md`. Reemplazan las decisiones anteriores incompatibles, como no trasladar partidos del viernes al sábado o mostrar siempre el número de cancha en el panel.
+A continuación se detalla el trabajo realizado, organizado por áreas temáticas de desarrollo. Cada entrada describe su etapa histórica: las reglas vigentes de lluvia y la presentación actual de Día de torneo, del pre-check y de la página de categoría están en las entradas 93 a 96 y en `CONTEXT.md`. Reemplazan las decisiones anteriores incompatibles, como no trasladar partidos del viernes al sábado o mostrar siempre el número de cancha en el panel.
 
 ---
 
@@ -3133,9 +3133,41 @@ Las entradas 93 y 94 agrupan temáticamente 23 de los 24 commits de `48da50b..49
 
 ---
 
+## 96. Página de categoría: marcador, posiciones y reinicio (13/11/2026)
+
+### 1. Problema y objetivo
+- Las tarjetas separaban los nombres del resultado en chips y mostraban las acciones antes de las parejas. En celular, las posiciones repetían los títulos de las estadísticas en una tarjeta por pareja. El número de cancha seguía apareciendo en categoría y cuadro.
+- El análisis de «Limpiar resultados» y «Reiniciar categoría» sobre copias de «Impares Noviembre» → 5ta detectó que limpiar conservaba un inicio real viejo y reiniciar dejaba referencias a partidos borrados en el registro de lluvia. Día de torneo ofrecía generar un cuadro para una categoría que había vuelto a borrador, y ambas acciones mostraban los errores con `alert()`.
+
+### 2. Partidos y posiciones más claros
+- **Tarjetas tipo marcador:** estado y horario arriba; después, una fila por pareja con los games de cada set en columnas a la derecha; al final, las acciones. La pareja 1 sigue arriba, los games ganadores de cada set van en negrita y se mantienen el ganador destacado, el perdedor en gris y los números tabulares. Los nombres pueden pasar de renglón sin empujar el marcador. Se sacaron los chips de sets y el trofeo del ganador del partido; «Sin resultado cargado» y el «vs» de los pendientes se conservaron.
+- **Acciones y encabezado:** «Reprogramar» pasó a «Cambiar horario»; tanto esa acción como «Asignar horario» usan `Clock`. «Cargar resultado», «Actualizar resultado» y «Editar resultado» usan `ClipboardList`, con `title` y `aria-label` acordes. «Parejas (N)» quedó como botón común, igual que «Cuadro», y se retiró «Torneo: …», ya cubierto por el link de volver. Se conservaron los handlers, las llamadas y los cálculos.
+- **Sin número de cancha:** se retiraron el chip de `PartidoCard`, las dos apariciones del cuadro y el CSS sin uso. `FilaPartidoZona` dejó `mostrarCancha` en false por defecto; la prop se conservó porque hay llamadas que la pasan explícitamente. El número ya no se muestra en ninguna pantalla del panel ni en la vista pública; la cancha se sigue guardando y validando. Los controles de cantidad de canchas se mantienen.
+- **Tabla compacta hasta 767 px:** encabezado único (#, Pareja, P, G, S, Gm), PJ y PP ocultos, una fila por pareja, nombres con salto de línea y números centrados y tabulares. Se mantienen el fondo celeste de quienes clasifican, los títulos y textos para lectores de pantalla, el orden y los cálculos. Se eliminaron los grids de las tarjetas, los `::before` con etiquetas y los `data-label` sin uso. Escritorio conserva su presentación.
+
+### 3. Limpiar, reiniciar y seguir desde el panel
+- **Cronómetro limpio:** `limpiarResultadosZonas` ahora pone `enJuegoDesde` en null cuando devuelve los partidos de zona a `PENDIENTE`. Sigue borrando sus sets y ganador y poniendo las posiciones en cero, sin cambiar sus horarios; también elimina el cuadro de esa categoría. Un parcial posterior registra un inicio nuevo.
+- **Reinicio sin referencias colgadas:** en la misma transacción que elimina los partidos, `reiniciarCategoria` quita sus IDs de `horariosAntesLluvia` y `partidosSinSlot` en todos los overrides del torneo. Se conservan las entradas ajenas, los formatos de objeto o cadena JSON y los metadatos, incluidas las fechas. La caché solo guarda `partidosSinSlot` y se actualiza después del commit cuando ese mapa cambió. Un fallo previo revierte tanto la depuración como la eliminación y deja la caché intacta.
+- **Alcance:** la categoría vuelve a `BORRADOR`, sin zonas, posiciones, partidos ni cuadro. Conserva sus parejas y disponibilidad, con `resolucionManual` en false; el torneo y las demás categorías siguen como estaban. El plan del pre-check mantiene su control de nómina existente; no se cambió ese mecanismo.
+- **Camino para rearmar:** `getEstadoEnVivo` excluye los borradores de `categorias` y `categoriasListasParaEliminatoria`. En categoría aparece «Esta categoría no tiene zonas. Para volver a armarla, abrí el pre-check desde el torneo.» con «Ir al torneo». Si el torneo está en curso y hay categorías en borrador con parejas suficientes, el acceso al pre-check dice «Armar categorías pendientes»; con el torneo en borrador conserva «Iniciar torneo».
+- **Errores en la página:** si falla limpiar o reiniciar, se cierra el modal y el mensaje aparece arriba en un aviso del panel con `role="alert"` y cierre de 44 × 44 px. Se agregó un estado separado del error de carga para conservar el resto de la pantalla. No se modificó `ConfirmModal`.
+
+### 4. Verificación registrada
+- Categoría y rondas del cuadro de «Impares Noviembre», con 5ta, revisadas a 320, 375 y 1440 px sin desborde de página. El marcador se probó con nombres largos y tres sets. Las posiciones se verificaron en las ocho zonas, con resultados, en los límites de 767/768 px y con games de tres cifras; a 1440 px coincidieron medidas, estilos e imagen con la tabla anterior.
+- `backend/scripts/test-modo-dia-torneo.js`, ya incluido en `npm test`, cubre el inicio en null al limpiar, el cronómetro nuevo con un parcial, la depuración de lluvia y caché, la conservación de datos ajenos y metadatos, el rollback y la exclusión de borradores incluso con restos de zonas y cuadro. Las 53 suites del backend pasaron en ambos commits de los arreglos. Los builds del frontend compilaron y el lint conservó los mismos 7 avisos.
+- En una copia con lluvia de sábado, reiniciar 5ta quitó cinco referencias colgadas y conservó las otras 32 entradas del registro. La interfaz se probó con errores y éxitos de ambas acciones, avisos cerrables, navegación y textos según el estado, con 12 envíos interceptados. Las 13 tablas y el esquema de `dev.db` permanecieron intactos.
+- Esta entrada registra las verificaciones de esos cambios; la actualización documental no requirió ejecutar nuevamente build ni tests.
+
+### 5. Commits incluidos
+- Tarjetas y encabezado: `643556d`.
+- Número de cancha y posiciones en celular: `8bdd7fe`, `cc82b8e`.
+- Limpieza, reinicio, errores y camino para rearmar: `156a8d3`, `3fbc284`.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El registro reúne 95 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 304 y 373 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 95 agrega entre 8 y 12 horas estimadas por el alcance de los cambios y sus pruebas. Las filas 91 a 95 agregan entre 32,25 y 46,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 304,25 a 372,5 horas. Se redondea a horas enteras. Las entradas 93 a 95 agrupan trabajo de varios días, no sesiones cronometradas únicas; no se estimó el esfuerzo por la distancia entre fechas de commits.
+El registro reúne 96 sesiones o entradas temáticas de trabajo. Las primeras 95 tienen un total aproximado de entre 304 y 373 horas de programación, refactorización, depuración, documentación y testeo; la entrada 96 queda sin estimación de horas y no se suma a ese total. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 95 agrega entre 8 y 12 horas estimadas por el alcance de los cambios y sus pruebas. Las filas 91 a 95 agregan entre 32,25 y 46,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 304,25 a 372,5 horas. Se redondea a horas enteras. Las entradas 93 a 95 agrupan trabajo de varios días, no sesiones cronometradas únicas; no se estimó el esfuerzo por la distancia entre fechas de commits.
 
 | Sesión | Tiempo estimado (estimación, no medición) | Temas cubiertos |
 |--------|-------------------------------------------|------------------|
@@ -3233,8 +3265,9 @@ El registro reúne 95 sesiones o entradas temáticas de trabajo, con un total ap
 | **92** | ~0,25 a 0,5 horas (estimación) | Aclaración de los cambios manuales al restaurar y documentación de la decisión, sin cambiar lógica. |
 | **93** | ~8 a 12 horas (estimación) | Horarios por pareja, motivos y opciones del pre-check, diseño móvil, pendientes ordenados, dieciseisavos automáticos y confirmación de inicio. |
 | **94** | ~10 a 14 horas (estimación) | Vista compacta de Día de torneo, reglas y pruebas de lluvia/restauración, controles al final, tiempo transcurrido y cambio de horario desde la pantalla. |
-| **95** | ~8 a 12 horas (estimación nueva) | Modal de canchas con una acción por vez, encabezado simplificado, grilla con un solo Ver todos en el modal, cronómetro real y migración con backup, cruces claros y bloqueo de parejas en dos partidos en juego, con pruebas. |
-| **Total** | **~304 a 373 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación de las sesiones 91 a 95. |
+| **95** | ~8 a 12 horas (estimación) | Modal de canchas con una acción por vez, encabezado simplificado, grilla con un solo Ver todos en el modal, cronómetro real y migración con backup, cruces claros y bloqueo de parejas en dos partidos en juego, con pruebas. |
+| **96** | Sin estimar | Tarjetas tipo marcador, número de cancha oculto, posiciones compactas en celular, limpieza del cronómetro y referencias de lluvia al reiniciar, errores en la página y camino para rearmar. |
+| **Total estimado (1 a 95)** | **~304 a 373 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación de las sesiones 91 a 95. |
 
 > **Nota:** esta tabla cubre las sesiones o entradas de codificación, depuración, pruebas y documentación técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
 
