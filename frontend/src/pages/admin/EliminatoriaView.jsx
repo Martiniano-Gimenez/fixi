@@ -211,9 +211,9 @@ export default function EliminatoriaView() {
           >
             <div className="cb-match-header">
               <div className="cb-match-info">
-                {!isBye && (
+                {!isBye && (isFinalizado || isJugable) && (
                   <span className={`cb-state${partido.estado === 'EN_CURSO' ? ' is-live' : ''}`}>
-                    {isFinalizado ? 'Finalizado' : partido.estado === 'EN_CURSO' ? 'En juego' : isJugable ? 'Pendiente' : 'Esperando'}
+                    {isFinalizado ? 'Finalizado' : partido.estado === 'EN_CURSO' ? 'En juego' : 'Pendiente'}
                   </span>
                 )}
                 {!isBye && (partido.fechaHora ? (
