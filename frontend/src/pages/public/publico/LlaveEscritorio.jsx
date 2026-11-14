@@ -45,7 +45,7 @@ export default function LlaveEscritorio({ fases, seguidaId, coincide, origenes }
           fases={fases}
           selectorRonda=".pv-llave-ronda"
           selectorPartido=".pv-llave-item"
-          color="var(--linea-fuerte)"
+          color="var(--gris)"
         />
       </div>
     </div>
