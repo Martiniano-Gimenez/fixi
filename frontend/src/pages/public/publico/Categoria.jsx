@@ -31,7 +31,6 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   const location = useLocation();
   const navigate = useNavigate();
   const recorridoRef = useRef(null);
-  const alinearFase = useRef(false);
   const ahora = Date.now();
   const e = estadoDe(cat, ahora);
   const origenes = useMemo(() => clasificadosPorOrigen(cat), [cat]);
@@ -63,7 +62,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
     }
   }, [hashElegido, location.hash, location.pathname, location.search, location.state, navigate]);
 
-  // La navegación entre fases alinea su contenido; evitamos que atrás restaure otro scroll.
+  // Conservamos el scroll al navegar entre fases, también al usar atrás.
   useLayoutEffect(() => {
     const anterior = window.history.scrollRestoration;
     window.history.scrollRestoration = 'manual';
@@ -87,22 +86,14 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
     if (!recorrido) return;
     const caja = recorrido.getBoundingClientRect();
     const barra = document.querySelector('.pv-barra')?.getBoundingClientRect().bottom || 56;
-    const pegado = alinearFase.current || caja.top <= barra + 1;
-    alinearFase.current = false;
-    const panel = document.getElementById(`${id}-panel-${activa}`);
-    if (pegado && panel) {
-      const separacion = parseFloat(getComputedStyle(recorrido).marginBottom) || 0;
-      window.scrollBy({ top: panel.getBoundingClientRect().top - caja.bottom - separacion, behavior: 'instant' });
-    } else if (caja.top < barra || caja.bottom > window.innerHeight) {
+    if (caja.top < barra - 1 || caja.bottom > window.innerHeight + 1) {
       recorrido.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
-  }, [activa, id]);
+  }, [activa]);
 
   const cambiarFase = (key) => {
     const fase = fases.find((f) => f.key === key);
     if (!fase || fase.key === activa) return;
-    const barra = document.querySelector('.pv-barra')?.getBoundingClientRect().bottom || 56;
-    alinearFase.current = (recorridoRef.current?.getBoundingClientRect().top ?? Infinity) <= barra + 1;
     navigate({ pathname: location.pathname, search: location.search, hash: `#${fase.hash}` },
       { state: { ...location.state, desdeInicio: false }, preventScrollReset: true });
   };
@@ -195,6 +186,12 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   );
 
   const fase = eliminatoria.find((f) => f.id === activa);
+  const fasesVisibles = useMemo(() => {
+    const rondas = cat.eliminatoria || [];
+    const indice = rondas.findIndex((f) => f.id === activa);
+    const desde = Math.max(0, indice - (rondas[indice]?.ronda <= 2 ? 1 : 0));
+    return rondas.slice(desde);
+  }, [cat.eliminatoria, activa]);
   const siguiente = eliminatoria[eliminatoria.findIndex((f) => f.id === activa) + 1];
   const reales = [...(fase?.partidos || [])].filter((p) => !p.esBye).sort(porHoraAsignada);
   const byes = (fase?.partidos || []).filter((p) => p.esBye);
@@ -213,7 +210,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
         })}</div>
       </div>}
     </>
-  ) : <LlaveEscritorio fases={eliminatoria} seguidaId={seguidaId} origenes={origenes} faseActivaId={activa} />);
+  ) : <LlaveEscritorio fases={fasesVisibles} seguidaId={seguidaId} origenes={origenes} />);
 
   return (
     <div>

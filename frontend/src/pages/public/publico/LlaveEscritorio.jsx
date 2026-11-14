@@ -1,31 +1,21 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useRef } from 'react';
 import BracketLines from '../../../components/BracketLines';
 import TarjetaPartido from './TarjetaPartido';
 import { fraseFase, ladoDe } from './utilidades';
 
 /**
- * Llave completa en escritorio: una columna por ronda, con líneas que unen cada cruce.
+ * Rondas visibles en escritorio: una columna por ronda, con líneas que unen cada cruce.
  * Los "pasa directo" ocupan su lugar (si no, las líneas no coinciden con los cruces).
  * Con una búsqueda (coincide), la pareja (su lugar y su próximo cruce) se destaca en azul y el resto
  * se atenúa en vez de desaparecer. origenes resuelve "1° Zona A" → pareja cuando su zona ya terminó.
  */
-export default function LlaveEscritorio({ fases, seguidaId, coincide, origenes, faseActivaId }) {
+export default function LlaveEscritorio({ fases, seguidaId, coincide, origenes }) {
   const rondasRef = useRef(null);
-  const scrollRef = useRef(null);
-  useLayoutEffect(() => {
-    const scroll = scrollRef.current;
-    const ronda = [...(rondasRef.current?.children || [])].find((el) => el.dataset.fase === faseActivaId);
-    if (!scroll || !ronda) return;
-    const caja = scroll.getBoundingClientRect(), elegida = ronda.getBoundingClientRect();
-    if (elegida.left < caja.left || elegida.right > caja.right) {
-      scroll.scrollTo({ left: scroll.scrollLeft + elegida.left - caja.left - 20, behavior: 'instant' });
-    }
-  }, [faseActivaId]);
   return (
-    <div className="pv-llave" ref={scrollRef}>
+    <div className="pv-llave">
       <div className="pv-llave-rondas" ref={rondasRef}>
         {fases.map((f) => (
-          <section key={f.id} data-fase={f.id} className={`pv-llave-ronda${f.id === faseActivaId ? ' is-active' : ''}`} aria-label={fraseFase(f.nombre)}>
+          <section key={f.id} data-fase={f.id} className="pv-llave-ronda" aria-label={fraseFase(f.nombre)}>
             <h3>{fraseFase(f.nombre)}</h3>
             <div className="pv-llave-col">
               {f.partidos.map((p) => {
