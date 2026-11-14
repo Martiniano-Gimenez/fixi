@@ -695,6 +695,12 @@ body:has(.panel) {
 .panel .cd-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); }
 .panel .cd-stale { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--e-3); margin-bottom: var(--e-5); }
 .panel .cd-notice-main { display: flex; align-items: flex-start; gap: var(--e-2); min-width: 0; }
+.panel .cd-action-error { display: flex; align-items: center; gap: var(--e-2); min-width: 0; margin-bottom: var(--e-5); }
+.panel .cd-error-message { flex: 1; min-width: 0; }
+.panel .cd-action-error .pm-close { color: inherit; }
+.panel .cd-rebuild-note { display: flex; align-items: flex-start; gap: var(--e-3); min-width: 0; padding: var(--e-4); border-radius: var(--r-control); color: var(--tinta-2); background: var(--marca-suave); }
+.panel .cd-rebuild-copy { min-width: 0; overflow-wrap: anywhere; }
+.panel .cd-rebuild-copy p { margin: 0; }
 .panel .cd-alert-icon { color: var(--alerta); }
 .panel .cd-brand-icon { color: var(--marca); flex-shrink: 0; }
 .panel .cd-empty { padding: var(--e-10) var(--e-5); text-align: center; border-radius: var(--r-panel); background: var(--superficie); box-shadow: var(--sombra-2); }

@@ -10,6 +10,8 @@ import {
   UserPlus,
   CheckCircle2,
   AlertTriangle,
+  Info,
+  X,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { estadoLabel } from '../../utils/estadoLabels';
@@ -50,6 +52,7 @@ export default function CategoriaDetail() {
   const [parejas, setParejas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [errorAccion, setErrorAccion] = useState('');
 
   const [partidoSeleccionado, setPartidoSeleccionado] = useState(null);
   const [partidoReprogramar, setPartidoReprogramar] = useState(null);
@@ -115,19 +118,22 @@ export default function CategoriaDetail() {
   }, [zonas, activeZonaId]);
 
   const handleLimpiarZonas = async () => {
+    setErrorAccion('');
     setLimpiandoZonas(true);
     try {
       await api.delete(`/categorias/${id}/zonas/resultados`);
       setLimpiarModalOpen(false);
       fetchData();
     } catch (err) {
-      alert(err.message);
+      setLimpiarModalOpen(false);
+      setErrorAccion(err.message);
     } finally {
       setLimpiandoZonas(false);
     }
   };
 
   const handleReiniciar = async () => {
+    setErrorAccion('');
     setReiniciando(true);
     try {
       await api.post(`/categorias/${id}/reiniciar`);
@@ -137,7 +143,8 @@ export default function CategoriaDetail() {
       setFasesEliminatorias([]);
       fetchData();
     } catch (err) {
-      alert(err.message);
+      setReiniciarModalOpen(false);
+      setErrorAccion(err.message);
     } finally {
       setReiniciando(false);
     }
@@ -164,6 +171,22 @@ export default function CategoriaDetail() {
           <ChevronLeft size={16} /> Volver a {categoria.torneo?.nombre || 'Torneo'}
         </Link>
       </div>
+
+      {errorAccion && (
+        <div className="pm-alert cd-action-error" role="alert">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span className="cd-error-message">{errorAccion}</span>
+          <button
+            type="button"
+            className="pm-button pm-close"
+            onClick={() => setErrorAccion('')}
+            aria-label="Cerrar aviso de error"
+            title="Cerrar aviso de error"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {cuadroDesactualizadoAviso && (
         <div
@@ -258,7 +281,17 @@ export default function CategoriaDetail() {
       </div>
 
       {/* Estado Borrador */}
-      {categoria.estado === 'BORRADOR' && (
+      {categoria.estado === 'BORRADOR' && (categoria.torneo?.estado === 'EN_CURSO' ? (
+        <div className="cd-rebuild-note">
+          <Info size={18} className="cd-brand-icon" aria-hidden="true" />
+          <div className="cd-rebuild-copy">
+            <p>Esta categoría no tiene zonas. Para volver a armarla, abrí el pre-check desde el torneo.</p>
+            <Link to={`/admin/torneos/${torneoId || categoria.torneoId}`} className="cd-inline-link">
+              Ir al torneo
+            </Link>
+          </div>
+        </div>
+      ) : (
         <div className="cd-empty">
           <Users size={44} className="cd-empty-icon" />
           <h3 className="cd-empty-title">Categoría en borrador</h3>
@@ -268,7 +301,7 @@ export default function CategoriaDetail() {
               : `${parejas.length} parejas listas.`}
           </p>
         </div>
-      )}
+      ))}
 
       {/* Zonas y Partidos */}
       {categoria.estado !== 'BORRADOR' && (

@@ -403,7 +403,7 @@ export default function TorneoDetail() {
                 to={`/admin/torneos/${id}/iniciar`}
                 className={`td-button${torneo.estado === 'EN_CURSO' ? '' : ' td-primary'}`}
               >
-                <Play size={16} /> Iniciar torneo
+                <Play size={16} /> {torneo.estado === 'EN_CURSO' ? 'Armar categorías pendientes' : 'Iniciar torneo'}
               </Link>
             )}
           </div>
