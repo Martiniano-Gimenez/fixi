@@ -181,7 +181,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   // ─── En juego y próximos ───
   const vivos = partidos.filter((p) => p.estado === 'EN_CURSO').sort(porHorario);
   const proximos = partidos
-    .filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && new Date(p.fechaHora).getTime() >= ahora)
+    .filter((p) => p.estado === 'PENDIENTE' && p.fechaHora)
     .sort(porHorario)
     .slice(0, MAX_PROXIMOS);
   const enJuego = [...vivos, ...proximos];

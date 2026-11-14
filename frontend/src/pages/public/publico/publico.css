@@ -71,12 +71,9 @@ body:has(.publico) {
 }
 .pv-barra.con-borde { box-shadow: 0 1px 0 var(--linea); }
 .pv-barra-fila { display: flex; align-items: center; gap: var(--e-2); height: 56px; }
-.pv-marca { display: flex; align-items: center; gap: var(--e-2); font-weight: 700; font-size: var(--t-17); letter-spacing: -.02em; color: var(--tinta); }
+.pv-marca { display: flex; align-items: center; gap: var(--e-2); min-height: 44px; font-weight: 700; font-size: var(--t-20); letter-spacing: -.02em; color: var(--marca); }
 .pv-logo {
-  width: 28px; height: 28px; flex: none; border-radius: 8px;
-  background: var(--superficie); box-shadow: var(--sombra-1);
-  display: grid; place-items: center;
-  color: var(--marca); font-weight: 800; font-size: 18px; line-height: 1; letter-spacing: -.04em;
+  flex: none; color: var(--marca);
 }
 .publico .pv-volver {
   display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding-right: var(--e-2);

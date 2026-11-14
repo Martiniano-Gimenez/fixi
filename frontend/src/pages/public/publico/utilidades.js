@@ -287,14 +287,14 @@ export function etapasDe(cat) {
 }
 
 // Estado de una categoría para su tarjeta y su encabezado
-export function estadoDe(cat, ahora = Date.now()) {
+export function estadoDe(cat) {
   const ps = partidosDeCategoria(cat);
   const total = ps.length;
   const jugados = ps.filter((p) => p.estado === 'FINALIZADO').length;
   const vivos = ps.filter((p) => p.estado === 'EN_CURSO').length;
   const terminada = total > 0 && jugados === total;
   const proximo = ps
-    .filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && new Date(p.fechaHora).getTime() >= ahora)
+    .filter((p) => p.estado === 'PENDIENTE' && p.fechaHora)
     .sort(porHorario)[0] || null;
   const preparacion = !(cat?.zonas || []).length && !(cat?.eliminatoria || []).length;
   return { total, jugados, vivos, terminada, proximo, preparacion, podio: terminada ? podioDe(cat) : null };
