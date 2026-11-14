@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Trophy, Users } from 'lucide-react';
 import Recorrido from './Recorrido';
@@ -14,12 +14,20 @@ import {
 
 const claveTarjeta = (p) => p.id;
 const MAX_PROXIMOS = 4;
+const consultaCelular = '(max-width: 767px)';
+const esPantallaCelular = () => window.matchMedia(consultaCelular).matches;
+const suscribirCelular = (onCambio) => {
+  const media = window.matchMedia(consultaCelular);
+  media.addEventListener('change', onCambio);
+  return () => media.removeEventListener('change', onCambio);
+};
 const HASH_RONDA = { 32: 'dieciseisavos', 16: 'octavos', 8: 'cuartos', 4: 'semi', 2: 'final', 1: 'final' };
 const porHoraAsignada = (a, b) => a.fechaHora && b.fechaHora ? porHorario(a, b)
   : a.fechaHora ? -1 : b.fechaHora ? 1 : (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
 
 export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId, animar, actualizacion, seccionInicial, torneoEstado, torneoNombre }) {
   const id = useId();
+  const esCelular = useSyncExternalStore(suscribirCelular, esPantallaCelular, () => false);
   const location = useLocation();
   const navigate = useNavigate();
   const recorridoRef = useRef(null);
@@ -145,7 +153,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   );
 
   const vivos = partidos.filter((p) => p.estado === 'EN_CURSO').sort(porHorario);
-  const proximos = partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora).sort(porHorario).slice(0, MAX_PROXIMOS);
+  const proximos = partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora).sort(porHorario).slice(0, esCelular ? 2 : MAX_PROXIMOS);
   const enJuego = [...vivos, ...proximos];
 
   const { jornadas, sinHora } = agruparPartidosPorJornada(partidos.filter((p) => p.zonaId), dias);

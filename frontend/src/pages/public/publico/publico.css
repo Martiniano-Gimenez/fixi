@@ -187,6 +187,7 @@ body:has(.publico) {
 .pv-recorrido-tabs { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: var(--e-1); }
 .publico .pv-recorrido-tabs > button { min-width: 44px; min-height: 64px; padding: var(--e-2) 0; border-radius: var(--r-control); background: var(--superficie-2); text-align: left; }
 .publico .pv-recorrido-tabs > button:is(:hover, :focus) { background: var(--marca-suave); }
+.publico .pv-recorrido-tabs > button:is(:hover, :focus) :is(.pv-etapa, .pv-etapa-cuenta) { color: var(--tinta-2); }
 .publico .pv-recorrido-tabs > button[aria-selected="true"] { background: var(--superficie); box-shadow: var(--sombra-1); }
 .publico .pv-recorrido-tabs > button[aria-selected="true"] .pv-etapa { color: var(--tinta); font-weight: 700; }
 .pv-recorrido-tabs .pv-etapa { text-align: center; }
