@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { ChevronRight, Clock, Loader2, AlertTriangle, Star, X } from 'lucide-react';
-import { formatDiaHorario, minutosCronologicosJornada, formatSlotCalendario, formatSlotCorto } from '../utils/dateUtils';
+import { formatDiaHorario, minutosCronologicosJornada, formatSlotCalendario } from '../utils/dateUtils';
 import { rankearSlotsParaPartido } from '../utils/rankingSlots';
 import GrillaHorariosPartido from './GrillaHorariosPartido';
-import { FilaPartidoZona } from './ElegirHorarioPartido';
 import { describirHorarioPareja, detallePorPareja } from './grillaHorarios';
 
 const HORA_INICIO_NOCHE_DIECISEISAVOS = 18; // 18:00hs: inicio de franja nocturna post-zonas para Dieciseisavos
 const FASE_POR_RONDA = { 64: 'Treintaidosavos', 32: 'Dieciseisavos', 16: 'Octavos', 8: 'Cuartos', 4: 'Semifinal', 2: 'Final' };
+const diasCompletos = (texto) => texto.replace(/\b(vie|sáb|dom|lun)\b/g,
+  (dia) => ({ vie: 'viernes', sáb: 'sábado', dom: 'domingo', lun: 'lunes' })[dia]);
 
 /** Horario cargado de una pareja a partir de sus inicios ("Viernes-18:00"): ventanas por jornada, de 75 min. */
 function horarioDeSlots(slotIds) {
@@ -189,7 +190,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
     { nombre: p1Nombre, slots: slotsP1 }, { nombre: p2Nombre, slots: slotsP2 },
   ].map(({ nombre, slots }) => {
     const horario = describirHorarioPareja(horarioDeSlots(slots));
-    return horario ? `${nombre} pueden ${horario}` : `${nombre}, sin horario cargado`;
+    return horario ? `${nombre} pueden ${diasCompletos(horario)}` : `${nombre}, sin horario cargado`;
   }).join(' · ') : null;
 
   // Los otros partidos de la zona, por horario y sin cancha.
@@ -221,7 +222,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
   const pedido = (opcion) => {
     if (!conParejas) return 'horario libre';
     if (!opcion.parejasAAmpliar.length) return 'entra en el horario de las dos parejas';
-    return detallePorPareja(opcion, nombres).map((d) => `${d.nombre}: ${d.texto}`).join(' · ');
+    return detallePorPareja(opcion, nombres).map((d) => `${d.nombre}: ${diasCompletos(d.texto)}`).join(' · ');
   };
 
   const handleCerrarModal = () => {
@@ -278,7 +279,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
       <div className="pm-modal pm-schedule" role="dialog" aria-modal="true" aria-labelledby="pm-schedule-title">
         <div className="pm-header">
           <div>
-            <h3 id="pm-schedule-title" className="pm-title">{partido.fechaHora ? 'Reprogramar horario' : 'Asignar horario'}</h3>
+            <h3 id="pm-schedule-title" className="pm-title">{partido.fechaHora ? 'Cambiar horario' : 'Asignar horario'}</h3>
             <span className="pm-muted">{partido.categoria?.nombre} · {contextoNombre}</span>
           </div>
           <button type="button" onClick={handleCerrarModal} className="pm-button pm-close" aria-label="Cerrar">
@@ -302,7 +303,19 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                 <ul className="pc-propuesta-partidos-list">
                   {otrosPartidos.map((zp) => (
                     <li key={zp.id} className="pc-propuesta-partido">
-                      <FilaPartidoZona partido={zp} nombres={nombres} mostrarCancha={false} badge={zp.fechaHora ? null : 'sin horario'} />
+                      <span className="pc-zona-fila">
+                        <span className="pc-zona-rivales">
+                          {zp.pareja1Id && zp.pareja2Id
+                            ? `${nombres.get(zp.pareja1Id) || 'Pareja 1'} vs ${nombres.get(zp.pareja2Id) || 'Pareja 2'}`
+                            : zp.origen || 'Partido por definir'}
+                        </span>
+                        {zp.fechaHora ? (
+                          <>
+                            <span className="pc-zona-separador" aria-hidden="true">{'\u00a0·'}</span>{' '}
+                            <span className="pc-zona-dato"><time dateTime={zp.fechaHora}>{formatDiaHorario(zp.fechaHora).toLowerCase()}</time></span>
+                          </>
+                        ) : <>{' '}<span className="pc-zona-badge">sin horario</span></>}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -356,7 +369,7 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                 <p className="pc-horarios-recomendado-texto">
                   <Star size={16} aria-hidden="true" />
                   <span className="pc-horarios-recomendado-cuerpo">
-                    <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)}
+                    <span><strong>Recomendado:</strong> {formatSlotCalendario(recomendado.slotId).toLowerCase()}
                       {conParejas && recomendado.estado === 'ENTRA' && ' · entra en el horario de las dos parejas'}</span>
                     {conParejas && recomendado.estado !== 'ENTRA' && (
                       <span className="pc-horarios-recomendado-detalle">{pedido(recomendado)}</span>
@@ -378,10 +391,10 @@ export default function AsignarHorarioModal({ isOpen, partido, torneoId, onClose
                 <div id="pm-asignar-grilla">
                   <GrillaHorariosPartido opciones={opciones} seleccion={seleccion} onSeleccion={setSeleccion} describir={pedido}
                     nombres={nombres} fijando={ocupado} onCambioDia={() => setSeleccion(null)}
-                    recomendadoClave={recomendado.clave} sinRecomendado soloDiasConHorarios sinPlegar />
+                    recomendadoClave={recomendado.clave} sinRecomendado soloDiasConHorarios sinPlegar diasCompletos />
                   {seleccion && (
                     <div className="pm-asignar-confirmacion" role="group" aria-label="Confirmar horario">
-                      <p className="pc-manual-copy" role="status" aria-atomic="true">{formatSlotCorto(seleccion.slotId)} · {pedido(seleccion)}</p>
+                      <p className="pc-manual-copy" role="status" aria-atomic="true">{formatSlotCalendario(seleccion.slotId).toLowerCase()} · {pedido(seleccion)}</p>
                       <div className="pc-manual-actions">
                         <button type="button" className="pc-manual-button" disabled={ocupado} onClick={() => handleAsignar(seleccion)}>
                           {guardandoSlotId === seleccion.slotId ? 'Asignando…' : 'Confirmar'}

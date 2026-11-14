@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import { ChevronRight, Star } from 'lucide-react';
-import { formatSlotCorto } from '../utils/dateUtils';
+import { formatSlotCorto, formatSlotCalendario } from '../utils/dateUtils';
 import { agruparInicios, detallePorPareja, esSecundario, filasVisibles, moverCelda } from './grillaHorarios';
 
 const NOMBRE_DIA = { Viernes: 'viernes', Sabado: 'sábado', Domingo: 'domingo' };
@@ -11,9 +11,10 @@ const NOMBRE_DIA = { Viernes: 'viernes', Sabado: 'sábado', Domingo: 'domingo' }
  * - sinRecomendado: no muestra su propia línea de recomendado ni la pliega: quien la usa arma esa parte.
  * - soloDiasConHorarios: oculta las jornadas sin ningún horario.
  * - sinPlegar: muestra todos los horarios de cada jornada, sin un plegado por día.
+ * - diasCompletos: usa los días completos en minúscula, solo para el modal de horario.
  */
 export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion, describir, fijando, onCambioDia, nombres = new Map(), esDefinicion = false,
-  recomendadoClave = null, sinRecomendado = false, soloDiasConHorarios = false, sinPlegar = false }) {
+  recomendadoClave = null, sinRecomendado = false, soloDiasConHorarios = false, sinPlegar = false, diasCompletos = false }) {
   const id = useId();
   const raiz = useRef(null);
   const dias = agruparInicios(opciones).filter((d) => !soloDiasConHorarios ||
@@ -40,7 +41,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
   // Lo que hay que pedirle a cada pareja, por separado: cuánto antes o después de su horario, o un día nuevo.
   const textoRecomendado = (
     <span className="pc-horarios-recomendado-cuerpo">
-      <span><strong>Recomendado:</strong> {formatSlotCorto(recomendado.slotId)}
+      <span><strong>Recomendado:</strong> {diasCompletos ? formatSlotCalendario(recomendado.slotId).toLowerCase() : formatSlotCorto(recomendado.slotId)}
         {recomendado.estado === 'ENTRA' && ` · entra en el horario de las ${esDefinicion ? 'cuatro' : 'dos'} parejas`}</span>
       {recomendado.estado !== 'ENTRA' && (
         <span className="pc-horarios-recomendado-detalle">
@@ -91,7 +92,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
               event.preventDefault();
               const otro = dias[event.key === 'Home' ? 0 : event.key === 'End' ? dias.length - 1 : (i + 1) % dias.length].dia;
               cambiarDia(otro); raiz.current.querySelector(`#${CSS.escape(`${id}-tab-${otro}`)}`).focus();
-            }}>{etiqueta}</button>
+            }}>{diasCompletos ? NOMBRE_DIA[dia] || dia.toLowerCase() : etiqueta}</button>
         ))}
       </div>
       <div className="pc-horarios-dias">
@@ -115,7 +116,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
                     <button type="button" data-clave={opcion.clave}
                       className={`pc-horarios-inicio is-${opcion.estado.toLowerCase()}${seleccion?.clave === opcion.clave ? ' is-selected' : ''}`}
                       tabIndex={claveFoco === opcion.clave ? 0 : -1} disabled={fijando}
-                      aria-label={`${formatSlotCorto(opcion.slotId)} · ${describir(opcion)}${opcion.clave === recomendado.clave ? ' · recomendado' : ''}`}
+                      aria-label={`${diasCompletos ? formatSlotCalendario(opcion.slotId).toLowerCase() : formatSlotCorto(opcion.slotId)} · ${describir(opcion)}${opcion.clave === recomendado.clave ? ' · recomendado' : ''}`}
                       onFocus={() => setFoco((prev) => ({ ...prev, [dia]: opcion.clave }))}
                       onClick={() => onSeleccion(opcion)} onKeyDown={(event) => {
                         const fila_ = visibles.indexOf(fila);
@@ -134,7 +135,7 @@ export default function GrillaHorariosPartido({ opciones, seleccion, onSeleccion
           return (
             <section key={dia} id={`${id}-${dia}`} role="tabpanel" aria-labelledby={`${id}-tab-${dia}`}
               className={`pc-horarios-dia${diaActivo === dia ? ' is-active' : ''}`}>
-              <h5 className="pc-horarios-dia-titulo">{etiqueta}</h5>
+              <h5 className="pc-horarios-dia-titulo">{diasCompletos ? NOMBRE_DIA[dia] || dia.toLowerCase() : etiqueta}</h5>
               {!originales.length ? <p className="pc-manual-copy">El club no tiene inicios para esta jornada.</p>
                 : !hayHorarios ? <p className="pc-manual-copy">Sin horarios posibles en esta jornada.</p> : (
                 <>

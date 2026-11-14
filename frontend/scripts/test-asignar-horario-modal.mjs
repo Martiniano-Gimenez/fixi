@@ -54,11 +54,11 @@ try {
   assert.equal(document.querySelector('#pm-schedule-title').textContent, 'Asignar horario');
   assert.match(texto(), /7ma · Zona F/);
   assert.equal(document.querySelector('.pc-horarios-parejas').textContent,
-    'Coria / Giuliani pueden vie de 18 a 21:30 h · Mendoza / Ávalos pueden vie de 18 a 21 h');
+    'Coria / Giuliani pueden viernes de 18 a 21:30 h · Mendoza / Ávalos pueden viernes de 18 a 21 h');
   const filas = [...document.querySelectorAll('.pc-propuesta-partidos li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim());
-  assert.deepEqual(filas, ['Mendoza / Ávalos vs Pellegrini / Cepeda · vie 18:00', 'Coria / Giuliani vs Pellegrini / Cepeda · vie 19:45']);
+  assert.deepEqual(filas, ['Mendoza / Ávalos vs Pellegrini / Cepeda · viernes 18:00', 'Coria / Giuliani vs Pellegrini / Cepeda · viernes 19:45']);
   assert.match(document.querySelector('.pm-asignar-recomendado').textContent,
-    /Recomendado: vie 16:00Coria \/ Giuliani: 2 h antes · Mendoza \/ Ávalos: 2 h antes/);
+    /Recomendado: viernes 16:00Coria \/ Giuliani: 2 h antes · Mendoza \/ Ávalos: 2 h antes/);
   assert.ok(!/cancha/i.test(texto()), 'No se muestra la cancha en ningún lado');
   assert.ok(!/Coincidían|Mejor opción|alternativas|-2h/.test(texto()), 'Sin los textos del diseño viejo');
   assert.equal(document.querySelectorAll('.pm-primary').length, 1, 'Un solo botón principal');
@@ -69,9 +69,9 @@ try {
   assert.ok(document.querySelector('[data-clave="Viernes-16:00"] .pc-horarios-estrella'));
   assert.equal(document.querySelector('[data-clave="Viernes-22:45"]').textContent, '22:45');
   assert.equal(document.querySelector('[data-clave="Domingo-10:00"]'), null, 'Partidos de zona: solo viernes y sábado');
-  assert.deepEqual([...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent), ['vie', 'sáb']);
+  assert.deepEqual([...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent), ['viernes', 'sábado']);
   await act(async () => document.querySelector('[data-clave="Viernes-22:45"]').click());
-  assert.match(document.querySelector('.pm-asignar-confirmacion').textContent, /vie 22:45 · Coria \/ Giuliani: 2 h 30 min después · Mendoza \/ Ávalos: 3 h después/);
+  assert.match(document.querySelector('.pm-asignar-confirmacion').textContent, /viernes 22:45 · Coria \/ Giuliani: 2 h 30 min después · Mendoza \/ Ávalos: 3 h después/);
   await act(async () => boton('Confirmar').click());
   assert.deepEqual(asignaciones.at(-1), { slotId: 'Viernes-22:45', canchaNumero: 3 }, 'Asigna la primera cancha libre, como hoy');
   assert.equal(asignado.dieciseisavosProgramados, 6, 'La respuesta llega a quien abrió el modal');
@@ -91,7 +91,7 @@ try {
   assert.match(texto(), /2º Zona J vs 2º Zona K/);
   assert.equal(document.querySelector('.pc-horarios-parejas'), null);
   assert.equal(document.querySelector('.pc-propuesta-partidos'), null);
-  assert.match(document.querySelector('.pm-asignar-recomendado').textContent, /Recomendado: sáb 21:00/);
+  assert.match(document.querySelector('.pm-asignar-recomendado').textContent, /Recomendado: sábado 21:00/);
   await act(async () => boton('Ver todos los horarios (1)').click());
   assert.equal(document.querySelectorAll('[role="tab"]').length, 1, 'Solo las jornadas con horarios');
   await act(async () => root.unmount());

@@ -503,7 +503,7 @@ body:has(.panel) {
 .panel .pm-confirm { max-width: 440px; }
 .panel .pm-confirm-message { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--e-5); font-size: var(--t-15); color: var(--tinta-2); overflow-wrap: anywhere; }
 
-/* Horario: avisos rojos y cancha visible en cada turno accionable. */
+/* Horario: avisos y selección de turnos, sin número de cancha visible. */
 .panel .pm-match-info { padding: var(--e-3); border-radius: var(--r-control); background: var(--superficie-2); margin-bottom: var(--e-4); overflow-wrap: anywhere; }
 .panel .pm-match-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); margin-top: var(--e-2); }
 .panel .pm-current-time { display: flex; align-items: center; gap: var(--e-2); color: var(--tinta-2); font-size: var(--t-13); }
@@ -516,6 +516,14 @@ body:has(.panel) {
 .panel .pm-asignar-recomendado { display: grid; gap: var(--e-3); justify-items: start; min-width: 0; }
 .panel .pm-asignar-recomendado .pm-button { min-height: 44px; max-width: 100%; white-space: normal; }
 .panel .pm-asignar-confirmacion { display: grid; gap: var(--e-2); margin-top: var(--e-3); padding: var(--e-3); border-radius: var(--r-control); background: var(--superficie-2); }
+@media (min-width: 900px) {
+  .panel .pm-modal.pm-schedule { max-width: 1120px; height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); }
+  .panel .pm-schedule .pc-horarios-tabs { display: flex; }
+  .panel .pm-schedule .pc-horarios-dias { grid-template-columns: minmax(0, 1fr); }
+  .panel .pm-schedule .pc-horarios-dia:not(.is-active) { display: none; }
+  .panel .pm-schedule .pc-horarios-dia [role="grid"] { columns: 3 260px; column-gap: var(--e-4); }
+  .panel .pm-schedule .pc-horarios-fila { max-width: none; break-inside: avoid; }
+}
 @media (max-width: 767.98px) {
   .panel .pm-asignar-recomendado { justify-items: stretch; }
 }
