@@ -75,12 +75,12 @@ export default function ZonaTable({ zona }) {
                     >
                       {zp.pareja.jugador1} / {zp.pareja.jugador2}
                     </td>
-                    <td className="cd-col-pts cd-numeric cd-points" data-label="Puntos">{zp.puntos}</td>
-                    <td className="cd-col-pj cd-numeric cd-desktop-stat" data-label="Jugados">{zp.pj}</td>
-                    <td className="cd-col-pg cd-numeric cd-highlight" data-label="Ganados">{zp.pg}</td>
-                    <td className="cd-col-pp cd-numeric cd-desktop-stat" data-label="Perdidos">{zp.pp}</td>
-                    <td className="cd-col-sets cd-numeric" data-label="Sets"><span className="cd-stat-pair">{zp.sf}<span>–</span>{zp.sc}</span></td>
-                    <td className="cd-col-games cd-numeric" data-label="Games"><span className="cd-stat-pair">{zp.gf}<span>–</span>{zp.gc}</span></td>
+                    <td className="cd-col-pts cd-numeric cd-points">{zp.puntos}</td>
+                    <td className="cd-col-pj cd-numeric cd-desktop-stat">{zp.pj}</td>
+                    <td className="cd-col-pg cd-numeric cd-highlight">{zp.pg}</td>
+                    <td className="cd-col-pp cd-numeric cd-desktop-stat">{zp.pp}</td>
+                    <td className="cd-col-sets cd-numeric"><span className="cd-stat-pair">{zp.sf}<span>–</span>{zp.sc}</span></td>
+                    <td className="cd-col-games cd-numeric"><span className="cd-stat-pair">{zp.gf}<span>–</span>{zp.gc}</span></td>
                   </tr>
                 );
               })}

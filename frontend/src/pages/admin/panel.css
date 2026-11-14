@@ -772,21 +772,15 @@ body:has(.panel) {
   .panel .cd-header-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; width: 100%; }
   .panel .cd-header-actions .pm-button { padding-inline: var(--e-2); font-size: var(--t-13); }
   .panel .cd-zone-card { padding: var(--e-3); }
-  .panel .cd-zone-table { display: block; }
-  .panel .cd-zone-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .panel .cd-zone-table tbody { display: grid; gap: var(--e-2); }
-  .panel .cd-zone-table tbody tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-radius: var(--r-control); background: var(--fondo); padding: var(--e-2); gap: var(--e-2) var(--e-1); }
-  .panel .cd-zone-table tbody tr.cd-qualifies { background: var(--progreso-suave); }
-  .panel .cd-zone-table td { display: block; width: auto; min-width: 0; padding: 0; border: 0; }
-  .panel .cd-zone-table .cd-col-pos { grid-column: 1; grid-row: 1; align-self: start; z-index: 1; width: 24px; font-weight: 600; }
-  .panel .cd-zone-table .cd-col-pareja { grid-column: 1 / -1; grid-row: 1; padding-left: var(--e-8); }
+}
+@media (max-width: 767px) {
+  .panel .cd-zone-table :is(th, td) { padding: var(--e-2) 2px; }
   .panel .cd-zone-table .cd-desktop-stat { display: none; }
-  .panel .cd-zone-table .cd-col-pts { grid-column: 1; grid-row: 2; width: auto; }
-  .panel .cd-zone-table .cd-col-pg { grid-column: 2; grid-row: 2; width: auto; }
-  .panel .cd-zone-table .cd-col-sets { grid-column: 3; grid-row: 2; width: auto; }
-  .panel .cd-zone-table .cd-col-games { grid-column: 4; grid-row: 2; width: auto; }
-  .panel .cd-zone-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: var(--e-1); font-size: var(--t-12); font-weight: 400; color: var(--gris); }
-  .panel .cd-zone-table .cd-qualifies td[data-label]::before { color: var(--progreso-texto); }
+  .panel .cd-zone-table .cd-col-pos { width: 20px; }
+  .panel .cd-zone-table .cd-col-pts, .panel .cd-zone-table .cd-col-pg { width: 24px; }
+  .panel .cd-zone-table .cd-col-sets { width: 42px; }
+  .panel .cd-zone-table .cd-col-games { width: 58px; }
+  .panel .cd-zone-table .cd-stat-pair { gap: 0; white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) {
   .panel .cd-zone-tab, .panel .cd-match-card, .panel .cd-toast, .panel .cd-menu-trigger, .panel.cd-menu-panel, .panel.cd-menu-panel .actions-menu-item { animation: none; transition: none; }
