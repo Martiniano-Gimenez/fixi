@@ -143,7 +143,9 @@ export default function Busqueda({
     return () => {
       if (!navegandoRef.current) {
         requestAnimationFrame(() => {
-          document.querySelector('.pv-lupa')?.focus();
+          if (!document.querySelector('.pv-busqueda-overlay')) {
+            document.querySelector('.pv-lupa')?.focus();
+          }
         });
       }
     };
@@ -254,6 +256,7 @@ export default function Busqueda({
               <input
                 ref={inputRef}
                 type="search"
+                autoFocus
                 className="pv-busqueda-input"
                 value={query}
                 onChange={handleInputChange}
