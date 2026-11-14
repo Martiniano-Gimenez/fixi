@@ -183,14 +183,17 @@ body:has(.publico) {
 .pv-podio-sub b { color: var(--tinta); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 
 /* Recorrido navegable: solo cambia el modo de la categoría, no las tarjetas del inicio. */
-.pv-fases-navegacion { margin-block: var(--e-6) var(--e-4); scroll-margin-top: calc(56px + var(--e-3) + env(safe-area-inset-top)); }
+.pv-fases-navegacion { position: sticky; top: calc(56px + env(safe-area-inset-top)); z-index: 25; margin-block: var(--e-6) var(--e-4); padding-block: var(--e-2); background: var(--fondo); scroll-margin-top: calc(56px + env(safe-area-inset-top)); }
 .pv-recorrido-tabs { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(44px, 1fr)); gap: var(--e-1); }
-.publico .pv-recorrido-tabs > button { min-width: 44px; min-height: 52px; padding: var(--e-2) 0; border-radius: var(--r-control); text-align: left; }
-.pv-recorrido-tabs > button[aria-selected="true"] { background: var(--marca-suave); box-shadow: inset 0 0 0 2px var(--marca); }
+.publico .pv-recorrido-tabs > button { min-width: 44px; min-height: 64px; padding: var(--e-2) 0; border-radius: var(--r-control); background: var(--superficie-2); text-align: left; }
+.publico .pv-recorrido-tabs > button:is(:hover, :focus) { background: var(--marca-suave); }
+.publico .pv-recorrido-tabs > button[aria-selected="true"] { background: var(--superficie); box-shadow: var(--sombra-1); }
+.publico .pv-recorrido-tabs > button[aria-selected="true"] .pv-etapa { color: var(--tinta); font-weight: 700; }
 .pv-recorrido-tabs .pv-etapa { text-align: center; }
+.pv-etapa-cuenta { display: block; margin-top: 2px; color: var(--gris); font-size: var(--t-12); line-height: 1.2; font-variant-numeric: tabular-nums; text-align: center; }
 .pv-recorrido-tabs .pv-tramo { margin-inline: var(--e-1); }
 /* Reserva el espacio visible para que una ronda corta no haga saltar el recorrido. */
-.pv-fase-panel { min-width: 0; min-height: calc(100dvh - 132px); }
+.pv-fase-panel { min-width: 0; min-height: calc(100dvh - 56px - var(--pv-fases-alto, 80px) - var(--e-4)); scroll-margin-top: calc(56px + var(--pv-fases-alto, 80px) + var(--e-4) + env(safe-area-inset-top)); }
 .pv-fase-contenido { animation: pv-fase-cambiar .25s var(--curva) both; }
 @keyframes pv-fase-cambiar { from { opacity: 0; } to { opacity: 1; } }
 .pv-fase-titulo { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--e-2); margin: 0 0 var(--e-3); font-size: var(--t-20); }
@@ -270,11 +273,10 @@ body:has(.publico) {
 /* ─── Cuadro ──────────────────────────────────────────────── */
 .pv-seg-scroll { overflow-x: auto; scrollbar-width: none; margin: 0 calc(var(--e-4) * -1); padding: 0 var(--e-4); }
 .pv-seg-scroll::-webkit-scrollbar { display: none; }
-.pv-seg { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: 4px; border-radius: 12px; background: var(--superficie-2); }
-.pv-seg-scroll .pv-seg { grid-auto-columns: minmax(44px, 1fr); min-width: min-content; }
-.pv-seg-ind { position: absolute; top: 4px; bottom: 4px; left: 4px; border-radius: 9px; background: var(--superficie); box-shadow: var(--sombra-1); transition: transform .5s var(--curva); }
+.pv-seg { position: relative; display: inline-flex; max-width: 100%; padding: 4px; border-radius: 12px; background: var(--superficie-2); vertical-align: top; }
+.pv-seg-scroll .pv-seg { min-width: max-content; }
 .pv-seg button { position: relative; min-height: 44px; padding: 0 var(--e-2); border-radius: 9px; font-weight: 600; font-size: var(--t-14); color: var(--gris); white-space: nowrap; }
-.pv-seg button[aria-selected="true"] { color: var(--marca); }
+.pv-seg button[aria-selected="true"] { color: var(--marca); background: var(--superficie); box-shadow: var(--sombra-1); }
 .pv-directo { margin-top: var(--e-3); background: var(--superficie); border-radius: var(--r-tarjeta); box-shadow: var(--sombra-1); padding: var(--e-3) 14px; }
 .pv-directo p { font-size: var(--t-14); color: var(--tinta-2); margin-bottom: var(--e-2); }
 .pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -360,9 +362,26 @@ body:has(.publico) {
 @media (min-width: 1100px) {
   .pv-lista.grilla { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .pv-proximos .pv-lista.grilla { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pv-proximos .pv-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (min-width: 1280px) {
+  .pv-proximos .pv-lista.grilla { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+  .pv-proximos .pv-item:last-child:nth-child(odd) { grid-column: auto; }
+  .pv-proximos .pv-item:last-child:nth-child(4n + 1) { grid-column: 1 / -1; }
+}
+@media (max-width: 767px) {
+  .pv-fases-navegacion { padding-block: var(--e-1); }
+  .publico .pv-recorrido-tabs > button { min-height: 56px; padding-block: var(--e-1); }
+  .pv-seg { display: flex; width: 100%; }
+  .pv-seg button { flex: 1; }
+  .pv-seg-scroll .pv-seg { display: inline-flex; width: max-content; }
+  .pv-seg-scroll .pv-seg button { flex: none; }
+}
+@media (max-width: 359px) {
+  .pv-etapa-cuenta { display: none; }
+  .publico .pv-recorrido-tabs > button { min-height: 44px; }
 }
 
 /* ─── Movimiento reducido: sin entradas ni llenado de barras ─── */

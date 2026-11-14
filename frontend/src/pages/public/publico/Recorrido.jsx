@@ -37,7 +37,8 @@ export default function Recorrido({ categoria, activa, onCambiar, idBase }) {
               <i style={{ '--p': p.toFixed(3) }} />
             </span>
             <span className="pv-etapa" aria-hidden="true">{e.corta}</span>
-            <span className="pv-sr">{e.larga}: {texto}</span>
+            {navegable && <span className="pv-etapa-cuenta" aria-hidden="true">{e.jugados}/{e.total}</span>}
+            <span className="pv-sr">{e.larga}: {texto}{navegable && e.estado !== 'actual' ? `, ${e.jugados} de ${e.total} jugados` : ''}</span>
           </Item>
         );
       })}

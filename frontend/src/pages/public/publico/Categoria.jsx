@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Trophy, Users } from 'lucide-react';
 import Recorrido from './Recorrido';
@@ -23,6 +23,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   const location = useLocation();
   const navigate = useNavigate();
   const recorridoRef = useRef(null);
+  const alinearFase = useRef(false);
   const ahora = Date.now();
   const e = estadoDe(cat, ahora);
   const origenes = useMemo(() => clasificadosPorOrigen(cat), [cat]);
@@ -54,21 +55,46 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
     }
   }, [hashElegido, location.hash, location.pathname, location.search, location.state, navigate]);
 
-  useEffect(() => {
+  // La navegación entre fases alinea su contenido; evitamos que atrás restaure otro scroll.
+  useLayoutEffect(() => {
+    const anterior = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+    return () => { window.history.scrollRestoration = anterior; };
+  }, []);
+
+  useLayoutEffect(() => {
+    const recorrido = recorridoRef.current;
+    if (!recorrido) return;
+    const medir = () => recorrido.parentElement.style.setProperty('--pv-fases-alto', `${recorrido.getBoundingClientRect().height}px`);
+    medir();
+    const observer = new ResizeObserver(medir);
+    observer.observe(recorrido);
+    return () => observer.disconnect();
+  }, [e.preparacion]);
+
+  useLayoutEffect(() => {
     if (fasePrevia.current === activa) return;
     fasePrevia.current = activa;
     const recorrido = recorridoRef.current;
     if (!recorrido) return;
     const caja = recorrido.getBoundingClientRect();
     const barra = document.querySelector('.pv-barra')?.getBoundingClientRect().bottom || 56;
-    if (caja.top < barra || caja.bottom > window.innerHeight) {
+    const pegado = alinearFase.current || caja.top <= barra + 1;
+    alinearFase.current = false;
+    const panel = document.getElementById(`${id}-panel-${activa}`);
+    if (pegado && panel) {
+      const separacion = parseFloat(getComputedStyle(recorrido).marginBottom) || 0;
+      window.scrollBy({ top: panel.getBoundingClientRect().top - caja.bottom - separacion, behavior: 'instant' });
+    } else if (caja.top < barra || caja.bottom > window.innerHeight) {
       recorrido.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
-  }, [activa]);
+  }, [activa, id]);
 
   const cambiarFase = (key) => {
     const fase = fases.find((f) => f.key === key);
     if (!fase || fase.key === activa) return;
+    const barra = document.querySelector('.pv-barra')?.getBoundingClientRect().bottom || 56;
+    alinearFase.current = (recorridoRef.current?.getBoundingClientRect().top ?? Infinity) <= barra + 1;
     navigate({ pathname: location.pathname, search: location.search, hash: `#${fase.hash}` },
       { state: { ...location.state, desdeInicio: false }, preventScrollReset: true });
   };

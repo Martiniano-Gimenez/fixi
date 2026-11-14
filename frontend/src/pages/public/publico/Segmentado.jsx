@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 const reducido = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /**
- * Selector segmentado con indicador que se desliza (patrón de pestañas).
+ * Selector segmentado con ancho según su contenido (patrón de pestañas).
  * Con más de 6 opciones se desplaza de costado y cada opción mide al menos 44px.
  * items: [{ key, label, aria? }]
  */
@@ -33,11 +33,6 @@ export default function Segmentado({ items, activo, onCambiar, etiqueta, idBase 
 
   const seg = (
     <div className="pv-seg" role="tablist" aria-label={etiqueta} onKeyDown={onKeyDown}>
-      <span
-        className="pv-seg-ind"
-        aria-hidden="true"
-        style={{ width: `calc((100% - 8px) / ${items.length})`, transform: `translateX(${i * 100}%)` }}
-      />
       {items.map((it, j) => (
         <button
           key={it.key}
