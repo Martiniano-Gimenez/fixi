@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { AlertTriangle } from 'lucide-react';
@@ -146,6 +147,7 @@ export default function TorneoPublic() {
   const location = useLocation();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [busquedaInmediata, setBusquedaInmediata] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -327,9 +329,17 @@ export default function TorneoPublic() {
 
   // Búsqueda en la URL: ?buscar=<texto>
   const buscarParam = searchParams.get('buscar');
-  const busquedaAbierta = searchParams.has('buscar');
+  const busquedaEnUrl = searchParams.has('buscar');
+  const busquedaAbierta = busquedaEnUrl || busquedaInmediata;
+
+  useEffect(() => {
+    if (busquedaEnUrl) setBusquedaInmediata(false);
+  }, [busquedaEnUrl]);
 
   const abrirBusqueda = () => {
+    // El teclado móvil necesita el campo y su foco dentro del gesto de la lupa.
+    flushSync(() => setBusquedaInmediata(true));
+    document.querySelector('.pv-busqueda-input')?.focus({ preventScroll: true });
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -356,6 +366,7 @@ export default function TorneoPublic() {
   };
 
   const cerrarBusqueda = () => {
+    setBusquedaInmediata(false);
     if (location.state?.busquedaDesdeApp) {
       navigate(-1);
     } else {
