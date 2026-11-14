@@ -86,7 +86,6 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
               <AlertTriangle size={10} /> Sin horario
             </span>
           )}
-          {partido.canchaNumero && <span className="cd-match-court">Cancha {partido.canchaNumero}</span>}
         </div>
       </div>
 

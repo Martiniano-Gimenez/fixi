@@ -8,7 +8,7 @@ const GrillaHorariosPartido = lazy(() => import('./GrillaHorariosPartido'));
 
 const tieneHorario = (partido) => partido.estado === 'FIJO' || Boolean(partido.fechaHora && partido.canchaNumero);
 
-export function FilaPartidoZona({ partido, nombres, badge, mostrarCancha = true }) {
+export function FilaPartidoZona({ partido, nombres, badge, mostrarCancha = false }) {
   const rivales = partido.pareja1Id && partido.pareja2Id
     ? `${nombres.get(partido.pareja1Id) || 'Pareja 1'} vs ${nombres.get(partido.pareja2Id) || 'Pareja 2'}`
     : partido.origen || 'Partido por definir';

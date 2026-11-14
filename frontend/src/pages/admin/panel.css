@@ -627,7 +627,6 @@ body:has(.panel) {
 .panel .cb-position { font-size: var(--t-12); font-weight: 600; color: var(--gris); flex-shrink: 0; }
 .panel .cb-time-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--e-2); }
 .panel .cb-time { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-1) var(--e-2); color: var(--tinta-2); font-size: var(--t-12); font-weight: 500; }
-.panel .cb-court { display: inline-flex; padding: var(--e-1) var(--e-2); border-radius: var(--r-dato); background: var(--superficie-2); color: var(--tinta-2); font-size: var(--t-12); font-weight: 600; }
 .panel .cb-review { color: var(--alerta-texto); background: var(--alerta-suave); box-shadow: none; font-size: var(--t-12); }
 .panel .cb-no-time { display: flex; align-items: center; gap: var(--e-1); color: var(--alerta-texto); font-size: var(--t-12); font-weight: 500; }
 .panel .cb-pairs { display: flex; flex-direction: column; gap: var(--e-3); }
@@ -733,7 +732,7 @@ body:has(.panel) {
 .panel .cd-match-card.is-clickable { cursor: pointer; }
 .panel .cd-match-header { margin-bottom: var(--e-3); }
 .panel .cd-match-info { display: flex; align-items: center; flex-wrap: wrap; gap: var(--e-2); }
-.panel .cd-match-status, .panel .cd-match-court { display: inline-flex; align-items: center; gap: var(--e-1); color: var(--tinta-2); background: var(--superficie-2); padding: var(--e-1) var(--e-2); border-radius: var(--r-dato); font-size: var(--t-12); font-weight: 600; }
+.panel .cd-match-status { display: inline-flex; align-items: center; gap: var(--e-1); color: var(--tinta-2); background: var(--superficie-2); padding: var(--e-1) var(--e-2); border-radius: var(--r-dato); font-size: var(--t-12); font-weight: 600; }
 .panel .cd-match-status.is-live { color: var(--vivo-texto); background: var(--vivo-suave); }
 .panel .cd-match-time { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--e-1); font-size: var(--t-13); color: var(--tinta-2); }
 .panel .cd-match-alert { display: inline-flex; align-items: center; gap: var(--e-1); padding: var(--e-1) var(--e-2); border-radius: var(--r-dato); color: var(--alerta-texto); background: var(--alerta-suave); font-size: var(--t-12); font-weight: 600; }

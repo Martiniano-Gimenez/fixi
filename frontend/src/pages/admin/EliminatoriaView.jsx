@@ -252,7 +252,6 @@ export default function EliminatoriaView() {
                   <div className="cb-time">
                     <Clock size={11} className="cb-brand-icon" />
                     {formatDiaHorario(partido.fechaHora)}
-                    {partido.canchaNumero && <span className="cb-court">Cancha {partido.canchaNumero}</span>}
                   </div>
                   {partido.horarioManual === true && Array.isArray(partido.advertencias) && partido.advertencias.length > 0 && (
                     <button
@@ -273,7 +272,6 @@ export default function EliminatoriaView() {
                   <div className="cb-no-time">
                     <AlertTriangle size={10} /> Sin horario
                   </div>
-                  {partido.canchaNumero && <span className="cb-court">Cancha {partido.canchaNumero}</span>}
                 </div>
               )
             )}
