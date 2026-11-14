@@ -229,7 +229,7 @@ export default function Busqueda({
   const resultados = useMemo(() => parejasQueCoinciden(categorias, query), [categorias, query]);
 
   const textoLimpio = query.trim();
-  const hayBusqueda = textoLimpio.length > 0;
+  const hayBusqueda = (textoLimpio.match(/\p{L}/gu) || []).length >= 2;
   const sinResultados = hayBusqueda && resultados.length === 0;
 
   const handleAbrirCategoria = (cat, e) => {
@@ -287,7 +287,7 @@ export default function Busqueda({
         <div className="pv-busqueda-cuerpo">
           {!hayBusqueda && (
             <p className="pv-busqueda-guia">
-              Escribí el apellido o nombre de un jugador para ver sus partidos.
+              Escribí al menos dos letras.
             </p>
           )}
 

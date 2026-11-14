@@ -98,9 +98,8 @@ export function partidosDeCategoria(cat) {
 
 // Parejas de todas las categorías que coinciden con la búsqueda, con su categoría
 export function parejasQueCoinciden(categorias, q) {
-  if (!q || !q.trim()) return [];
-  const n = normalizar(q.trim());
-  const palabras = n.split(/\s+/).filter(Boolean);
+  const palabras = normalizar(q).match(/\p{L}+/gu) || [];
+  if (palabras.join('').length < 2) return [];
   const out = [];
 
   (categorias || []).forEach((c) => {
@@ -142,8 +141,8 @@ export function parejasQueCoinciden(categorias, q) {
     });
 
     mapa.forEach((pareja) => {
-      const norm = normalizar(pareja.nombre);
-      const coincide = norm.includes(n) || (palabras.length > 1 && palabras.every((pal) => norm.includes(pal)));
+      const nombre = normalizar(pareja.nombre).match(/\p{L}+/gu) || [];
+      const coincide = palabras.every((pal) => nombre.some((parte) => parte.startsWith(pal)));
       if (coincide) out.push(pareja);
     });
   });

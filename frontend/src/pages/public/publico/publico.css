@@ -495,7 +495,7 @@ body:has(.publico) {
 .pv-busqueda-pareja-cat {
   font-size: var(--t-13); font-weight: 600; color: var(--tinta-2);
   background: var(--superficie-2); padding: 2px 8px; border-radius: var(--r-pill);
-  align-self: flex-start;
+  justify-self: start;
 }
 .pv-busqueda-pareja-acciones {
   display: flex; flex-wrap: wrap; gap: var(--e-2);
