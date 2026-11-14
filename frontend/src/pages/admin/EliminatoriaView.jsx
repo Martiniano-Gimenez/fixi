@@ -469,11 +469,15 @@ export default function EliminatoriaView() {
                   type="button"
                   role="tab"
                   aria-selected={isActive}
+                  aria-label={fase.nombre.replace(/ de Final\b/g, ' de final')}
                   className={`cb-tab ${isActive ? 'active' : ''}`}
                   onClick={() => setActiveRoundId(fase.id)}
                 >
                   {fase.ronda === 2 && <Trophy size={16} className="cb-trophy" />}
-                  <span>{fase.nombre.replace(/ de Final\b/g, ' de final')}</span>
+                  <span className="cb-tab-full" aria-hidden="true">{fase.nombre.replace(/ de Final\b/g, ' de final')}</span>
+                  <span className="cb-tab-short" aria-hidden="true">
+                    {({ 64: '32avos', 32: '16avos', 16: 'Octavos', 8: 'Cuartos', 4: 'Semis', 2: 'Final' })[fase.ronda] || fase.nombre.replace(/ de Final\b/g, ' de final')}
+                  </span>
                 </button>
               );
             })}
