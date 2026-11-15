@@ -155,7 +155,7 @@ export default function PartidoCard({ partido, onClick, onCargarResultado, onRep
                 e.stopPropagation();
                 handleClick();
               }}
-              className="pm-button cd-match-button"
+              className={`${isFinalizado ? 'pm-text-button' : 'pm-button'} cd-match-button`}
               title={isFinalizado ? 'Editar resultado' : isEnCurso ? 'Actualizar resultado' : 'Cargar resultado'}
               aria-label={isFinalizado ? 'Editar resultado' : isEnCurso ? 'Actualizar resultado' : 'Cargar resultado'}
             >

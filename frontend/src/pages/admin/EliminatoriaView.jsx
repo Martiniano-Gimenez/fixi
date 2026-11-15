@@ -315,7 +315,7 @@ export default function EliminatoriaView() {
                       e.stopPropagation();
                       handleClickPartido(partido);
                     }}
-                    className="pm-button cb-action-button"
+                    className={`${isFinalizado ? 'pm-text-button cb-result-link' : 'pm-button'} cb-action-button`}
                   >
                     <ClipboardList size={14} aria-hidden="true" />
                     <span>{isFinalizado ? 'Editar resultado' : 'Cargar resultado'}</span>

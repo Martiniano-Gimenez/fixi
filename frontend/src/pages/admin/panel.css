@@ -630,6 +630,7 @@ body:has(.panel) {
 .panel .cb-match-actions { display: flex; align-items: stretch; gap: var(--e-1); min-width: 0; }
 .panel .cb-action-button { flex: 1 1 0; min-width: 44px; min-height: 44px; padding: var(--e-1) var(--e-2); gap: var(--e-1); font-size: var(--t-12); white-space: normal; }
 .panel .cb-action-button > span { min-width: 0; overflow-wrap: anywhere; }
+.panel .cb-result-link { flex: 0 1 auto; padding-inline: 0; }
 .panel .cb-edit-button { color: var(--gris); background: none; box-shadow: none; }
 @media (hover: hover) {
   .panel .cb-edit-button:hover { color: var(--marca); }
