@@ -43,6 +43,7 @@
  *     corrección del marcador sin cambiar ganador, estadísticas y rollback completo.
  * H22-H25 Clasificados de zonas de tres protegidos por el cuadro jugado; correcciones permitidas,
  *     orígenes editados y carga con otras zonas incompletas.
+ * H26 El endpoint retirado fecha-hora devuelve 404 sin modificar los partidos.
  *
  * En todos los casos de A se verifica que ningún par padre/hijo con horario tenga descanso menor al mínimo de la
  * ronda del hijo (obtenerDescansoMinimoRequeridoMs: 30 min antes de la final, 75 en las demás).
@@ -618,7 +619,6 @@ async function testCierreAutomatico() {
     ['POST', `/torneos/${torneo.id}/canchas-override`, { canchasDisponiblesOverride: 2, diaKey: DOM }],
     ['POST', `/torneos/${torneo.id}/canchas-override`, { canchasDisponiblesOverride: 4, diaKey: DOM }],
     ['PUT', `/partidos/${finalB.id}/asignar-horario-manual`, { fechaHora: fecha(DOM, '12:00'), canchaNumero: 1 }],
-    ['PUT', `/partidos/${finalB.id}/fecha-hora`, { fechaHora: fecha(DOM, '12:00') }],
     ['PATCH', `/partidos/${finalB.id}/bracket`, { origenPareja1: '1° Zona A' }],
     ['POST', `/categorias/${cats.B.id}/generar-eliminatoria`],
     ['POST', `/categorias/${cats.B.id}/sincronizar-cuadro`],
@@ -629,6 +629,8 @@ async function testCierreAutomatico() {
     ['DELETE', `/categorias/${cats.B.id}/zonas/resultados`],
     ['POST', `/categorias/${cats.B.id}/reiniciar`],
   ];
+  assertResultado.equal((await http('PUT', `/partidos/${finalB.id}/fecha-hora`, { fechaHora: fecha(DOM, '12:00') })).status, 404,
+    'La ruta retirada también responde 404 con un partido finalizado');
   for (const [metodo, ruta, body] of prohibidas) {
     const r = await http(metodo, ruta, body);
     assertResultado.equal(r.status, 400, `${metodo} ${ruta}: ${JSON.stringify(r.json)}`);
@@ -1162,6 +1164,24 @@ async function testCargaZonaConOtraIncompleta() {
   assertResultado.deepEqual(await snapshotCorreccionZona(), antes);
 }
 
+async function testEndpointFechaHoraRetirado() {
+  const { torneo, cats } = await armar({ cats: [['A', 6]] });
+  const partido = await prisma.partido.findFirst({ where: { categoriaId: cats.A.id, zonaId: { not: null } } });
+  assertResultado.ok(partido?.fechaHora, 'La prueba usa un partido real pendiente con horario');
+  assertResultado.equal(partido.estado, 'PENDIENTE');
+  const snapshot = async () => ({
+    torneo: await prisma.torneo.findUnique({ where: { id: torneo.id } }),
+    categoria: await prisma.categoria.findUnique({ where: { id: cats.A.id } }),
+    partidos: await prisma.partido.findMany({ where: { categoriaId: cats.A.id }, include: { sets: true }, orderBy: { id: 'asc' } }),
+  });
+  const antes = await snapshot();
+  for (const fechaHora of ['2030-01-01T15:00:00.000Z', 'fecha inválida', null]) {
+    const r = await http('PUT', `/partidos/${partido.id}/fecha-hora`, { fechaHora });
+    assertResultado.equal(r.status, 404, 'El pedido autenticado a la ruta retirada responde como cualquier ruta inexistente');
+    assertResultado.deepEqual(await snapshot(), antes, 'La ruta retirada no cambia horarios, marcas, resultados ni estados');
+  }
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -1200,6 +1220,7 @@ async function run() {
     { nombre: 'H23: corrección que solo cambia un cruce pendiente', fn: testZonaTresSoloCambiaPendiente },
     { nombre: 'H24: protección según el origen actual editado a mano', fn: testZonaTresOrigenEditado },
     { nombre: 'H25: cargar zona valida aun con otra zona incompleta', fn: testCargaZonaConOtraIncompleta },
+    { nombre: 'H26: fecha-hora retirado devuelve 404 sin escrituras', fn: testEndpointFechaHoraRetirado },
   ];
 
   const resultados = [];
