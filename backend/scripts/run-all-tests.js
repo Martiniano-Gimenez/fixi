@@ -78,6 +78,7 @@ const TEST_SUITES = [
   'test-inscripcion-publica.js',
   'test-optimizador-precheck.js',
   'test-dieciseisavos-al-completar-zonas.js',
+  'test-cuadro-16avos-regenerado.js',
   'test-lluvia-horario-original.js',
 ];
 

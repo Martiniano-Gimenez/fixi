@@ -1,6 +1,7 @@
 const faseEliminatoriaService = require('../services/faseEliminatoria.service');
 const { asignarHorariosRondaUno } = require('../services/eliminatoriaScheduler.service');
 const { getCategoriaById } = require('../services/categoria.service');
+const { programarCuadroConDieciseisavos } = require('../services/partido.service');
 
 function getOrgId(req) {
   return req.organizadorId || req.organizador?.id;
@@ -20,7 +21,9 @@ async function generarEliminatoria(req, res, next) {
     );
 
     let schedulingResult = null;
-    if (!resultado.esDieciseisavos) {
+    if (resultado.esDieciseisavos) {
+      schedulingResult = await programarCuadroConDieciseisavos(organizadorId, categoriaId, torneoId);
+    } else {
       schedulingResult = await asignarHorariosRondaUno(organizadorId, torneoId, categoriaId);
     }
 

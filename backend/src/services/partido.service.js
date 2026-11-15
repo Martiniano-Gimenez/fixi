@@ -425,7 +425,10 @@ async function cargarResultado(organizadorId, partidoId, data) {
     await programarPrimeraRondaTrasAsignacion(organizadorId, partido.categoriaId, asignacion);
   }
 
-  return { message: nuevoEstado === 'FINALIZADO' ? 'Partido finalizado.' : 'Set guardado. Partido en curso.' };
+  return {
+    message: nuevoEstado === 'FINALIZADO' ? 'Partido finalizado.' : 'Set guardado. Partido en curso.',
+    ...(asignacion?.esDieciseisavos ? { schedulingResult: asignacion.schedulingResult ?? null } : {}),
+  };
 }
 
 /**
@@ -892,6 +895,26 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
 
 const sinHorario = { OR: [{ fechaHora: null }, { canchaNumero: null }, { sinHorarioAsignado: true }] };
 
+// Generar el cuadro y asignar sus clasificados ya terminó su transacción. Si falla el scheduler,
+// se conserva ese trabajo; los cambios de horarios del intento fallido sí se revierten completos.
+async function programarCuadroConDieciseisavos(organizadorId, categoriaId, torneoId) {
+  try {
+    const pendientes = await prisma.partido.count({ where: {
+      categoriaId, faseEliminatoriaId: { not: null }, esBye: false, estado: 'PENDIENTE', ...sinHorario,
+    } });
+    if (!pendientes) return null;
+    const scheduler = require('./eliminatoriaScheduler.service');
+    return await prisma.$transaction(
+      (tx) => scheduler.programarHorariosEliminatorias(organizadorId, torneoId, categoriaId, tx, null,
+        { conservarHorarios: true, noAntesDeMs: Date.now() }),
+      { timeout: 60_000 },
+    );
+  } catch (err) {
+    console.warn(`[Auto-Scheduler] No se pudo programar el cuadro con dieciseisavos de ${categoriaId}:`, err.message);
+    return null;
+  }
+}
+
 /**
  * Programa los dieciseisavos de una categoría cuando ya no le quedan partidos de zona sin horario.
  * Usa programarHorariosEliminatorias, que respeta lo que ya tiene horario. Si falla, solo lo registra:
@@ -1031,6 +1054,14 @@ async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId, ext
 async function programarPrimeraRondaTrasAsignacion(organizadorId, categoriaId, resultado) {
   const { asignarHorariosRondaUno } = require('./eliminatoriaScheduler.service');
 
+  if (resultado.esDieciseisavos) {
+    const categoria = await prisma.categoria.findUnique({ where: { id: categoriaId }, select: { torneoId: true } });
+    if (categoria?.torneoId) {
+      resultado.schedulingResult = await programarCuadroConDieciseisavos(organizadorId, categoriaId, categoria.torneoId);
+    }
+    return resultado;
+  }
+
   // 4. Si no es dieciseisavos (que se juegan el sábado a la noche), programar domingo
   if (!resultado.esDieciseisavos) {
     const categoria = await prisma.categoria.findUnique({
@@ -1062,4 +1093,5 @@ module.exports = {
   updateEstado,
   verificarYAutoAsignarEliminatoria,
   programarDieciseisavosAlCompletarZonas,
+  programarCuadroConDieciseisavos,
 };
