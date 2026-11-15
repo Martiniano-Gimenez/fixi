@@ -154,12 +154,16 @@ async function updateCategoria(organizadorId, categoriaId, data) {
 }
 
 async function deleteCategoria(organizadorId, categoriaId) {
-  await prisma.$transaction(async (tx) => {
+  const overridesActualizados = await prisma.$transaction(async (tx) => {
     const categoria = await getCategoriaById(organizadorId, categoriaId, tx);
     exigirTorneoNoFinalizado(categoria.torneo);
+    const partidos = await tx.partido.findMany({ where: { categoriaId }, select: { id: true } });
+    const actualizados = await canchasOverridesService.quitarPartidosDeRegistros(tx, categoria.torneoId, partidos.map((p) => p.id));
     await tx.categoria.delete({ where: { id: categoria.id } });
     if (categoria.torneo.estado !== 'BORRADOR') await recalcularEstadoTorneo(tx, categoria.torneoId);
+    return actualizados;
   });
+  canchasOverridesService.aplicarLimpiezaRegistros(overridesActualizados);
 
   return { message: 'Categoría eliminada con éxito' };
 }
@@ -177,31 +181,7 @@ async function reiniciarCategoria(organizadorId, categoriaId) {
       where: { categoriaId: categoria.id },
       select: { id: true },
     });
-    const partidoIds = new Set(partidos.map((p) => p.id));
-    const quitarPartidos = (registro) => {
-      let datos = registro;
-      if (typeof registro === 'string') {
-        try { datos = JSON.parse(registro); } catch { return undefined; }
-      }
-      if (!datos || typeof datos !== 'object' || Array.isArray(datos)) return undefined;
-      const restantes = Object.entries(datos).filter(([id]) => !partidoIds.has(id));
-      if (restantes.length === Object.keys(datos).length) return undefined;
-      const limpio = Object.fromEntries(restantes);
-      return typeof registro === 'string' ? JSON.stringify(limpio) : limpio;
-    };
-    const overrides = await tx.overrideCanchasDia.findMany({ where: { torneoId: categoria.torneoId } });
-    const actualizados = [];
-    for (const override of overrides) {
-      const horariosAntesLluvia = quitarPartidos(override.horariosAntesLluvia);
-      const partidosSinSlot = quitarPartidos(override.partidosSinSlot);
-      if (horariosAntesLluvia === undefined && partidosSinSlot === undefined) continue;
-      const actualizado = await tx.overrideCanchasDia.update({
-        where: { id: override.id },
-        data: { horariosAntesLluvia, partidosSinSlot, updatedAt: override.updatedAt },
-      });
-      // La caché solo guarda partidosSinSlot; se actualiza después del commit.
-      if (partidosSinSlot !== undefined) actualizados.push(actualizado);
-    }
+    const actualizados = await canchasOverridesService.quitarPartidosDeRegistros(tx, categoria.torneoId, partidos.map((p) => p.id));
 
     await tx.partido.deleteMany({
       where: { categoriaId: categoria.id },
@@ -228,13 +208,7 @@ async function reiniciarCategoria(organizadorId, categoriaId) {
     return actualizados;
   });
 
-  for (const override of overridesActualizados) {
-    canchasOverridesService.applyCacheMutation('SET', {
-      ...override,
-      partidosSinSlot: typeof override.partidosSinSlot === 'string'
-        ? JSON.parse(override.partidosSinSlot) : override.partidosSinSlot,
-    });
-  }
+  canchasOverridesService.aplicarLimpiezaRegistros(overridesActualizados);
 
   return { message: 'Categoría reiniciada con éxito' };
 }

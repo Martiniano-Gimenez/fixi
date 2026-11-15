@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma');
+const canchasOverridesService = require('./canchasOverrides.service');
 const { getCategoriaById, recalcularEstadosPorPartido } = require('./categoria.service');
 const { DURACION_PARTIDO_MIN } = require('./slots.service');
 const {
@@ -660,10 +661,15 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
   return fases;
 }
 
-async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null) {
-  await getCategoriaById(organizadorId, categoriaId, externalTx);
+// Con tx externa, su dueño recibe las mutaciones y las publica solo después de confirmar.
+async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null, mutacionesCache = []) {
+  const categoria = await getCategoriaById(organizadorId, categoriaId, externalTx);
 
   const performDelete = async (tx) => {
+    const partidos = await tx.partido.findMany({
+      where: { categoriaId, faseEliminatoriaId: { not: null } }, select: { id: true },
+    });
+    const actualizados = await canchasOverridesService.quitarPartidosDeRegistros(tx, categoria.torneoId, partidos.map((p) => p.id));
     await tx.partido.deleteMany({
       where: {
         categoriaId,
@@ -675,14 +681,14 @@ async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null)
       where: { categoriaId },
     });
     await recalcularEstadosPorPartido(tx, categoriaId);
+    return actualizados;
   };
 
   if (externalTx) {
-    await performDelete(externalTx);
+    mutacionesCache.push(...await performDelete(externalTx));
   } else {
-    await prisma.$transaction(async (tx) => {
-      await performDelete(tx);
-    });
+    const actualizados = await prisma.$transaction(performDelete);
+    canchasOverridesService.aplicarLimpiezaRegistros(actualizados);
   }
 
   return { message: 'Fase eliminatoria borrada exitosamente.' };
@@ -869,6 +875,7 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
 
   let resultadoGenerar = null;
   let schedulingResult = null;
+  const mutacionesCache = [];
 
   await prisma.$transaction(async (tx) => {
     const partidosJugadosTx = await tx.partido.count({
@@ -885,7 +892,7 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
     }
 
     // 1. Borrar eliminatorias existentes
-    await borrarEliminatoria(organizadorId, categoriaId, tx);
+    await borrarEliminatoria(organizadorId, categoriaId, tx, mutacionesCache);
 
     // 2. Generar eliminatorias nuevas
     resultadoGenerar = await generarEliminatoria(organizadorId, categoriaId, tx);
@@ -907,6 +914,7 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
     maxWait: 10000,
     timeout: 30000,
   });
+  canchasOverridesService.aplicarLimpiezaRegistros(mutacionesCache);
 
   return {
     message: 'Cuadro eliminatorio sincronizado exitosamente.',

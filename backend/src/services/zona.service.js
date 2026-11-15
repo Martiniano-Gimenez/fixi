@@ -2427,9 +2427,9 @@ async function resolverDesempateZona(organizadorId, categoriaId, zonaId, orden) 
  * Limpia todos los resultados de las zonas de una categoría
  */
 async function limpiarResultadosZonas(organizadorId, categoriaId) {
-  await getCategoriaById(organizadorId, categoriaId);
+  const categoria = await getCategoriaById(organizadorId, categoriaId);
 
-  await prisma.$transaction(async (tx) => {
+  const overridesActualizados = await prisma.$transaction(async (tx) => {
     const partidosZonas = await tx.partido.findMany({
       where: { categoriaId, zonaId: { not: null } },
     });
@@ -2479,14 +2479,21 @@ async function limpiarResultadosZonas(organizadorId, categoriaId) {
     }
 
     const faseViejas = await tx.faseEliminatoria.findMany({ where: { categoriaId } });
+    let actualizados = [];
     if (faseViejas.length > 0) {
+      const partidosBorrados = await tx.partido.findMany({
+        where: { faseEliminatoriaId: { in: faseViejas.map((f) => f.id) } }, select: { id: true },
+      });
+      actualizados = await canchasOverridesService.quitarPartidosDeRegistros(tx, categoria.torneoId, partidosBorrados.map((p) => p.id));
       await tx.partido.deleteMany({
         where: { faseEliminatoriaId: { in: faseViejas.map((f) => f.id) } },
       });
       await tx.faseEliminatoria.deleteMany({ where: { categoriaId } });
     }
     await recalcularEstadosPorPartido(tx, categoriaId);
+    return actualizados;
   });
+  canchasOverridesService.aplicarLimpiezaRegistros(overridesActualizados);
 
   return { message: 'Resultados de zonas reseteados.' };
 }
@@ -2562,7 +2569,10 @@ async function regenerarPartidosZona(tx, categoriaId, zonaId) {
     select: { id: true },
   });
   const ids = existingPartidos.map((p) => p.id);
+  let overridesActualizados = [];
   if (ids.length > 0) {
+    const categoria = await tx.categoria.findUnique({ where: { id: categoriaId }, select: { torneoId: true } });
+    overridesActualizados = await canchasOverridesService.quitarPartidosDeRegistros(tx, categoria.torneoId, ids);
     await tx.setPartido.deleteMany({
       where: { partidoId: { in: ids } },
     });
@@ -2576,6 +2586,7 @@ async function regenerarPartidosZona(tx, categoriaId, zonaId) {
     sinHorarioAsignado: Boolean(requiereArmadoManual),
   });
   await recalcularEstadosPorPartido(tx, categoriaId);
+  return overridesActualizados;
 }
 
 /**
@@ -2691,7 +2702,7 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
   }
 
   // 2. Transacción atómica
-  return await prisma.$transaction(async (tx) => {
+  const { resultado, overridesActualizados } = await prisma.$transaction(async (tx) => {
     // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
     const catCheck = await tx.categoria.findUnique({
       where: { id: categoriaId },
@@ -2774,8 +2785,8 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
     });
 
     // Regenerar partidos de ambas zonas
-    await regenerarPartidosZona(tx, categoriaId, zonaOrigenId);
-    await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
+    const overridesActualizados = await regenerarPartidosZona(tx, categoriaId, zonaOrigenId);
+    overridesActualizados.push(...await regenerarPartidosZona(tx, categoriaId, zonaDestinoId));
 
     // Asignar horarios a los partidos nuevos dentro de la transacción externa
     await asignarHorariosAutomatico(organizadorId, [categoriaId], tx,
@@ -2791,14 +2802,19 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
     }
 
     return {
-      message: 'Pareja movida de zona correctamente.',
-      categoriaId,
-      zonaOrigenId,
-      zonaDestinoId,
-      parejaId,
-      cuadroDesactualizado,
+      overridesActualizados,
+      resultado: {
+        message: 'Pareja movida de zona correctamente.',
+        categoriaId,
+        zonaOrigenId,
+        zonaDestinoId,
+        parejaId,
+        cuadroDesactualizado,
+      },
     };
   });
+  canchasOverridesService.aplicarLimpiezaRegistros(overridesActualizados);
+  return resultado;
 }
 
 /**
@@ -2916,7 +2932,7 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
 
   // 2. Transacción atómica. Va entera dentro del reintento: un choque de orden (P2002) aborta la
   // transacción y el intento siguiente vuelve a leer max(orden) desde cero.
-  return await conReintentoOrden(() => prisma.$transaction(async (tx) => {
+  const { resultado, overridesActualizados } = await conReintentoOrden(() => prisma.$transaction(async (tx) => {
     // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
     const catCheck = await tx.categoria.findUnique({
       where: { id: categoriaId },
@@ -3000,7 +3016,7 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     });
 
     // Regenerar partidos de la zona destino
-    await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
+    const overridesActualizados = await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
 
     // Asignar horarios únicamente a los partidos de la zona destino dentro de la transacción externa
     await asignarHorariosAutomatico(organizadorId, [categoriaId], tx, { zonaId: zonaDestinoId });
@@ -3020,13 +3036,18 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     }
 
     return {
-      message: 'Pareja agregada a la zona correctamente.',
-      categoriaId,
-      zonaDestinoId,
-      pareja: parejaConSlots || nuevaPareja,
-      cuadroDesactualizado,
+      overridesActualizados,
+      resultado: {
+        message: 'Pareja agregada a la zona correctamente.',
+        categoriaId,
+        zonaDestinoId,
+        pareja: parejaConSlots || nuevaPareja,
+        cuadroDesactualizado,
+      },
     };
   }));
+  canchasOverridesService.aplicarLimpiezaRegistros(overridesActualizados);
+  return resultado;
 }
 
 module.exports = {
