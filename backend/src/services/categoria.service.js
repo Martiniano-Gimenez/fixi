@@ -1,11 +1,30 @@
 const prisma = require('../lib/prisma');
 const canchasOverridesService = require('./canchasOverrides.service');
+const { recalcularEstadoTorneo, exigirTorneoNoFinalizado, incluirFinalPodio, conPodioCategoria } = require('./torneo.service');
+
+async function recalcularEstadosPorPartido(tx, categoriaId) {
+  const categoria = await tx.categoria.findUnique({ where: { id: categoriaId }, select: { torneoId: true } });
+  const partidos = await tx.partido.findMany({ where: { categoriaId, esBye: false }, select: {
+    estado: true, faseEliminatoria: { select: { ronda: true } },
+  } });
+  const terminada = partidos.some((partido) => partido.faseEliminatoria?.ronda === 2)
+    && partidos.every((partido) => partido.estado === 'FINALIZADO');
+  await tx.categoria.update({ where: { id: categoriaId }, data: { estado: terminada ? 'FINALIZADO' : 'EN_CURSO' } });
+  await recalcularEstadoTorneo(tx, categoria.torneoId);
+}
+
+async function exigirCategoriaConTorneoAbierto(organizadorId, categoriaId) {
+  const categoria = await getCategoriaById(organizadorId, categoriaId);
+  exigirTorneoNoFinalizado(categoria.torneo);
+  return categoria;
+}
 
 async function getCategoriaById(organizadorId, categoriaId, tx = null) {
   const db = tx || prisma;
   const categoria = await db.categoria.findUnique({
     where: { id: categoriaId },
     include: {
+      fasesEliminatorias: incluirFinalPodio,
       torneo: {
         include: {
           organizador: {
@@ -44,7 +63,7 @@ async function getCategoriaById(organizadorId, categoriaId, tx = null) {
     throw error;
   }
 
-  return categoria;
+  return conPodioCategoria(categoria);
 }
 
 async function createCategoria(organizadorId, torneoId, { nombre }) {
@@ -115,6 +134,11 @@ async function getCategorias(organizadorId, torneoId) {
 
 async function updateCategoria(organizadorId, categoriaId, data) {
   const categoria = await getCategoriaById(organizadorId, categoriaId);
+  if (data.estado !== undefined && data.estado !== categoria.estado) {
+    const error = new Error('El estado de la categoría se actualiza automáticamente con los resultados.');
+    error.statusCode = 400;
+    throw error;
+  }
 
   const updateData = {};
   if (data.nombre !== undefined && data.nombre.trim()) {
@@ -141,6 +165,7 @@ async function deleteCategoria(organizadorId, categoriaId) {
 
 async function reiniciarCategoria(organizadorId, categoriaId) {
   const categoria = await getCategoriaById(organizadorId, categoriaId);
+  exigirTorneoNoFinalizado(categoria.torneo);
 
   if (categoria.estado === 'BORRADOR') {
     throw new Error('La categoría ya está en estado BORRADOR.');
@@ -213,6 +238,8 @@ async function reiniciarCategoria(organizadorId, categoriaId) {
 }
 
 module.exports = {
+  recalcularEstadosPorPartido,
+  exigirCategoriaConTorneoAbierto,
   getCategoriaById,
   createCategoria,
   getCategorias,

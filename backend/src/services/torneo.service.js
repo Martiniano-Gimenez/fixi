@@ -2,6 +2,37 @@ const prisma = require('../lib/prisma');
 const crypto = require('crypto');
 const { parseFechaLocal } = require('../utils/dateUtils');
 
+function exigirTorneoNoFinalizado(torneo) {
+  if (torneo.estado === 'FINALIZADO') {
+    const error = new Error('El torneo está finalizado. Solo se pueden corregir resultados o reiniciar el torneo.');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+const seleccionParejaPodio = { id: true, jugador1: true, jugador2: true };
+const incluirFinalPodio = { where: { ronda: 2 }, include: { partidos: { include: {
+  ganador: { select: seleccionParejaPodio }, pareja1: { select: seleccionParejaPodio }, pareja2: { select: seleccionParejaPodio },
+} } } };
+
+function conPodioCategoria(categoria) {
+  const final = categoria.fasesEliminatorias?.flatMap((fase) => fase.partidos)
+    .find((partido) => !partido.esBye && partido.estado === 'FINALIZADO' && partido.ganadorId);
+  const campeones = categoria.estado === 'FINALIZADO' ? final?.ganador || null : null;
+  const subcampeones = campeones ? (final.ganadorId === final.pareja1Id ? final.pareja2 : final.pareja1) : null;
+  return { ...categoria, campeones, subcampeones };
+}
+
+async function recalcularEstadoTorneo(tx, torneoId) {
+  const categorias = await tx.categoria.findMany({ where: { torneoId }, select: {
+    estado: true, _count: { select: { parejas: true } },
+  } });
+  const jugables = categorias.filter((categoria) => categoria.estado !== 'BORRADOR' || categoria._count.parejas >= 2);
+  const estado = jugables.length > 0 && jugables.every((categoria) => categoria.estado === 'FINALIZADO')
+    ? 'FINALIZADO' : 'EN_CURSO';
+  await tx.torneo.update({ where: { id: torneoId }, data: { estado } });
+}
+
 function generarSlug(nombre) {
   const base = nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
   const randomStr = crypto.randomBytes(3).toString('hex');
@@ -86,6 +117,7 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
           },
           zonas: { select: { id: true, nombre: true } },
           partidos: { select: { id: true, estado: true, esBye: true } },
+          fasesEliminatorias: incluirFinalPodio,
         },
         orderBy: { createdAt: 'asc' },
       },
@@ -104,11 +136,17 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
     throw error;
   }
 
-  return torneo;
+  return { ...torneo, categorias: torneo.categorias.map(conPodioCategoria) };
 }
 
 async function updateTorneo(organizadorId, torneoId, data) {
   const torneo = await getTorneoById(organizadorId, torneoId);
+  const esInicio = torneo.estado === 'BORRADOR' && data.estado === 'EN_CURSO';
+  if (data.estado !== undefined && data.estado !== torneo.estado && !esInicio) {
+    const error = new Error('El estado del torneo se actualiza automáticamente con los resultados.');
+    error.statusCode = 400;
+    throw error;
+  }
 
   let parsedFecha;
   if (data.fecha !== undefined) {
@@ -241,6 +279,10 @@ async function reiniciarTorneo(organizadorId, torneoId) {
 }
 
 module.exports = {
+  exigirTorneoNoFinalizado,
+  recalcularEstadoTorneo,
+  incluirFinalPodio,
+  conPodioCategoria,
   createTorneo,
   getTorneos,
   getTorneoById,

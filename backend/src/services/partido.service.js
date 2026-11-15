@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
-const { getCategoriaById } = require('./categoria.service');
+const { getCategoriaById, recalcularEstadosPorPartido } = require('./categoria.service');
+const { exigirTorneoNoFinalizado } = require('./torneo.service');
 const { parseSlotToDate } = require('./zona.service');
 const { requireTorneoFecha, getDiaCalendarioConTrasnoche, clavesJornadasTorneo } = require('../utils/dateUtils');
 const canchasOverridesService = require('./canchasOverrides.service');
@@ -363,6 +364,7 @@ async function cargarResultado(organizadorId, partidoId, data) {
           ? new Date() : undefined,
       },
     });
+    await recalcularEstadosPorPartido(tx, partido.categoriaId);
   });
 
   // Disparar lógica post-resultado solo cuando el partido está FINALIZADO
@@ -447,7 +449,7 @@ async function propagarEliminatoria(partido, ganadorId, externalTx = null) {
     const destino = faseSiguiente.ronda === 2 ? 'la Final'
       : `el partido #${partidoDestino.posicionEnRonda} de ${nombreFase}`;
     const detalle = partidoDestino.estado === 'EN_CURSO'
-      ? `${destino} ya está en juego. Quitalo de en juego primero.`
+      ? `${destino} ya está en juego. Volvelo a pendiente primero.`
       : `${destino} ya tiene resultado. Borrá primero el resultado de ${destino}.`;
     const error = new Error(`No se puede cambiar el ganador: ${detalle}`);
     error.statusCode = 400;
@@ -504,6 +506,7 @@ async function borrarResultado(organizadorId, partidoId) {
         enJuegoDesde: null,
       },
     });
+    await recalcularEstadosPorPartido(tx, partido.categoriaId);
   });
 
   // Si es partido de zona, recalcular stats
@@ -520,7 +523,8 @@ async function borrarResultado(organizadorId, partidoId) {
 }
 
 async function updateFechaHora(organizadorId, partidoId, fechaHora) {
-  await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  const verificado = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  exigirTorneoNoFinalizado(verificado.categoria.torneo);
   const data = {
     fechaHora: fechaHora ? new Date(fechaHora) : null,
   };
@@ -537,7 +541,8 @@ async function updateFechaHora(organizadorId, partidoId, fechaHora) {
 }
 
 async function updateBracketMatch(organizadorId, partidoId, data) {
-  await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  const verificado = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  exigirTorneoNoFinalizado(verificado.categoria.torneo);
 
   return prisma.$transaction(async (tx) => {
     const partido = await tx.partido.findUnique({ where: { id: partidoId } });
@@ -677,6 +682,7 @@ function diasPermitidosPartido(partido) {
 
 async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  exigirTorneoNoFinalizado(partido.categoria.torneo);
   const { slotId, canchaNumero, fechaHora } = data;
 
   // Solo se asigna o reprograma un partido PENDIENTE
@@ -952,6 +958,7 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
         pareja2: true,
       },
     });
+    await recalcularEstadosPorPartido(tx, partido.categoriaId);
   });
 
   return {

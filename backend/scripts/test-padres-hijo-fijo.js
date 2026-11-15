@@ -505,7 +505,7 @@ async function testGanadorConSiguienteJugado(organizadorId, torneoId) {
       }
       const mensaje = estado === 'FINALIZADO'
         ? 'No se puede cambiar el ganador: la Final ya tiene resultado. Borrá primero el resultado de la Final.'
-        : 'No se puede cambiar el ganador: la Final ya está en juego. Quitalo de en juego primero.';
+        : 'No se puede cambiar el ganador: la Final ya está en juego. Volvelo a pendiente primero.';
       await rechazaSinCambios(() => partidoService.cargarResultado(organizadorId, semi1.id, gana2), mensaje);
       await rechazaSinCambios(() => partidoService.cargarResultado(organizadorId, semi1.id, parcial), mensaje);
       await rechazaSinCambios(() => partidoService.borrarResultado(organizadorId, semi1.id), mensaje);
@@ -554,6 +554,96 @@ async function testGanadorConSiguienteJugado(organizadorId, torneoId) {
   } finally { await prisma.categoria.delete({ where: { id: categoria.id } }); }
 }
 
+async function testCierreAutomatico() {
+  const { org, torneo, cats } = await armar({ cats: [['A', 6], ['B', 6]] });
+  const crearBorrador = (nombre, cantidad) => prisma.categoria.create({ data: { torneoId: torneo.id, nombre,
+    parejas: { create: Array.from({ length: cantidad }, (_, i) => ({ orden: i + 1, jugador1: `${nombre} ${i}`, jugador2: 'Borrador' })) },
+  }, include: { parejas: { orderBy: { orden: 'asc' } } } });
+  await crearBorrador('Sin parejas', 0);
+  await crearBorrador('Una pareja', 1);
+  const estados = async () => ({
+    torneo: (await prisma.torneo.findUnique({ where: { id: torneo.id } })).estado,
+    categorias: await prisma.categoria.findMany({ where: { torneoId: torneo.id }, select: { id: true, estado: true }, orderBy: { id: 'asc' } }),
+  });
+  const terminar = async (cat, hastaFinal = true) => {
+    await cargarZonas(cat);
+    const fases = await prisma.faseEliminatoria.findMany({ where: { categoriaId: cat.id }, orderBy: { ronda: 'desc' } });
+    for (const fase of fases) {
+      const ps = await prisma.partido.findMany({ where: { faseEliminatoriaId: fase.id, esBye: false }, orderBy: { posicionEnRonda: 'asc' } });
+      for (const p of ps) if (hastaFinal || fase.ronda !== 2) await partidoService.cargarResultado(org.id, p.id, SETS_GANA_1);
+    }
+    return partidoDe(cat.id, 2, 1);
+  };
+  await terminar(cats.A);
+  assertResultado.equal((await prisma.categoria.findUnique({ where: { id: cats.A.id } })).estado, 'FINALIZADO');
+  assertResultado.equal((await estados()).torneo, 'EN_CURSO', 'La otra categoría todavía tiene pendientes');
+  const finalB = await terminar(cats.B, false);
+  const antes = await estados();
+  const transaction = prisma.$transaction;
+  prisma.$transaction = (fn, ...args) => transaction.call(prisma, async (tx) => { await fn(tx); throw new Error('Rollback cierre'); }, ...args);
+  try { await assertResultado.rejects(() => partidoService.cargarResultado(org.id, finalB.id, SETS_GANA_1), /Rollback cierre/); }
+  finally { prisma.$transaction = transaction; }
+  assertResultado.deepEqual(await estados(), antes, 'Categoría y torneo se revierten junto con el resultado');
+  assertResultado.equal((await prisma.partido.findUnique({ where: { id: finalB.id } })).estado, 'PENDIENTE');
+  await partidoService.cargarResultado(org.id, finalB.id, SETS_GANA_1);
+  assertResultado.equal((await estados()).torneo, 'FINALIZADO', 'Los borradores con cero o una pareja no impiden el cierre');
+  const catPublicada = await http('GET', `/categorias/${cats.A.id}`);
+  assertResultado.ok(catPublicada.json.campeones?.jugador1);
+  assertResultado.ok(catPublicada.json.subcampeones?.jugador1);
+  const cerrado = await prisma.partido.findMany({ where: { categoria: { torneoId: torneo.id } }, include: { sets: true }, orderBy: { id: 'asc' } });
+  const prohibidas = [
+    ['GET', `/torneos/${torneo.id}/en-vivo`],
+    ['POST', `/torneos/${torneo.id}/canchas-override`, { canchasDisponiblesOverride: 2, diaKey: DOM }],
+    ['POST', `/torneos/${torneo.id}/canchas-override`, { canchasDisponiblesOverride: 4, diaKey: DOM }],
+    ['PUT', `/partidos/${finalB.id}/asignar-horario-manual`, { fechaHora: fecha(DOM, '12:00'), canchaNumero: 1 }],
+    ['PUT', `/partidos/${finalB.id}/fecha-hora`, { fechaHora: fecha(DOM, '12:00') }],
+    ['PATCH', `/partidos/${finalB.id}/bracket`, { origenPareja1: '1° Zona A' }],
+    ['POST', `/categorias/${cats.B.id}/generar-eliminatoria`],
+    ['POST', `/categorias/${cats.B.id}/sincronizar-cuadro`],
+    ['DELETE', `/categorias/${cats.B.id}/fases-eliminatorias`],
+    ['POST', `/categorias/${cats.B.id}/zonas/mover-pareja`, {}],
+    ['POST', `/categorias/${cats.B.id}/zonas/agregar-pareja`, {}],
+    ['POST', `/categorias/${cats.B.id}/parejas`, {}],
+    ['DELETE', `/categorias/${cats.B.id}/zonas/resultados`],
+    ['POST', `/categorias/${cats.B.id}/reiniciar`],
+  ];
+  for (const [metodo, ruta, body] of prohibidas) {
+    const r = await http(metodo, ruta, body);
+    assertResultado.equal(r.status, 400, `${metodo} ${ruta}: ${JSON.stringify(r.json)}`);
+    assertResultado.match(r.json.error, /finalizado|en curso/i);
+  }
+  assertResultado.deepEqual(await prisma.partido.findMany({ where: { categoria: { torneoId: torneo.id } }, include: { sets: true }, orderBy: { id: 'asc' } }), cerrado);
+  assertResultado.equal(await prisma.overrideCanchasDia.count({ where: { torneoId: torneo.id } }), 0);
+  await partidoService.cargarResultado(org.id, finalB.id, { sets: [{ gamesPareja1: 6, gamesPareja2: 4 }, { gamesPareja1: 6, gamesPareja2: 3 }] });
+  assertResultado.equal((await estados()).torneo, 'FINALIZADO', 'Corregir sets conserva el cierre');
+  await partidoService.borrarResultado(org.id, finalB.id);
+  assertResultado.equal((await estados()).torneo, 'EN_CURSO');
+  assertResultado.equal((await prisma.categoria.findUnique({ where: { id: cats.B.id } })).estado, 'EN_CURSO');
+  await partidoService.updateEstado(org.id, finalB.id, 'EN_CURSO');
+  assertResultado.equal((await estados()).torneo, 'EN_CURSO');
+  await partidoService.updateEstado(org.id, finalB.id, 'PENDIENTE');
+  const borrador = await crearBorrador('Dos parejas', 2);
+  await partidoService.cargarResultado(org.id, finalB.id, SETS_GANA_1);
+  assertResultado.equal((await estados()).torneo, 'EN_CURSO', 'El borrador con dos parejas cuenta como pendiente');
+  const zona = await prisma.zona.create({ data: { categoriaId: borrador.id, nombre: 'Zona A' } });
+  const crearPartido = (extra) => prisma.partido.create({ data: { categoriaId: borrador.id,
+    pareja1Id: borrador.parejas[0].id, pareja2Id: borrador.parejas[1].id, ...extra } });
+  const pZona = await crearPartido({ zonaId: zona.id });
+  await partidoService.cargarResultado(org.id, pZona.id, SETS_GANA_1);
+  assertResultado.equal((await prisma.categoria.findUnique({ where: { id: borrador.id } })).estado, 'EN_CURSO', 'Sin final no se cierra la categoría');
+  const fase = await prisma.faseEliminatoria.create({ data: { categoriaId: borrador.id, nombre: 'Final', ronda: 2 } });
+  await crearPartido({ faseEliminatoriaId: fase.id, posicionEnRonda: 2, esBye: true });
+  const pFinal = await crearPartido({ faseEliminatoriaId: fase.id });
+  await partidoService.cargarResultado(org.id, pFinal.id, SETS_GANA_1);
+  assertResultado.equal((await estados()).torneo, 'FINALIZADO', 'El pase directo pendiente no cuenta como partido real');
+  for (const [ruta, estado] of [[`/torneos/${torneo.id}`, 'EN_CURSO'], [`/categorias/${cats.A.id}`, 'EN_CURSO']]) {
+    assertResultado.equal((await http('PATCH', ruta, { estado })).status, 400, 'No hay reapertura manual por PATCH');
+  }
+  assertResultado.equal((await http('POST', `/torneos/${torneo.id}/reiniciar`)).status, 200);
+  assertResultado.equal((await estados()).torneo, 'BORRADOR', 'Reiniciar torneo sigue disponible');
+  console.log('  ✅ Cierre automático: final, última categoría, borradores, pases directos, correcciones, rollback y bloqueos HTTP.');
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -578,6 +668,7 @@ async function run() {
       const { org, torneo } = await armar({ cats: [['A', 6]] });
       await testGanadorConSiguienteJugado(org.id, torneo.id);
     } },
+    { nombre: 'H12: cierre automático y acciones bloqueadas', fn: testCierreAutomatico },
   ];
 
   const resultados = [];

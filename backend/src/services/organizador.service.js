@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
+const { exigirTorneoNoFinalizado } = require('./torneo.service');
 const {
   getSlotsValidosSet,
   generarGrillaOrganizador,
@@ -2408,6 +2409,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     throw error;
   }
 
+  exigirTorneoNoFinalizado(torneo);
   if (torneo.estado !== 'EN_CURSO') {
     const error = new Error('El modo Día de Torneo solo está disponible para torneos en curso.');
     error.statusCode = 400;
