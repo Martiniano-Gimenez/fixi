@@ -535,7 +535,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
     // Armado impuesto por el optimizador del pre-check: grupos de parejaId en orden de juego (P1 = [0] vs [1], ...).
     const indice = new Map(parejas.map((p, i) => [p.id, i]));
     const aIndices = (ids) => ids.map((id) => {
-      if (!indice.has(id)) throw new Error('El armado impuesto incluye una pareja que no es de la categoría.');
+      if (!indice.has(id)) throw Object.assign(new Error('El armado impuesto incluye una pareja que no es de la categoría.'), { statusCode: 409 });
       return indice.get(id);
     });
     grupos = armado.grupos.map(aIndices);

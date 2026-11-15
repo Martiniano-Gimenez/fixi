@@ -1557,7 +1557,7 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
       for (const cPlan of cached.categoriasPlan) {
         const categoria = await tx.categoria.findUnique({ where: { id: cPlan.categoriaId } });
         if (!categoria || categoria.estado !== 'BORRADOR') {
-          throw new Error(`La categoría "${cPlan.nombre}" ya no está en estado Borrador.`);
+          throw Object.assign(new Error(`La categoría "${cPlan.nombre}" ya no está en estado Borrador.`), { statusCode: 409 });
         }
 
         let asignadosCount = 0;

@@ -169,7 +169,7 @@ async function reiniciarCategoria(organizadorId, categoriaId) {
   exigirTorneoNoFinalizado(categoria.torneo);
 
   if (categoria.estado === 'BORRADOR') {
-    throw new Error('La categoría ya está en estado BORRADOR.');
+    throw Object.assign(new Error('La categoría ya está en estado BORRADOR.'), { statusCode: 400 });
   }
 
   const overridesActualizados = await prisma.$transaction(async (tx) => {
