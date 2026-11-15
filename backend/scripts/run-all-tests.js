@@ -28,6 +28,7 @@ const TEST_SUITES = [
   'test-auditoria-fixes.js',
   'test-authz-disponibilidad.js',
   'test-auth-login-registro.js',
+  'test-club-torneo-en-curso.js',
   'test-auto-asignar-eliminatoria.js',
   'test-date-parsing.js',
   'test-disponibilidad-guard.js',
