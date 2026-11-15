@@ -3,12 +3,19 @@ const canchasOverridesService = require('./canchasOverrides.service');
 const { recalcularEstadoTorneo, exigirTorneoNoFinalizado, incluirFinalPodio, conPodioCategoria } = require('./torneo.service');
 
 async function recalcularEstadosPorPartido(tx, categoriaId) {
-  const categoria = await tx.categoria.findUnique({ where: { id: categoriaId }, select: { torneoId: true } });
+  const categoria = await tx.categoria.findUnique({ where: { id: categoriaId }, select: {
+    torneoId: true, estado: true, torneo: { select: { estado: true } },
+  } });
   const partidos = await tx.partido.findMany({ where: { categoriaId, esBye: false }, select: {
     estado: true, faseEliminatoria: { select: { ronda: true } },
   } });
   const terminada = partidos.some((partido) => partido.faseEliminatoria?.ronda === 2)
     && partidos.every((partido) => partido.estado === 'FINALIZADO');
+  // Borrar un cuadro vacío no inicia una categoría ni un torneo en preparación.
+  if (categoria.estado === 'BORRADOR' && partidos.length === 0) {
+    if (categoria.torneo.estado !== 'BORRADOR') await recalcularEstadoTorneo(tx, categoria.torneoId);
+    return;
+  }
   await tx.categoria.update({ where: { id: categoriaId }, data: { estado: terminada ? 'FINALIZADO' : 'EN_CURSO' } });
   await recalcularEstadoTorneo(tx, categoria.torneoId);
 }
@@ -156,8 +163,9 @@ async function updateCategoria(organizadorId, categoriaId, data) {
 async function deleteCategoria(organizadorId, categoriaId) {
   const categoria = await getCategoriaById(organizadorId, categoriaId);
 
-  await prisma.categoria.delete({
-    where: { id: categoria.id },
+  await prisma.$transaction(async (tx) => {
+    await tx.categoria.delete({ where: { id: categoria.id } });
+    if (categoria.torneo.estado !== 'BORRADOR') await recalcularEstadoTorneo(tx, categoria.torneoId);
   });
 
   return { message: 'Categoría eliminada con éxito' };
@@ -223,6 +231,7 @@ async function reiniciarCategoria(organizadorId, categoriaId) {
       where: { categoriaId: categoria.id },
       data: { resolucionManual: false },
     });
+    await recalcularEstadoTorneo(tx, categoria.torneoId);
     return actualizados;
   });
 

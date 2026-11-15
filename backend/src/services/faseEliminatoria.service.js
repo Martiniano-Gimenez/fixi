@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma');
-const { getCategoriaById } = require('./categoria.service');
+const { getCategoriaById, recalcularEstadosPorPartido } = require('./categoria.service');
 const { DURACION_PARTIDO_MIN } = require('./slots.service');
 const {
   calcularFinDeZonasCategoria,
@@ -51,8 +51,14 @@ function nombreRonda(ronda) {
  * @param {object|null} [externalTx] - Transacción externa opcional
  */
 async function generarEliminatoria(organizadorId, categoriaId, externalTx = null) {
-  const db = externalTx || prisma;
-  await getCategoriaById(organizadorId, categoriaId, externalTx);
+  if (!externalTx || externalTx === prisma) {
+    return prisma.$transaction((tx) => generarEliminatoria(organizadorId, categoriaId, tx), {
+      maxWait: 10000,
+      timeout: 30000,
+    });
+  }
+  const db = externalTx;
+  await getCategoriaById(organizadorId, categoriaId, db);
 
   // 0. Verificar si todos los partidos de las zonas están finalizados
   const partidosPendientes = await db.partido.count({
@@ -213,6 +219,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       }
     }
 
+    await recalcularEstadosPorPartido(db, categoriaId);
     return { 
       message: 'Clasificados asignados al bracket exitosamente.',
       primeraRonda: primeraRondaNum,
@@ -447,6 +454,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
     });
   }
 
+  await recalcularEstadosPorPartido(db, categoriaId);
   return {
     totalParejas,
     potencia,
@@ -620,7 +628,6 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
 
 async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null) {
   await getCategoriaById(organizadorId, categoriaId, externalTx);
-  const db = externalTx || prisma;
 
   const performDelete = async (tx) => {
     await tx.partido.deleteMany({
@@ -633,6 +640,7 @@ async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null)
     await tx.faseEliminatoria.deleteMany({
       where: { categoriaId },
     });
+    await recalcularEstadosPorPartido(tx, categoriaId);
   };
 
   if (externalTx) {
@@ -860,6 +868,7 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
         partidosSinHorario: 0,
       };
     }
+    await recalcularEstadosPorPartido(tx, categoriaId);
   }, {
     maxWait: 10000,
     timeout: 30000,

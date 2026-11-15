@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma');
-const { getCategoriaById } = require('./categoria.service');
+const { getCategoriaById, recalcularEstadosPorPartido } = require('./categoria.service');
 const { conReintentoOrden } = require('../utils/reintentoOrden');
 const {
   calcularCompatibilidad,
@@ -183,6 +183,7 @@ async function iniciarCategoria(organizadorId, categoriaId, externalTx = null) {
       where: { id: categoriaId },
       data: { estado: 'EN_CURSO' },
     });
+    await recalcularEstadosPorPartido(tx, categoriaId);
   };
 
   if (externalTx) {
@@ -623,6 +624,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
       where: { id: categoriaId },
       data: { estado: 'EN_CURSO' },
     });
+    await recalcularEstadosPorPartido(tx, categoriaId);
   };
 
   if (externalTx) {
@@ -2428,6 +2430,7 @@ async function limpiarResultadosZonas(organizadorId, categoriaId) {
       });
       await tx.faseEliminatoria.deleteMany({ where: { categoriaId } });
     }
+    await recalcularEstadosPorPartido(tx, categoriaId);
   });
 
   return { message: 'Resultados de zonas reseteados.' };
@@ -2517,6 +2520,7 @@ async function regenerarPartidosZona(tx, categoriaId, zonaId) {
   await generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size, parejasEnEstaZona, {
     sinHorarioAsignado: Boolean(requiereArmadoManual),
   });
+  await recalcularEstadosPorPartido(tx, categoriaId);
 }
 
 /**

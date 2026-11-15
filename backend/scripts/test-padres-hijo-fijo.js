@@ -34,6 +34,8 @@
  *     sin diaKey (H10b) borra el override (base y caché) y lo vuelve a programar.
  * H11 Cambiar o borrar un ganador se bloquea si el siguiente está jugado/en juego; corregir sets con el mismo
  *     ganador sigue permitido. Con el siguiente pendiente se conserva la propagación atómica y su rollback.
+ * H12 La última final cierra la categoría y el torneo; corregir, borrar y las acciones bloqueadas respetan ese estado.
+ * H13 Limpiar o rearmar partidos recalcula los estados sin dejar cierres viejos, dentro de la misma transacción.
  *
  * En todos los casos de A se verifica que ningún par padre/hijo con horario tenga descanso menor al mínimo de la
  * ronda del hijo (obtenerDescansoMinimoRequeridoMs: 30 min antes de la final, 75 en las demás).
@@ -50,7 +52,8 @@ const { JWT_SECRET } = require('../src/config/env');
 const { startTestServer } = require('./utils/testServer');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
 const zonaService = require('../src/services/zona.service');
-const { generarEliminatoria } = require('../src/services/faseEliminatoria.service');
+const categoriaService = require('../src/services/categoria.service');
+const { generarEliminatoria, borrarEliminatoria, sincronizarCuadro } = require('../src/services/faseEliminatoria.service');
 const { programarHorariosEliminatorias } = require('../src/services/eliminatoriaScheduler.service');
 const { obtenerDescansoMinimoRequeridoMs } = require('../src/utils/bracketWarnings');
 const { parseFechaLocal } = require('../src/utils/dateUtils');
@@ -644,6 +647,118 @@ async function testCierreAutomatico() {
   console.log('  ✅ Cierre automático: final, última categoría, borradores, pases directos, correcciones, rollback y bloqueos HTTP.');
 }
 
+async function testCierreAlRearmarPartidos() {
+  const { org, torneo, cats } = await armar({ cats: [['5ta', 6], ['7ma', 6]] });
+  const quinta = cats['5ta'];
+  const septima = cats['7ma'];
+  const estadoTorneo = async () => (await prisma.torneo.findUnique({ where: { id: torneo.id } })).estado;
+  const estadoCategoria = async (cat) => (await prisma.categoria.findUnique({ where: { id: cat.id } })).estado;
+  const terminar = async (cat, hastaFinal = true) => {
+    await cargarZonas(cat);
+    const fases = await prisma.faseEliminatoria.findMany({ where: { categoriaId: cat.id }, orderBy: { ronda: 'desc' } });
+    for (const fase of fases) {
+      const partidos = await prisma.partido.findMany({ where: { faseEliminatoriaId: fase.id, esBye: false }, orderBy: { posicionEnRonda: 'asc' } });
+      for (const p of partidos) if (hastaFinal || fase.ronda !== 2) await partidoService.cargarResultado(org.id, p.id, SETS_GANA_1);
+    }
+    return partidoDe(cat.id, 2, 1);
+  };
+  const snapshot = async () => ({
+    torneo: await estadoTorneo(),
+    categorias: await prisma.categoria.findMany({ where: { torneoId: torneo.id }, orderBy: { id: 'asc' } }),
+    partidos: await prisma.partido.findMany({ where: { categoria: { torneoId: torneo.id } }, include: { sets: true }, orderBy: { id: 'asc' } }),
+    zonas: await prisma.zona.findMany({ where: { categoria: { torneoId: torneo.id } }, include: { zonaParejas: true }, orderBy: { id: 'asc' } }),
+    fases: await prisma.faseEliminatoria.findMany({ where: { categoria: { torneoId: torneo.id } }, orderBy: { id: 'asc' } }),
+  });
+  const comprobarRollback = async (accion) => {
+    const antes = await snapshot();
+    const transaction = prisma.$transaction;
+    prisma.$transaction = (fn, ...args) => transaction.call(prisma, async (tx) => {
+      await fn(tx);
+      throw new Error('Rollback al rearmar');
+    }, ...args);
+    try { await assertResultado.rejects(accion, /Rollback al rearmar/); }
+    finally { prisma.$transaction = transaction; }
+    assertResultado.deepEqual(await snapshot(), antes, 'Los partidos y los estados se revierten juntos');
+  };
+
+  await terminar(quinta);
+  const finalSeptima = await terminar(septima, false);
+  assertResultado.equal(await estadoCategoria(quinta), 'FINALIZADO');
+  const limpiar = () => zonaService.limpiarResultadosZonas(org.id, quinta.id);
+  await comprobarRollback(limpiar);
+  await limpiar();
+  assertResultado.equal(await estadoCategoria(quinta), 'EN_CURSO', 'Limpiar una categoría terminada la vuelve a en curso');
+  assertResultado.equal(await prisma.faseEliminatoria.count({ where: { categoriaId: quinta.id } }), 0);
+  assertResultado.equal(await prisma.partido.count({ where: { categoriaId: quinta.id, estado: { not: 'PENDIENTE' } } }), 0);
+  await partidoService.cargarResultado(org.id, finalSeptima.id, SETS_GANA_1);
+  assertResultado.equal(await estadoCategoria(septima), 'FINALIZADO');
+  assertResultado.equal(await estadoTorneo(), 'EN_CURSO', 'Terminar 7ma no cierra el torneo después de limpiar 5ta');
+
+  await partidoService.borrarResultado(org.id, finalSeptima.id);
+  await terminar(quinta);
+  const borrar = () => borrarEliminatoria(org.id, quinta.id);
+  await comprobarRollback(borrar);
+  await borrar();
+  assertResultado.equal(await estadoCategoria(quinta), 'EN_CURSO', 'Borrar el cuadro vuelve la categoría a en curso');
+  await comprobarRollback(() => generarEliminatoria(org.id, quinta.id));
+  await generarEliminatoria(org.id, quinta.id);
+  await terminar(quinta);
+  const cuadroTerminado = (await snapshot()).partidos.filter((p) => p.categoriaId === quinta.id);
+  await generarEliminatoria(org.id, quinta.id);
+  assertResultado.equal(await estadoCategoria(quinta), 'FINALIZADO', 'Reasignar clasificados sin borrar el cuadro conserva los resultados');
+  assertResultado.deepEqual((await snapshot()).partidos.filter((p) => p.categoriaId === quinta.id), cuadroTerminado);
+
+  const regenerar = () => prisma.$transaction(async (tx) => {
+    await borrarEliminatoria(org.id, quinta.id, tx);
+    await generarEliminatoria(org.id, quinta.id, tx);
+  });
+  await comprobarRollback(regenerar);
+  await regenerar();
+  assertResultado.equal(await estadoCategoria(quinta), 'EN_CURSO', 'Regenerar el cuadro de una categoría terminada la vuelve a en curso');
+  assertResultado.equal(await estadoTorneo(), 'EN_CURSO');
+  const eliminatorios = await prisma.partido.findMany({ where: { categoriaId: quinta.id, faseEliminatoriaId: { not: null } } });
+  assertResultado.ok(eliminatorios.length > 0 && eliminatorios.every((p) => p.estado === 'PENDIENTE'));
+  assertResultado.ok(eliminatorios.every((p) => !cuadroTerminado.some((anterior) => anterior.id === p.id)));
+
+  const sincronizar = () => sincronizarCuadro(org.id, quinta.id);
+  await comprobarRollback(sincronizar);
+  await sincronizar();
+  assertResultado.equal(await estadoCategoria(quinta), 'EN_CURSO');
+  assertResultado.equal(await estadoTorneo(), 'EN_CURSO');
+  assertResultado.equal(await prisma.partido.count({ where: { id: { in: eliminatorios.map((p) => p.id) } } }), 0);
+  await partidoService.cargarResultado(org.id, finalSeptima.id, SETS_GANA_1);
+  const reiniciar = () => categoriaService.reiniciarCategoria(org.id, quinta.id);
+  await comprobarRollback(reiniciar);
+  await reiniciar();
+  assertResultado.equal(await estadoCategoria(quinta), 'BORRADOR');
+  assertResultado.equal(await estadoTorneo(), 'EN_CURSO', 'El borrador con parejas sigue impidiendo el cierre');
+  await zonaService.iniciarCategoria(org.id, quinta.id);
+  assertResultado.equal(await estadoCategoria(quinta), 'EN_CURSO');
+  await comprobarRollback(() => categoriaService.deleteCategoria(org.id, quinta.id));
+  await categoriaService.deleteCategoria(org.id, quinta.id);
+  assertResultado.equal(await estadoTorneo(), 'FINALIZADO', 'Eliminar la última categoría pendiente recalcula el torneo');
+
+  // Categoría iniciada que quedó con una sola pareja: al reiniciarla deja de contar como pendiente.
+  const noJugable = await prisma.categoria.create({ data: { torneoId: torneo.id, nombre: 'Sin rivales', estado: 'EN_CURSO',
+    parejas: { create: { jugador1: 'Una', jugador2: 'Pareja', orden: 1 } },
+  } });
+  await partidoService.cargarResultado(org.id, finalSeptima.id, SETS_GANA_1);
+  assertResultado.equal(await estadoTorneo(), 'EN_CURSO');
+  const reiniciarNoJugable = () => categoriaService.reiniciarCategoria(org.id, noJugable.id);
+  await comprobarRollback(reiniciarNoJugable);
+  await reiniciarNoJugable();
+  assertResultado.equal(await estadoCategoria(noJugable), 'BORRADOR');
+  assertResultado.equal(await estadoTorneo(), 'FINALIZADO', 'Reiniciar recalcula el torneo sin iniciar el borrador');
+
+  const borrador = await prisma.torneo.create({ data: { organizadorId: org.id, nombre: 'Preparación', slug: `borrador-${torneo.id}`, fecha: parseFechaLocal(VIE) } });
+  const categoriaBorrador = await prisma.categoria.create({ data: { torneoId: borrador.id, nombre: 'Sin iniciar' } });
+  await borrarEliminatoria(org.id, categoriaBorrador.id);
+  assertResultado.equal(await estadoCategoria(categoriaBorrador), 'BORRADOR');
+  await categoriaService.deleteCategoria(org.id, categoriaBorrador.id);
+  assertResultado.equal((await prisma.torneo.findUnique({ where: { id: borrador.id } })).estado, 'BORRADOR');
+  console.log('  ✅ Limpiar, borrar, generar, regenerar, sincronizar, reiniciar y eliminar recalculan estados con rollback atómico.');
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -669,6 +784,7 @@ async function run() {
       await testGanadorConSiguienteJugado(org.id, torneo.id);
     } },
     { nombre: 'H12: cierre automático y acciones bloqueadas', fn: testCierreAutomatico },
+    { nombre: 'H13: cierre al limpiar o rearmar partidos', fn: testCierreAlRearmarPartidos },
   ];
 
   const resultados = [];
