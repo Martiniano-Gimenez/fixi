@@ -27,6 +27,7 @@ const TEST_SUITES = [
   'test-asignar-horario-manual-bloqueos.js',
   'test-auditoria-fixes.js',
   'test-authz-disponibilidad.js',
+  'test-auth-login-registro.js',
   'test-auto-asignar-eliminatoria.js',
   'test-date-parsing.js',
   'test-disponibilidad-guard.js',
