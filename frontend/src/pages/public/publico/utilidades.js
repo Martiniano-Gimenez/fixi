@@ -23,14 +23,11 @@ export const origenPareja2 = (p) => p.origenPareja2 || p.displayOrigenPareja2 ||
 export const nombrePareja1 = (p) => p.pareja1 || p.displayPareja1 || acortarOrigen(origenPareja1(p)) || 'A definir';
 export const nombrePareja2 = (p) => p.pareja2 || p.displayPareja2 || acortarOrigen(origenPareja2(p)) || 'A definir';
 
-const empateExacto = (a, b) =>
-  a.puntos === b.puntos && a.pg === b.pg && a.sf - a.sc === b.sf - b.sc && a.gf - a.gc === b.gf - b.gc;
-
 /**
  * Parejas ya ubicadas en la llave por su lugar ("1° Zona A" → pareja), con la misma regla que usa el
  * backend para completar el cuadro: la zona terminó (todos sus partidos FINALIZADO) y la posición sale
- * de tabla[], que viene ordenada con ordenarZonaParejas. Si en round robin hay un empate exacto en
- * todos los criterios, el orden no está garantizado y esa posición no se resuelve.
+ * de tabla[], ya ordenada. empatePendiente indica los lugares que el backend todavía no resolvió;
+ * las estadísticas iguales por sí solas no implican que el orden esté pendiente.
  */
 export function clasificadosPorOrigen(categoria) {
   const mapa = new Map();
@@ -38,8 +35,9 @@ export function clasificadosPorOrigen(categoria) {
     const ps = z.partidos || [];
     if (!ps.length || !ps.every((p) => p.estado === 'FINALIZADO')) return;
     const t = z.tabla || [];
+    const pendientes = new Set(z.empatePendiente || []);
     for (let i = 0; i < Math.min(z.clasifican, t.length); i++) {
-      if (z.formato !== 'MINI_BRACKET' && [t[i - 1], t[i + 1]].some((o) => o && empateExacto(o, t[i]))) continue;
+      if (pendientes.has(t[i].parejaId)) continue;
       mapa.set(`${i + 1}° ${z.nombre}`, { nombre: t[i].pareja, parejaId: t[i].parejaId });
     }
   });

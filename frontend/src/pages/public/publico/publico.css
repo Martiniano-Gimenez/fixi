@@ -265,6 +265,7 @@ body:has(.publico) {
 .pv-t-head { font-size: var(--t-12); color: var(--gris); padding-bottom: 6px; }
 .pv-t-head span:nth-child(n+3), .pv-t-fila span:nth-child(n+3) { text-align: right; }
 .pv-t-filas { position: relative; }
+.pv-t-empate { margin: 0; padding: var(--e-3) var(--e-4); color: var(--gris); font-size: var(--t-13); line-height: 1.5; overflow-wrap: anywhere; }
 .pv-t-fila { position: absolute; left: 0; right: 0; height: 52px; border-top: 1px solid var(--linea); transition: transform .75s var(--curva); font-size: var(--t-14); background: var(--superficie); }
 .pv-t-pos { width: 22px; height: 22px; border-radius: var(--r-dato); display: grid; place-items: center; font-size: var(--t-13); font-weight: 650; background: var(--superficie-2); color: var(--gris); }
 .pv-t-fila.clasifica .pv-t-pos { background: var(--progreso); color: var(--tinta); }

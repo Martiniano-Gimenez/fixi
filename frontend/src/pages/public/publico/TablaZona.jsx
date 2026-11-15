@@ -12,6 +12,7 @@ const ALTO_FILA = 52;
 export default function TablaZona({ zona, seguidaId, busqueda, children, mostrarClasifican = true, onAbrirPareja }) {
   const id = useId();
   const filas = zona.tabla || [];
+  const pendientes = new Set(zona.empatePendiente || []);
   const q = normalizar(busqueda);
   return (
     <section className="pv-tabla" aria-label={`Posiciones de la ${zona.nombre}`}>
@@ -36,7 +37,7 @@ export default function TablaZona({ zona, seguidaId, busqueda, children, mostrar
           .map((row, i) => ({ row, i }))
           .sort((a, b) => String(a.row.parejaId).localeCompare(String(b.row.parejaId)))
           .map(({ row, i }) => {
-            const clasifica = i < zona.clasifican;
+            const clasifica = i < zona.clasifican && !pendientes.has(row.parejaId);
             const seguida = seguidaId && row.parejaId === seguidaId;
             const coincide = q && normalizar(row.pareja).includes(q);
             const puedeAbrir = Boolean(onAbrirPareja && row.parejaId && row.pareja);
@@ -69,6 +70,7 @@ export default function TablaZona({ zona, seguidaId, busqueda, children, mostrar
             );
           })}
       </div>
+      {pendientes.size > 0 && <p className="pv-t-empate">Hay un empate exacto entre {pendientes.size} parejas. El orden lo define la organización.</p>}
       {children}
     </section>
   );
