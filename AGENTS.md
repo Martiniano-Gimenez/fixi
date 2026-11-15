@@ -4,7 +4,7 @@ Fixi es una app para organizar torneos de pádel. Frontend: React 19 + Vite con 
 Antes de tocar nada, leé `CONTEXT.md` (estado del proyecto) y las últimas entradas de `BITACORA.md`.
 
 ## Git
-- Trabajá siempre en la rama `feature/rediseno`.
+- Nunca trabajes directo en `main`. Cada etapa nueva arranca su propia rama desde `main`, con un nombre que diga qué es (`feature/...` o `fix/...`); el pedido la indica. Si no la indica, preguntá antes de crearla.
 - Nunca hagas merge a `main` ni `push` si no te lo piden.
 - Un commit por tarea, con mensaje en español: `feat: ...`, `fix: ...`, `chore: ...`.
 - No subas la carpeta `.claude/`. Las capturas van en `capturas/` (no entra en git).
