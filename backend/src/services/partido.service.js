@@ -52,6 +52,8 @@ function validarParejasDistintas(partido) {
 async function recalcularZonaTrasResultado(partido, db) {
   const zona = await db.zona.findUnique({ where: { id: partido.zonaId } });
   if (zona.formato === 'ROUND_ROBIN') {
+    // El orden manual solo vale para los resultados con los que se resolvió el empate.
+    await db.zonaPareja.updateMany({ where: { zonaId: partido.zonaId }, data: { posicion: 0 } });
     await recalcularStatsZona(partido.zonaId, db);
   } else if (zona.formato === 'MINI_BRACKET') {
     await propagarMiniBracket(partido.zonaId, db);

@@ -8,28 +8,53 @@ const {
   resolverPadresEHijoEliminatoria,
 } = require('../utils/bracketWarnings');
 
-function ordenarZonaParejas(zonaParejas, formato) {
-  if (!Array.isArray(zonaParejas)) return [];
-  return [...zonaParejas].sort((a, b) => {
+function compararEstadisticasZona(a, b) {
+  return (b.puntos || 0) - (a.puntos || 0)
+    || (b.pg || 0) - (a.pg || 0)
+    || ((b.sf || 0) - (b.sc || 0)) - ((a.sf || 0) - (a.sc || 0))
+    || ((b.gf || 0) - (b.gc || 0)) - ((a.gf || 0) - (a.gc || 0));
+}
+
+function ordenarZonaParejas(zonaParejas, formato, partidos = []) {
+  return resolverPosicionesZona(zonaParejas, formato, partidos).ordenadas;
+}
+
+function resolverPosicionesZona(zonaParejas, formato, partidos = []) {
+  if (!Array.isArray(zonaParejas)) return { ordenadas: [], empatePendiente: [] };
+  const base = [...zonaParejas].sort((a, b) => {
     if (formato === 'MINI_BRACKET') {
-      const posA = a.posicion || 99;
-      const posB = b.posicion || 99;
-      if (posA !== posB) return posA - posB;
+      const posicion = (a.posicion || 99) - (b.posicion || 99);
+      if (posicion) return posicion;
     }
-
-    if (b.puntos !== a.puntos) return b.puntos - a.puntos;
-    if (b.pg !== a.pg) return b.pg - a.pg;
-
-    const diffSetsA = (a.sf || 0) - (a.sc || 0);
-    const diffSetsB = (b.sf || 0) - (b.sc || 0);
-    if (diffSetsB !== diffSetsA) return diffSetsB - diffSetsA;
-
-    const diffGamesA = (a.gf || 0) - (a.gc || 0);
-    const diffGamesB = (b.gf || 0) - (b.gc || 0);
-    if (diffGamesB !== diffGamesA) return diffGamesB - diffGamesA;
-
-    return 0;
+    return compararEstadisticasZona(a, b);
   });
+  if (formato !== 'ROUND_ROBIN') return { ordenadas: base, empatePendiente: [] };
+
+  const finalizada = partidos.length > 0 && partidos.every(p => p.estado === 'FINALIZADO');
+  const ordenadas = [], empatePendiente = [];
+  for (let inicio = 0; inicio < base.length;) {
+    let fin = inicio + 1;
+    while (fin < base.length && compararEstadisticasZona(base[inicio], base[fin]) === 0) fin++;
+    let grupo = base.slice(inicio, fin);
+    const ids = new Set(grupo.map(zp => zp.parejaId));
+    const directo = grupo.length === 2 && partidos.find(p => p.estado === 'FINALIZADO'
+      && ids.has(p.pareja1Id) && ids.has(p.pareja2Id) && ids.has(p.ganadorId));
+    if (directo) {
+      grupo.sort((a, b) => Number(b.parejaId === directo.ganadorId) - Number(a.parejaId === directo.ganadorId));
+    } else if (grupo.length > 1) {
+      const manualCompleto = grupo.every(zp => Number.isInteger(zp.posicion) && zp.posicion > 0)
+        && new Set(grupo.map(zp => zp.posicion)).size === grupo.length;
+      if (manualCompleto) grupo.sort((a, b) => a.posicion - b.posicion);
+      else {
+        // Orden de presentación por inscripción; estos lugares no definen clasificados.
+        grupo.sort((a, b) => (a.pareja?.orden || 0) - (b.pareja?.orden || 0));
+        if (finalizada) empatePendiente.push(...grupo.map(zp => zp.parejaId));
+      }
+    }
+    ordenadas.push(...grupo);
+    inicio = fin;
+  }
+  return { ordenadas, empatePendiente };
 }
 
 function nombreRonda(ronda) {
@@ -80,7 +105,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
         include: { pareja: true },
       },
       partidos: {
-        select: { estado: true },
+        select: { estado: true, pareja1Id: true, pareja2Id: true, ganadorId: true },
       },
     },
   });
@@ -97,7 +122,8 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
   const otros = [];
 
   zonas.forEach((zona) => {
-    const ordenadas = ordenarZonaParejas(zona.zonaParejas, zona.formato);
+    const { ordenadas, empatePendiente } = resolverPosicionesZona(zona.zonaParejas, zona.formato, zona.partidos);
+    const sinDefinir = new Set(empatePendiente);
     const topZona = ordenadas.slice(0, zona.clasifican);
     
     // Una zona individual está finalizada si tiene partidos y todos están FINALIZADO
@@ -107,7 +133,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       let parejaId = null;
       let pareja = null;
       
-      if ((gruposFinalizados || zonaFinalizada) && topZona[index]) {
+      if ((gruposFinalizados || zonaFinalizada) && topZona[index] && !sinDefinir.has(topZona[index].parejaId)) {
         parejaId = topZona[index].parejaId;
         pareja = topZona[index].pareja;
       }
@@ -375,7 +401,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
     let estado = 'PENDIENTE';
     let ganadorId = null;
 
-    if (isBye && (gruposFinalizados || (p1?.parejaId || p2?.parejaId))) {
+    if (isBye && (p1?.parejaId || p2?.parejaId)) {
       estado = 'FINALIZADO';
       if (p1?.parejaId) ganadorId = p1.parejaId;
       if (p2?.parejaId) ganadorId = p2.parejaId;
@@ -894,6 +920,7 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
 
 module.exports = {
   ordenarZonaParejas,
+  resolverPosicionesZona,
   generarEliminatoria,
   getFasesEliminatorias,
   borrarEliminatoria,

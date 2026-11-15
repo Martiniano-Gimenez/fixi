@@ -1,5 +1,4 @@
 const zonaService = require('../services/zona.service');
-const { ordenarZonaParejas } = require('../services/faseEliminatoria.service');
 
 function getOrgId(req) {
   return req.organizadorId || req.organizador?.id;
@@ -11,16 +10,19 @@ async function getZonasByCategoria(req, res, next) {
     const categoriaId = req.params.categoriaId || req.params.id;
     const zonas = await zonaService.getZonasByCategoria(organizadorId, categoriaId);
 
-    for (const zona of zonas) {
-      if (zona.formato === 'ROUND_ROBIN' || zona.formato === 'MINI_BRACKET') {
-        zona.zonaParejas = ordenarZonaParejas(zona.zonaParejas, zona.formato);
-      }
-    }
-
     res.json(zonas);
   } catch (error) {
     next(error);
   }
+}
+
+async function resolverDesempateZona(req, res, next) {
+  try {
+    const resultado = await zonaService.resolverDesempateZona(
+      getOrgId(req), req.params.id, req.params.zonaId, req.body?.orden,
+    );
+    res.json(resultado);
+  } catch (error) { next(error); }
 }
 
 async function limpiarResultadosZonas(req, res, next) {
@@ -69,6 +71,7 @@ async function agregarPareja(req, res, next) {
 
 module.exports = {
   getZonasByCategoria,
+  resolverDesempateZona,
   getZonasByTorneo: getZonasByCategoria,
   limpiarResultadosZonas,
   moverPareja,

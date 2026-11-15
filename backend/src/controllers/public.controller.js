@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma');
-const { ordenarZonaParejas } = require('../services/faseEliminatoria.service');
+const { resolverPosicionesZona } = require('../services/faseEliminatoria.service');
 const inscripcionService = require('../services/inscripcion.service');
 
 /**
@@ -79,47 +79,51 @@ async function getTorneoPublico(req, res, next) {
         jugador2: p.jugador2,
         orden: p.orden,
       })),
-      zonas: c.zonas.map((z) => ({
-        id: z.id,
-        nombre: z.nombre,
-        formato: z.formato,
-        clasifican: z.clasifican,
-        tabla: ordenarZonaParejas(z.zonaParejas, z.formato).map((zp) => ({
-          parejaId: zp.parejaId,
-          pareja: `${zp.pareja.jugador1} / ${zp.pareja.jugador2}`,
-          posicion: zp.posicion,
-          puntos: zp.puntos,
-          pj: zp.pj,
-          pg: zp.pg,
-          pp: zp.pp,
-          sf: zp.sf,
-          sc: zp.sc,
-          gf: zp.gf,
-          gc: zp.gc,
-        })),
-        partidos: c.partidos
-          .filter((p) => p.zonaId === z.id)
-          .map((p) => ({
-            id: p.id,
-            posicionEnRonda: p.posicionEnRonda,
-            estado: p.estado,
-            fechaHora: p.fechaHora,
-            canchaNumero: p.canchaNumero,
-            sinHorarioAsignado: p.sinHorarioAsignado,
-            origenPareja1: p.origenPareja1,
-            origenPareja2: p.origenPareja2,
-            pareja1Id: p.pareja1Id,
-            pareja2Id: p.pareja2Id,
-            ganadorId: p.ganadorId,
-            pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
-            pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
-            ganador: p.ganador ? `${p.ganador.jugador1} / ${p.ganador.jugador2}` : null,
-            sets: p.sets.map((s) => ({
-              gamesPareja1: s.gamesPareja1,
-              gamesPareja2: s.gamesPareja2,
-            })),
+      zonas: c.zonas.map((z) => {
+        const { ordenadas, empatePendiente } = resolverPosicionesZona(z.zonaParejas, z.formato, c.partidos.filter(p => p.zonaId === z.id));
+        return {
+          id: z.id,
+          nombre: z.nombre,
+          formato: z.formato,
+          clasifican: z.clasifican,
+          empatePendiente,
+          tabla: ordenadas.map((zp) => ({
+            parejaId: zp.parejaId,
+            pareja: `${zp.pareja.jugador1} / ${zp.pareja.jugador2}`,
+            posicion: z.formato === 'ROUND_ROBIN' ? 0 : zp.posicion,
+            puntos: zp.puntos,
+            pj: zp.pj,
+            pg: zp.pg,
+            pp: zp.pp,
+            sf: zp.sf,
+            sc: zp.sc,
+            gf: zp.gf,
+            gc: zp.gc,
           })),
-      })),
+          partidos: c.partidos
+            .filter((p) => p.zonaId === z.id)
+            .map((p) => ({
+              id: p.id,
+              posicionEnRonda: p.posicionEnRonda,
+              estado: p.estado,
+              fechaHora: p.fechaHora,
+              canchaNumero: p.canchaNumero,
+              sinHorarioAsignado: p.sinHorarioAsignado,
+              origenPareja1: p.origenPareja1,
+              origenPareja2: p.origenPareja2,
+              pareja1Id: p.pareja1Id,
+              pareja2Id: p.pareja2Id,
+              ganadorId: p.ganadorId,
+              pareja1: p.pareja1 ? `${p.pareja1.jugador1} / ${p.pareja1.jugador2}` : null,
+              pareja2: p.pareja2 ? `${p.pareja2.jugador1} / ${p.pareja2.jugador2}` : null,
+              ganador: p.ganador ? `${p.ganador.jugador1} / ${p.ganador.jugador2}` : null,
+              sets: p.sets.map((s) => ({
+                gamesPareja1: s.gamesPareja1,
+                gamesPareja2: s.gamesPareja2,
+              })),
+            })),
+        };
+      }),
       eliminatoria: (() => {
         const fases = c.fasesEliminatorias || [];
         if (fases.length === 0) return [];

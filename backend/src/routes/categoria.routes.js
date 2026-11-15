@@ -32,6 +32,7 @@ router.get('/:id/parejas', parejaController.getParejasByCategoria);
 
 // Zonas de la categoría
 router.get('/:id/zonas', zonaController.getZonasByCategoria);
+router.put('/:id/zonas/:zonaId/desempate', torneoAbierto, zonaController.resolverDesempateZona);
 router.delete('/:id/zonas/resultados', torneoAbierto, zonaController.limpiarResultadosZonas);
 router.post('/:id/zonas/mover-pareja', torneoAbierto, zonaController.moverPareja);
 router.post('/:id/zonas/agregar-pareja', torneoAbierto, zonaController.agregarPareja);

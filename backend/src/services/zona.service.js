@@ -2341,7 +2341,7 @@ async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, reg
 async function getZonasByCategoria(organizadorId, categoriaId) {
   await getCategoriaById(organizadorId, categoriaId);
 
-  return await prisma.zona.findMany({
+  const zonas = await prisma.zona.findMany({
     where: { categoriaId },
     include: {
       zonaParejas: {
@@ -2366,6 +2366,45 @@ async function getZonasByCategoria(organizadorId, categoriaId) {
     },
     orderBy: { nombre: 'asc' },
   });
+  const { resolverPosicionesZona } = require('./faseEliminatoria.service');
+  return zonas.map(zona => {
+    const { ordenadas, empatePendiente } = resolverPosicionesZona(zona.zonaParejas, zona.formato, zona.partidos);
+    return { ...zona, zonaParejas: ordenadas, empatePendiente };
+  });
+}
+
+async function resolverDesempateZona(organizadorId, categoriaId, zonaId, orden) {
+  return prisma.$transaction(async (tx) => {
+    const categoria = await getCategoriaById(organizadorId, categoriaId, tx);
+    const { exigirTorneoNoFinalizado } = require('./torneo.service');
+    exigirTorneoNoFinalizado(categoria.torneo);
+    const rechazar = mensaje => {
+      const error = new Error(mensaje);
+      error.statusCode = 400;
+      throw error;
+    };
+    const zona = await tx.zona.findUnique({ where: { id: zonaId }, include: { zonaParejas: true, partidos: true } });
+    if (!zona || zona.categoriaId !== categoriaId) rechazar('La zona no pertenece a esta categoría.');
+    if (zona.formato !== 'ROUND_ROBIN') rechazar('El desempate manual solo corresponde a zonas de todos contra todos.');
+    if (!zona.partidos.length || zona.partidos.some(p => p.estado !== 'FINALIZADO')) {
+      rechazar('Terminá todos los partidos de la zona antes de resolver el desempate.');
+    }
+    const { resolverPosicionesZona } = require('./faseEliminatoria.service');
+    const { empatePendiente } = resolverPosicionesZona(zona.zonaParejas, zona.formato, zona.partidos);
+    if (!empatePendiente.length) rechazar('La zona no tiene un empate pendiente de resolver.');
+    if (!Array.isArray(orden) || orden.length !== empatePendiente.length
+      || new Set(orden).size !== orden.length || orden.some(id => typeof id !== 'string' || !empatePendiente.includes(id))) {
+      rechazar('Elegí exactamente las parejas empatadas, sin repetir, en el orden que definiste.');
+    }
+    await tx.zonaPareja.updateMany({ where: { zonaId }, data: { posicion: 0 } });
+    for (let i = 0; i < orden.length; i++) {
+      await tx.zonaPareja.update({ where: { zonaId_parejaId: { zonaId, parejaId: orden[i] } }, data: { posicion: i + 1 } });
+    }
+    const { verificarYAutoAsignarEliminatoria } = require('./partido.service');
+    await verificarYAutoAsignarEliminatoria(organizadorId, categoriaId, tx, true);
+    await recalcularEstadosPorPartido(tx, categoriaId);
+    return { message: 'Desempate guardado.', zonaId, orden, empatePendiente: [] };
+  }, { maxWait: 10000, timeout: 30000 });
 }
 
 /**
@@ -2979,6 +3018,7 @@ module.exports = {
   iniciarTorneo: iniciarCategoria,
   asignarHorariosAutomatico,
   getZonasByCategoria,
+  resolverDesempateZona,
   limpiarResultadosZonas,
   fusionarSlotsEnVentanas,
   interseccionVentanas,
