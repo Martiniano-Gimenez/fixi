@@ -749,7 +749,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   const categorias = await db.categoria.findMany({
     where: { id: { in: categoriaIds } },
     include: {
-      torneo: true,
+      torneo: { include: { overridesDia: { select: { diaKey: true } } } },
     },
   });
 
@@ -836,7 +836,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   const partidos = await db.partido.findMany({
     where: {
       categoriaId: { in: categoriaIds },
-      zonaId: options.zonaId ? options.zonaId : { not: null },
+      zonaId: options.zonaId ? options.zonaId : options.zonaIds ? { in: options.zonaIds } : { not: null },
       estado: 'PENDIENTE',
     },
     orderBy: [{ categoria: { nombre: 'asc' } }, { zona: { nombre: 'asc' } }, { posicionEnRonda: 'asc' }, { id: 'asc' }],
@@ -947,8 +947,17 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   grupo2.sort((a, b) => a.numOptions - b.numOptions);
 
   const updatesMap = new Map();
+  const jornadasConLluvia = new Set(categorias.flatMap((c) => c.torneo.overridesDia.map((o) => `${c.torneoId}:${o.diaKey}`)));
 
-  function isCourtFree(cancha, startMs, endMs) {
+  function isCourtFree(cancha, startMs, endMs, torneoId) {
+    // Sin overrides se conserva la capacidad del club. Con lluvia, la misma fuente que usa su scheduler.
+    if (jornadasConLluvia.size) {
+      const jornada = getDiaCalendarioConTrasnoche(new Date(startMs), organizador);
+      if (jornadasConLluvia.has(`${torneoId}:${jornada.key}`)) {
+        const habilitadas = canchasOverridesService.getCanchasDia(torneoId, jornada.key, cantidadCanchas).canchas;
+        if (cancha > habilitadas) return false;
+      }
+    }
     const timeline = courtTimelines.get(cancha) || [];
     for (const interval of timeline) {
       if (startMs < interval.endMs && endMs > interval.startMs) {
@@ -969,9 +978,9 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
     return true;
   }
 
-  function findFreeCourtAt(startMs, endMs) {
+  function findFreeCourtAt(startMs, endMs, torneoId) {
     for (let c = 1; c <= cantidadCanchas; c++) {
-      if (isCourtFree(c, startMs, endMs)) {
+      if (isCourtFree(c, startMs, endMs, torneoId)) {
         return c;
       }
     }
@@ -998,7 +1007,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
       return false;
     }
 
-    const canchaLibre = findFreeCourtAt(startMs, endMs);
+    const canchaLibre = findFreeCourtAt(startMs, endMs, partido.categoria.torneoId);
     if (canchaLibre !== null) {
       courtTimelines.get(canchaLibre).push({ startMs, endMs });
       if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
@@ -1032,7 +1041,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
         let T = wStart;
         while (T + DURACION_MS <= wEnd) {
           const tEnd = T + DURACION_MS;
-          if (isCourtFree(c, T, tEnd) && isPairFree(partido.pareja1Id, T, tEnd) && isPairFree(partido.pareja2Id, T, tEnd)) {
+          if (isCourtFree(c, T, tEnd, partido.categoria.torneoId) && isPairFree(partido.pareja1Id, T, tEnd) && isPairFree(partido.pareja2Id, T, tEnd)) {
             if (bestCandidateForWindow === null || T < bestCandidateForWindow.T) {
               bestCandidateForWindow = { T, cancha: c };
             }
@@ -1191,7 +1200,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
         }
         if (!withinShared) continue;
 
-        const canchaLibre = findFreeCourtAt(sWin.startMs, sWin.endMs);
+        const canchaLibre = findFreeCourtAt(sWin.startMs, sWin.endMs, m.categoria.torneoId);
         if (canchaLibre !== null) {
           courtTimelines.get(canchaLibre).push({ startMs: sWin.startMs, endMs: sWin.endMs });
           updatesMap.set(m.id, {
@@ -1220,7 +1229,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
             let T = wStart;
             while (T + DURACION_MS <= wEnd) {
               const tEnd = T + DURACION_MS;
-              if (isCourtFree(c, T, tEnd)) {
+              if (isCourtFree(c, T, tEnd, m.categoria.torneoId)) {
                 if (bestCandidate === null || T < bestCandidate.T) {
                   bestCandidate = { T, cancha: c };
                 }
@@ -1263,7 +1272,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
             let T = cWin.startMs;
             while (T + DURACION_MS <= cWin.endMs) {
               const tEnd = T + DURACION_MS;
-              if (isCourtFree(c, T, tEnd)) {
+              if (isCourtFree(c, T, tEnd, m.categoria.torneoId)) {
                 if (bestFallback === null || T < bestFallback.T) {
                   bestFallback = { T, cancha: c };
                 }
@@ -2762,7 +2771,8 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
     await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
 
     // Asignar horarios a los partidos nuevos dentro de la transacción externa
-    await asignarHorariosAutomatico(organizadorId, [categoriaId], tx);
+    await asignarHorariosAutomatico(organizadorId, [categoriaId], tx,
+      { zonaIds: [zonaOrigenId, zonaDestinoId] });
 
     let cuadroDesactualizado = false;
     try {

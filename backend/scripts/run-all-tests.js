@@ -43,6 +43,7 @@ const TEST_SUITES = [
   'test-modo-lluvia-independiente.js',
   'test-modo-lluvia-mcf.js',
   'test-operaciones-zonas.js',
+  'test-mover-pareja-con-lluvia.js',
   'test-orden-cronologico-slots.js',
   'test-parejas-categoria-zona.js',
   'test-persistencia-overrides.js',
