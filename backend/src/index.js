@@ -53,12 +53,17 @@ app.use('/api/parejas', parejaRoutes);
 app.use('/api/partidos', partidoRoutes);
 app.use('/api/public', publicRoutes);
 
+// Las rutas de API inexistentes no caen en el frontend ni en el 404 HTML de Express.
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Ruta no encontrada.' });
+});
+
 // ─── Serve Frontend in Production ────────────────────────
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../../frontend/dist');
   app.use(express.static(frontendPath));
 
-  app.get('*', (req, res) => {
+  app.get('/{*path}', (req, res) => {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }

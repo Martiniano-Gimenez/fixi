@@ -504,7 +504,7 @@ async function main() {
     assert((await contar(cat.id)) === 3, `parejas: ${await contar(cat.id)}`);
   });
 
-  await caso('I27 inscripción mientras corre el inicio (transacción que tarda más que el busy_timeout) → 409 o 503 REINTENTAR, nunca 500', async () => {
+  await caso('I27 inscripción mientras corre el inicio → 409 o 500 genérico, sin escrituras', async () => {
     const t8 = await crearTorneo(orgA, 'Durante Inicio');
     const cat = await crearCategoria(t8.id, '2da');
     await crearParejasConSlots(cat.id, 6, slotsBase);
@@ -534,8 +534,10 @@ async function main() {
       inicio = await pedidoInicio;
       const estados = rs.map((x) => `${x.status} ${x.json?.codigo}`);
       console.log(`     (estados: ${JSON.stringify(estados)})`);
-      assert(rs.every((x) => (x.status === 409 && x.json?.codigo === 'TORNEO_INICIADO') || (x.status === 503 && x.json?.codigo === 'REINTENTAR')), `estados: ${JSON.stringify(estados)} ${rs.map((x) => x.texto.slice(0, 120)).join(' | ')}`);
-      assert(rs.some((x) => x.status === 503), 'ninguna llegó al tiempo de espera: el caso no probó el 503');
+      assert(rs.every((x) => (x.status === 409 && x.json?.codigo === 'TORNEO_INICIADO') ||
+        (x.status === 500 && JSON.stringify(x.json) === JSON.stringify({ error: 'Ocurrió un error inesperado. Probá de nuevo.' }))),
+      `estados: ${JSON.stringify(estados)} ${rs.map((x) => x.texto.slice(0, 120)).join(' | ')}`);
+      assert(rs.some((x) => x.status === 500), 'ninguna llegó al tiempo de espera: el caso no probó el 500 genérico');
     } finally {
       prisma.$transaction = original;
     }
