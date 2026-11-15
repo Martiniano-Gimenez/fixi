@@ -37,6 +37,8 @@
  * H12 La última final cierra la categoría y el torneo; corregir, borrar y las acciones bloqueadas respetan ese estado.
  * H13 Limpiar o rearmar partidos recalcula los estados sin dejar cierres viejos, dentro de la misma transacción.
  * H14 Armar una categoría no inicia el torneo: el recálculo conserva BORRADOR hasta el inicio por pre-check.
+ * H15-H18 Correcciones de zona con pase directo, bloqueo atómico con destino jugado, rechazo de parejas
+ *     repetidas y retiro de clasificados al borrar o dejar parcial un resultado de zona.
  *
  * En todos los casos de A se verifica que ningún par padre/hijo con horario tenga descanso menor al mínimo de la
  * ronda del hijo (obtenerDescansoMinimoRequeridoMs: 30 min antes de la final, 75 en las demás).
@@ -790,6 +792,136 @@ async function testRecalculoRespetaBorrador() {
   console.log('  ✅ Armar zonas y cuadro conserva el torneo en BORRADOR, sin escribir su estado ni sus fechas.');
 }
 
+async function armarZonaConPaseDirecto(lado = 1) {
+  const fixture = await armar({ cats: [['A', 4]] });
+  const cat = fixture.cats.A;
+  const bye = await prisma.partido.findFirst({ where: { categoriaId: cat.id, esBye: true } });
+  assertResultado.ok(bye, 'La zona de cuatro clasifica tres parejas y genera un pase directo');
+  if (lado === 2) {
+    await prisma.partido.update({ where: { id: bye.id }, data: {
+      origenPareja2: bye.origenPareja1, origenPareja1: null,
+      pareja2Id: bye.pareja1Id, pareja1Id: null,
+    } });
+  }
+  await cargarZonas(cat);
+  const definicion = await prisma.partido.findFirst({ where: { categoriaId: cat.id, zonaId: { not: null }, posicionEnRonda: 3 } });
+  const nuevaPrimera = definicion.ganadorId === definicion.pareja1Id ? definicion.pareja2Id : definicion.pareja1Id;
+  const correccion = { sets: [1, 2].map(() => ({
+    gamesPareja1: nuevaPrimera === definicion.pareja1Id ? 6 : 0,
+    gamesPareja2: nuevaPrimera === definicion.pareja2Id ? 6 : 0,
+  })) };
+  const semi = await prisma.partido.findFirst({ where: { categoriaId: cat.id, faseEliminatoria: { ronda: 4 }, esBye: false } });
+  const final = await partidoDe(cat.id, 2, 1);
+  return { ...fixture, cat, bye, definicion, nuevaPrimera, correccion, semi, final };
+}
+
+async function snapshotCorreccionZona() {
+  return {
+    partidos: await prisma.partido.findMany({ include: { sets: { orderBy: { numero: 'asc' } } }, orderBy: { id: 'asc' } }),
+    posiciones: await prisma.zonaPareja.findMany({ orderBy: { id: 'asc' } }),
+    categorias: await prisma.categoria.findMany({ orderBy: { id: 'asc' } }),
+    torneos: await prisma.torneo.findMany({ orderBy: { id: 'asc' } }),
+  };
+}
+
+async function testCorreccionZonaPaseDirecto() {
+  for (const lado of [1, 2]) {
+    const { org, cat, bye, definicion, nuevaPrimera, correccion, semi, final } = await armarZonaConPaseDirecto(lado);
+    const antes = await snapshotCorreccionZona();
+    const transaction = prisma.$transaction;
+    prisma.$transaction = (fn, ...args) => transaction.call(prisma, async (tx) => {
+      await fn(tx);
+      throw new Error('Rollback corrección zona');
+    }, ...args);
+    try {
+      await assertResultado.rejects(() => partidoService.cargarResultado(org.id, definicion.id, correccion), /Rollback corrección zona/);
+    } finally { prisma.$transaction = transaction; }
+    assertResultado.deepEqual(await snapshotCorreccionZona(), antes, 'Resultado, posiciones, cuadro y estados se revierten juntos');
+
+    const r = await http('PUT', `/partidos/${definicion.id}/resultado`, correccion);
+    assertResultado.equal(r.status, 200, JSON.stringify(r.json));
+    const pase = await prisma.partido.findUnique({ where: { id: bye.id } });
+    const siguiente = await partidoDe(cat.id, 2, 1);
+    assertResultado.equal(pase[`pareja${lado}Id`], nuevaPrimera);
+    assertResultado.equal(pase.ganadorId, nuevaPrimera);
+    assertResultado.equal(pase.estado, 'FINALIZADO');
+    assertResultado.equal(pase.fechaHora, null);
+    assertResultado.equal(pase.canchaNumero, null);
+    const slotFinal = bye.posicionEnRonda % 2 === 1 ? 'pareja1Id' : 'pareja2Id';
+    assertResultado.equal(siguiente[slotFinal], nuevaPrimera);
+    const primeraRonda = await prisma.partido.findMany({ where: { categoriaId: cat.id, faseEliminatoria: { ronda: 4 } } });
+    const ids = primeraRonda.flatMap((p) => [p.pareja1Id, p.pareja2Id]).filter(Boolean);
+    assertResultado.equal(ids.length, 3);
+    assertResultado.equal(new Set(ids).size, ids.length, 'Ninguna pareja ocupa dos lugares en la primera ronda');
+    const actualSemi = primeraRonda.find((p) => p.id === semi.id);
+    assertResultado.ok(![actualSemi.pareja1Id, actualSemi.pareja2Id].includes(nuevaPrimera), 'La pareja con pase directo no juega además la semifinal');
+    assertResultado.ok(ids.includes(definicion.ganadorId), 'El antiguo primero conserva su lugar como segundo');
+    await partidoService.cargarResultado(org.id, semi.id, SETS_GANA_1);
+    const finalCompleta = await partidoDe(cat.id, 2, 1);
+    assertResultado.notEqual(finalCompleta.pareja1Id, finalCompleta.pareja2Id);
+    await partidoService.cargarResultado(org.id, final.id, SETS_GANA_1);
+    const cerrado = await snapshotCorreccionZona();
+    assertResultado.equal(cerrado.categorias[0].estado, 'FINALIZADO');
+    assertResultado.equal(cerrado.torneos[0].estado, 'FINALIZADO');
+  }
+}
+
+async function testCorreccionZonaConDestinoJugado() {
+  for (const estado of ['EN_CURSO', 'FINALIZADO']) {
+    const { org, definicion, correccion, semi, final } = await armarZonaConPaseDirecto();
+    await partidoService.cargarResultado(org.id, semi.id, SETS_GANA_1);
+    if (estado === 'EN_CURSO') await partidoService.updateEstado(org.id, final.id, estado);
+    else await partidoService.cargarResultado(org.id, final.id, SETS_GANA_1);
+    // Ajustar el marcador conservando al primero sigue permitido con el destino jugado.
+    const mismosGanadores = { sets: [1, 2].map(() => ({
+      gamesPareja1: definicion.ganadorId === definicion.pareja1Id ? 6 : 2,
+      gamesPareja2: definicion.ganadorId === definicion.pareja2Id ? 6 : 2,
+    })) };
+    assertResultado.equal((await http('PUT', `/partidos/${definicion.id}/resultado`, mismosGanadores)).status, 200);
+    const antes = await snapshotCorreccionZona();
+    const r = await http('PUT', `/partidos/${definicion.id}/resultado`, correccion);
+    assertResultado.equal(r.status, 400, JSON.stringify(r.json));
+    assertResultado.match(r.json.error, /Final/);
+    assertResultado.match(r.json.error, estado === 'EN_CURSO' ? /en juego.*pendiente/ : /resultado.*Borrá/);
+    assertResultado.deepEqual(await snapshotCorreccionZona(), antes, 'El rechazo no modifica sets, posiciones, cuadro, horarios ni estados');
+  }
+}
+
+async function testPartidoConParejaRepetida() {
+  const { final, nuevaPrimera } = await armarZonaConPaseDirecto();
+  await prisma.partido.update({ where: { id: final.id }, data: { pareja1Id: nuevaPrimera, pareja2Id: nuevaPrimera } });
+  for (const estado of ['PENDIENTE', 'EN_CURSO']) {
+    await prisma.partido.update({ where: { id: final.id }, data: { estado } });
+    const antes = await snapshotCorreccionZona();
+    for (const [metodo, ruta, body] of [
+      ['PUT', `/partidos/${final.id}/resultado`, SETS_GANA_1],
+      ['PUT', `/partidos/${final.id}/resultado`, { sets: [{ gamesPareja1: 6, gamesPareja2: 1 }] }],
+      ['PATCH', `/partidos/${final.id}/estado`, { estado: estado === 'PENDIENTE' ? 'EN_CURSO' : 'PENDIENTE' }],
+    ]) {
+      const r = await http(metodo, ruta, body);
+      assertResultado.equal(r.status, 400);
+      assertResultado.match(r.json.error, /misma pareja de los dos lados/);
+      assertResultado.deepEqual(await snapshotCorreccionZona(), antes);
+    }
+  }
+}
+
+async function testRetirarClasificadoDePaseDirecto() {
+  for (const parcial of [false, true]) {
+    const { org, cat, bye, definicion } = await armarZonaConPaseDirecto();
+    if (parcial) await partidoService.cargarResultado(org.id, definicion.id, { sets: [{ gamesPareja1: 6, gamesPareja2: 1 }] });
+    else await partidoService.borrarResultado(org.id, definicion.id);
+    const pase = await prisma.partido.findUnique({ where: { id: bye.id } });
+    assertResultado.equal(pase.ganadorId, null);
+    assertResultado.equal(pase.estado, 'PENDIENTE');
+    assertResultado.equal(pase.pareja1Id, null);
+    assertResultado.equal(pase.pareja2Id, null);
+    const final = await partidoDe(cat.id, 2, 1);
+    assertResultado.equal(final.pareja1Id, null);
+    assertResultado.equal(final.pareja2Id, null);
+  }
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -817,6 +949,10 @@ async function run() {
     { nombre: 'H12: cierre automático y acciones bloqueadas', fn: testCierreAutomatico },
     { nombre: 'H13: cierre al limpiar o rearmar partidos', fn: testCierreAlRearmarPartidos },
     { nombre: 'H14: el recálculo no inicia un torneo en borrador', fn: testRecalculoRespetaBorrador },
+    { nombre: 'H15: corregir zona actualiza pase directo y destino pendiente', fn: testCorreccionZonaPaseDirecto },
+    { nombre: 'H16: corrección con destino jugado devuelve 400 sin cambios', fn: testCorreccionZonaConDestinoJugado },
+    { nombre: 'H17: misma pareja de ambos lados devuelve 400 sin cambios', fn: testPartidoConParejaRepetida },
+    { nombre: 'H18: borrar o dejar parcial retira el pase directo pendiente', fn: testRetirarClasificadoDePaseDirecto },
   ];
 
   const resultados = [];

@@ -41,13 +41,30 @@ async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
   return partido;
 }
 
+function validarParejasDistintas(partido) {
+  if (partido.pareja1Id && partido.pareja1Id === partido.pareja2Id) {
+    const error = new Error('El partido tiene la misma pareja de los dos lados. Corregí el cruce antes de cargar un resultado o cambiar su estado.');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+async function recalcularZonaTrasResultado(partido, db) {
+  const zona = await db.zona.findUnique({ where: { id: partido.zonaId } });
+  if (zona.formato === 'ROUND_ROBIN') {
+    await recalcularStatsZona(partido.zonaId, db);
+  } else if (zona.formato === 'MINI_BRACKET') {
+    await propagarMiniBracket(partido.zonaId, db);
+  }
+}
+
 /**
  * Recalcula todas las estadísticas de una zona (ROUND_ROBIN).
  * Se llama cada vez que se carga o edita el resultado de un partido de la zona.
  */
-async function recalcularStatsZona(zonaId) {
-  const zonaParejas = await prisma.zonaPareja.findMany({ where: { zonaId } });
-  const partidos = await prisma.partido.findMany({
+async function recalcularStatsZona(zonaId, db = prisma) {
+  const zonaParejas = await db.zonaPareja.findMany({ where: { zonaId } });
+  const partidos = await db.partido.findMany({
     where: { zonaId, estado: 'FINALIZADO' },
     include: { sets: true },
   });
@@ -107,7 +124,7 @@ async function recalcularStatsZona(zonaId) {
   // Guardar stats recalculadas
   for (const zp of zonaParejas) {
     const s = stats[zp.parejaId];
-    await prisma.zonaPareja.update({
+    await db.zonaPareja.update({
       where: { id: zp.id },
       data: s,
     });
@@ -118,8 +135,8 @@ async function recalcularStatsZona(zonaId) {
  * Lógica para zonas de 4 (MINI_BRACKET): Propaga los ganadores y perdedores
  * de los partidos 1 y 2 hacia los partidos 3 y 4.
  */
-async function propagarMiniBracket(zonaId) {
-  const partidos = await prisma.partido.findMany({
+async function propagarMiniBracket(zonaId, db = prisma) {
+  const partidos = await db.partido.findMany({
     where: { zonaId },
     orderBy: { posicionEnRonda: 'asc' },
   });
@@ -138,11 +155,11 @@ async function propagarMiniBracket(zonaId) {
 
   // Si P1 terminó, propagamos su ganador y perdedor al slot 1 de P3 y P4
   if (p1.estado === 'FINALIZADO' && p1.ganadorId) {
-    await prisma.partido.update({
+    await db.partido.update({
       where: { id: pGanadores.id },
       data: { pareja1Id: p1.ganadorId },
     });
-    await prisma.partido.update({
+    await db.partido.update({
       where: { id: pPerdedores.id },
       data: { pareja1Id: getPerdedor(p1) },
     });
@@ -150,18 +167,18 @@ async function propagarMiniBracket(zonaId) {
 
   // Si P2 terminó, propagamos su ganador y perdedor al slot 2 de P3 y P4
   if (p2.estado === 'FINALIZADO' && p2.ganadorId) {
-    await prisma.partido.update({
+    await db.partido.update({
       where: { id: pGanadores.id },
       data: { pareja2Id: p2.ganadorId },
     });
-    await prisma.partido.update({
+    await db.partido.update({
       where: { id: pPerdedores.id },
       data: { pareja2Id: getPerdedor(p2) },
     });
   }
 
   // --- LÓGICA DE POSICIONES EXACTAS ---
-  await prisma.zonaPareja.updateMany({
+  await db.zonaPareja.updateMany({
     where: { zonaId },
     data: { posicion: 0 }
   });
@@ -169,12 +186,12 @@ async function propagarMiniBracket(zonaId) {
   // Partido 3 define 1ro y 2do
   if (pGanadores.estado === 'FINALIZADO' && pGanadores.ganadorId) {
     const loser = getPerdedor(pGanadores);
-    await prisma.zonaPareja.updateMany({
+    await db.zonaPareja.updateMany({
       where: { zonaId, parejaId: pGanadores.ganadorId },
       data: { posicion: 1 }
     });
     if (loser) {
-      await prisma.zonaPareja.updateMany({
+      await db.zonaPareja.updateMany({
         where: { zonaId, parejaId: loser },
         data: { posicion: 2 }
       });
@@ -184,12 +201,12 @@ async function propagarMiniBracket(zonaId) {
   // Partido 4 define 3ro y 4to
   if (pPerdedores.estado === 'FINALIZADO' && pPerdedores.ganadorId) {
     const loser = getPerdedor(pPerdedores);
-    await prisma.zonaPareja.updateMany({
+    await db.zonaPareja.updateMany({
       where: { zonaId, parejaId: pPerdedores.ganadorId },
       data: { posicion: 3 }
     });
     if (loser) {
-      await prisma.zonaPareja.updateMany({
+      await db.zonaPareja.updateMany({
         where: { zonaId, parejaId: loser },
         data: { posicion: 4 }
       });
@@ -197,7 +214,7 @@ async function propagarMiniBracket(zonaId) {
   }
 
   // Actualizar stats visuales de la tabla
-  await recalcularStatsZona(zonaId);
+  await recalcularStatsZona(zonaId, db);
 }
 
 function validarSetPadel(gamesP1, gamesP2, setNum) {
@@ -274,6 +291,7 @@ async function validarParejasEnJuego(db, partido) {
 /** Cargar el resultado parcial o total de un partido (sets). */
 async function cargarResultado(organizadorId, partidoId, data) {
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  validarParejasDistintas(partido);
   const { sets } = data;
 
   if (!partido.pareja1Id || !partido.pareja2Id) {
@@ -331,6 +349,7 @@ async function cargarResultado(organizadorId, partidoId, data) {
     nuevoEstado = 'FINALIZADO';
   }
 
+  let asignacion;
   await prisma.$transaction(async (tx) => {
     if (partido.faseEliminatoriaId) {
       const actual = await tx.partido.findUnique({ where: { id: partidoId } });
@@ -364,39 +383,18 @@ async function cargarResultado(organizadorId, partidoId, data) {
           ? new Date() : undefined,
       },
     });
+    if (partido.zonaId && (nuevoEstado === 'FINALIZADO' || partido.estado === 'FINALIZADO')) {
+      await recalcularZonaTrasResultado(partido, tx);
+      // La clasificación y los pases directos forman parte del resultado: sus errores deben hacer rollback.
+      asignacion = await verificarYAutoAsignarEliminatoria(
+        organizadorId, partido.categoriaId, tx, partido.estado === 'FINALIZADO',
+      );
+    }
     await recalcularEstadosPorPartido(tx, partido.categoriaId);
-  });
+  }, { maxWait: 10000, timeout: 30000 });
 
-  // Disparar lógica post-resultado solo cuando el partido está FINALIZADO
-  if (nuevoEstado === 'FINALIZADO') {
-    if (partido.zonaId) {
-      const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
-      if (zona.formato === 'ROUND_ROBIN') {
-        await recalcularStatsZona(partido.zonaId);
-      } else if (zona.formato === 'MINI_BRACKET') {
-        await propagarMiniBracket(partido.zonaId);
-      }
-
-      // Auto-asignación de clasificados y programación de domingo si concluyó la fase de grupos
-      try {
-        await verificarYAutoAsignarEliminatoria(organizadorId, partido.categoriaId);
-      } catch (errAuto) {
-        console.error('[Auto-Eliminatoria] Error al auto-asignar eliminatoria tras partido de zona:', errAuto);
-      }
-    }
-  } else {
-    // Si el partido estaba FINALIZADO y ahora vuelve a EN_CURSO (edición parcial),
-    // revertimos las stats y la propagación del bracket
-    if (partido.estado === 'FINALIZADO') {
-      if (partido.zonaId) {
-        const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
-        if (zona.formato === 'ROUND_ROBIN') {
-          await recalcularStatsZona(partido.zonaId);
-        } else if (zona.formato === 'MINI_BRACKET') {
-          await propagarMiniBracket(partido.zonaId);
-        }
-      }
-    }
+  if (nuevoEstado === 'FINALIZADO' && asignacion) {
+    await programarPrimeraRondaTrasAsignacion(organizadorId, partido.categoriaId, asignacion);
   }
 
   return { message: nuevoEstado === 'FINALIZADO' ? 'Partido finalizado.' : 'Set guardado. Partido en curso.' };
@@ -506,18 +504,12 @@ async function borrarResultado(organizadorId, partidoId) {
         enJuegoDesde: null,
       },
     });
-    await recalcularEstadosPorPartido(tx, partido.categoriaId);
-  });
-
-  // Si es partido de zona, recalcular stats
-  if (partido.zonaId) {
-    const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
-    if (zona.formato === 'ROUND_ROBIN') {
-      await recalcularStatsZona(partido.zonaId);
-    } else if (zona.formato === 'MINI_BRACKET') {
-      await propagarMiniBracket(partido.zonaId);
+    if (partido.zonaId) {
+      await recalcularZonaTrasResultado(partido, tx);
+      await verificarYAutoAsignarEliminatoria(organizadorId, partido.categoriaId, tx, true);
     }
-  }
+    await recalcularEstadosPorPartido(tx, partido.categoriaId);
+  }, { maxWait: 10000, timeout: 30000 });
 
   return { message: 'Resultado borrado exitosamente.' };
 }
@@ -911,6 +903,7 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
   }
 
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  validarParejasDistintas(partido);
 
   if (partido.estado === 'FINALIZADO') {
     const error = new Error('No se puede modificar el estado de un partido finalizado desde aquí. Editá o borrá el resultado.');
@@ -971,11 +964,12 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
  * Auto-asigna clasificados al cuadro eliminatorio si se completaron todos los partidos de zona de la categoría.
  * También dispara la auto-programación de primera ronda de domingo si corresponde.
  */
-async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId) {
+async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId, externalTx = null, actualizarIncompletas = false) {
+  const db = externalTx || prisma;
   if (!categoriaId || !organizadorId) return null;
 
   // 1. Contar partidos de zona no finalizados en esta categoría
-  const partidosPendientes = await prisma.partido.count({
+  const partidosPendientes = await db.partido.count({
     where: {
       categoriaId,
       zonaId: { not: null },
@@ -984,10 +978,10 @@ async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId) {
   });
 
   // Si aún quedan partidos de zona pendientes o en curso, no se auto-asigna
-  if (partidosPendientes > 0) return null;
+  if (partidosPendientes > 0 && !actualizarIncompletas) return null;
 
   // 2. Verificar si la categoría tiene fases eliminatorias creadas (bracket generado al inicio)
-  const fasesCount = await prisma.faseEliminatoria.count({
+  const fasesCount = await db.faseEliminatoria.count({
     where: { categoriaId },
   });
 
@@ -995,9 +989,15 @@ async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId) {
 
   // 3. Ejecutar asignación de clasificados (poblado dinámico del bracket existente)
   const { generarEliminatoria } = require('./faseEliminatoria.service');
-  const { asignarHorariosRondaUno } = require('./eliminatoriaScheduler.service');
 
-  const resultado = await generarEliminatoria(organizadorId, categoriaId);
+  const resultado = await generarEliminatoria(organizadorId, categoriaId, externalTx);
+  if (!externalTx) await programarPrimeraRondaTrasAsignacion(organizadorId, categoriaId, resultado);
+  return resultado;
+}
+
+// Los horarios se programan después del commit; nunca se absorben errores de clasificación.
+async function programarPrimeraRondaTrasAsignacion(organizadorId, categoriaId, resultado) {
+  const { asignarHorariosRondaUno } = require('./eliminatoriaScheduler.service');
 
   // 4. Si no es dieciseisavos (que se juegan el sábado a la noche), programar domingo
   if (!resultado.esDieciseisavos) {

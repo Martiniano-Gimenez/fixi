@@ -168,16 +168,16 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
         updateData.canchaNumero = null;
       }
       
-      // Solo actualizar parejas si el partido de primera ronda aún no comenzó (PENDIENTE)
-      if (partido.estado === 'PENDIENTE') {
+      // Un pase directo finalizado también depende de la clasificación actual de su zona.
+      if (partido.estado === 'PENDIENTE' || esBye) {
         if (partido.origenPareja1) {
           const c1 = clasificadasMap.get(partido.origenPareja1);
-          if (c1 && c1.parejaId) updateData.pareja1Id = c1.parejaId;
+          if (c1) updateData.pareja1Id = c1.parejaId;
         }
         
         if (partido.origenPareja2) {
           const c2 = clasificadasMap.get(partido.origenPareja2);
-          if (c2 && c2.parejaId) updateData.pareja2Id = c2.parejaId;
+          if (c2) updateData.pareja2Id = c2.parejaId;
         }
       }
 
@@ -185,23 +185,14 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       const pareja1Id = updateData.pareja1Id !== undefined ? updateData.pareja1Id : partido.pareja1Id;
       const pareja2Id = updateData.pareja2Id !== undefined ? updateData.pareja2Id : partido.pareja2Id;
       
-      if (esBye && partido.estado !== 'FINALIZADO') {
-        if (pareja1Id && !pareja2Id) {
-          updateData.estado = 'FINALIZADO';
-          updateData.ganadorId = pareja1Id;
-        } else if (pareja2Id && !pareja1Id) {
-          updateData.estado = 'FINALIZADO';
-          updateData.ganadorId = pareja2Id;
-        }
-      }
-      
-      // Partidos ya finalizados previamente (caso edge de re-ejecución)
-      if (partido.estado === 'FINALIZADO') {
-        if (pareja1Id && !pareja2Id) {
-          updateData.ganadorId = pareja1Id;
-        } else if (pareja2Id && !pareja1Id) {
-          updateData.ganadorId = pareja2Id;
-        }
+      if (esBye) {
+        updateData.ganadorId = pareja1Id && !pareja2Id ? pareja1Id
+          : pareja2Id && !pareja1Id ? pareja2Id : null;
+        updateData.estado = updateData.ganadorId ? 'FINALIZADO' : 'PENDIENTE';
+
+        // Conservar el ganador anterior para que la protección entre rondas detecte el cambio.
+        const { propagarEliminatoria } = require('./partido.service');
+        await propagarEliminatoria({ ...partido, ...updateData, ganadorId: partido.ganadorId }, updateData.ganadorId, db);
       }
 
       if (Object.keys(updateData).length > 0) {
@@ -209,13 +200,6 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
           where: { id: partido.id }, 
           data: updateData 
         });
-
-        // Propagar ganador de BYE a la siguiente ronda
-        if (updateData.ganadorId) {
-          const { propagarEliminatoria } = require('./partido.service');
-          const updatedPartido = { ...partido, ...updateData };
-          await propagarEliminatoria(updatedPartido, updateData.ganadorId, db);
-        }
       }
     }
 
