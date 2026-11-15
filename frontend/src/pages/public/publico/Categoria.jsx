@@ -98,8 +98,17 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
       { state: { ...location.state, desdeInicio: false }, preventScrollReset: true });
   };
   const c = (clase, i) => ({ className: `${clase}${animar ? ' pv-cascada' : ''}`, style: { '--i': i } });
+  const abrirPareja = (pareja, boton) => {
+    const params = new URLSearchParams(location.search);
+    params.set('buscar', pareja.nombre);
+    navigate({ pathname: location.pathname, search: params.toString(), hash: location.hash }, {
+      state: { ...location.state, busquedaDesdeApp: true,
+        parejaBusqueda: { ...pareja, categoriaId: cat.id, focoOrigen: boton.id } },
+      preventScrollReset: true,
+    });
+  };
   const tarjeta = (conDia) => (p) => (
-    <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia={conDia} seguidaId={seguidaId} origenes={origenes} atrasado={sinResultado(p, ahora)} />
+    <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia={conDia} seguidaId={seguidaId} origenes={origenes} atrasado={sinResultado(p, ahora)} onAbrirPareja={abrirPareja} />
   );
 
   // ─── Encabezado ───
@@ -178,7 +187,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
         <div key={vista} id={`${id}-zonas-panel-${vista}`} role="tabpanel" aria-labelledby={`${id}-zonas-tab-${vista}`}
           hidden={vistaZona !== i} tabIndex={0} className="pv-zonas-panel">
           {vistaZona === i && (i === 0 ? (
-            <div className="pv-zonas">{zonas.map((z) => <TablaZona key={z.id} zona={z} seguidaId={seguidaId} mostrarClasifican={!clasificacionUniforme} />)}</div>
+            <div className="pv-zonas">{zonas.map((z) => <TablaZona key={z.id} zona={z} seguidaId={seguidaId} mostrarClasifican={!clasificacionUniforme} onAbrirPareja={abrirPareja} />)}</div>
           ) : vistaPartidosZona)}
         </div>
       ))}
@@ -219,7 +228,7 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
         <section className="pv-seccion pv-proximos" aria-labelledby="t-en-juego">
           <h2 id="t-en-juego">En juego y próximos</h2>
           {enJuego.length ? <ListaAnimada items={enJuego} clave={claveTarjeta} className="pv-lista grilla" render={(p) => (
-            <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia seguidaId={seguidaId} origenes={origenes} atrasado={false} />
+            <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia seguidaId={seguidaId} origenes={origenes} atrasado={false} onAbrirPareja={abrirPareja} />
           )} /> : <p className="pv-vacio">No hay partidos en juego ni próximos.</p>}
         </section>
         {e.preparacion ? (
