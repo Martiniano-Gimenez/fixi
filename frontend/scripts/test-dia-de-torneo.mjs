@@ -61,7 +61,7 @@ try {
   assert.ok(document.querySelector('.dt-current-match').compareDocumentPosition(document.querySelector('.dt-upcoming-match')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING,
     'En juego va antes que próximos');
   const titulos = [...document.querySelectorAll('.dt-hour-title')].map((h) => h.textContent);
-  assert.deepEqual(titulos, ['15:00', '01:30 · madrugada del sábado'], 'Un título por horario; la madrugada cuenta para el viernes');
+  assert.deepEqual(titulos, ['15:00', '01:30'], 'Un título por horario; la madrugada cuenta para el viernes');
   const primerGrupo = document.querySelector('.dt-hour-group');
   assert.equal(primerGrupo.querySelectorAll('.dt-upcoming-match').length, 2);
   assert.equal(texto('.dt-upcoming-match .dt-pair-names'), 'Dávila / Arrieta vs Tapia / Nieva');
@@ -79,12 +79,12 @@ try {
 
   // Lluvia: textos de los modales y banner sin número de cancha
   const botonQueEmpieza = (t) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(t));
+  await act(async () => botonQueEmpieza('Lluvia').click());
   const menos = document.querySelector('[aria-label="Reducir cantidad de canchas"]');
   await act(async () => menos.click());
   await act(async () => menos.click());
+  assert.match(document.body.textContent, /Los partidos pendientes del viernes se acomodan en las canchas habilitadas, uno detrás de otro, hasta el cierre del club\. Ninguno se adelanta\. Lo que no entre pasa al sábado\./);
   await act(async () => botonQueEmpieza('Reducir a 4 canchas').click());
-  assert.match(document.body.textContent, /Los partidos pendientes de esta jornada se acomodan en las canchas habilitadas, uno detrás de otro\. El viernes nadie juega antes de su horario de inicio; lo que no entre pasa al sábado\./);
-  await act(async () => botonQueEmpieza('Reducir y reprogramar').click());
   for (let i = 0; i < 50 && !document.querySelector('.dt-feedback'); i++) await act(async () => new Promise((r) => setTimeout(r, 20)));
   assert.deepEqual(enviosLluvia, [{ canchasDisponiblesOverride: 4, diaKey: '2026-11-06' }]);
   const banner = document.querySelector('.dt-feedback');
@@ -95,7 +95,7 @@ try {
   for (let i = 0; i < 50 && !document.querySelector('.dt-ghost-match'); i++) await act(async () => new Promise((r) => setTimeout(r, 20)));
   const alerta = document.querySelector('.dt-notice.dt-danger');
   assert.match(alerta.textContent, /1 partido no entra con las canchas habilitadas/);
-  assert.match(alerta.textContent, /No se pudieron reprogramar solos\. Asignales horario desde Pendientes\./);
+  assert.match(alerta.textContent, /Elegiles un horario nuevo\./);
   assert.equal(texto('.dt-ghost-match .dt-muted'), '7ma Damas · Zona C · vie 19:00');
   assert.ok(!/Cancha|\bC\d|Inhabilitadas|Asignado a/.test(alerta.textContent), 'La alerta no muestra canchas');
 
