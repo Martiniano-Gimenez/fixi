@@ -43,7 +43,6 @@ export default function TablaZona({ zona, seguidaId, busqueda, children, mostrar
             const seguida = seguidaId && row.parejaId === seguidaId;
             const coincide = q && normalizar(row.pareja).includes(q);
             const puedeAbrir = Boolean(onAbrirPareja && row.parejaId && row.pareja);
-            const Nombre = puedeAbrir ? 'button' : 'span';
             return (
               <div
                 key={row.parejaId || row.pareja}
@@ -53,21 +52,22 @@ export default function TablaZona({ zona, seguidaId, busqueda, children, mostrar
                 aria-label={`${i + 1}°, ${row.pareja}: ${row.puntos} puntos, ${row.pj} jugados, sets ${row.sf} a ${row.sc}, games ${row.gf} a ${row.gc}`}
               >
                 <span className="pv-t-pos num" aria-hidden="true">{i + 1}</span>
-                <Nombre className={`pv-t-nombre${puedeAbrir ? ' pv-pareja-link' : ''}`} translate="no" title={row.pareja}
-                  aria-hidden={puedeAbrir ? undefined : true}
-                  {...(puedeAbrir ? {
-                    type: 'button', id: `${id}-pareja-${row.parejaId}`,
-                    'aria-label': `Ver partidos de ${row.pareja}`,
-                    onClick: (event) => onAbrirPareja({ parejaId: row.parejaId, nombre: row.pareja }, event.currentTarget),
-                  } : {})}>
-                  <span className={puedeAbrir ? 'pv-t-nombre-texto' : undefined}>
-                    {row.pareja}{seguida && <Estrella decorativa />}
-                  </span>
-                </Nombre>
+                <span className="pv-t-nombre" translate="no" title={row.pareja} aria-hidden="true">
+                  {row.pareja}{seguida && <Estrella decorativa />}
+                </span>
                 <span className="pv-t-dato" aria-hidden="true"><Numero valor={row.pj} /></span>
                 <span className="pv-t-dato" aria-hidden="true"><Numero valor={`${row.sf}-${row.sc}`} /></span>
                 <span className="pv-t-dato" aria-hidden="true"><Numero valor={`${row.gf}-${row.gc}`} /></span>
                 <span className="pv-t-ptos" aria-hidden="true"><Numero valor={row.puntos} /></span>
+                {puedeAbrir && (
+                  <button
+                    type="button"
+                    id={`${id}-pareja-${row.parejaId}`}
+                    className="pv-t-abrir"
+                    aria-label={`Ver partidos de ${row.pareja}`}
+                    onClick={(event) => onAbrirPareja({ parejaId: row.parejaId, nombre: row.pareja }, event.currentTarget)}
+                  />
+                )}
               </div>
             );
           })}

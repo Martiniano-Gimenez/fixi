@@ -265,6 +265,9 @@ body:has(.publico) {
 .pv-t-fila.clasifica .pv-t-pos { background: var(--progreso); color: var(--tinta); }
 .pv-t-nombre { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.25; font-weight: 500; overflow-wrap: anywhere; }
 .pv-t-nombre .pv-estrella { display: inline-block; vertical-align: -2px; margin-left: 4px; }
+.publico .pv-t-abrir { position: absolute; inset: 0; z-index: 1; width: 100%; min-height: 44px; padding: 0; border: 0; background: transparent; }
+.publico .pv-t-abrir:focus-visible { outline-offset: -2px; }
+.pv-t-fila:has(> .pv-t-abrir:focus-visible) { background: var(--superficie-2); }
 .publico .pv-pareja-link {
   display: block;
   width: 100%;
@@ -276,18 +279,18 @@ body:has(.publico) {
   background: transparent;
   text-align: left;
   text-decoration: none;
-  text-underline-offset: 3px;
   overflow: visible;
-  -webkit-line-clamp: unset;
 }
-.publico .pv-pareja-link:hover,
-.publico .pv-pareja-link:focus-visible { text-decoration: underline; }
-.pv-t-nombre-texto { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.publico .pv-pareja-link:focus-visible { color: var(--marca); }
 .pv-t-dato { color: var(--gris); font-variant-numeric: tabular-nums; }
 .pv-t-ptos { font-weight: 800; font-size: var(--t-15); font-variant-numeric: tabular-nums; }
 .pv-t-fila.coincide .pv-t-nombre { font-weight: 700; }
 .pv-t-fila.seguida { background: #F3F7FF; }
-.pv-corte { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--progreso); z-index: 20; }
+.pv-corte { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--progreso); z-index: 20; pointer-events: none; }
+@media (hover: hover) {
+  .pv-t-fila:has(> .pv-t-abrir:hover) { background: var(--superficie-2); }
+  .publico .pv-pareja-link:hover { color: var(--marca); }
+}
 /* ─── Cuadro ──────────────────────────────────────────────── */
 .pv-seg-scroll { overflow-x: auto; scrollbar-width: none; margin: 0 calc(var(--e-4) * -1); padding: 0 var(--e-4); }
 .pv-seg-scroll::-webkit-scrollbar { display: none; }
