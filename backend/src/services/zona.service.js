@@ -837,7 +837,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
     where: {
       categoriaId: { in: categoriaIds },
       zonaId: options.zonaId ? options.zonaId : options.zonaIds ? { in: options.zonaIds } : { not: null },
-      estado: 'PENDIENTE',
+      estado: options.partidoIds ? undefined : 'PENDIENTE',
     },
     orderBy: [{ categoria: { nombre: 'asc' } }, { zona: { nombre: 'asc' } }, { posicionEnRonda: 'asc' }, { id: 'asc' }],
     include: {
@@ -860,8 +860,10 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
   const partidosFase1 = [];
   const partidosMiniBracketFase2 = [];
+  const idsPermitidos = options.partidoIds ? new Set(options.partidoIds) : null;
 
   for (const p of partidos) {
+    if (idsPermitidos && !idsPermitidos.has(p.id)) continue;
     if (yaAgendadosIds.has(p.id)) continue;
     if (p.zona?.requiereArmadoManual) continue;
     if (p.zona?.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3) {
@@ -951,8 +953,9 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
   function isCourtFree(cancha, startMs, endMs, torneoId) {
     // Sin overrides se conserva la capacidad del club. Con lluvia, la misma fuente que usa su scheduler.
-    if (jornadasConLluvia.size) {
+    if (jornadasConLluvia.size || options.diaKey) {
       const jornada = getDiaCalendarioConTrasnoche(new Date(startMs), organizador);
+      if (options.diaKey && jornada.key !== options.diaKey) return false;
       if (jornadasConLluvia.has(`${torneoId}:${jornada.key}`)) {
         const habilitadas = canchasOverridesService.getCanchasDia(torneoId, jornada.key, cantidadCanchas).canchas;
         if (cancha > habilitadas) return false;

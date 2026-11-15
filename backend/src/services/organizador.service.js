@@ -2394,15 +2394,27 @@ async function armarHorariosAntesLluvia(tx, torneoId, diaKey, horariosClubObj) {
     select: { horariosAntesLluvia: true },
   });
   const enOtroRegistro = new Set();
+  const sinHorarioPrevios = new Set();
   for (const o of otrasJornadas) {
-    for (const id of Object.keys(leerJson(o.horariosAntesLluvia) || {})) enOtroRegistro.add(id);
+    for (const [id, previo] of Object.entries(leerJson(o.horariosAntesLluvia) || {})) {
+      enOtroRegistro.add(id);
+      if (previo?.fechaHora === null) sinHorarioPrevios.add(id);
+    }
   }
   const pendientes = await tx.partido.findMany({
-    where: { categoria: { torneoId }, estado: 'PENDIENTE', esBye: false, fechaHora: { not: null } },
-    select: { id: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true },
+    where: { categoria: { torneoId }, estado: 'PENDIENTE', esBye: false },
+    select: { id: true, zonaId: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true },
   });
   const registro = {};
   for (const p of pendientes) {
+    if (!p.fechaHora) {
+      // Recordar la ausencia previa en la primera lluvia y conservarla en las demás jornadas.
+      // No confundir con nuevos pendientes creados durante otra lluvia que ya estaba activa.
+      if (p.zonaId && (!otrasJornadas.length || sinHorarioPrevios.has(p.id))) {
+        registro[p.id] = { fechaHora: null, canchaNumero: p.canchaNumero, sinHorarioAsignado: p.sinHorarioAsignado };
+      }
+      continue;
+    }
     if (enOtroRegistro.has(p.id)) continue;
     if (getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key !== diaKey) continue;
     registro[p.id] = {
@@ -2412,6 +2424,31 @@ async function armarHorariosAntesLluvia(tx, torneoId, diaKey, horariosClubObj) {
     };
   }
   return registro;
+}
+
+async function programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, overridesAnteriores) {
+  const resumen = { partidosNuevosProgramados: 0, partidosNuevosSinHorario: 0 };
+  if (!jornadas.length) return resumen;
+  // Un partido de la otra jornada registrada debe esperar su propia restauración.
+  const registrados = new Set(overridesAnteriores.flatMap((o) => Object.keys(leerJson(o.horariosAntesLluvia) || {})));
+  const candidatos = await tx.partido.findMany({
+    where: { categoria: { torneoId, estado: { not: 'BORRADOR' } }, zonaId: { not: null }, faseEliminatoriaId: null,
+      estado: 'PENDIENTE', esBye: false, horarioManual: false, id: { notIn: [...registrados] },
+      OR: [{ fechaHora: null }, { canchaNumero: null }, { sinHorarioAsignado: true }] },
+    select: { id: true, categoriaId: true },
+  });
+  if (!candidatos.length) return resumen;
+  const partidoIds = candidatos.map((p) => p.id);
+  const categoriaIds = [...new Set(candidatos.map((p) => p.categoriaId))];
+  for (const diaKey of jornadas) {
+    // isPreCheck conserva la disponibilidad también en P3/P4: desactiva el fallback que la ignora.
+    await asignarHorariosAutomatico(organizadorId, categoriaIds, tx, { partidoIds, diaKey, isPreCheck: true });
+  }
+  resumen.partidosNuevosProgramados = await tx.partido.count({ where: {
+    id: { in: partidoIds }, fechaHora: { not: null }, canchaNumero: { not: null }, sinHorarioAsignado: false,
+  } });
+  resumen.partidosNuevosSinHorario = candidatos.length - resumen.partidosNuevosProgramados;
+  return resumen;
 }
 
 /**
@@ -2588,6 +2625,9 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   // Si cualquiera de las dos operaciones falla, todo hace rollback sin dejar estados inconsistentes.
   const { res: mcfRes, pendingMutations } = await prisma.$transaction(async (tx) => {
     let res;
+    const overridesAnteriores = esRestauracion ? await tx.overrideCanchasDia.findMany({
+      where: { torneoId }, orderBy: { diaKey: 'asc' },
+    }) : [];
 
     // Primera reducción del viernes o del sábado: guardar el horario de antes de la lluvia antes de mover nada.
     // Si la jornada ya tiene override (segunda reducción), su registro no se pisa.
@@ -2745,6 +2785,15 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       if (m) mutations.push(m);
     }
 
+    if (esRestauracion) {
+      const jornadas = overridesAnteriores.filter((o) => (!diaKeyJornada || o.diaKey === overrideDiaKey)
+        && getDiaCalendarioConTrasnoche(parseFechaLocal(o.diaKey), horariosClubObj)?.logicalDate.getDay() !== 0)
+        .map((o) => o.diaKey);
+      // Primero se recuperaron todos los registrados y se quitaron los overrides en DB. La caché
+      // sigue intacta hasta el commit; el asignador ve las jornadas restantes mediante la misma tx.
+      Object.assign(res, await programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, overridesAnteriores));
+    }
+
     // Sincronizar estado en Torneo dentro de la misma tx (retrocompatibilidad)
     if (esRestauracion) {
       const remainingOverrides = await tx.overrideCanchasDia.findMany({
@@ -2793,6 +2842,10 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       partidosSinCambio: mcfRes.partidosSinCambio,
       partidosSinHorarioNuevo: mcfRes.partidosSinHorarioNuevo,
       cambios: mcfRes.cambios || [],
+      ...(esRestauracion ? {
+        partidosNuevosProgramados: mcfRes.partidosNuevosProgramados,
+        partidosNuevosSinHorario: mcfRes.partidosNuevosSinHorario,
+      } : {}),
     },
   };
 }
