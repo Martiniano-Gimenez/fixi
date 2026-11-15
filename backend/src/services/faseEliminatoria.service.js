@@ -50,9 +50,9 @@ function nombreRonda(ronda) {
  * @param {string} categoriaId - ID de la categoría
  * @param {object|null} [externalTx] - Transacción externa opcional
  */
-async function generarEliminatoria(organizadorId, categoriaId, externalTx = null) {
+async function generarEliminatoria(organizadorId, categoriaId, externalTx = null, { soloValidar = false } = {}) {
   if (!externalTx || externalTx === prisma) {
-    return prisma.$transaction((tx) => generarEliminatoria(organizadorId, categoriaId, tx), {
+    return prisma.$transaction((tx) => generarEliminatoria(organizadorId, categoriaId, tx, { soloValidar }), {
       maxWait: 10000,
       timeout: 30000,
     });
@@ -151,6 +151,28 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       orderBy: { posicionEnRonda: 'asc' },
     });
 
+    // Comparar los orígenes actuales, incluidos los intercambiados desde Editar cruce.
+    // Los pases directos conservan su protección contra el partido de la ronda siguiente.
+    for (const partido of partidosPrimeraRonda) {
+      if (partido.esBye || !['EN_CURSO', 'FINALIZADO'].includes(partido.estado)) continue;
+      const cambiaPareja = [1, 2].some(lado => {
+        const clasificada = clasificadasMap.get(partido[`origenPareja${lado}`]);
+        return clasificada && clasificada.parejaId !== partido[`pareja${lado}Id`];
+      });
+      if (!cambiaPareja) continue;
+      const nombre = `partido #${partido.posicionEnRonda} de ${fasePrimeraRonda.nombre.toLowerCase()}`;
+      const destino = primeraRondaNum === 2 ? 'la final' : `el ${nombre}`;
+      const resultadoDestino = primeraRondaNum === 2 ? 'de la final' : `del ${nombre}`;
+      const detalle = partido.estado === 'EN_CURSO'
+        ? `${destino} ya está en juego. Volvelo a pendiente primero.`
+        : `${destino} ya tiene resultado. Borrá primero el resultado ${resultadoDestino}.`;
+      const error = new Error(`No se puede cambiar la clasificación: ${detalle}`);
+      error.statusCode = 400;
+      throw error;
+    }
+    // Si aún quedan zonas sin terminar, validar sin adelantar la asignación automática.
+    if (soloValidar) return null;
+
     for (const partido of partidosPrimeraRonda) {
       const updateData = {};
       
@@ -210,6 +232,8 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       esDieciseisavos,
     };
   }
+
+  if (soloValidar) return null;
 
   // 3. Determinar estructura de rondas
   const totalParejas = clasificadas.length;

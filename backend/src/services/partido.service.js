@@ -383,9 +383,6 @@ async function cargarResultado(organizadorId, partidoId, data) {
         await propagarEliminatoria(actual, ganadorId, tx);
       }
     }
-    if (nuevoEstado === 'EN_CURSO' && partido.estado !== 'EN_CURSO') {
-      await validarParejasEnJuego(tx, partido);
-    }
     // Reemplazar todos los sets con los nuevos
     await tx.setPartido.deleteMany({ where: { partidoId } });
 
@@ -415,6 +412,9 @@ async function cargarResultado(organizadorId, partidoId, data) {
       asignacion = await verificarYAutoAsignarEliminatoria(
         organizadorId, partido.categoriaId, tx, partido.estado === 'FINALIZADO',
       );
+    }
+    if (nuevoEstado === 'EN_CURSO' && partido.estado !== 'EN_CURSO') {
+      await validarParejasEnJuego(tx, partido);
     }
     await recalcularEstadosPorPartido(tx, partido.categoriaId);
   }, { maxWait: 10000, timeout: 30000 });
@@ -1006,8 +1006,8 @@ async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId, ext
     },
   });
 
-  // Si aún quedan partidos de zona pendientes o en curso, no se auto-asigna
-  if (partidosPendientes > 0 && !actualizarIncompletas) return null;
+  // Con zonas incompletas se valida el cuadro jugado, conservando la asignación automática habitual.
+  const soloValidar = partidosPendientes > 0 && !actualizarIncompletas;
 
   // 2. Verificar si la categoría tiene fases eliminatorias creadas (bracket generado al inicio)
   const fasesCount = await db.faseEliminatoria.count({
@@ -1019,7 +1019,8 @@ async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId, ext
   // 3. Ejecutar asignación de clasificados (poblado dinámico del bracket existente)
   const { generarEliminatoria } = require('./faseEliminatoria.service');
 
-  const resultado = await generarEliminatoria(organizadorId, categoriaId, externalTx);
+  const resultado = await generarEliminatoria(organizadorId, categoriaId, externalTx, { soloValidar });
+  if (!resultado) return null;
   if (!externalTx) await programarPrimeraRondaTrasAsignacion(organizadorId, categoriaId, resultado);
   return resultado;
 }

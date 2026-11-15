@@ -41,6 +41,8 @@
  *     repetidas y retiro de clasificados al borrar o dejar parcial un resultado de zona.
  * H19-H21 P1/P2 de mini-bracket: cambio de ganador, borrado y parcial con P3/P4 protegidos o pendientes;
  *     corrección del marcador sin cambiar ganador, estadísticas y rollback completo.
+ * H22-H25 Clasificados de zonas de tres protegidos por el cuadro jugado; correcciones permitidas,
+ *     orígenes editados y carga con otras zonas incompletas.
  *
  * En todos los casos de A se verifica que ningún par padre/hijo con horario tenga descanso menor al mínimo de la
  * ronda del hijo (obtenerDescansoMinimoRequeridoMs: 30 min antes de la final, 75 en las demás).
@@ -883,8 +885,10 @@ async function testCorreccionZonaConDestinoJugado() {
     const antes = await snapshotCorreccionZona();
     const r = await http('PUT', `/partidos/${definicion.id}/resultado`, correccion);
     assertResultado.equal(r.status, 400, JSON.stringify(r.json));
-    assertResultado.match(r.json.error, /Final/);
-    assertResultado.match(r.json.error, estado === 'EN_CURSO' ? /en juego.*pendiente/ : /resultado.*Borrá/);
+    // El intercambio de primero y segundo también afecta la semifinal real ya jugada:
+    // esa dependencia se valida antes de propagar el pase directo hacia la final.
+    assertResultado.match(r.json.error, new RegExp(`partido #${semi.posicionEnRonda} de semifinal`));
+    assertResultado.match(r.json.error, /ya tiene resultado.*Borrá primero el resultado/);
     assertResultado.deepEqual(await snapshotCorreccionZona(), antes, 'El rechazo no modifica sets, posiciones, cuadro, horarios ni estados');
   }
 }
@@ -1039,6 +1043,125 @@ async function testMiniBracketMismoGanador() {
   }
 }
 
+const invertirResultadoZona = (p) => ({ sets: [1, 2].map(() => ({
+  gamesPareja1: p.ganadorId === p.pareja1Id ? 0 : 6,
+  gamesPareja2: p.ganadorId === p.pareja2Id ? 0 : 6,
+})) });
+
+async function armarZonaTresConCuadro() {
+  const fixture = await armar({ cats: [['A', 6]] });
+  const cat = fixture.cats.A;
+  await cargarZonas(cat);
+  const zona = await prisma.zona.findFirst({ where: { categoriaId: cat.id }, orderBy: { nombre: 'asc' }, include: {
+    zonaParejas: { include: { pareja: true } }, partidos: true,
+  } });
+  const parejas = zona.zonaParejas.map(zp => zp.pareja).sort((a, b) => a.orden - b.orden);
+  const cruce = (a, b) => zona.partidos.find(p => [p.pareja1Id, p.pareja2Id].includes(a.id) && [p.pareja1Id, p.pareja2Id].includes(b.id));
+  const primeraRonda = await prisma.partido.findMany({ where: { categoriaId: cat.id, faseEliminatoria: { ronda: 4 } }, orderBy: { posicionEnRonda: 'asc' } });
+  const origen1 = `1° ${zona.nombre}`, origen2 = `2° ${zona.nombre}`;
+  const conOrigen = (origen) => primeraRonda.find(p => [p.origenPareja1, p.origenPareja2].includes(origen));
+  return { ...fixture, cat, zona, parejas, entrePrimeros: cruce(parejas[0], parejas[1]),
+    porSegundo: cruce(parejas[1], parejas[2]), primeraRonda, origen1, origen2,
+    partidoPrimero: conOrigen(origen1), partidoSegundo: conOrigen(origen2) };
+}
+
+async function terminarCuadroZonaTres(org, cat) {
+  const fases = await prisma.faseEliminatoria.findMany({ where: { categoriaId: cat.id }, orderBy: { ronda: 'desc' } });
+  for (const fase of fases) {
+    for (const p of await prisma.partido.findMany({ where: { faseEliminatoriaId: fase.id, esBye: false } })) {
+      await partidoService.cargarResultado(org.id, p.id, SETS_GANA_1);
+    }
+  }
+}
+
+async function comprobarRechazoClasificacion(partido, camino, estado) {
+  const antes = await snapshotCorreccionZona();
+  const r = camino === 'borrar' ? await http('DELETE', `/partidos/${partido.id}/resultado`)
+    : await http('PUT', `/partidos/${partido.id}/resultado`, camino === 'parcial' ? SET_PARCIAL_MINI : invertirResultadoZona(partido));
+  assertResultado.equal(r.status, 400, `${camino}: ${JSON.stringify(r.json)}`);
+  assertResultado.match(r.json.error, /No se puede cambiar la clasificación:.*partido #\d+ de semifinal/);
+  assertResultado.match(r.json.error, estado === 'EN_CURSO' ? /en juego.*Volvelo a pendiente primero/ : /ya tiene resultado.*Borrá primero el resultado/);
+  assertResultado.deepEqual(await snapshotCorreccionZona(), antes, 'El rechazo conserva sets, posiciones, parejas, horarios y estados de categoría y torneo');
+  return r;
+}
+
+async function testZonaTresCuadroJugado() {
+  for (const estado of ['EN_CURSO', 'FINALIZADO']) {
+    const { org, cat, entrePrimeros, porSegundo, partidoSegundo } = await armarZonaTresConCuadro();
+    if (estado === 'EN_CURSO') await partidoService.updateEstado(org.id, partidoSegundo.id, estado);
+    else await terminarCuadroZonaTres(org, cat);
+    for (const p of [entrePrimeros, porSegundo]) {
+      for (const camino of ['ganador', 'borrar', 'parcial']) await comprobarRechazoClasificacion(p, camino, estado);
+    }
+    if (estado === 'FINALIZADO') {
+      const antes = await snapshotCorreccionZona();
+      const r = await http('PUT', `/partidos/${entrePrimeros.id}/resultado`, { sets: [1, 2].map(() => ({
+        gamesPareja1: entrePrimeros.ganadorId === entrePrimeros.pareja1Id ? 6 : 2,
+        gamesPareja2: entrePrimeros.ganadorId === entrePrimeros.pareja2Id ? 6 : 2,
+      })) });
+      assertResultado.equal(r.status, 200, JSON.stringify(r.json));
+      const despues = await snapshotCorreccionZona();
+      assertResultado.deepEqual(despues.partidos.filter(p => p.faseEliminatoriaId), antes.partidos.filter(p => p.faseEliminatoriaId));
+      assertResultado.equal(despues.categorias[0].estado, 'FINALIZADO');
+      assertResultado.equal(despues.torneos[0].estado, 'FINALIZADO');
+    }
+  }
+}
+
+async function testZonaTresSoloCambiaPendiente() {
+  const { org, porSegundo, partidoPrimero, partidoSegundo, parejas, origen2 } = await armarZonaTresConCuadro();
+  await partidoService.cargarResultado(org.id, partidoPrimero.id, SETS_GANA_1);
+  const antes = await snapshotCorreccionZona();
+  const r = await http('PUT', `/partidos/${porSegundo.id}/resultado`, invertirResultadoZona(porSegundo));
+  assertResultado.equal(r.status, 200, JSON.stringify(r.json));
+  const despues = await snapshotCorreccionZona();
+  assertResultado.deepEqual(despues.partidos.find(p => p.id === partidoPrimero.id), antes.partidos.find(p => p.id === partidoPrimero.id));
+  const pendiente = despues.partidos.find(p => p.id === partidoSegundo.id);
+  const lado = pendiente.origenPareja1 === origen2 ? 1 : 2;
+  assertResultado.equal(pendiente[`pareja${lado}Id`], parejas[2].id);
+  assertResultado.equal(pendiente.estado, 'PENDIENTE');
+  assertResultado.equal(despues.posiciones.find(zp => zp.parejaId === parejas[2].id).puntos, 3);
+}
+
+async function testZonaTresOrigenEditado() {
+  for (const protegerNuevo of [false, true]) {
+    const { org, porSegundo, partidoPrimero, partidoSegundo, parejas, origen1, origen2 } = await armarZonaTresConCuadro();
+    const lado = partidoPrimero.origenPareja1 === origen1 ? 1 : 2;
+    const r = await http('PATCH', `/partidos/${partidoPrimero.id}/bracket`, { [`origenPareja${lado}`]: origen2, liberarEnOtros: true });
+    assertResultado.equal(r.status, 200, JSON.stringify(r.json));
+    const protegido = protegerNuevo ? partidoPrimero : partidoSegundo;
+    await partidoService.updateEstado(org.id, protegido.id, 'EN_CURSO');
+    if (protegerNuevo) {
+      const bloqueo = await comprobarRechazoClasificacion(porSegundo, 'ganador', 'EN_CURSO');
+      assertResultado.match(bloqueo.json.error, new RegExp(`#${partidoPrimero.posicionEnRonda} de semifinal`));
+    } else {
+      const correccion = await http('PUT', `/partidos/${porSegundo.id}/resultado`, invertirResultadoZona(porSegundo));
+      assertResultado.equal(correccion.status, 200, JSON.stringify(correccion.json));
+      const pendiente = await prisma.partido.findUnique({ where: { id: partidoPrimero.id } });
+      assertResultado.equal(pendiente[`pareja${lado}Id`], parejas[2].id, 'Se actualiza el destino actual del origen, no el inicial');
+    }
+  }
+}
+
+async function testCargaZonaConOtraIncompleta() {
+  const { org, cat, zona, entrePrimeros, partidoSegundo, origen1, origen2 } = await armarZonaTresConCuadro();
+  // Fixture histórico: otra zona incompleta y un origen ya jugado. La carga debe validar
+  // el cuadro aunque todavía no corresponda la asignación automática de todos los clasificados.
+  // Reunir ambos orígenes de esta zona para que el cruce protegido no dependa de la otra.
+  const ladoAjeno = partidoSegundo.origenPareja1 === origen2 ? 2 : 1;
+  const editado = await http('PATCH', `/partidos/${partidoSegundo.id}/bracket`, { [`origenPareja${ladoAjeno}`]: origen1, liberarEnOtros: true });
+  assertResultado.equal(editado.status, 200, JSON.stringify(editado.json));
+  const otra = await prisma.partido.findFirst({ where: { categoriaId: cat.id, zonaId: { not: zona.id } } });
+  await prisma.partido.update({ where: { id: otra.id }, data: { estado: 'PENDIENTE', ganadorId: null } });
+  await partidoService.updateEstado(org.id, partidoSegundo.id, 'EN_CURSO');
+  await prisma.partido.update({ where: { id: entrePrimeros.id }, data: { estado: 'PENDIENTE', ganadorId: null } });
+  const antes = await snapshotCorreccionZona();
+  const r = await http('PUT', `/partidos/${entrePrimeros.id}/resultado`, invertirResultadoZona(entrePrimeros));
+  assertResultado.equal(r.status, 400, JSON.stringify(r.json));
+  assertResultado.match(r.json.error, /clasificación.*en juego.*Volvelo a pendiente primero/);
+  assertResultado.deepEqual(await snapshotCorreccionZona(), antes);
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -1073,6 +1196,10 @@ async function run() {
     { nombre: 'H19: P1/P2 protegidos por P3/P4 jugados, 400 sin cambios', fn: testMiniBracketDestinoProtegido },
     { nombre: 'H20: P1/P2 cambian o vacían P3/P4 pendientes y estadísticas', fn: testMiniBracketDestinosPendientes },
     { nombre: 'H21: corregir sets de P1/P2 con igual ganador sigue permitido', fn: testMiniBracketMismoGanador },
+    { nombre: 'H22: zona de tres con cuadro jugado, rechazos y cierre conservado', fn: testZonaTresCuadroJugado },
+    { nombre: 'H23: corrección que solo cambia un cruce pendiente', fn: testZonaTresSoloCambiaPendiente },
+    { nombre: 'H24: protección según el origen actual editado a mano', fn: testZonaTresOrigenEditado },
+    { nombre: 'H25: cargar zona valida aun con otra zona incompleta', fn: testCargaZonaConOtraIncompleta },
   ];
 
   const resultados = [];
