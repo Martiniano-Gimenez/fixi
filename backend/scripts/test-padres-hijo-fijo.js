@@ -29,9 +29,11 @@
  * H9  Cadena de antecesores: categoría de 18 parejas (4 octavos con BYE), final fijada a mano a las 17:30;
  *     reprogramar A. Solo entra si los cuartos (abuelos de la final) se adelantan a las 12:30: la final
  *     conserva su horario manual.
- * H10 Padre sin turno por un hijo EN_CURSO (domingo 10:00-12:30, A y B de 6 parejas): la lluvia del domingo lo
+ * H10 Estado histórico de padre pendiente con un hijo EN_CURSO (domingo 10:00-12:30, A y B de 6 parejas): la lluvia del domingo lo
  *     deja sin horario y en partidosSinSlot del domingo con su motivo; restaurar el domingo con diaKey (H10a) o
  *     sin diaKey (H10b) borra el override (base y caché) y lo vuelve a programar.
+ * H11 Cambiar o borrar un ganador se bloquea si el siguiente está jugado/en juego; corregir sets con el mismo
+ *     ganador sigue permitido. Con el siguiente pendiente se conserva la propagación atómica y su rollback.
  *
  * En todos los casos de A se verifica que ningún par padre/hijo con horario tenga descanso menor al mínimo de la
  * ronda del hijo (obtenerDescansoMinimoRequeridoMs: 30 min antes de la final, 75 en las demás).
@@ -42,6 +44,8 @@ const { ensureTestDb } = require('./utils/testEnvGuard');
 const { resetTestDb } = require('./reset-test-db');
 const jwt = require('jsonwebtoken');
 const prisma = require('../src/lib/prisma');
+const partidoService = require('../src/services/partido.service');
+const assertResultado = require('node:assert/strict');
 const { JWT_SECRET } = require('../src/config/env');
 const { startTestServer } = require('./utils/testServer');
 const canchasOverridesService = require('../src/services/canchasOverrides.service');
@@ -401,9 +405,9 @@ async function h9_cadena_de_antecesores() {
 }
 
 /**
- * H10. Padre sin turno por un hijo EN_CURSO (no se puede mover), por caminos de la app: se terminan las zonas y las
- * dos semis de A (PUT resultado), se inicia la final (PATCH estado, con las dos parejas) y se borra el resultado de
- * la semi 2 (DELETE resultado, que no mira al hijo). Domingo 10:00-12:30 y lluvia a 1 cancha: el techo de la semi 2
+ * H10. Padre sin turno por un hijo EN_CURSO (no se puede mover): se terminan las zonas y las dos semis de A,
+ * se inicia la final y se verifica que borrar la semi 2 ya se rechaza. Se siembra luego el estado histórico que
+ * antes dejaba ese borrado: semi 2 pendiente y final en juego sin su segunda pareja. Con lluvia a 1 cancha, el techo de la semi 2
  * es 10:45 y a las 10:00 la cancha 1 la ocupa la semi 1 finalizada. Se verifica partidosSinSlot del domingo y la
  * restauración del domingo (con diaKey o sin diaKey).
  */
@@ -426,7 +430,15 @@ async function h10_padre_sin_turno_por_hijo_en_curso(restaurarConDiaKey) {
   let r = await http('PATCH', `/partidos/${final.id}/estado`, { estado: 'EN_CURSO' });
   assert(r.status === 200, `PATCH final EN_CURSO: HTTP ${r.status} ${JSON.stringify(r.json)}`);
   r = await http('DELETE', `/partidos/${s2.id}/resultado`);
-  assert(r.status === 200, `DELETE resultado semi 2: HTTP ${r.status} ${JSON.stringify(r.json)}`);
+  assert(r.status === 400 && r.json.error.includes('la Final ya está en juego'),
+    `DELETE resultado semi 2 debe bloquearse: HTTP ${r.status} ${JSON.stringify(r.json)}`);
+  // Antes del bloqueo, borrar esta semifinal dejaba la final en juego sin su segunda pareja.
+  // Sembrar solo ese estado histórico: el scheduler debe seguir pudiendo recuperar bases anteriores.
+  await prisma.$transaction(async (tx) => {
+    await tx.setPartido.deleteMany({ where: { partidoId: s2.id } });
+    await tx.partido.update({ where: { id: s2.id }, data: { estado: 'PENDIENTE', ganadorId: null, enJuegoDesde: null } });
+    await tx.partido.update({ where: { id: final.id }, data: { pareja2Id: null, origenPareja2: null } });
+  });
 
   await lluviaDomingo(torneo, 1);
   const s2Lluvia = await prisma.partido.findUnique({ where: { id: s2.id } });
@@ -452,6 +464,96 @@ async function h10_padre_sin_turno_por_hijo_en_curso(restaurarConDiaKey) {
   assert(v.length === 0, `violaciones de descanso: ${v.join(' | ')}`);
 }
 
+async function testGanadorConSiguienteJugado(organizadorId, torneoId) {
+  const categoria = await prisma.categoria.create({ data: {
+    torneoId, nombre: 'Ganador con siguiente jugado', estado: 'EN_CURSO',
+    parejas: { create: Array.from({ length: 4 }, (_, i) => ({ orden: i + 1, jugador1: `Pareja ${i + 1}`, jugador2: 'Ganador' })) },
+  }, include: { parejas: { orderBy: { orden: 'asc' } } } });
+  try {
+    const [a, b, c, d] = categoria.parejas;
+    const semis = await prisma.faseEliminatoria.create({ data: { categoriaId: categoria.id, nombre: 'Semifinal', ronda: 4 } });
+    const final = await prisma.faseEliminatoria.create({ data: { categoriaId: categoria.id, nombre: 'Final', ronda: 2 } });
+    const crear = (faseId, posicionEnRonda, pareja1Id = null, pareja2Id = null) => prisma.partido.create({ data: {
+      categoriaId: categoria.id, faseEliminatoriaId: faseId, posicionEnRonda, pareja1Id, pareja2Id,
+      origenPareja1: pareja1Id ? `1° Zona ${posicionEnRonda}` : null,
+      origenPareja2: pareja2Id ? `2° Zona ${posicionEnRonda}` : null,
+      fechaHora: new Date('2026-11-08T15:00:00.000Z'), canchaNumero: posicionEnRonda,
+    } });
+    const semi1 = await crear(semis.id, 1, a.id, b.id);
+    const semi2 = await crear(semis.id, 2, c.id, d.id);
+    const destino = await crear(final.id, 1);
+    const gana1 = { sets: [{ gamesPareja1: 6, gamesPareja2: 2 }, { gamesPareja1: 6, gamesPareja2: 3 }] };
+    const gana2 = { sets: [{ gamesPareja1: 2, gamesPareja2: 6 }, { gamesPareja1: 3, gamesPareja2: 6 }] };
+    const correccion = { sets: [{ gamesPareja1: 6, gamesPareja2: 4 }, { gamesPareja1: 7, gamesPareja2: 5 }] };
+    const parcial = { sets: [{ gamesPareja1: 6, gamesPareja2: 4 }] };
+    const leer = () => prisma.partido.findMany({ where: { categoriaId: categoria.id }, orderBy: { id: 'asc' },
+      include: { sets: { orderBy: { numero: 'asc' } } } });
+    const rechazaSinCambios = async (accion, mensaje) => {
+      const antes = await leer();
+      await assertResultado.rejects(accion, { statusCode: 400, message: mensaje });
+      assertResultado.deepEqual(await leer(), antes, 'El rechazo conserva sets, estado, ganador, inicio, horarios y ambos cruces completos');
+    };
+    await partidoService.cargarResultado(organizadorId, semi1.id, gana1);
+    await partidoService.cargarResultado(organizadorId, semi2.id, gana1);
+
+    for (const estado of ['FINALIZADO', 'EN_CURSO']) {
+      if (estado === 'FINALIZADO') await partidoService.cargarResultado(organizadorId, destino.id, gana1);
+      else {
+        await partidoService.borrarResultado(organizadorId, destino.id);
+        // Marcado en juego sin sets: el bloqueo depende del estado, no de tener un parcial.
+        await partidoService.updateEstado(organizadorId, destino.id, 'EN_CURSO');
+      }
+      const mensaje = estado === 'FINALIZADO'
+        ? 'No se puede cambiar el ganador: la Final ya tiene resultado. Borrá primero el resultado de la Final.'
+        : 'No se puede cambiar el ganador: la Final ya está en juego. Quitalo de en juego primero.';
+      await rechazaSinCambios(() => partidoService.cargarResultado(organizadorId, semi1.id, gana2), mensaje);
+      await rechazaSinCambios(() => partidoService.cargarResultado(organizadorId, semi1.id, parcial), mensaje);
+      await rechazaSinCambios(() => partidoService.borrarResultado(organizadorId, semi1.id), mensaje);
+      const antes = await leer();
+      await partidoService.cargarResultado(organizadorId, semi1.id, correccion);
+      const despues = await leer();
+      const corregido = despues.find((p) => p.id === semi1.id);
+      assertResultado.equal(corregido.ganadorId, a.id);
+      assertResultado.deepEqual(corregido.sets.map(({ gamesPareja1, gamesPareja2 }) => ({ gamesPareja1, gamesPareja2 })), correccion.sets);
+      assertResultado.deepEqual(despues.filter((p) => p.id !== semi1.id), antes.filter((p) => p.id !== semi1.id),
+        'Corregir sets con el mismo ganador no toca la final ni la otra semifinal');
+    }
+
+    await partidoService.updateEstado(organizadorId, destino.id, 'PENDIENTE');
+    const antes = await leer();
+    const transaction = prisma.$transaction;
+    prisma.$transaction = (fn, ...args) => transaction.call(prisma, async (tx) => { await fn(tx); throw new Error('Fallo antes del commit del ganador'); }, ...args);
+    try {
+      await assertResultado.rejects(() => partidoService.cargarResultado(organizadorId, semi1.id, gana2), /Fallo antes del commit/);
+    } finally { prisma.$transaction = transaction; }
+    assertResultado.deepEqual(await leer(), antes, 'Un rollback revierte juntos los sets y la propagación de la pareja');
+
+    await partidoService.cargarResultado(organizadorId, semi1.id, gana2);
+    let siguiente = await prisma.partido.findUnique({ where: { id: destino.id } });
+    assertResultado.equal(siguiente.estado, 'PENDIENTE');
+    assertResultado.equal(siguiente.pareja1Id, b.id);
+    assertResultado.equal(siguiente.origenPareja1, semi1.origenPareja2);
+    assertResultado.equal(siguiente.pareja2Id, c.id);
+    await partidoService.cargarResultado(organizadorId, semi2.id, gana2);
+    siguiente = await prisma.partido.findUnique({ where: { id: destino.id } });
+    assertResultado.equal(siguiente.pareja2Id, d.id, 'La semifinal par actualiza el segundo lugar de la final');
+    await partidoService.borrarResultado(organizadorId, semi1.id);
+    const borrado = (await leer()).find((p) => p.id === semi1.id);
+    assertResultado.equal(borrado.estado, 'PENDIENTE'); assertResultado.equal(borrado.ganadorId, null); assertResultado.equal(borrado.enJuegoDesde, null);
+    assertResultado.deepEqual(borrado.sets, []);
+    siguiente = await prisma.partido.findUnique({ where: { id: destino.id } });
+    assertResultado.equal(siguiente.pareja1Id, null); assertResultado.equal(siguiente.origenPareja1, null);
+    assertResultado.equal(siguiente.pareja2Id, d.id);
+
+    await partidoService.cargarResultado(organizadorId, semi1.id, gana1);
+    await partidoService.cargarResultado(organizadorId, destino.id, gana1);
+    await partidoService.cargarResultado(organizadorId, destino.id, gana2);
+    assertResultado.equal((await prisma.partido.findUnique({ where: { id: destino.id } })).ganadorId, d.id,
+      'La final no tiene partido siguiente y permite corregir su ganador');
+    console.log('  ✅ Ganador protegido: siguiente finalizado/en juego, parciales, borrado, corrección de sets, destino pendiente y rollback.');
+  } finally { await prisma.categoria.delete({ where: { id: categoria.id } }); }
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -472,6 +574,10 @@ async function run() {
     { nombre: 'H9: techo de la cadena de antecesores', fn: h9_cadena_de_antecesores },
     { nombre: 'H10a: padre sin turno por hijo EN_CURSO, restaurar con diaKey', fn: () => h10_padre_sin_turno_por_hijo_en_curso(true) },
     { nombre: 'H10b: padre sin turno por hijo EN_CURSO, restaurar sin diaKey', fn: () => h10_padre_sin_turno_por_hijo_en_curso(false) },
+    { nombre: 'H11: proteger ganador si el siguiente ya se jugó', fn: async () => {
+      const { org, torneo } = await armar({ cats: [['A', 6]] });
+      await testGanadorConSiguienteJugado(org.id, torneo.id);
+    } },
   ];
 
   const resultados = [];

@@ -331,6 +331,12 @@ async function cargarResultado(organizadorId, partidoId, data) {
   }
 
   await prisma.$transaction(async (tx) => {
+    if (partido.faseEliminatoriaId) {
+      const actual = await tx.partido.findUnique({ where: { id: partidoId } });
+      if (nuevoEstado === 'FINALIZADO' || actual.estado === 'FINALIZADO') {
+        await propagarEliminatoria(actual, ganadorId, tx);
+      }
+    }
     if (nuevoEstado === 'EN_CURSO' && partido.estado !== 'EN_CURSO') {
       await validarParejasEnJuego(tx, partido);
     }
@@ -376,10 +382,6 @@ async function cargarResultado(organizadorId, partidoId, data) {
         console.error('[Auto-Eliminatoria] Error al auto-asignar eliminatoria tras partido de zona:', errAuto);
       }
     }
-
-    if (partido.faseEliminatoriaId) {
-      await propagarEliminatoria(partido, ganadorId);
-    }
   } else {
     // Si el partido estaba FINALIZADO y ahora vuelve a EN_CURSO (edición parcial),
     // revertimos las stats y la propagación del bracket
@@ -391,9 +393,6 @@ async function cargarResultado(organizadorId, partidoId, data) {
         } else if (zona.formato === 'MINI_BRACKET') {
           await propagarMiniBracket(partido.zonaId);
         }
-      }
-      if (partido.faseEliminatoriaId) {
-        await propagarEliminatoria(partido, null);
       }
     }
   }
@@ -441,6 +440,20 @@ async function propagarEliminatoria(partido, ganadorId, externalTx = null) {
 
   if (!partidoDestino) return;
 
+  if (partidoDestino.estado === 'EN_CURSO' || partidoDestino.estado === 'FINALIZADO') {
+    // Corregir los sets sin cambiar al ganador no modifica un cruce que ya se jugó.
+    if (partido.ganadorId === ganadorId) return;
+    const nombreFase = faseSiguiente.nombre.replace(/ de Final\b/g, ' de final');
+    const destino = faseSiguiente.ronda === 2 ? 'la Final'
+      : `el partido #${partidoDestino.posicionEnRonda} de ${nombreFase}`;
+    const detalle = partidoDestino.estado === 'EN_CURSO'
+      ? `${destino} ya está en juego. Quitalo de en juego primero.`
+      : `${destino} ya tiene resultado. Borrá primero el resultado de ${destino}.`;
+    const error = new Error(`No se puede cambiar el ganador: ${detalle}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
   // Determine origenPareja of the winner
   let origenGanador = null;
   let parejaGanadoraId = ganadorId;
@@ -477,6 +490,10 @@ async function borrarResultado(organizadorId, partidoId) {
   }
 
   await prisma.$transaction(async (tx) => {
+    if (partido.faseEliminatoriaId) {
+      const actual = await tx.partido.findUnique({ where: { id: partidoId } });
+      await propagarEliminatoria(actual, null, tx);
+    }
     await tx.setPartido.deleteMany({ where: { partidoId } });
 
     await tx.partido.update({
@@ -497,11 +514,6 @@ async function borrarResultado(organizadorId, partidoId) {
     } else if (zona.formato === 'MINI_BRACKET') {
       await propagarMiniBracket(partido.zonaId);
     }
-  }
-
-  // Si es eliminatoria, limpiar la propagación
-  if (partido.faseEliminatoriaId) {
-    await propagarEliminatoria(partido, null);
   }
 
   return { message: 'Resultado borrado exitosamente.' };
