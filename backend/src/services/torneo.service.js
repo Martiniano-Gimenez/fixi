@@ -24,6 +24,10 @@ function conPodioCategoria(categoria) {
 }
 
 async function recalcularEstadoTorneo(tx, torneoId) {
+  const torneo = await tx.torneo.findUnique({ where: { id: torneoId }, select: { estado: true } });
+  // El inicio por pre-check es el que saca al torneo de preparación.
+  if (torneo?.estado === 'BORRADOR') return;
+
   const categorias = await tx.categoria.findMany({ where: { torneoId }, select: {
     estado: true, _count: { select: { parejas: true } },
   } });

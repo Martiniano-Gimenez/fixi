@@ -36,6 +36,7 @@
  *     ganador sigue permitido. Con el siguiente pendiente se conserva la propagación atómica y su rollback.
  * H12 La última final cierra la categoría y el torneo; corregir, borrar y las acciones bloqueadas respetan ese estado.
  * H13 Limpiar o rearmar partidos recalcula los estados sin dejar cierres viejos, dentro de la misma transacción.
+ * H14 Armar una categoría no inicia el torneo: el recálculo conserva BORRADOR hasta el inicio por pre-check.
  *
  * En todos los casos de A se verifica que ningún par padre/hijo con horario tenga descanso menor al mínimo de la
  * ronda del hijo (obtenerDescansoMinimoRequeridoMs: 30 min antes de la final, 75 en las demás).
@@ -759,6 +760,24 @@ async function testCierreAlRearmarPartidos() {
   console.log('  ✅ Limpiar, borrar, generar, regenerar, sincronizar, reiniciar y eliminar recalculan estados con rollback atómico.');
 }
 
+async function testRecalculoRespetaBorrador() {
+  const { org, torneo } = await armar({ cats: [] });
+  const antes = await prisma.torneo.findUnique({ where: { id: torneo.id } });
+  assertResultado.equal(antes.estado, 'BORRADOR');
+  const categoria = await prisma.categoria.create({ data: { torneoId: torneo.id, nombre: 'En preparación',
+    parejas: { create: Array.from({ length: 6 }, (_, i) => ({ orden: i + 1, jugador1: `Jugador ${i}`, jugador2: 'Pareja' })) },
+  } });
+  await zonaService.iniciarCategoria(org.id, categoria.id);
+  assertResultado.equal((await prisma.categoria.findUnique({ where: { id: categoria.id } })).estado, 'EN_CURSO');
+  assertResultado.ok(await prisma.partido.count({ where: { categoriaId: categoria.id } }));
+  assertResultado.deepEqual(await prisma.torneo.findUnique({ where: { id: torneo.id } }), antes,
+    'Armar las zonas no cambia el torneo en borrador');
+  await generarEliminatoria(org.id, categoria.id);
+  assertResultado.deepEqual(await prisma.torneo.findUnique({ where: { id: torneo.id } }), antes,
+    'Armar el cuadro tampoco cambia el torneo en borrador');
+  console.log('  ✅ Armar zonas y cuadro conserva el torneo en BORRADOR, sin escribir su estado ni sus fechas.');
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -785,6 +804,7 @@ async function run() {
     } },
     { nombre: 'H12: cierre automático y acciones bloqueadas', fn: testCierreAutomatico },
     { nombre: 'H13: cierre al limpiar o rearmar partidos', fn: testCierreAlRearmarPartidos },
+    { nombre: 'H14: el recálculo no inicia un torneo en borrador', fn: testRecalculoRespetaBorrador },
   ];
 
   const resultados = [];
