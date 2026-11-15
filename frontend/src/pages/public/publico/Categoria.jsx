@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Trophy, Users } from 'lucide-react';
+import { ChevronDown, Trophy, Users } from 'lucide-react';
 import Recorrido from './Recorrido';
 import Segmentado from './Segmentado';
 import TarjetaPartido from './TarjetaPartido';
@@ -24,6 +24,23 @@ const suscribirCelular = (onCambio) => {
 const HASH_RONDA = { 32: 'dieciseisavos', 16: 'octavos', 8: 'cuartos', 4: 'semi', 2: 'final', 1: 'final' };
 const porHoraAsignada = (a, b) => a.fechaHora && b.fechaHora ? porHorario(a, b)
   : a.fechaHora ? -1 : b.fechaHora ? 1 : (a.posicionEnRonda || 0) - (b.posicionEnRonda || 0);
+
+function JornadaZona({ nombre, cantidad, abiertaInicial, children }) {
+  const id = useId();
+  const [abierta, setAbierta] = useState(abiertaInicial);
+  return (
+    <section className="pv-fase-jornada" aria-label={nombre}>
+      <h3 className="pv-titulo-dia pv-jornada-titulo">
+        <button type="button" className="pv-jornada-toggle" aria-expanded={abierta} aria-controls={`${id}-partidos`}
+          onClick={() => setAbierta((valor) => !valor)}>
+          <span>{nombre} <small>· {cantidad} {cantidad === 1 ? 'partido' : 'partidos'}</small></span>
+          <ChevronDown size={20} aria-hidden="true" />
+        </button>
+      </h3>
+      <div id={`${id}-partidos`} className="pv-jornada-contenido" hidden={!abierta}>{children}</div>
+    </section>
+  );
+}
 
 export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId, animar, actualizacion, seccionInicial, torneoEstado, torneoNombre }) {
   const id = useId();
@@ -159,18 +176,18 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   const { jornadas, sinHora } = agruparPartidosPorJornada(partidos.filter((p) => p.zonaId), dias);
   const jornadasOrdenadas = torneoEstado === 'EN_CURSO' && hoy?.momento === 'durante'
     ? [...jornadas].sort((a, b) => Number(b.dia.key === hoy.key) - Number(a.dia.key === hoy.key)) : jornadas;
+  const gruposZona = jornadasOrdenadas.map(({ dia, partidos }) => ({ key: dia.key, nombre: nombreJornada(dia), partidos }));
+  if (sinHora.length) gruposZona.push({ key: 'sin-horario', nombre: 'Sin horario', partidos: sinHora });
+  const jornadaInicial = (torneoEstado === 'EN_CURSO' && hoy?.momento === 'durante'
+    && gruposZona.find((grupo) => grupo.key === hoy.key))
+    || gruposZona.find((grupo) => grupo.partidos.some((p) => p.estado === 'PENDIENTE')) || gruposZona.at(-1);
   const vistaPartidosZona = (
     <div className="pv-jornadas">
-      {jornadasOrdenadas.map(({ dia, partidos: ps }) => (
-        <section key={dia.key} className="pv-fase-jornada" aria-label={nombreJornada(dia)}>
-          <h3 className="pv-titulo-dia">{nombreJornada(dia)} <small>{ps.length} {ps.length === 1 ? 'partido' : 'partidos'}</small></h3>
-          <ListaAnimada items={ps} clave={claveTarjeta} className="pv-lista grilla" render={tarjeta(false)} />
-        </section>
+      {gruposZona.map((grupo) => (
+        <JornadaZona key={grupo.key} nombre={grupo.nombre} cantidad={grupo.partidos.length} abiertaInicial={grupo.key === jornadaInicial?.key}>
+          <ListaAnimada items={grupo.partidos} clave={claveTarjeta} className="pv-lista grilla" render={tarjeta(false)} />
+        </JornadaZona>
       ))}
-      {sinHora.length > 0 && <section className="pv-fase-jornada" aria-label="Sin horario">
-        <h3 className="pv-titulo-dia">Sin horario</h3>
-        <ListaAnimada items={sinHora} clave={claveTarjeta} className="pv-lista grilla" render={tarjeta(false)} />
-      </section>}
       {!jornadas.length && !sinHora.length && <p className="pv-vacio">Todavía no hay partidos de zona.</p>}
     </div>
   );

@@ -237,9 +237,9 @@ export function rangoFechas(dias) {
 
 export const diaDe = (p) => jornada(p.fechaHora)?.key || null;
 
-// Pendiente cuyo horario ya pasó (inicio + duración) y todavía no tiene resultado
+// Pendiente con ambas parejas definidas cuyo horario ya pasó (inicio + duración).
 export const sinResultado = (p, ahora = Date.now()) =>
-  p.estado === 'PENDIENTE' && Boolean(p.fechaHora) && new Date(p.fechaHora).getTime() + DURACION_PARTIDO_MIN * 60000 < ahora;
+  p.estado === 'PENDIENTE' && Boolean(p.pareja1Id && p.pareja2Id && p.fechaHora) && new Date(p.fechaHora).getTime() + DURACION_PARTIDO_MIN * 60000 < ahora;
 
 // "Dieciseisavos de Final" → "Dieciseisavos de final" (mayúscula solo al principio)
 export const fraseFase = (texto) => (texto || '').replace(/ de Final(?![a-záéíóú])/g, ' de final');

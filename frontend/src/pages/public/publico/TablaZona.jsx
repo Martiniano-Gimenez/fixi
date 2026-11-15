@@ -31,9 +31,6 @@ export default function TablaZona({ zona, seguidaId, busqueda, children, mostrar
         <span>Pts</span>
       </div>
       <div className="pv-t-filas" role="list" style={{ height: filas.length * ALTO_FILA }}>
-        {zona.clasifican > 0 && zona.clasifican < filas.length && (
-          <span className="pv-corte" style={{ top: zona.clasifican * ALTO_FILA }} aria-hidden="true" />
-        )}
         {/* Orden estable en el DOM (por id) para que la transición de transform funcione */}
         {[...filas]
           .map((row, i) => ({ row, i }))

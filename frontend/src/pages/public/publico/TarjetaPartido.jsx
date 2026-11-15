@@ -96,7 +96,7 @@ export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, se
       : null;
 
   return (
-    <article className={`pv-partido ${vivo ? 'vivo' : ''} ${esSeguida ? 'seguida' : ''} ${clase}`}>
+    <article className={`pv-partido ${vivo ? 'vivo' : ''} ${p.estado === 'PENDIENTE' ? 'pendiente' : ''} ${esSeguida ? 'seguida' : ''} ${clase}`}>
       <div className="pv-p-meta">
         <span className="pv-p-hora num">{hora || 'Horario a definir'}</span>
         {etiqueta ? <span>{etiqueta}</span> : null}
