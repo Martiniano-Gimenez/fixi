@@ -3201,9 +3201,49 @@ Las entradas 93 y 94 agrupan temáticamente 23 de los 24 commits de `48da50b..49
 
 ---
 
+## 98. Vista pública: navegación por fases, búsqueda y parejas (14/11/2026)
+
+### 1. Problema y decisiones de estructura
+- La página de categoría reunía todas las fases una debajo de otra, con un índice de chips y una sección de horarios que repetía los partidos. El recorrido de fases se veía como progreso, pero no permitía navegar. El buscador podía devolver demasiadas coincidencias y «Seguir» solo se descubría desde la lupa.
+- **Decisión:** la categoría dejó de ser «de corrido». El recorrido es la navegación y muestra el contenido de la fase elegida; queda fijo debajo de la barra superior al bajar. No se usaron pestañas Zonas/Cuadro/Horarios para no parecerse a Pádel Set. Zonas tiene «Posiciones | Partidos»; Partidos reemplaza la sección Horarios.
+- **Alternativas descartadas:** estrellas de «Seguir» en cada fila, por el ruido visual y los toques accidentales en celular, y recordar la elección Posiciones/Partidos entre visitas. El seguimiento por categoría conserva su guardado; el selector no agrega persistencia.
+
+### 2. Fases, zonas y cuadro
+- **Contenido siempre visible:** nombre del torneo sobre la categoría, campeones si terminó y «En juego y próximos», con su estado vacío. Debajo aparecen las fases existentes: Zonas, 16avos, 8vos, 4tos, Semi y Final. Abre en Zonas mientras haya partidos de zona sin terminar; después, en la primera ronda sin terminar y, si terminó todo, en Final. También se pueden consultar fases futuras.
+- **Recorrido como navegación:** pestañas de al menos 44 px con barra de progreso, nombre y cuenta jugados/total, colores de avance conservados y fase elegida blanca con sombra y nombre marino en negrita. Las cuentas se ocultan a 320 px para que entre. Usa `tablist`, `tab`, `tabpanel`, `aria-selected` y flechas; el anillo de teclado queda solo en `:focus-visible`. La fase va en el hash, incluido `#dieciseisavos`, para compartir enlaces y recorrer cambios con Atrás. El cambio anima opacity con movimiento reducido y no mueve el scroll si el recorrido está a la vista. El recorrido informativo del inicio no cambia.
+- **Zonas más limpias:** «clasifican N por zona» se muestra una sola vez en el subtítulo si todas clasifican igual, y en cada tabla si difieren. Se retiró la línea punteada: el número celeste y la referencia de clasificación alcanzan. El selector se ajusta al contenido en escritorio y ocupa el ancho en celular. Partidos se agrupa por jornada y hora, con la zona en cada tarjeta y la madrugada hasta las 6 asignada al día anterior.
+- **Jornadas plegables:** encabezados con cantidad, chevron, `aria-expanded`, `aria-controls` y al menos 44 px. Al entrar se abre la de hoy si está presente y el torneo está en curso; si no, la primera con pendientes o, si terminó todo, la última. Las otras empiezan plegadas; después se pueden abrir varias. Se incluyó «Sin horario» y el plegado también funciona en escritorio. Solo se animan opacity y transform, respetando movimiento reducido.
+- **Cuadro en escritorio:** arranca en la ronda elegida y sigue hasta la final; al elegir Final muestra también la semifinal si existe. Los títulos de columna quedaron comunes, sin aspecto de pestaña. Se sacó el panel blanco contenedor: tarjetas blancas con sombra directamente sobre el fondo, sin cambiar el ancho de columnas ni la alineación de las líneas. En celular se muestran solo los partidos de la ronda elegida, ordenados por hora, con sus orígenes si faltan parejas.
+
+### 3. Próximos, horarios y tarjetas
+- **Un demorado sigue siendo próximo:** en inicio y categoría se toma el primer pendiente con horario, ordenado por fecha y hora, aunque ya haya pasado. No se compara con la hora real para descartarlo; sigue ahí hasta que empiece o termine. Se conserva `fraseProximo`.
+- **Límites y avisos:** «En juego y próximos» muestra todos los partidos en juego primero y luego hasta 2 pendientes en celular (hasta 767 px) o hasta 4 en escritorio. La grilla usa una columna en celular, dos entre 768 y 1279 px y hasta cuatro desde 1280 px, evitando tarjetas huérfanas. En ese bloque no se muestra «Sin resultado cargado». En las otras vistas, `sinResultado` exige los IDs de ambas parejas además del estado pendiente y el inicio más 75 minutos ya pasado: un cruce sin definir nunca muestra el aviso.
+- **Presentación compartida:** días completos en los horarios («Viernes 15:15», «Sábado 15:15», «Domingo 15:15»). Pendientes más compactos hasta 767 px, con menos padding y separación y nombres a 16 px, sin achicar los botones de 44 px. En juego, terminados con marcador y escritorio conservan sus tamaños. El encabezado público pasó a la misma marca del panel, con cinta y «Fixi», manteniendo el link y el área táctil.
+
+### 4. Buscador y acceso desde la pareja
+- **Desde dos letras y por comienzo de palabra:** ignora tildes y mayúsculas; cada palabra escrita debe coincidir con el comienzo de alguna palabra del nombre de la pareja. «gen» encuentra Godoy, «alv gen» encuentra Amaya / Godoy y «ar» no encuentra Amaya. Se conservó la forma de reunir parejas de zonas y cuadro. El campo vacío muestra la ayuda de escribir apellido o nombre; con algo escrito y menos de dos letras, pide al menos dos. El chip de categoría ocupa solo el ancho del texto.
+- **Foco y teclado:** la lupa abre con el campo listo para escribir; el campo se monta y enfoca dentro del gesto para solicitar el teclado móvil. Se evitó que la limpieza del efecto en StrictMode robara ese foco. El cierre conserva Escape, el historial y el retorno al origen.
+- **Tocar para ver partidos:** en categoría, toda la fila de posiciones y los nombres reales en tarjetas abren el panel actual con esa pareja exacta por ID y categoría, sus partidos y «Seguir». Así no se mezclan parejas de nombres parecidos o iguales de otra categoría. Cerrar devuelve el foco al botón tocado, con `aria-label="Ver partidos de {pareja}"`; consultar desde un nombre no enfoca el campo ni pide teclado. Pases directos, cruces sin definir y nombres del cuadro de escritorio no tienen esta acción.
+- **Resaltado sin subrayado:** las filas toman un fondo suave y los nombres en tarjetas pasan a `--marca` al pasar el puntero o enfocar con teclado, sin sumar negrita; conservan los estilos normales de ganador y perdedor. Se mantiene un único botón por fila, con foco visible solo por teclado y hover limitado a dispositivos que lo soportan, para que no quede pegado después de tocar.
+
+### 5. Verificación registrada y esfuerzo estimado
+- Durante estos cambios se revisaron «Impares Noviembre» y respuestas interceptadas para categorías en zonas, eliminatoria y terminadas, a 320, 375 y 1440 px, además de 768 px en navegación y cuadro. Se probaron hashes, Atrás, rondas de 5ta, 7ma y Suma 7, líneas alineadas, nombres largos, tres sets, estados en vivo y partidos demorados, sin scroll horizontal de página.
+- Se verificaron búsqueda por prefijos y tildes, foco de la lupa, apertura por ID con homónimos, seguimiento con la misma clave de guardado y foco de vuelta con Cerrar, Escape y Atrás. En el ajuste de resaltados, el contraste mínimo medido de los textos de fila fue 4,83:1. Las jornadas se probaron con hoy, primera pendiente, todas terminadas y solo sin horario; también se comprobó la madrugada y que en juego, finalizados y escritorio conservaran su tamaño al compactar pendientes.
+- Los builds del frontend compilaron y el lint mantuvo los mismos 7 avisos. Las pruebas de presentación usaron lecturas o respuestas interceptadas, sin modificar `dev.db`. Esta entrada registra esas verificaciones; el cambio documental solo requiere revisar el diff, sin volver a correr build ni tests.
+- **Esfuerzo estimado:** ~12 a 18 horas para navegación e historial, cuadro, búsqueda y acceso a parejas, ajustes visuales y pruebas. Es una estimación de esfuerzo, no una medición cronometrada ni la diferencia entre fechas de commits.
+
+### 6. Commits incluidos
+- Próximos, marca y horarios: `746cee1`, `87e9d34`, `3e1f7a7`.
+- Búsqueda, ayuda y foco: `57d44b2`, `d54d795`, `8d7ca99`, `b85a864`.
+- Navegación por fases, encabezado, zonas y recorrido fijo: `7d4ad17`, `6618bd3`, `07433bf`, `753983f`.
+- Rondas de escritorio y cuadro sin panel: `152a2d5`, `d5bb832`.
+- Parejas tocables, resaltados, compactación y jornadas: `fcc4fdc`, `d007548`, `2d13e4d`.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El registro reúne 97 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 318 y 394 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. Se completó la estimación pendiente de la entrada 96 con entre 8 y 12 horas y se estimaron entre 6 y 9 horas para la 97, según el alcance y las pruebas registradas. Las filas 91 a 97 agregan entre 46,25 y 67,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 318,25 a 393,5 horas. Se redondea a horas enteras. Las entradas temáticas pueden agrupar varios pedidos o días; no se estimó el esfuerzo por la distancia entre fechas de commits.
+El registro reúne 98 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 330 y 412 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 98 agrega entre 12 y 18 horas estimadas para los cambios de la vista pública y sus pruebas. Las filas 91 a 98 agregan entre 58,25 y 85,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 330,25 a 411,5 horas. Se redondea a horas enteras. Las entradas temáticas pueden agrupar varios pedidos o días; no se estimó el esfuerzo por la distancia entre fechas de commits.
 
 | Sesión | Tiempo estimado (estimación, no medición) | Temas cubiertos |
 |--------|-------------------------------------------|------------------|
@@ -3304,7 +3344,8 @@ El registro reúne 97 sesiones o entradas temáticas de trabajo, con un total ap
 | **95** | ~8 a 12 horas (estimación) | Modal de canchas con una acción por vez, encabezado simplificado, grilla con un solo Ver todos en el modal, cronómetro real y migración con backup, cruces claros y bloqueo de parejas en dos partidos en juego, con pruebas. |
 | **96** | ~8 a 12 horas (estimación) | Tarjetas tipo marcador, número de cancha oculto, posiciones compactas en celular, limpieza del cronómetro y referencias de lluvia al reiniciar, errores en la página y camino para rearmar. |
 | **97** | ~6 a 9 horas (estimación) | Cuadro tipo marcador, acciones con texto, rondas en una fila, modal de horario amplio y compacto con grilla continua e intercambio transaccional de cruces, con pruebas y documentación. |
-| **Total estimado (1 a 97)** | **~318 a 394 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación de las sesiones 91 a 97. |
+| **98** | ~12 a 18 horas (estimación) | Vista pública con navegación fija por fases e historial, zonas por posiciones o partidos y jornadas plegables, cuadro desde la ronda elegida sin panel, próximos demorados, búsqueda por prefijos, parejas tocables con seguimiento y foco, compactación móvil y pruebas. |
+| **Total estimado (1 a 98)** | **~330 a 412 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación de las sesiones 91 a 98. |
 
 > **Nota:** esta tabla cubre las sesiones o entradas de codificación, depuración, pruebas y documentación técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
 
