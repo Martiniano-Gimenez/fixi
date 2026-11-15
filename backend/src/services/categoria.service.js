@@ -80,28 +80,21 @@ async function createCategoria(organizadorId, torneoId, { nombre }) {
     throw error;
   }
 
-  // Verificar que el torneo pertenezca al organizador
-  const torneo = await prisma.torneo.findUnique({
-    where: { id: torneoId },
-  });
-
-  if (!torneo) {
-    const error = new Error('Torneo no encontrado.');
-    error.statusCode = 404;
-    throw error;
-  }
-
-  if (torneo.organizadorId !== organizadorId) {
-    const error = new Error('No tenés permisos para agregar categorías a este torneo.');
-    error.statusCode = 403;
-    throw error;
-  }
-
-  return await prisma.categoria.create({
-    data: {
-      torneoId,
-      nombre: nombre.trim(),
-    },
+  return await prisma.$transaction(async (tx) => {
+    // Verificar propiedad y estado dentro de la misma transacción que el alta.
+    const torneo = await tx.torneo.findUnique({ where: { id: torneoId } });
+    if (!torneo) {
+      const error = new Error('Torneo no encontrado.');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (torneo.organizadorId !== organizadorId) {
+      const error = new Error('No tenés permisos para agregar categorías a este torneo.');
+      error.statusCode = 403;
+      throw error;
+    }
+    exigirTorneoNoFinalizado(torneo);
+    return tx.categoria.create({ data: { torneoId, nombre: nombre.trim() } });
   });
 }
 
@@ -161,9 +154,9 @@ async function updateCategoria(organizadorId, categoriaId, data) {
 }
 
 async function deleteCategoria(organizadorId, categoriaId) {
-  const categoria = await getCategoriaById(organizadorId, categoriaId);
-
   await prisma.$transaction(async (tx) => {
+    const categoria = await getCategoriaById(organizadorId, categoriaId, tx);
+    exigirTorneoNoFinalizado(categoria.torneo);
     await tx.categoria.delete({ where: { id: categoria.id } });
     if (categoria.torneo.estado !== 'BORRADOR') await recalcularEstadoTorneo(tx, categoria.torneoId);
   });

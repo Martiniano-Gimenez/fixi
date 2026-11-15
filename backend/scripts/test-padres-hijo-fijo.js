@@ -595,6 +595,18 @@ async function testCierreAutomatico() {
   assertResultado.ok(catPublicada.json.campeones?.jugador1);
   assertResultado.ok(catPublicada.json.subcampeones?.jugador1);
   const cerrado = await prisma.partido.findMany({ where: { categoria: { torneoId: torneo.id } }, include: { sets: true }, orderBy: { id: 'asc' } });
+  const categoriasCerradas = await prisma.categoria.findMany({ where: { torneoId: torneo.id }, orderBy: { id: 'asc' } });
+  const bloqueoCategorias = [
+    ['POST', `/torneos/${torneo.id}/categorias`, { nombre: 'Nueva categoría' }],
+    ['DELETE', `/categorias/${cats.B.id}`],
+  ];
+  for (const [metodo, ruta, body] of bloqueoCategorias) {
+    const r = await http(metodo, ruta, body);
+    assertResultado.equal(r.status, 400, `${metodo} ${ruta}`);
+    assertResultado.equal(r.json.error, 'El torneo está finalizado. Solo se pueden corregir resultados o reiniciar el torneo.');
+  }
+  assertResultado.deepEqual(await prisma.categoria.findMany({ where: { torneoId: torneo.id }, orderBy: { id: 'asc' } }), categoriasCerradas,
+    'Crear o eliminar una categoría de un torneo cerrado no cambia sus categorías');
   const prohibidas = [
     ['GET', `/torneos/${torneo.id}/en-vivo`],
     ['POST', `/torneos/${torneo.id}/canchas-override`, { canchasDisponiblesOverride: 2, diaKey: DOM }],

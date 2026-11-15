@@ -441,7 +441,7 @@ export default function TorneoDetail() {
           </h2>
         </div>
 
-        {torneo.categorias?.length > 0 && (
+        {torneo.estado !== 'FINALIZADO' && torneo.categorias?.length > 0 && (
           <div className="td-category-tools">
             <button
               type="button"
@@ -459,15 +459,17 @@ export default function TorneoDetail() {
           <Layers size={44} className="td-empty-icon" />
           <h3 className="td-empty-title">No hay categorías cargadas</h3>
           <p className="td-empty-copy">
-            Agregá las categorías que se juegan en este torneo.
+            {torneo.estado === 'FINALIZADO' ? 'Este torneo no tiene categorías.' : 'Agregá las categorías que se juegan en este torneo.'}
           </p>
-          <button
-            type="button"
-            onClick={() => setNuevaCatModalOpen(true)}
-            className="td-button td-primary"
-          >
-            <Plus size={16} /> Agregar categoría
-          </button>
+          {torneo.estado !== 'FINALIZADO' && (
+            <button
+              type="button"
+              onClick={() => setNuevaCatModalOpen(true)}
+              className="td-button td-primary"
+            >
+              <Plus size={16} /> Agregar categoría
+            </button>
+          )}
         </div>
       ) : (
         <div className="td-category-grid">
@@ -553,15 +555,17 @@ export default function TorneoDetail() {
                     </Link>
                   )}
 
-                  <button
-                    type="button"
-                    className="td-button td-delete"
-                    title="Eliminar categoría"
-                    aria-label={`Eliminar categoría ${cat.nombre}`}
-                    onClick={() => setCategoriaAEliminar(cat)}
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {torneo.estado !== 'FINALIZADO' && (
+                    <button
+                      type="button"
+                      className="td-button td-delete"
+                      title="Eliminar categoría"
+                      aria-label={`Eliminar categoría ${cat.nombre}`}
+                      onClick={() => setCategoriaAEliminar(cat)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
               </div>
             );
