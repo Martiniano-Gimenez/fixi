@@ -3241,9 +3241,48 @@ Las entradas 93 y 94 agrupan temáticamente 23 de los 24 commits de `48da50b..49
 
 ---
 
+## 99. Cierre automático del torneo y campeones (14/11/2026)
+
+### 1. Análisis previo y decisión de producto
+- Se completó 5ta de «Impares Noviembre» de punta a punta con los servicios reales: resultados de todas las zonas, generación del cuadro y resultados hasta la final. Se dejó 7ma a medias para comparar una categoría terminada con un torneo todavía en juego.
+- **Hallazgos:** los estados de categoría y torneo nunca pasaban automáticamente a `FINALIZADO`. El público podía mostrar campeones a partir de la final, pero el panel seguía ofreciendo acciones y textos de torneo en curso. Además, cambiar el ganador de una semifinal con la final ya jugada podía dejar un campeón que no había jugado la final.
+- **Decisión del usuario:** cierre completamente automático, sin botón «Finalizar torneo» ni acción de reapertura manual. Se descartó la propuesta mixta de cerrar cada categoría automáticamente y pedir al organizador que confirmara el cierre del torneo. Las correcciones de resultados siguen permitidas y, si dejan partidos sin terminar, los estados vuelven automáticamente a `EN_CURSO`.
+
+### 2. Ganadores protegidos y estados coherentes
+- **Entre rondas:** cambiar el ganador, retirarlo por un parcial o borrar el resultado se rechaza con 400 si el partido siguiente está en juego o finalizado. El mensaje identifica ese partido y pide volverlo a pendiente o borrar primero su resultado. Corregir los sets con el mismo ganador sigue permitido; con el siguiente pendiente se actualiza su pareja. Resultado y propagación quedan en una sola transacción, con rollback completo ante errores.
+- **Categoría:** se cierra al terminar todos los partidos reales de zonas y eliminatoria, con una final real incluida. Los pases directos no cuentan. Una categoría iniciada sin final o con algún partido real pendiente o en juego queda `EN_CURSO`.
+- **Torneo:** se cierra cuando tiene categorías jugables y todas están terminadas. Una categoría en borrador con dos parejas o más cuenta como pendiente; con menos de dos, no cuenta. Si una categoría vuelve a estar en curso, el torneo también.
+- **Recálculo en cada operación:** toda acción que modifica resultados, estados o el conjunto de partidos recalcula categoría y torneo en la misma transacción. Incluye limpiar resultados de zonas, armar o regenerar partidos de zona, generar el cuadro o reasignar sus clasificados, borrarlo y sincronizarlo; mover o agregar parejas queda cubierto al regenerar los partidos. Reiniciar una categoría la deja en `BORRADOR` y recalcula el torneo; eliminar una categoría también lo recalcula. La asignación que solo cambia horarios no altera el avance deportivo.
+- **Preparación preservada:** el recálculo nunca saca al torneo de `BORRADOR` ni escribe sobre él mientras está en preparación. Armar una categoría o su cuadro no inicia el torneo: el inicio formal del panel sigue siendo por el pre-check. Borrar un cuadro vacío tampoco inicia una categoría en borrador.
+
+### 3. Qué queda bloqueado al finalizar
+- Día de torneo deja de estar disponible. Lluvia y restauración, cambios de horario, generar/borrar/sincronizar o editar el cuadro, mover o agregar parejas, limpiar o reiniciar una categoría y crear o eliminar categorías se rechazan con HTTP 400. Las operaciones bloqueadas comparten «El torneo está finalizado. Solo se pueden corregir resultados o reiniciar el torneo.»; las que exigen estar en curso conservan su validación de estado.
+- Cargar, corregir y borrar resultados sigue disponible, respetando la protección del ganador entre rondas. Corregir sets con el mismo ganador mantiene el cierre; borrar la final o dejarla parcial devuelve automáticamente categoría y torneo a `EN_CURSO`, sin una acción manual de reapertura.
+- Se conservan la consulta del historial y la vista pública, la edición de nombres y el reinicio completo del torneo a `BORRADOR`, con la limpieza habitual de partidos, lluvia y pre-check.
+
+### 4. Panel y público al terminar
+- **Panel:** Mis torneos y el detalle muestran «Finalizado». Cada categoría terminada muestra «Terminada» y sus campeones; la página de categoría agrega «Campeones» con trofeo dorado y «Subcampeones». Se ocultan mover y agregar pareja al terminar la categoría, y limpiar/reiniciar cuando también terminó el torneo. En el detalle del torneo finalizado desaparecen crear y eliminar categorías, incluso la acción de agregar en la lista vacía.
+- **Cuadro:** estado «Terminada» y campeones destacados en la final con el trofeo dorado junto al nombre. En categoría y cuadro, cada partido finalizado conserva «Editar resultado» con `ClipboardList`, como texto chico sin borde a la izquierda y con 44 px táctiles. Se mantuvo el botón semántico que abre el modal; cargar y actualizar resultados conservan su presentación.
+- **Público:** se mantienen los campeones en la tarjeta del inicio y el podio en categoría, con el recorrido completo y apertura en Final cuando terminó todo. «En juego y próximos» se omite si no tiene partidos. En escritorio, los partidos en juego ocupan primero las cuatro plazas y los pendientes completan lo que quede; si hay más de cuatro en juego, se muestran todos. Se retiró el estiramiento de la última tarjeta y las columnas del cuadro aprovechan hasta unos 280 px cuando hay pocas rondas. El celular conserva todos los partidos en juego y hasta dos próximos.
+
+### 5. Verificación, copias y esfuerzo estimado
+- **Análisis:** `capturas/analisis-cierre-2026-11-14` conserva la copia inicial, el resultado del recorrido y las pruebas de estados y del bloqueo entre rondas. Se revisaron Mis torneos, detalle del torneo, categoría, cuadro, Día de torneo e inicio y categoría públicos, con una categoría completa y otra parcial.
+- **Cierre implementado:** `capturas/cierre-auto-2026-11-14` conserva `mixto.db` (5ta terminada y otras categorías en curso) y `terminado.db` (todas las categorías y el torneo terminados), con sus metadatos para repetir las pantallas. Las pruebas de servicios y HTTP se hicieron en la base de tests; las del navegador usaron copias y respuestas interceptadas, bloqueando los envíos. `dev.db` mantuvo el mismo hash.
+- `test-padres-hijo-fijo.js` cubre la protección del ganador, última final y última categoría, borradores y pases directos, correcciones y borrado de final, operaciones bloqueadas, limpiar 5ta y terminar 7ma sin cerrar el torneo, regeneración del cuadro, conservación de `BORRADOR` y rollback atómico. Las 53 suites del backend pasaron en los cambios que lo requerían. Build correcto y lint con los mismos 7 avisos; panel y público revisados a 320, 375 y 1440 px, sin desbordes, con teclado, nombres largos y líneas del cuadro alineadas.
+- **Recorrido completo cerrado:** se verificó el ciclo de prueba desde zonas hasta campeones y cierre del torneo, incluyendo el estado mixto, las correcciones posteriores y los bloqueos. Es el cierre del recorrido de prueba, no una modificación de los datos de desarrollo.
+- **Esfuerzo estimado:** ~10 a 14 horas para análisis, decisiones, protección entre rondas, cierre y recálculos, presentación, pruebas y documentación. Es una estimación de esfuerzo, no una medición cronometrada. Esta actualización documental solo revisó el diff; no volvió a ejecutar build ni tests.
+
+### 6. Commits incluidos
+- Protección de ganadores entre rondas: `d25c93f`.
+- Cierre automático y recálculos al limpiar o rearmar, sin iniciar torneos en preparación: `6c3007d`, `c1a3e04`, `a5b7d6f`.
+- Presentación de terminados en el panel y ajustes del público: `b7a2957`, `029ad2a`.
+- Crear/eliminar categorías bloqueado y edición de resultados discreta: `2c1f241`, `99cf206`.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El registro reúne 98 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 330 y 412 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 98 agrega entre 12 y 18 horas estimadas para los cambios de la vista pública y sus pruebas. Las filas 91 a 98 agregan entre 58,25 y 85,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 330,25 a 411,5 horas. Se redondea a horas enteras. Las entradas temáticas pueden agrupar varios pedidos o días; no se estimó el esfuerzo por la distancia entre fechas de commits.
+El registro reúne 99 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 340 y 426 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 99 agrega entre 10 y 14 horas estimadas para el análisis y cierre automático del torneo, sus ajustes y pruebas. Las filas 91 a 99 agregan entre 68,25 y 99,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 340,25 a 425,5 horas. Se redondea a horas enteras. Las entradas temáticas pueden agrupar varios pedidos o días; no se estimó el esfuerzo por la distancia entre fechas de commits.
 
 | Sesión | Tiempo estimado (estimación, no medición) | Temas cubiertos |
 |--------|-------------------------------------------|------------------|
@@ -3345,7 +3384,8 @@ El registro reúne 98 sesiones o entradas temáticas de trabajo, con un total ap
 | **96** | ~8 a 12 horas (estimación) | Tarjetas tipo marcador, número de cancha oculto, posiciones compactas en celular, limpieza del cronómetro y referencias de lluvia al reiniciar, errores en la página y camino para rearmar. |
 | **97** | ~6 a 9 horas (estimación) | Cuadro tipo marcador, acciones con texto, rondas en una fila, modal de horario amplio y compacto con grilla continua e intercambio transaccional de cruces, con pruebas y documentación. |
 | **98** | ~12 a 18 horas (estimación) | Vista pública con navegación fija por fases e historial, zonas por posiciones o partidos y jornadas plegables, cuadro desde la ronda elegida sin panel, próximos demorados, búsqueda por prefijos, parejas tocables con seguimiento y foco, compactación móvil y pruebas. |
-| **Total estimado (1 a 98)** | **~330 a 412 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación de las sesiones 91 a 98. |
+| **99** | ~10 a 14 horas (estimación) | Análisis de cierre con copias, protección de ganadores entre rondas, estados automáticos y recálculos transaccionales, preparación preservada, bloqueos al finalizar, campeones en el panel, ajustes del público y de edición de resultados, recorrido completo y pruebas. |
+| **Total estimado (1 a 99)** | **~340 a 426 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación y cierre de las sesiones 91 a 99. |
 
 > **Nota:** esta tabla cubre las sesiones o entradas de codificación, depuración, pruebas y documentación técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
 
