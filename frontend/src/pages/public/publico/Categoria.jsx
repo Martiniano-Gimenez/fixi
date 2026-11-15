@@ -13,7 +13,7 @@ import {
 } from './utilidades';
 
 const claveTarjeta = (p) => p.id;
-const MAX_PROXIMOS = 4;
+const MAX_TARJETAS_ESCRITORIO = 4;
 const consultaCelular = '(max-width: 767px)';
 const esPantallaCelular = () => window.matchMedia(consultaCelular).matches;
 const suscribirCelular = (onCambio) => {
@@ -170,7 +170,8 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
   );
 
   const vivos = partidos.filter((p) => p.estado === 'EN_CURSO').sort(porHorario);
-  const proximos = partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora).sort(porHorario).slice(0, esCelular ? 2 : MAX_PROXIMOS);
+  const cupoProximos = esCelular ? 2 : Math.max(0, MAX_TARJETAS_ESCRITORIO - vivos.length);
+  const proximos = partidos.filter((p) => p.estado === 'PENDIENTE' && p.fechaHora).sort(porHorario).slice(0, cupoProximos);
   const enJuego = [...vivos, ...proximos];
 
   const { jornadas, sinHora } = agruparPartidosPorJornada(partidos.filter((p) => p.zonaId), dias);
@@ -242,12 +243,12 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
     <div>
       {encabezado}
       <div className="pv-envolver pv-cat-cuerpo">
-        <section className="pv-seccion pv-proximos" aria-labelledby="t-en-juego">
+        {enJuego.length > 0 && <section className="pv-seccion pv-proximos" aria-labelledby="t-en-juego">
           <h2 id="t-en-juego">En juego y próximos</h2>
-          {enJuego.length ? <ListaAnimada items={enJuego} clave={claveTarjeta} className="pv-lista grilla" render={(p) => (
+          <ListaAnimada items={enJuego} clave={claveTarjeta} className="pv-lista grilla" render={(p) => (
             <TarjetaPartido partido={p} etiqueta={p.etiqueta} conDia seguidaId={seguidaId} origenes={origenes} atrasado={false} onAbrirPareja={abrirPareja} />
-          )} /> : <p className="pv-vacio">No hay partidos en juego ni próximos.</p>}
-        </section>
+          )} />
+        </section>}
         {e.preparacion ? (
           <div className="pv-preparacion">
             <Users size={36} aria-hidden="true" />
