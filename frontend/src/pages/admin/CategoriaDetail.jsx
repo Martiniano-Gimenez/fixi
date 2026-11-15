@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -24,6 +24,7 @@ import AsignarHorarioModal from '../../components/AsignarHorarioModal';
 import MoverParejaModal from '../../components/MoverParejaModal';
 import AgregarParejaModal from '../../components/AgregarParejaModal';
 import ActionsMenu from '../../components/ActionsMenu';
+import DesempateZonaModal from '../../components/DesempateZonaModal';
 
 function ordenarPartidos(partidosList) {
   return [...partidosList].sort((a, b) => {
@@ -67,6 +68,10 @@ export default function CategoriaDetail() {
   const [moverModalOpen, setMoverModalOpen] = useState(false);
   const [agregarModalOpen, setAgregarModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [zonaDesempate, setZonaDesempate] = useState(null);
+  const [enfocarZonaTrasDesempate, setEnfocarZonaTrasDesempate] = useState(false);
+  const desempateTriggerRef = useRef(null);
+  const activeZonaTabRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -102,6 +107,21 @@ export default function CategoriaDetail() {
       setLoading(false);
     }
   }, [id]);
+
+  const cerrarDesempate = useCallback(() => setZonaDesempate(null), []);
+  const guardarDesempate = async () => {
+    setZonaDesempate(null);
+    await fetchData();
+    // El aviso desaparece al resolver el empate; su pestaña sigue disponible para volver a la zona.
+    setEnfocarZonaTrasDesempate(true);
+  };
+
+  useEffect(() => {
+    if (enfocarZonaTrasDesempate && !zonaDesempate) {
+      activeZonaTabRef.current?.focus();
+      setEnfocarZonaTrasDesempate(false);
+    }
+  }, [enfocarZonaTrasDesempate, zonaDesempate]);
 
   useEffect(() => {
     fetchData();
@@ -156,13 +176,18 @@ export default function CategoriaDetail() {
   if (error || !categoria) return <div className="cd-page pm-alert">{error || 'Categoría no encontrada'}</div>;
 
   const activeZona = zonas.find((z) => z.id === activeZonaId);
+  const empatePendiente = activeZona?.empatePendiente || [];
+  const primerEmpatado = activeZona?.zonaParejas.findIndex(zp => empatePendiente.includes(zp.parejaId)) ?? -1;
+  // Las posiciones anteriores al grupo siguen definidas; el grupo empatado todavía no clasifica.
+  const zonaParaTabla = primerEmpatado < 0 ? activeZona
+    : { ...activeZona, clasifican: Math.min(activeZona.clasifican, primerEmpatado) };
   const partidosDeZona = activeZona ? partidos.filter((p) => p.zonaId === activeZona.id) : [];
 
   const partidosOrdenados = ordenarPartidos(partidosDeZona);
 
   return (
     <div className="cd-page">
-      <div className="cd-screen">
+      <div className="cd-screen" inert={Boolean(zonaDesempate)}>
       {/* Breadcrumb de navegación */}
       <div className="cd-back-row">
         <Link
@@ -325,6 +350,7 @@ export default function CategoriaDetail() {
               <button
                 key={z.id}
                 type="button"
+                ref={activeZonaId === z.id ? activeZonaTabRef : null}
 
                 onClick={() => setActiveZonaId(z.id)}
                 className={`cd-zone-tab${activeZonaId === z.id ? ' is-active' : ''}`}
@@ -339,7 +365,18 @@ export default function CategoriaDetail() {
             <div className="cd-zones-grid">
               {/* Tabla de posiciones de la zona */}
               <div>
-                <ZonaTable zona={activeZona} />
+                {empatePendiente.length > 0 && (
+                  <div className="cd-tie-notice" role="status">
+                    <p>Hay un empate entre {empatePendiente.length} parejas. Definí el orden para completar el cuadro.</p>
+                    {categoria.torneo?.estado !== 'FINALIZADO' && (
+                      <button type="button" className="pm-button" onClick={event => {
+                        desempateTriggerRef.current = event.currentTarget;
+                        setZonaDesempate(activeZona);
+                      }}>Definir orden</button>
+                    )}
+                  </div>
+                )}
+                <ZonaTable zona={zonaParaTabla} />
               </div>
 
               {/* Partidos de la zona */}
@@ -362,6 +399,16 @@ export default function CategoriaDetail() {
       )}
 
       </div>
+
+      {zonaDesempate && (
+        <DesempateZonaModal
+          zona={zonaDesempate}
+          categoriaId={id}
+          onClose={cerrarDesempate}
+          onSaved={guardarDesempate}
+          returnFocusTo={desempateTriggerRef.current}
+        />
+      )}
 
       {/* Modal para Cargar/Editar Resultado */}
       {partidoSeleccionado && (
