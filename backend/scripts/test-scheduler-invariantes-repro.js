@@ -2000,6 +2000,13 @@ async function reproPartidoSinSlotNoHuerfano(registrarResultado) {
     },
   });
 
+  // Un partido nuevo de la restauración ahora puede pasar al sábado: este caso necesita parejas que solo juegan el viernes.
+  await prisma.slotPareja.createMany({
+    data: parejas.slice(12, 14).flatMap((pareja) =>
+      ['Viernes-22:00', 'Viernes-23:15', 'Viernes-00:30'].map((slotId) => ({ parejaId: pareja.id, slotId }))
+    ),
+  });
+
   // Override en Viernes con el partido 7 en partidosSinSlot
   await canchasOverridesService.setOverrideDia(
     torneo.id,

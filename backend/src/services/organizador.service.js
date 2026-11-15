@@ -2426,7 +2426,28 @@ async function armarHorariosAntesLluvia(tx, torneoId, diaKey, horariosClubObj) {
   return registro;
 }
 
-async function programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, overridesAnteriores) {
+async function calcularPisosRestauracion(tx, torneo, organizador) {
+  const refFecha = requireTorneoFecha(torneo);
+  const partidos = await tx.partido.findMany({
+    where: { categoria: { torneoId: torneo.id }, esBye: false, fechaHora: { not: null } },
+    select: { estado: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true },
+  });
+  const pisos = {};
+  const [viernesKey, sabadoKey] = clavesJornadasTorneo(refFecha);
+  for (const [dia, apertura, key] of [['Viernes', organizador.viernesInicio, viernesKey], ['Sabado', organizador.sabadoInicio, sabadoKey]]) {
+    const medianoche = proximaFechaPorDia(dia, refFecha);
+    const inicio = medianoche.getTime() + horaAMinutos(apertura) * 60_000;
+    const deJornada = partidos.filter((p) => getDiaCalendarioConTrasnoche(p.fechaHora, organizador).key === key);
+    const jugados = deJornada.filter((p) => p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO');
+    const pendientes = deJornada.filter((p) => p.estado === 'PENDIENTE' && p.canchaNumero && !p.sinHorarioAsignado);
+    pisos[key] = !jugados.length ? inicio : Math.max(inicio, pendientes.length
+      ? Math.min(...pendientes.map((p) => p.fechaHora.getTime()))
+      : Math.max(...jugados.map((p) => p.fechaHora.getTime() + DURACION_PARTIDO_MIN * 60_000)));
+  }
+  return pisos;
+}
+
+async function programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, overridesAnteriores, pisosPorJornada) {
   const resumen = { partidosNuevosProgramados: 0, partidosNuevosSinHorario: 0 };
   if (!jornadas.length) return resumen;
   // Un partido de la otra jornada registrada debe esperar su propia restauración.
@@ -2440,10 +2461,8 @@ async function programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, 
   if (!candidatos.length) return resumen;
   const partidoIds = candidatos.map((p) => p.id);
   const categoriaIds = [...new Set(candidatos.map((p) => p.categoriaId))];
-  for (const diaKey of jornadas) {
-    // isPreCheck conserva la disponibilidad también en P3/P4: desactiva el fallback que la ignora.
-    await asignarHorariosAutomatico(organizadorId, categoriaIds, tx, { partidoIds, diaKey, isPreCheck: true });
-  }
+  // Puede continuar el sábado, con su lluvia vigente. isPreCheck conserva la disponibilidad de P3/P4.
+  await asignarHorariosAutomatico(organizadorId, categoriaIds, tx, { partidoIds, pisosPorJornada, isPreCheck: true });
   resumen.partidosNuevosProgramados = await tx.partido.count({ where: {
     id: { in: partidoIds }, fechaHora: { not: null }, canchaNumero: { not: null }, sinHorarioAsignado: false,
   } });
@@ -2628,6 +2647,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     const overridesAnteriores = esRestauracion ? await tx.overrideCanchasDia.findMany({
       where: { torneoId }, orderBy: { diaKey: 'asc' },
     }) : [];
+    const pisosPorJornada = esRestauracion ? await calcularPisosRestauracion(tx, torneo, organizador) : null;
 
     // Primera reducción del viernes o del sábado: guardar el horario de antes de la lluvia antes de mover nada.
     // Si la jornada ya tiene override (segunda reducción), su registro no se pisa.
@@ -2791,7 +2811,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
         .map((o) => o.diaKey);
       // Primero se recuperaron todos los registrados y se quitaron los overrides en DB. La caché
       // sigue intacta hasta el commit; el asignador ve las jornadas restantes mediante la misma tx.
-      Object.assign(res, await programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, overridesAnteriores));
+      Object.assign(res, await programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, overridesAnteriores, pisosPorJornada));
     }
 
     // Sincronizar estado en Torneo dentro de la misma tx (retrocompatibilidad)

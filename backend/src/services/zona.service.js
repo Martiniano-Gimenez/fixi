@@ -953,9 +953,13 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
   function isCourtFree(cancha, startMs, endMs, torneoId) {
     // Sin overrides se conserva la capacidad del club. Con lluvia, la misma fuente que usa su scheduler.
-    if (jornadasConLluvia.size || options.diaKey) {
+    if (jornadasConLluvia.size || options.diaKey || options.pisosPorJornada) {
       const jornada = getDiaCalendarioConTrasnoche(new Date(startMs), organizador);
       if (options.diaKey && jornada.key !== options.diaKey) return false;
+      if (options.pisosPorJornada) {
+        const piso = options.pisosPorJornada[jornada.key];
+        if (piso === undefined || startMs < piso) return false;
+      }
       if (jornadasConLluvia.has(`${torneoId}:${jornada.key}`)) {
         const habilitadas = canchasOverridesService.getCanchasDia(torneoId, jornada.key, cantidadCanchas).canchas;
         if (cancha > habilitadas) return false;

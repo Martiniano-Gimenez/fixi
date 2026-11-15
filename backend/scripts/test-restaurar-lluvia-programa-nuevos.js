@@ -77,13 +77,17 @@ async function escenario(dosDias = false, cantidadDestino = 2) {
   await prisma.partido.create({ data: { categoriaId: otra.id, faseEliminatoriaId: fase.id, posicionEnRonda: 1,
     fechaHora: fecha(DOM, '19:00'), canchaNumero: 1, sinHorarioAsignado: false, horarioManual: true } });
   await prisma.partido.create({ data: { categoriaId: otra.id, faseEliminatoriaId: fase.id, posicionEnRonda: 2, sinHorarioAsignado: true } });
-  const ctx = { org, torneo, cat, origen, destino, registrada, viernes, zona };
+  const ctx = { org, torneo, cat, origen, destino, registrada, viernes, zona,
+    bloqueadores: [...fija.partidos, ...fija2.partidos].map((p) => p.id) };
   const previa = await zona(cat.id, 'Zona previa sin horario', 2, viernes);
   ctx.sinHorarioPrevio = previa.partidos[0].id;
   await prisma.partido.update({ where: { id: ctx.sinHorarioPrevio }, data: { sinHorarioAsignado: true } });
   ctx.originales = new Map((await todos(ctx)).filter(conHorario).map((p) => [p.id, { fechaHora: p.fechaHora, canchaNumero: p.canchaNumero }]));
   await lluvia(ctx, VIE);
   if (dosDias) await lluvia(ctx, SAB);
+  // Los casos base prueban una jornada sin empezar. Se mantienen estos turnos testigo sin
+  // tocar después de preparar la reducción; los casos específicos de pisos agregan jugados.
+  await prisma.partido.updateMany({ where: { id: { in: ctx.bloqueadores } }, data: { estado: 'PENDIENTE', ganadorId: null } });
   ctx.cuadro = (await todos(ctx)).filter((p) => p.faseEliminatoriaId);
   return ctx;
 }
@@ -113,7 +117,7 @@ async function invariantes(ctx, nuevos) {
   for (let i = 0; i < agendados.length; i++) {
     const p = agendados[i];
     const dia = getDiaCalendarioConTrasnoche(p.fechaHora, ctx.org).key;
-    assert.ok(p.canchaNumero <= overrides.getCanchasDia(ctx.torneo.id, dia, 3).canchas);
+    if (p.estado !== 'FINALIZADO') assert.ok(p.canchaNumero <= overrides.getCanchasDia(ctx.torneo.id, dia, 3).canchas);
     if (ctx.originales.has(p.id)) assert.ok(+p.fechaHora >= +ctx.originales.get(p.id).fechaHora, 'Nadie se adelanta al horario previo a la lluvia');
     for (const q of agendados.slice(i + 1)) if (+p.fechaHora < +q.fechaHora + D && +q.fechaHora < +p.fechaHora + D) {
       assert.notEqual(p.canchaNumero, q.canchaNumero, 'No hay canchas superpuestas');
@@ -176,6 +180,103 @@ async function dosLluvias(orden, editarEntreLluvias = false) {
   console.log(`PASS dos lluvias restauradas en orden ${orden.filter(Boolean).join(' → ') || 'global'}, edición entre lluvias=${editarEntreLluvias}; sin solapes ni adelantos`);
 }
 
+async function jornadaEmpezada(sinPendientes) {
+  const ctx = await escenario();
+  ctx.org.viernesInicio = '17:00';
+  await prisma.organizador.update({ where: { id: ctx.org.id }, data: { viernesInicio: '17:00' } });
+  const slots = [...getSlotsValidosSet(ctx.org)].filter((s) => s.startsWith('Viernes-'));
+  const testigos = (await todos(ctx)).filter((p) => ctx.bloqueadores.includes(p.id));
+  for (const p of testigos) {
+    const i = ctx.bloqueadores.indexOf(p.id);
+    await prisma.partido.update({ where: { id: p.id }, data: sinPendientes
+      ? { estado: 'FINALIZADO', ganadorId: p.pareja1Id }
+      : { fechaHora: new Date(+fecha(VIE, '18:15') + i * D) } });
+  }
+  if (!sinPendientes) {
+    for (let i = 0; i < 2; i++) {
+      const z = await ctx.zona(ctx.cat.id, `Jugado ${i}`, 2, slots);
+      await prisma.partido.update({ where: { id: z.partidos[0].id }, data: {
+        estado: 'FINALIZADO', ganadorId: z.parejas[0].id, fechaHora: fecha(VIE, '17:00'), canchaNumero: i + 1, sinHorarioAsignado: false,
+      } });
+    }
+  }
+  const z = await ctx.zona(ctx.cat.id, 'Zona nueva del piso', 2, slots);
+  const idsAntes = new Set((await todos(ctx)).map((p) => p.id));
+  await http(ctx, 'POST', `/categorias/${ctx.cat.id}/zonas/agregar-pareja`, {
+    zonaDestinoId: z.id, jugador1: 'Nueva piso', jugador2: 'Pareja', slotIds: slots,
+  });
+  const nuevos = new Set((await todos(ctx)).filter((p) => !idsAntes.has(p.id)).map((p) => p.id));
+  assert.equal(nuevos.size, 3);
+  assert.ok((await todos(ctx)).filter((p) => nuevos.has(p.id)).every((p) => !conHorario(p)));
+  const antes = await todos(ctx);
+  // Un reloj de 2038 detecta cualquier piso basado en la hora real en lugar de la jornada.
+  const OriginalDate = global.Date;
+  const futuro = +new OriginalDate('2038-03-15T12:00:00Z');
+  global.Date = class extends OriginalDate {
+    constructor(...args) { super(...(args.length ? args : [futuro])); }
+    static now() { return futuro; }
+  };
+  let respuesta;
+  try { respuesta = await restaurar(ctx, VIE); }
+  finally { global.Date = OriginalDate; }
+  const despues = await invariantes(ctx, nuevos);
+  const asignados = despues.filter((p) => nuevos.has(p.id) && conHorario(p));
+  if (sinPendientes) {
+    assert.equal(asignados.length, 0, 'La jornada empezó, no tenía pendientes y su último jugado termina al cierre');
+    assert.equal(respuesta.reprogramacion.partidosNuevosSinHorario, 3);
+  } else {
+    assert.ok(asignados.length > 0, 'Hay lugar después del piso, aun con el reloj de 2038');
+    assert.ok(asignados.every((p) => +p.fechaHora >= +fecha(VIE, '18:15')), 'El hueco de las 17:00 en cancha 3 no adelanta al próximo pendiente');
+  }
+  for (const p of antes.filter((p) => ctx.bloqueadores.includes(p.id) || p.estado === 'FINALIZADO')) {
+    assert.deepEqual(despues.find((q) => q.id === p.id), p, 'Los testigos y los jugados no cambian');
+  }
+  console.log(`PASS piso de jornada empezada, sin pendientes=${sinPendientes}: foto previa al registro, sin hora real ni adelantos`);
+}
+
+async function miniSabadoConLluvia() {
+  const ctx = await escenario();
+  await lluvia(ctx, SAB);
+  const ov = await prisma.overrideCanchasDia.findUnique({ where: { torneoId_diaKey: { torneoId: ctx.torneo.id, diaKey: VIE } } });
+  const registro = typeof ov.horariosAntesLluvia === 'string' ? JSON.parse(ov.horariosAntesLluvia) : ov.horariosAntesLluvia;
+  const registrados = Object.entries(registro).filter(([, p]) => p.fechaHora).map(([id]) => id);
+  assert.equal(registrados.length, 5);
+  // Durante la lluvia los del viernes ocupan la tarde del sábado. Al volver a su registro
+  // liberan lugar después de P1/P2, sin que haya que mover esos dos partidos nuevos.
+  for (const [i, id] of registrados.entries()) await prisma.partido.update({ where: { id }, data: {
+    fechaHora: new Date(+fecha(SAB, '11:30') + i * D), canchaNumero: 1, sinHorarioAsignado: false,
+  } });
+  const slots = [...getSlotsValidosSet(ctx.org)].filter((s) => s.startsWith('Sabado-'));
+  const z = await ctx.zona(ctx.cat.id, 'Zona mini nueva', 3, slots);
+  const idsAntes = new Set((await todos(ctx)).map((p) => p.id));
+  await http(ctx, 'POST', `/categorias/${ctx.cat.id}/zonas/agregar-pareja`, {
+    zonaDestinoId: z.id, jugador1: 'Nueva mini', jugador2: 'Pareja', slotIds: slots,
+  });
+  const antes = (await todos(ctx)).filter((p) => !idsAntes.has(p.id));
+  const padres = antes.filter((p) => p.posicionEnRonda <= 2);
+  const hijos = antes.filter((p) => p.posicionEnRonda >= 3);
+  assert.equal(padres.length, 2);
+  assert.equal(hijos.length, 2);
+  assert.ok(padres.every((p) => conHorario(p) && getDiaCalendarioConTrasnoche(p.fechaHora, ctx.org).key === SAB));
+  assert.ok(hijos.every((p) => !conHorario(p)), 'P3/P4 no entraban con la lluvia antes de recuperar el registro del viernes');
+  const nuevos = new Set(antes.map((p) => p.id));
+  const respuesta = await restaurar(ctx, VIE);
+  const despues = await invariantes(ctx, nuevos);
+  const finPadres = Math.max(...padres.map((p) => +p.fechaHora + D));
+  for (const p of padres) assert.deepEqual(despues.find((q) => q.id === p.id), p, 'P1/P2 conservan hora y cancha');
+  for (const p of hijos) {
+    const actual = despues.find((q) => q.id === p.id);
+    assert.ok(conHorario(actual));
+    assert.equal(getDiaCalendarioConTrasnoche(actual.fechaHora, ctx.org).key, SAB);
+    assert.ok(+actual.fechaHora >= finPadres, 'P3/P4 se juegan después de P1/P2');
+    assert.equal(actual.canchaNumero, 1, 'El sábado sigue con su única cancha abierta');
+  }
+  assert.equal(respuesta.reprogramacion.partidosNuevosProgramados, 2);
+  assert.equal(respuesta.reprogramacion.partidosNuevosSinHorario, 0);
+  assert.equal(overrides.getCanchasDia(ctx.torneo.id, SAB, 3).canchas, 1);
+  console.log('PASS MINI_BRACKET: restaurar viernes programa P3/P4 el sábado detrás de P1/P2, respetando su lluvia');
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -190,6 +291,9 @@ async function run() {
     await dosLluvias([SAB, VIE]);
     await dosLluvias([SAB, VIE], true);
     await dosLluvias([undefined]); // Restaurar todas las jornadas en una sola transacción.
+    await jornadaEmpezada(false);
+    await jornadaEmpezada(true);
+    await miniSabadoConLluvia();
 
     const ctx = await escenario();
     const z = await ctx.zona(ctx.cat.id, 'Zona sin horario deliberado', 2, ctx.viernes);
