@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Info,
   X,
+  Trophy,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { estadoLabel } from '../../utils/estadoLabels';
@@ -213,7 +214,7 @@ export default function CategoriaDetail() {
               <h1 className="cd-title">
                 Categoría {categoria.nombre}
               </h1>
-              <span className="cd-state">{estadoLabel(categoria.estado)}</span>
+              <span className="cd-state">{categoria.estado === 'FINALIZADO' ? 'Terminada' : estadoLabel(categoria.estado)}</span>
             </div>
           </div>
 
@@ -235,7 +236,7 @@ export default function CategoriaDetail() {
               </Link>
             )}
 
-            {categoria.estado !== 'BORRADOR' && (
+            {categoria.estado !== 'BORRADOR' && categoria.torneo?.estado !== 'FINALIZADO' && (
               <ActionsMenu>
                 {categoria.estado === 'EN_CURSO' && (
                   <>
@@ -281,6 +282,18 @@ export default function CategoriaDetail() {
       </div>
 
       {/* Estado Borrador */}
+      {categoria.estado === 'FINALIZADO' && categoria.campeones && (
+        <section className="cd-podio" aria-label="Podio de la categoría">
+          <div className="cd-podio-winners">
+            <Trophy size={24} aria-hidden="true" />
+            <div><h2>Campeones</h2><p>{categoria.campeones.jugador1} / {categoria.campeones.jugador2}</p></div>
+          </div>
+          {categoria.subcampeones && <div>
+            <h2>Subcampeones</h2><p>{categoria.subcampeones.jugador1} / {categoria.subcampeones.jugador2}</p>
+          </div>}
+        </section>
+      )}
+
       {categoria.estado === 'BORRADOR' && (categoria.torneo?.estado === 'EN_CURSO' ? (
         <div className="cd-rebuild-note">
           <Info size={18} className="cd-brand-icon" aria-hidden="true" />

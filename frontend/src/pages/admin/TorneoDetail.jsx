@@ -19,6 +19,7 @@ import {
   Eye,
   Settings,
   Activity,
+  Trophy,
   Edit2,
   X,
   GitBranch,
@@ -487,11 +488,18 @@ export default function TorneoDetail() {
                   <div className="td-category-heading">
                     <h3 className="td-category-title">{cat.nombre}</h3>
                     <div className="td-category-state">
-                      {cat.estado !== torneo.estado && (
-                        <span className={`td-state td-state-${cat.estado.toLowerCase()}`}>{estadoLabel(cat.estado)}</span>
+                      {(cat.estado === 'FINALIZADO' || cat.estado !== torneo.estado) && (
+                        <span className={`td-state td-state-${cat.estado.toLowerCase()}`}>{cat.estado === 'FINALIZADO' ? 'Terminada' : estadoLabel(cat.estado)}</span>
                       )}
                     </div>
                   </div>
+
+                  {cat.estado === 'FINALIZADO' && cat.campeones && (
+                    <div className="td-champions">
+                      <Trophy size={18} aria-hidden="true" />
+                      <div><span>Campeones</span><strong>{cat.campeones.jugador1} / {cat.campeones.jugador2}</strong></div>
+                    </div>
+                  )}
 
                   <div className="td-category-meta">
                     <span className="td-meta-item">

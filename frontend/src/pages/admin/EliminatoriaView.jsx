@@ -159,6 +159,8 @@ export default function EliminatoriaView() {
     const isJugable = !isBye && Boolean(partido.pareja1Id && partido.pareja2Id);
     const p1esGanador = isFinalizado && partido.ganadorId === partido.pareja1Id;
     const p2esGanador = isFinalizado && partido.ganadorId === partido.pareja2Id;
+    const esFinalTerminada = categoria.estado === 'FINALIZADO'
+      && partido.faseEliminatoriaId === fases.find((fase) => fase.ronda === 2)?.id;
 
     // Lados definidos en la tarjeta (para identificar el slot BYE)
     const lado1Definido = Boolean(partido.pareja1 || partido.pareja1Id || partido.origenPareja1);
@@ -231,8 +233,9 @@ export default function EliminatoriaView() {
                   {isBye && !lado1Definido ? (
                     <span className="cb-bye">Pasa directo</span>
                   ) : p1Pareja ? (
-                    <span className="cb-name">
-                      {formatParejaDisplay(p1Pareja)}
+                    <span className={`cb-name${esFinalTerminada && p1esGanador ? ' cb-champion' : ''}`}>
+                      <span>{formatParejaDisplay(p1Pareja)}</span>
+                      {esFinalTerminada && p1esGanador && <Trophy size={16} className="cb-trophy" role="img" aria-label="Campeones" aria-hidden={false} />}
                     </span>
                   ) : (
                     <span className="cb-placeholder">
@@ -260,8 +263,9 @@ export default function EliminatoriaView() {
                   {isBye && !lado2Definido ? (
                     <span className="cb-bye">Pasa directo</span>
                   ) : p2Pareja ? (
-                    <span className="cb-name">
-                      {formatParejaDisplay(p2Pareja)}
+                    <span className={`cb-name${esFinalTerminada && p2esGanador ? ' cb-champion' : ''}`}>
+                      <span>{formatParejaDisplay(p2Pareja)}</span>
+                      {esFinalTerminada && p2esGanador && <Trophy size={16} className="cb-trophy" role="img" aria-label="Campeones" aria-hidden={false} />}
                     </span>
                   ) : (
                     <span className="cb-placeholder">
@@ -389,7 +393,7 @@ export default function EliminatoriaView() {
         </div>
         <div className="cb-heading-actions">
           <span className="cb-state">
-            {estadoLabel(categoria.estado)}
+            {categoria.estado === 'FINALIZADO' ? 'Terminada' : estadoLabel(categoria.estado)}
           </span>
           {categoria.torneo?.estado === 'EN_CURSO' && (
             <Link
@@ -473,7 +477,6 @@ export default function EliminatoriaView() {
                   className={`cb-tab ${isActive ? 'active' : ''}`}
                   onClick={() => setActiveRoundId(fase.id)}
                 >
-                  {fase.ronda === 2 && <Trophy size={16} className="cb-trophy" />}
                   <span className="cb-tab-full" aria-hidden="true">{fase.nombre.replace(/ de Final\b/g, ' de final')}</span>
                   <span className="cb-tab-short" aria-hidden="true">
                     {({ 64: '32avos', 32: '16avos', 16: 'Octavos', 8: 'Cuartos', 4: 'Semis', 2: 'Final' })[fase.ronda] || fase.nombre.replace(/ de Final\b/g, ' de final')}
@@ -495,7 +498,6 @@ export default function EliminatoriaView() {
             {fases.map((fase) => (
               <div key={fase.id} className="bracket-section cb-round">
                 <h3 className="cb-round-title">
-                  {fase.ronda === 2 && <Trophy size={18} className="cb-trophy" />}
                   {fase.nombre.replace(/ de Final\b/g, ' de final')}
                 </h3>
                 <div className="cb-matches-column">
