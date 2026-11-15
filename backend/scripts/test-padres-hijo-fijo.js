@@ -39,6 +39,8 @@
  * H14 Armar una categoría no inicia el torneo: el recálculo conserva BORRADOR hasta el inicio por pre-check.
  * H15-H18 Correcciones de zona con pase directo, bloqueo atómico con destino jugado, rechazo de parejas
  *     repetidas y retiro de clasificados al borrar o dejar parcial un resultado de zona.
+ * H19-H21 P1/P2 de mini-bracket: cambio de ganador, borrado y parcial con P3/P4 protegidos o pendientes;
+ *     corrección del marcador sin cambiar ganador, estadísticas y rollback completo.
  *
  * En todos los casos de A se verifica que ningún par padre/hijo con horario tenga descanso menor al mínimo de la
  * ronda del hijo (obtenerDescansoMinimoRequeridoMs: 30 min antes de la final, 75 en las demás).
@@ -922,6 +924,121 @@ async function testRetirarClasificadoDePaseDirecto() {
   }
 }
 
+const SETS_GANA_2 = { sets: [{ gamesPareja1: 0, gamesPareja2: 6 }, { gamesPareja1: 0, gamesPareja2: 6 }] };
+const SET_PARCIAL_MINI = { sets: [{ gamesPareja1: 6, gamesPareja2: 2 }] };
+
+async function armarMiniBracketProtegido(destinoPos = null, estado = null) {
+  const { org, torneo, cats } = await armar({ cats: [['A', 4]] });
+  const zona = await prisma.zona.findFirst({ where: { categoriaId: cats.A.id, formato: 'MINI_BRACKET' } });
+  const partidos = await prisma.partido.findMany({ where: { zonaId: zona.id }, orderBy: { posicionEnRonda: 'asc' } });
+  await partidoService.cargarResultado(org.id, partidos[0].id, SETS_GANA_1);
+  await partidoService.cargarResultado(org.id, partidos[1].id, SETS_GANA_1);
+  if (estado === 'FINALIZADO') await partidoService.cargarResultado(org.id, partidos[destinoPos - 1].id, SETS_GANA_1);
+  if (estado === 'EN_CURSO') await partidoService.updateEstado(org.id, partidos[destinoPos - 1].id, estado);
+  return { org, torneo, cat: cats.A, zona, partidos };
+}
+
+async function corregirPrimeraRondaMini(partido, camino) {
+  return camino === 'borrar'
+    ? http('DELETE', `/partidos/${partido.id}/resultado`)
+    : http('PUT', `/partidos/${partido.id}/resultado`, camino === 'parcial' ? SET_PARCIAL_MINI : SETS_GANA_2);
+}
+
+async function comprobarEstadisticasMini(zonaId) {
+  const partidos = await prisma.partido.findMany({ where: { zonaId }, include: { sets: true }, orderBy: { posicionEnRonda: 'asc' } });
+  const tabla = await prisma.zonaPareja.findMany({ where: { zonaId } });
+  for (const fila of tabla) {
+    const jugados = partidos.filter(p => p.estado === 'FINALIZADO' && [p.pareja1Id, p.pareja2Id].includes(fila.parejaId));
+    const ganados = jugados.filter(p => p.ganadorId === fila.parejaId).length;
+    let sf = 0, sc = 0, gf = 0, gc = 0, posicion = 0;
+    for (const p of jugados) {
+      assertResultado.ok([p.pareja1Id, p.pareja2Id].includes(p.ganadorId), 'El ganador pertenece al partido');
+      for (const set of p.sets) {
+        const favor = p.pareja1Id === fila.parejaId ? set.gamesPareja1 : set.gamesPareja2;
+        const contra = p.pareja1Id === fila.parejaId ? set.gamesPareja2 : set.gamesPareja1;
+        gf += favor; gc += contra;
+        if (favor > contra) sf++; else sc++;
+      }
+      if (p.posicionEnRonda >= 3) posicion = (p.posicionEnRonda === 3 ? 1 : 3) + (p.ganadorId === fila.parejaId ? 0 : 1);
+    }
+    const esperado = { pj: jugados.length, pg: ganados, pp: jugados.length - ganados, puntos: ganados * 3, sf, sc, gf, gc, posicion };
+    for (const [campo, valor] of Object.entries(esperado)) assertResultado.equal(fila[campo], valor, `${fila.parejaId}: ${campo}`);
+  }
+}
+
+async function testMiniBracketDestinoProtegido() {
+  for (const [pos, estado] of [[3, 'FINALIZADO'], [4, 'EN_CURSO'], [3, 'EN_CURSO'], [4, 'FINALIZADO']]) {
+    const { zona, partidos } = await armarMiniBracketProtegido(pos, estado);
+    for (const origen of partidos.slice(0, 2)) {
+      for (const camino of ['ganador', 'borrar', 'parcial']) {
+        const antes = await snapshotCorreccionZona();
+        const r = await corregirPrimeraRondaMini(origen, camino);
+        assertResultado.equal(r.status, 400, `${camino} P${origen.posicionEnRonda}: ${JSON.stringify(r.json)}`);
+        assertResultado.match(r.json.error, new RegExp(`P${pos} de ${zona.nombre}`));
+        assertResultado.match(r.json.error, estado === 'EN_CURSO' ? /en juego.*Volvelo a pendiente primero/ : /ya tiene resultado.*Borrá primero el resultado/);
+        assertResultado.deepEqual(await snapshotCorreccionZona(), antes, 'El rechazo conserva sets, parejas, posiciones, horarios y estados');
+      }
+    }
+    await comprobarEstadisticasMini(zona.id);
+  }
+}
+
+async function testMiniBracketDestinosPendientes() {
+  for (const pos of [1, 2]) {
+    for (const camino of ['ganador', 'borrar', 'parcial']) {
+      const { org, zona, partidos } = await armarMiniBracketProtegido();
+      const origen = partidos[pos - 1];
+      const otro = partidos[pos === 1 ? 1 : 0];
+      if (pos === 1) {
+        const antes = await snapshotCorreccionZona();
+        const transaction = prisma.$transaction;
+        prisma.$transaction = (fn, ...args) => transaction.call(prisma, async (tx) => {
+          await fn(tx);
+          throw new Error('Rollback mini-bracket');
+        }, ...args);
+        const accion = camino === 'borrar' ? () => partidoService.borrarResultado(org.id, origen.id)
+          : () => partidoService.cargarResultado(org.id, origen.id, camino === 'parcial' ? SET_PARCIAL_MINI : SETS_GANA_2);
+        try { await assertResultado.rejects(accion, /Rollback mini-bracket/); }
+        finally { prisma.$transaction = transaction; }
+        assertResultado.deepEqual(await snapshotCorreccionZona(), antes, 'La propagación, estadísticas y estados se revierten con el resultado');
+      }
+      const r = await corregirPrimeraRondaMini(origen, camino);
+      assertResultado.equal(r.status, 200, JSON.stringify(r.json));
+      const actual = await prisma.partido.findMany({ where: { zonaId: zona.id }, orderBy: { posicionEnRonda: 'asc' }, include: { sets: true } });
+      const campo = pos === 1 ? 'pareja1Id' : 'pareja2Id';
+      const otroCampo = pos === 1 ? 'pareja2Id' : 'pareja1Id';
+      assertResultado.equal(actual[2][campo], camino === 'ganador' ? origen.pareja2Id : null);
+      assertResultado.equal(actual[3][campo], camino === 'ganador' ? origen.pareja1Id : null);
+      assertResultado.equal(actual[2][otroCampo], otro.pareja1Id);
+      assertResultado.equal(actual[3][otroCampo], otro.pareja2Id);
+      assertResultado.equal(actual[pos - 1].estado, camino === 'ganador' ? 'FINALIZADO' : camino === 'parcial' ? 'EN_CURSO' : 'PENDIENTE');
+      assertResultado.equal(actual[pos - 1].ganadorId, camino === 'ganador' ? origen.pareja2Id : null);
+      assertResultado.equal(actual[pos - 1].sets.length, camino === 'ganador' ? 2 : camino === 'parcial' ? 1 : 0);
+      for (const destino of actual.slice(2)) {
+        assertResultado.equal(destino.estado, 'PENDIENTE');
+        assertResultado.equal(destino.ganadorId, null);
+      }
+      await comprobarEstadisticasMini(zona.id);
+      const snapshot = await snapshotCorreccionZona();
+      assertResultado.equal(snapshot.categorias[0].estado, 'EN_CURSO');
+      assertResultado.equal(snapshot.torneos[0].estado, 'EN_CURSO');
+    }
+  }
+}
+
+async function testMiniBracketMismoGanador() {
+  for (const [pos, estado] of [[3, 'FINALIZADO'], [4, 'EN_CURSO']]) {
+    const { zona, partidos } = await armarMiniBracketProtegido(pos, estado);
+    const destinosAntes = (await snapshotCorreccionZona()).partidos.filter(p => [partidos[2].id, partidos[3].id].includes(p.id));
+    for (const origen of partidos.slice(0, 2)) {
+      const r = await http('PUT', `/partidos/${origen.id}/resultado`, { sets: [1, 2].map(() => ({ gamesPareja1: 6, gamesPareja2: 2 })) });
+      assertResultado.equal(r.status, 200, JSON.stringify(r.json));
+      assertResultado.deepEqual((await snapshotCorreccionZona()).partidos.filter(p => [partidos[2].id, partidos[3].id].includes(p.id)), destinosAntes);
+      await comprobarEstadisticasMini(zona.id);
+    }
+  }
+}
+
 async function run() {
   await ensureTestDb();
   resetTestDb();
@@ -953,6 +1070,9 @@ async function run() {
     { nombre: 'H16: corrección con destino jugado devuelve 400 sin cambios', fn: testCorreccionZonaConDestinoJugado },
     { nombre: 'H17: misma pareja de ambos lados devuelve 400 sin cambios', fn: testPartidoConParejaRepetida },
     { nombre: 'H18: borrar o dejar parcial retira el pase directo pendiente', fn: testRetirarClasificadoDePaseDirecto },
+    { nombre: 'H19: P1/P2 protegidos por P3/P4 jugados, 400 sin cambios', fn: testMiniBracketDestinoProtegido },
+    { nombre: 'H20: P1/P2 cambian o vacían P3/P4 pendientes y estadísticas', fn: testMiniBracketDestinosPendientes },
+    { nombre: 'H21: corregir sets de P1/P2 con igual ganador sigue permitido', fn: testMiniBracketMismoGanador },
   ];
 
   const resultados = [];

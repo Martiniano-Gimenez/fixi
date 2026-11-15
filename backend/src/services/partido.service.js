@@ -132,14 +132,55 @@ async function recalcularStatsZona(zonaId, db = prisma) {
 }
 
 /**
- * Lógica para zonas de 4 (MINI_BRACKET): Propaga los ganadores y perdedores
- * de los partidos 1 y 2 hacia los partidos 3 y 4.
+ * Calcula los cambios de P3/P4 y los valida antes de escribir. Un resultado propuesto permite
+ * anticipar el bloqueo antes de validar si las parejas pueden volver a entrar en juego.
  */
-async function propagarMiniBracket(zonaId, db = prisma) {
+async function prepararPropagacionMiniBracket(zonaId, db, resultadoPropuesto = null) {
   const partidos = await db.partido.findMany({
     where: { zonaId },
     orderBy: { posicionEnRonda: 'asc' },
   });
+  if (resultadoPropuesto) {
+    const origen = partidos.find(p => p.id === resultadoPropuesto.id);
+    if (origen) Object.assign(origen, resultadoPropuesto);
+  }
+  const porPosicion = new Map(partidos.map(p => [p.posicionEnRonda, p]));
+  const actualizaciones = new Map();
+  if ([1, 2, 3, 4].some(pos => !porPosicion.has(pos))) return { partidos, actualizaciones };
+
+  for (const pos of [1, 2]) {
+    const origen = porPosicion.get(pos);
+    const ganadorId = origen.estado === 'FINALIZADO' ? origen.ganadorId : null;
+    const perdedorId = ganadorId
+      ? ganadorId === origen.pareja1Id ? origen.pareja2Id : origen.pareja1Id : null;
+    const campo = pos === 1 ? 'pareja1Id' : 'pareja2Id';
+    for (const [destinoPos, parejaId] of [[3, ganadorId], [4, perdedorId]]) {
+      const destino = porPosicion.get(destinoPos);
+      if (destino[campo] === parejaId) continue;
+      if (destino.estado === 'EN_CURSO' || destino.estado === 'FINALIZADO') {
+        const zona = await db.zona.findUnique({ where: { id: zonaId } });
+        const nombre = `partido P${destinoPos} de ${zona.nombre}`;
+        const detalle = destino.estado === 'EN_CURSO'
+          ? `el ${nombre} ya está en juego. Volvelo a pendiente primero.`
+          : `el ${nombre} ya tiene resultado. Borrá primero el resultado del ${nombre}.`;
+        const error = new Error(`No se puede cambiar el resultado: ${detalle}`);
+        error.statusCode = 400;
+        throw error;
+      }
+      const data = actualizaciones.get(destino.id) || {};
+      data[campo] = parejaId;
+      actualizaciones.set(destino.id, data);
+    }
+  }
+  return { partidos, actualizaciones };
+}
+
+/**
+ * Lógica para zonas de 4 (MINI_BRACKET): Propaga los ganadores y perdedores
+ * de los partidos 1 y 2 hacia los partidos 3 y 4.
+ */
+async function propagarMiniBracket(zonaId, db = prisma) {
+  const { partidos, actualizaciones } = await prepararPropagacionMiniBracket(zonaId, db);
 
   const p1 = partidos.find(p => p.posicionEnRonda === 1);
   const p2 = partidos.find(p => p.posicionEnRonda === 2);
@@ -153,28 +194,10 @@ async function propagarMiniBracket(zonaId, db = prisma) {
     return partido.ganadorId === partido.pareja1Id ? partido.pareja2Id : partido.pareja1Id;
   };
 
-  // Si P1 terminó, propagamos su ganador y perdedor al slot 1 de P3 y P4
-  if (p1.estado === 'FINALIZADO' && p1.ganadorId) {
-    await db.partido.update({
-      where: { id: pGanadores.id },
-      data: { pareja1Id: p1.ganadorId },
-    });
-    await db.partido.update({
-      where: { id: pPerdedores.id },
-      data: { pareja1Id: getPerdedor(p1) },
-    });
-  }
-
-  // Si P2 terminó, propagamos su ganador y perdedor al slot 2 de P3 y P4
-  if (p2.estado === 'FINALIZADO' && p2.ganadorId) {
-    await db.partido.update({
-      where: { id: pGanadores.id },
-      data: { pareja2Id: p2.ganadorId },
-    });
-    await db.partido.update({
-      where: { id: pPerdedores.id },
-      data: { pareja2Id: getPerdedor(p2) },
-    });
+  // Aplicar solo cambios permitidos, incluidos los null al retirar un ganador.
+  for (const [id, data] of actualizaciones) {
+    await db.partido.update({ where: { id }, data });
+    Object.assign(partidos.find(p => p.id === id), data);
   }
 
   // --- LÓGICA DE POSICIONES EXACTAS ---
@@ -351,6 +374,9 @@ async function cargarResultado(organizadorId, partidoId, data) {
 
   let asignacion;
   await prisma.$transaction(async (tx) => {
+    if (partido.zona?.formato === 'MINI_BRACKET' && [1, 2].includes(partido.posicionEnRonda)) {
+      await prepararPropagacionMiniBracket(partido.zonaId, tx, { id: partidoId, ganadorId, estado: nuevoEstado });
+    }
     if (partido.faseEliminatoriaId) {
       const actual = await tx.partido.findUnique({ where: { id: partidoId } });
       if (nuevoEstado === 'FINALIZADO' || actual.estado === 'FINALIZADO') {
@@ -490,6 +516,9 @@ async function borrarResultado(organizadorId, partidoId) {
   }
 
   await prisma.$transaction(async (tx) => {
+    if (partido.zona?.formato === 'MINI_BRACKET' && [1, 2].includes(partido.posicionEnRonda)) {
+      await prepararPropagacionMiniBracket(partido.zonaId, tx, { id: partidoId, ganadorId: null, estado: 'PENDIENTE' });
+    }
     if (partido.faseEliminatoriaId) {
       const actual = await tx.partido.findUnique({ where: { id: partidoId } });
       await propagarEliminatoria(actual, null, tx);
