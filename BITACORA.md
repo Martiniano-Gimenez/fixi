@@ -3280,6 +3280,65 @@ Las entradas 93 y 94 agrupan temáticamente 23 de los 24 commits de `48da50b..49
 
 ---
 
+## 100. Auditoría: correcciones, seguridad y cierre documental (16/11/2026)
+
+### 1. Alcance y resultado de la auditoría
+- Se integraron en `main`, por avances rápidos locales y sin push, los 24 commits de `d92aa9c` a `b99ce18`. La auditoría cubrió correcciones de zonas con cuadro jugado, empates, acceso, configuración del club, programación y restauración por lluvia, registros de partidos borrados, edición de cruces, privacidad pública, inscripción y validaciones del panel.
+- Resultados, propagación y recálculo de categoría/torneo conservan las transacciones y protecciones entre rondas. Se reutilizaron los schedulers existentes, sin cambiar el esquema en estos arreglos. La base de desarrollo no se modificó para las pruebas de esta auditoría; se usó la base de tests y respuestas interceptadas en frontend.
+- `CONTEXT.md` resume el estado vigente por tema y los contratos de `empatePendiente`, desempate manual y categoría completa. Se retiraron de pendientes el desempate exacto y el cambio de estado por edición del torneo; las demás deudas previas no se dan por resueltas.
+
+### 2. Decisiones del dueño
+- **Empate exacto:** si quedan dos parejas empatadas en todos los criterios, decide su partido entre sí. Si persiste el empate total, el organizador define el orden a mano; hasta entonces esos lugares del cuadro quedan sin pareja. Corregir resultados invalida el orden manual de esa zona.
+- **Club con torneo en curso:** no se cambian canchas ni horarios y no se reprograma por esta vía. Simulación y guardado comparan con los valores actuales y comparten el 409. Para cerrar canchas de una jornada se usa Lluvia; nombre y valores iguales siguen permitidos.
+- **Privacidad en borrador:** el público no recibe nombres de inscriptos, zonas, partidos ni cuadro hasta que empiece el torneo. Conserva los datos del evento y la cantidad de parejas por categoría; no muestra buscador ni seguimiento en borrador.
+- **Inscripción por link:** máximo de 48 parejas por categoría, incluyendo las cargadas desde el panel. El panel sigue sin tope. El límite se controla en la cola y transacción del alta; GET publica solo `completa`, sin cantidades.
+
+### 3. Commits integrados
+- `d92aa9c`: fix: corregir clasificados de zona con pase directo.
+- `1159a5e`: fix: proteger la segunda ronda de zonas de cuatro.
+- `eb3f1fa`: fix: proteger clasificados de zona con el cuadro jugado.
+- `ba036c9`: fix: resolver empates exactos en zonas.
+- `570eef1`: feat: resolver empates de zona desde el panel.
+- `709cc51`: fix: respetar empates pendientes en la vista pública.
+- `2c5ce3a`: fix: validar registro y limitar intentos de acceso.
+- `6d39574`: fix: proteger la configuración del club con torneos en curso.
+- `d59c224`: fix: retirar el endpoint de fecha y hora sin validaciones.
+- `5a9bd90`: fix: ocultar detalles internos en errores de la API.
+- `d7b450b`: fix: preservar reintentos y proteger los registros de errores.
+- `22320f9`: fix: programar el cuadro regenerado con dieciseisavos.
+- `e2ff6b2`: fix: respetar la lluvia al mover o agregar parejas de zona.
+- `0119a14`: fix: programar partidos nuevos al restaurar la lluvia.
+- `9083dda`: fix: respetar los pisos de jornada al restaurar la lluvia.
+- `8c0c603`: fix: limpiar registros de lluvia al borrar partidos.
+- `c102a93`: fix: proteger la edición de cruces de primera ronda.
+- `24134b1`: fix: ocultar parejas en borrador en la vista pública.
+- `97b8616`: fix: impedir cambios de estado al editar un torneo.
+- `d5242dd`: fix: quitar números de cancha de los mensajes del panel.
+- `ee462cc`: fix: restringir CORS y agregar cabeceras de seguridad.
+- `0af34c3`: fix: validar nombres del panel y evitar categorías duplicadas.
+- `cea3392`: fix: limitar la inscripción pública a 48 parejas por categoría.
+- `b99ce18`: fix: proteger la simulación de jornada con un torneo en curso.
+
+**Ajuste del manejo de errores:** `d7b450b` corrige el manejo inicial de `5a9bd90`: conserva el 503 `REINTENTAR` y evita registrar cuerpos del parser o stacks de errores esperados. I27 mantiene la exigencia original de 409/503 y nunca 500.
+
+### 4. Limpieza final de este cierre
+- Se retiraron `mostrarCancha` y su render de `FilaPartidoZona` en `ElegirHorarioPartido.jsx`. La búsqueda confirmó un solo pase explícito, siempre `false`; los demás consumidores no usaban la prop. Las condiciones y validaciones internas de cancha no cambian.
+- `.pv-btn` pasó de 40 a 44 px de alto mínimo. Se conservaron el resto de los estilos y la estructura de las pantallas, sin compensaciones.
+- Se corrigieron las referencias al endpoint retirado en CONTEXT y el comentario de `test-r32-marca-sin-horario.js`: `updateFechaHora` es un servicio interno sin ruta HTTP. Las pruebas que verifican el 404 o usan el servicio no se reescribieron, ni las entradas históricas de esta bitácora.
+
+### 5. Qué sigue pendiente
+- **Sesión:** JWT de 7 días guardado en `localStorage`, sin revocación desde el servidor. Decisión de diseño postergada.
+- **Lluvia:** los P1/P2 de un mini cuadro creados durante la lluvia no se adelantan al restaurar aunque aparezca lugar antes; esa dependencia puede dejar P3/P4 sin horario. No se cambia en este cierre.
+- **Deploy:** configurar `TRUST_PROXY` según el proxy real para que los límites por IP funcionen por cliente; mantener `CORS_ORIGIN` vacío con frontend/API del mismo origen, o declarar los orígenes exactos separados por comas si hay clientes cruzados. Ambas notas siguen juntas en CONTEXT.
+- Las otras deudas técnicas previas documentadas en CONTEXT conservan su alcance; esta auditoría no las cierra por omisión.
+
+### 6. Verificación del cierre
+- `npm test` completo: backend 69/69 suites y frontend 15/15 pruebas. `npm run build` correcto; `npm run lint` con los mismos 7 avisos, sin nuevos.
+- Las páginas reales, con fetch interceptado, se revisaron en navegador a 320, 375 y 1440 px: inicio en borrador/en curso, categoría, búsqueda, inscripción y estados cerrada, completa, iniciado, no encontrado, error y confirmación. Las 33 combinaciones quedaron sin scroll horizontal y todos los `.pv-btn` visibles midieron al menos 44 px; no se necesitaron compensaciones de estilo.
+- Diff limitado a los 5 archivos autorizados, sin lógica de negocio ni esquema nuevos. `dev.db` mantuvo el mismo SHA256 antes y después. Se cierra en `chore/cierre-auditoria`, sin push.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
 El registro reúne 99 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 340 y 426 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 99 agrega entre 10 y 14 horas estimadas para el análisis y cierre automático del torneo, sus ajustes y pruebas. Las filas 91 a 99 agregan entre 68,25 y 99,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 340,25 a 425,5 horas. Se redondea a horas enteras. Las entradas temáticas pueden agrupar varios pedidos o días; no se estimó el esfuerzo por la distancia entre fechas de commits.

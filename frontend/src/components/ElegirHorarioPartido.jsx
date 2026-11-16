@@ -8,7 +8,7 @@ const GrillaHorariosPartido = lazy(() => import('./GrillaHorariosPartido'));
 
 const tieneHorario = (partido) => partido.estado === 'FIJO' || Boolean(partido.fechaHora && partido.canchaNumero);
 
-export function FilaPartidoZona({ partido, nombres, badge, mostrarCancha = false }) {
+export function FilaPartidoZona({ partido, nombres, badge }) {
   const rivales = partido.pareja1Id && partido.pareja2Id
     ? `${nombres.get(partido.pareja1Id) || 'Pareja 1'} vs ${nombres.get(partido.pareja2Id) || 'Pareja 2'}`
     : partido.origen || 'Partido por definir';
@@ -20,9 +20,7 @@ export function FilaPartidoZona({ partido, nombres, badge, mostrarCancha = false
           <span className="pc-zona-separador" aria-hidden="true">{'\u00a0·'}</span>{' '}
           <span className="pc-zona-dato">
             <time dateTime={partido.fechaHora}>{formatPartidoHorario(partido.fechaHora).toLowerCase().replace(' · ', ' ')}</time>
-            {mostrarCancha && <span className="pc-zona-separador" aria-hidden="true">{'\u00a0·'}</span>}
           </span>
-          {mostrarCancha && <>{' '}<span className="pc-zona-dato">Cancha {partido.canchaNumero}</span></>}
         </>
       )}
       {badge && <>{' '}<span className="pc-zona-badge">{badge}</span></>}
@@ -222,7 +220,7 @@ export default function ElegirHorarioPartido({
           <ul className="pc-propuesta-partidos-list">
             {otrosPartidos.map((p) => (
               <li key={p.posicionEnRonda} className="pc-propuesta-partido">
-                <FilaPartidoZona partido={p} nombres={nombres} mostrarCancha={false} badge={p.fechaHora && p.canchaNumero ? null : 'sin horario'} />
+                <FilaPartidoZona partido={p} nombres={nombres} badge={p.fechaHora && p.canchaNumero ? null : 'sin horario'} />
               </li>
             ))}
           </ul>
