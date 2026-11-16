@@ -78,6 +78,7 @@ const TEST_SUITES = [
   'test-solape-finales-extension.js',
   'test-padres-hijo-fijo.js',
   'test-empate-exacto-zona.js',
+  'test-publico-borrador-sin-parejas.js',
   'test-armado-zonas-reparacion.js',
   'test-inscripcion-publica.js',
   'test-optimizador-precheck.js',

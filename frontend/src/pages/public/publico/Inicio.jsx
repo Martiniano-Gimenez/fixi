@@ -33,6 +33,7 @@ export default function Inicio({ torneo, categorias, fechas, seguidas, hrefCateg
           {torneo.organizador && <p {...c('pv-club', 0)}>{torneo.organizador}</p>}
           <h1 {...c('', 1)}>{torneo.nombre}</h1>
           {(fechas || torneo.fecha) && <p {...c('pv-fechas', 1)}>{fechas || formatFechaTorneo(torneo.fecha)}</p>}
+          {torneo.estado === 'BORRADOR' && <p className="pv-publicacion">La lista de parejas y los partidos se publican cuando empiece el torneo.</p>}
           {torneo.inscripcionAbierta && (
             <a href={`/torneo/${torneo.slug}/inscripcion`} className="pv-btn pv-btn-primario pv-inscribite">
               Inscribite
@@ -68,7 +69,9 @@ export default function Inicio({ torneo, categorias, fechas, seguidas, hrefCateg
                     {e.terminada && <span className="pv-fase terminada">Terminada</span>}
                     <ChevronRight size={20} className="pv-cat-flecha" aria-hidden="true" />
                   </div>
-                  {e.preparacion ? (
+                  {torneo.estado === 'BORRADOR' ? (
+                    <p className="pv-recorrido-texto"><b className="num">{cat.totalParejas ?? 0}</b>{cat.totalParejas === 1 ? ' pareja inscripta' : ' parejas inscriptas'}</p>
+                  ) : e.preparacion ? (
                     <p className="pv-recorrido-texto">En preparación: las zonas se arman cuando arranque el torneo.</p>
                   ) : (
                     <>

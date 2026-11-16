@@ -253,7 +253,9 @@ export default function Categoria({ categoria: cat, seguidaId, isMobile, rondaId
           <div className="pv-preparacion">
             <Users size={36} aria-hidden="true" />
             <h2>En preparación</h2>
-            <p>El organizador está cargando las parejas y armando las zonas. El fixture aparece acá cuando arranque.</p>
+            <p>{torneoEstado === 'BORRADOR'
+              ? 'La lista de parejas y los partidos se publican cuando empiece el torneo.'
+              : 'El organizador está cargando las parejas y armando las zonas. El fixture aparece acá cuando arranque.'}</p>
           </div>
         ) : (
           <>

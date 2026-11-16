@@ -68,7 +68,12 @@ async function getTorneoPublico(req, res, next) {
       return res.status(404).json({ error: 'Torneo no encontrado.' });
     }
 
-    const categoriasFormateadas = torneo.categorias.map((c) => ({
+    const categoriasFormateadas = torneo.categorias.map((c) => torneo.estado === 'BORRADOR' ? {
+      id: c.id,
+      nombre: c.nombre,
+      estado: c.estado,
+      totalParejas: c.parejas.length,
+    } : ({
       id: c.id,
       nombre: c.nombre,
       estado: c.estado,
@@ -77,7 +82,6 @@ async function getTorneoPublico(req, res, next) {
         id: p.id,
         jugador1: p.jugador1,
         jugador2: p.jugador2,
-        orden: p.orden,
       })),
       zonas: c.zonas.map((z) => {
         const { ordenadas, empatePendiente } = resolverPosicionesZona(z.zonaParejas, z.formato, c.partidos.filter(p => p.zonaId === z.id));
@@ -107,7 +111,6 @@ async function getTorneoPublico(req, res, next) {
               posicionEnRonda: p.posicionEnRonda,
               estado: p.estado,
               fechaHora: p.fechaHora,
-              canchaNumero: p.canchaNumero,
               sinHorarioAsignado: p.sinHorarioAsignado,
               origenPareja1: p.origenPareja1,
               origenPareja2: p.origenPareja2,
@@ -184,7 +187,6 @@ async function getTorneoPublico(req, res, next) {
               posicion: p.posicionEnRonda,
               estado: p.estado,
               fechaHora: p.fechaHora,
-              canchaNumero: p.canchaNumero,
               origenPareja1: p.origenPareja1,
               origenPareja2: p.origenPareja2,
               displayOrigenPareja1,

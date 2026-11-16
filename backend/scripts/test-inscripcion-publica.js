@@ -289,7 +289,7 @@ async function main() {
     assert(parejaSlots, 'depende de I6');
     const vista = await http('GET', `/public/${t1.slug}`);
     esperar(vista, 200);
-    assert(vista.texto.includes('Lucía Ríos'), 'la vista pública no lista la pareja inscripta');
+    assert(!vista.texto.includes('Lucía Ríos'), 'la vista pública en borrador expone la pareja inscripta');
     assert(!vista.texto.includes(TELEFONO_NUCLEO), 'GET /public/:slug expone el teléfono');
     assert(!/telefono/i.test(vista.texto), 'GET /public/:slug trae un campo telefono');
     const insc = await http('GET', `/public/${t1.slug}/inscripcion`);
@@ -590,7 +590,7 @@ async function main() {
     const insc = await http('GET', `/public/${t9.slug}/inscripcion`);
     esperar(vista, 200);
     esperar(insc, 200);
-    assert(vista.texto.includes(parejaIndicaciones.jugador1), 'la vista no incluye la pareja de prueba');
+    assert(!vista.texto.includes(parejaIndicaciones.jugador1), 'la vista en borrador expone la pareja de prueba');
     for (const r of [vista, insc, respuestaIndicaciones]) {
       assert(!/"indicaciones"\s*:/i.test(r.texto) && !r.texto.includes('Necesitamos llegar juntos'), `se expusieron indicaciones: ${r.texto}`);
     }
