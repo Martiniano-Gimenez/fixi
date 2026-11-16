@@ -486,7 +486,7 @@ async function testModoDiaTorneo() {
     await organizadorService.reprogramarPorReduccionCanchas(organizador.id, torneo.id, 3, pEnCurso.fechaHora);
     throw new Error('FALLÓ EL TEST: Debería haber bloqueado la reducción a 3');
   } catch (err) {
-    if (err.statusCode === 400 && err.message.includes('partido en curso en la Cancha 4')) {
+    if (err.statusCode === 400 && err.message.includes('No podés reducir a 3 canchas mientras se juega')) {
       console.log(`✅ Bloqueo correcto verificado: "${err.message}"`);
     } else {
       throw err;
@@ -1211,7 +1211,7 @@ async function testModoDiaTorneo() {
       dSabadoLluviaE
     );
   } catch (err) {
-    if (err.statusCode === 400 && err.message.includes('Cancha 4')) {
+    if (err.statusCode === 400 && err.message.includes('No podés reducir a 3 canchas mientras se juega')) {
       bloqueoExitoso = true;
       console.log(`✅ Verificado: Partido EN_CURSO del sábado en Cancha 4 bloqueó correctamente la reducción a 3 canchas ("${err.message}").`);
     } else {

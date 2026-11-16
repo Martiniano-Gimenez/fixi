@@ -2628,7 +2628,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       const p1 = p.pareja1 ? `${p.pareja1.jugador1}/${p.pareja1.jugador2}` : 'P1';
       const p2 = p.pareja2 ? `${p.pareja2.jugador1}/${p.pareja2.jugador2}` : 'P2';
       const error = new Error(
-        `No podés reducir a ${overrideNum} canchas porque hay un partido en curso en la Cancha ${p.canchaNumero} (${p1} vs ${p2}). Esperá a que termine o finalizalo antes de reducir.`
+        `No podés reducir a ${overrideNum} canchas mientras se juega ${p1} vs ${p2}. Esperá a que termine o cargá su resultado antes de reducir.`
       );
       error.statusCode = 400;
       throw error;

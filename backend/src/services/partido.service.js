@@ -752,7 +752,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
 
   const canchaNum = parseInt(canchaNumero, 10);
   if (isNaN(canchaNum) || canchaNum < 1 || canchaNum > (organizador.cantidadCanchas || 1)) {
-    const error = new Error(`El número de cancha debe ser entre 1 y ${organizador.cantidadCanchas || 1}.`);
+    const error = new Error('No se pudo asignar una cancha válida. Elegí otro horario.');
     error.statusCode = 400;
     throw error;
   }
@@ -774,7 +774,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
 
   const canchasJornada = canchasOverridesService.getCanchasDia(torneo.id, jornada.key, organizador.cantidadCanchas || 1);
   if (canchaNum > canchasJornada.canchas) {
-    throw errorAsignacion(`La cancha ${canchaNum} está cerrada por lluvia el ${NOMBRES_DIA[diaLogico]}. Elegí otra cancha.`);
+    throw errorAsignacion(`Ese horario ya no tiene canchas libres: la lluvia cerró canchas el ${NOMBRES_DIA[diaLogico]}. Elegí otro horario.`);
   }
 
   const targetStartMs = targetDate.getTime();
@@ -800,7 +800,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
     const haySolapamiento = Math.max(targetStartMs, oStartMs) < Math.min(targetEndMs, oEndMs);
     if (haySolapamiento) {
       if (otro.canchaNumero === canchaNum) {
-        const error = new Error(`La cancha ${canchaNum} ya está ocupada en ese horario por otro partido.`);
+        const error = new Error('Ese horario se ocupó con otro partido. Elegí otro horario.');
         error.statusCode = 409;
         throw error;
       }

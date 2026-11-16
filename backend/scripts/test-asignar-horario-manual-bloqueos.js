@@ -31,7 +31,7 @@ const MSG_DIA_ZONA = 'Los partidos de zona se juegan viernes o sábado.';
 const MSG_DIA_R32 = 'Los dieciseisavos se juegan el sábado.';
 const MSG_DIA_OCTAVOS = 'Las eliminatorias desde octavos se juegan el domingo.';
 const MSG_FUERA_TORNEO = 'El horario elegido está fuera de los días del torneo.';
-const msgLluvia = (cancha, dia) => `La cancha ${cancha} está cerrada por lluvia el ${dia}. Elegí otra cancha.`;
+const msgLluvia = (cancha, dia) => `Ese horario ya no tiene canchas libres: la lluvia cerró canchas el ${dia}. Elegí otro horario.`;
 
 const DIA_VIERNES = '2026-10-16';
 const DIA_SABADO = '2026-10-17';
