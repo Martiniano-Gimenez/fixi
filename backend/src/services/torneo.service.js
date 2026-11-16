@@ -146,8 +146,10 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
 async function updateTorneo(organizadorId, torneoId, data) {
   const torneo = await getTorneoById(organizadorId, torneoId);
   const esInicio = torneo.estado === 'BORRADOR' && data.estado === 'EN_CURSO';
-  if (data.estado !== undefined && data.estado !== torneo.estado && !esInicio) {
-    const error = new Error('El estado del torneo se actualiza automáticamente con los resultados.');
+  if (data.estado !== undefined && data.estado !== torneo.estado) {
+    const error = new Error(esInicio
+      ? 'Para iniciar el torneo usá Iniciar torneo.'
+      : 'El estado del torneo se actualiza automáticamente con los resultados.');
     error.statusCode = 400;
     throw error;
   }
@@ -191,9 +193,6 @@ async function updateTorneo(organizadorId, torneoId, data) {
   const updateData = {};
   if (data.nombre !== undefined && data.nombre.trim()) updateData.nombre = data.nombre.trim();
   if (data.fecha !== undefined) updateData.fecha = parsedFecha;
-  if (data.estado !== undefined) updateData.estado = data.estado;
-  // La inscripción por link solo vive en BORRADOR (que este endpoint acepte `estado` queda como pendiente aparte)
-  if (data.estado !== undefined && data.estado !== 'BORRADOR') updateData.inscripcionAbierta = false;
 
   return await prisma.torneo.update({
     where: { id: torneo.id },

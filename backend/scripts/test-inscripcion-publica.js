@@ -470,12 +470,14 @@ async function main() {
     esperar(await inscribir(t5.slug, cuerpo(cat5.id)), 409, 'INSCRIPCION_CERRADA');
   });
 
-  await caso('I25 PUT /torneos/:id con estado fuera de BORRADOR cierra la inscripción', async () => {
+  await caso('I25 PUT /torneos/:id no inicia el torneo ni cierra la inscripción', async () => {
     const t7 = await crearTorneo(orgA, 'Put Estado');
     esperar(await abrir(t7.id, true, tokenA), 200);
-    esperar(await http('PUT', `/torneos/${t7.id}`, { body: { estado: 'EN_CURSO' }, token: tokenA }), 200);
+    const r = await http('PUT', `/torneos/${t7.id}`, { body: { estado: 'EN_CURSO' }, token: tokenA });
+    esperar(r, 400);
+    assert(r.json.error === 'Para iniciar el torneo usá Iniciar torneo.', `mensaje: ${r.texto}`);
     const t = await prisma.torneo.findUnique({ where: { id: t7.id } });
-    assert(t.inscripcionAbierta === false, 'quedó abierta con el torneo en curso');
+    assert(t.estado === 'BORRADOR' && t.inscripcionAbierta === true, 'editar el estado inició el torneo o cerró la inscripción');
   });
 
   console.log('\n▶ Cola serial y esperas');
