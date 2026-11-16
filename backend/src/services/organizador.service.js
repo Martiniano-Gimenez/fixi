@@ -148,6 +148,16 @@ function cambianHorarios(organizador, updateData) {
   return HORARIOS_CLUB.some((campo) => updateData[campo] !== undefined && updateData[campo] !== (organizador[campo] || null));
 }
 
+async function exigirCambioJornadaSinTorneoEnCurso(db, organizador, updateData) {
+  const canchasCambiadas = updateData.cantidadCanchas !== undefined && updateData.cantidadCanchas !== organizador.cantidadCanchas;
+  if (cambianHorarios(organizador, updateData) || canchasCambiadas) {
+    const torneoEnCurso = await db.torneo.findFirst({ where: { organizadorId: organizador.id, estado: 'EN_CURSO' }, select: { id: true } });
+    if (torneoEnCurso) {
+      throw errorConfiguracion('Tenés un torneo en curso. Podés cambiar las canchas y los horarios del club cuando termine. Para cerrar canchas un día, usá Lluvia.', 409);
+    }
+  }
+}
+
 async function slotsFueraDeJornada(db, organizadorId, organizadorProyectado) {
   const nuevosSlotsValidos = getSlotsValidosSet(organizadorProyectado);
   const slotsActuales = await db.slotPareja.findMany({
@@ -167,6 +177,7 @@ async function slotsFueraDeJornada(db, organizadorId, organizadorProyectado) {
 async function simularCambioJornadaOrganizador(organizadorId, nuevaJornada) {
   const updateData = validarConfiguracionClub(nuevaJornada);
   const organizador = await getOrganizador(organizadorId);
+  await exigirCambioJornadaSinTorneoEnCurso(prisma, organizador, updateData);
   const slotsInvalidos = cambianHorarios(organizador, updateData)
     ? await slotsFueraDeJornada(prisma, organizadorId, { ...organizador, ...updateData })
     : [];
@@ -183,14 +194,8 @@ async function updateOrganizador(organizadorId, data) {
 
   return await prisma.$transaction(async (tx) => {
     const organizador = await getOrganizador(organizadorId, tx);
+    await exigirCambioJornadaSinTorneoEnCurso(tx, organizador, updateData);
     const horariosCambiados = cambianHorarios(organizador, updateData);
-    const canchasCambiadas = updateData.cantidadCanchas !== undefined && updateData.cantidadCanchas !== organizador.cantidadCanchas;
-    if (horariosCambiados || canchasCambiadas) {
-      const torneoEnCurso = await tx.torneo.findFirst({ where: { organizadorId, estado: 'EN_CURSO' }, select: { id: true } });
-      if (torneoEnCurso) {
-        throw errorConfiguracion('Tenés un torneo en curso. Podés cambiar las canchas y los horarios del club cuando termine. Para cerrar canchas un día, usá Lluvia.', 409);
-      }
-    }
     const updated = await tx.organizador.update({
       where: { id: organizador.id },
       data: updateData,

@@ -31,6 +31,7 @@ const TEST_SUITES = [
   'test-authz-disponibilidad.js',
   'test-auth-login-registro.js',
   'test-club-torneo-en-curso.js',
+  'test-simular-jornada-torneo-en-curso.js',
   'test-errores-http.js',
   'test-cors-cabeceras.js',
   'test-auto-asignar-eliminatoria.js',
