@@ -22,6 +22,7 @@ const SCRIPTS_DIR = __dirname;
 
 // Lista explícita de las suites oficiales
 const TEST_SUITES = [
+  'test-tope-inscripcion-categoria.js',
   'test-alta-tardia-flujo.js',
   'test-asignar-horario-manual-validaciones.js',
   'test-asignar-horario-manual-bloqueos.js',

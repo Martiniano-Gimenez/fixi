@@ -180,7 +180,7 @@ async function main() {
     assert(new Date(torneo.fecha).getTime() === parseFechaLocal(VIERNES).getTime(), `fecha: ${torneo.fecha}`);
     const nombres = (categorias || []).map((c) => c.nombre).sort();
     assert(JSON.stringify(nombres) === JSON.stringify(['4ta', '6ta']), `categorías: ${JSON.stringify(categorias)}`);
-    assert(categorias.every((c) => Object.keys(c).sort().join(',') === 'id,nombre'), `campos de categoría: ${JSON.stringify(categorias)}`);
+    assert(categorias.every((c) => Object.keys(c).sort().join(',') === 'completa,id,nombre'), `campos de categoría: ${JSON.stringify(categorias)}`);
     const esperada = generarGrillaOrganizador(orgA);
     assert(!('domingo' in grilla), 'la grilla trae domingo');
     assert(JSON.stringify(grilla.viernes) === JSON.stringify(esperada.viernes), 'grilla de viernes distinta a la del club');
