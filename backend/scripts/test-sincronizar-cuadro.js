@@ -601,10 +601,13 @@ async function testSincronizarCuadro() {
       throw new Error('updateBracketMatch debió fallar al intentar editar un cruce BYE.');
     }
 
-    // Vaciar el lado 2 del cruce normal
-    await partidoService.updateBracketMatch(organizador.id, cruceNormal.id, {
+    // La API conserva todos los clasificados; el lugar vacío se prepara como fixture del scheduler.
+    const cruceAntesDeVaciar = await prisma.partido.findUnique({ where: { id: cruceNormal.id } });
+    await assert.rejects(() => partidoService.updateBracketMatch(organizador.id, cruceNormal.id, {
       origenPareja2: null,
-    });
+    }), { statusCode: 400, message: 'Cada clasificado tiene que seguir en el cuadro.' });
+    assert.deepEqual(await prisma.partido.findUnique({ where: { id: cruceNormal.id } }), cruceAntesDeVaciar);
+    await prisma.partido.update({ where: { id: cruceNormal.id }, data: { origenPareja2: null, pareja2Id: null } });
 
     const cruceEditadoDb = await prisma.partido.findUnique({ where: { id: cruceNormal.id } });
     if (cruceEditadoDb.esBye !== false) {

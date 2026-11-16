@@ -153,6 +153,9 @@ export default function EliminatoriaView() {
     }
   }
 
+  const primeraFaseId = fases.reduce((primera, fase) =>
+    !primera || fase.ronda > primera.ronda ? fase : primera, null)?.id;
+
   const renderMatch = (partido) => {
     const isBye = Boolean(partido.esBye);
     const isFinalizado = partido.estado === 'FINALIZADO';
@@ -321,7 +324,7 @@ export default function EliminatoriaView() {
                     <span>{isFinalizado ? 'Editar resultado' : 'Cargar resultado'}</span>
                   </button>
                 )}
-                {!isFinalizado && (
+                {!isFinalizado && partido.estado !== 'EN_CURSO' && partido.faseEliminatoriaId === primeraFaseId && (
                   <button
                     type="button"
                     title="Editar cruce"

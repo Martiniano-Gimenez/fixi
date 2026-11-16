@@ -64,6 +64,7 @@ const TEST_SUITES = [
   'test-scheduler-r32-fin-zonas.js',
   'test-scheduling-domingo.js',
   'test-sincronizar-cuadro.js',
+  'test-editar-cruces-primera-ronda.js',
   'test-torneo-fecha-guard.js',
   'test-zona-horaria.js',
   'test-zona-horaria-frontend-parity.js',

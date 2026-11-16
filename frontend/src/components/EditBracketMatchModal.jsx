@@ -5,7 +5,6 @@ import { X } from 'lucide-react';
 export default function EditBracketMatchModal({
   isOpen = true,
   partido,
-  zonas = [],
   partidosRonda = [],
   onClose,
   onSuccess,
@@ -99,12 +98,7 @@ export default function EditBracketMatchModal({
 
   if (!isOpen || !partido) return null;
 
-  const originOptions = [];
-  zonas.forEach((z) => {
-    for (let i = 1; i <= z.clasifican; i++) {
-      originOptions.push(`${i}° ${z.nombre}`);
-    }
-  });
+  const originOptions = [...new Set(partidosRonda.flatMap((p) => [p.origenPareja1, p.origenPareja2]).filter(Boolean))];
 
   const renderOption = (opt) => {
     const info = orígenesEnUsoOtrosPartidos.get(opt);
@@ -171,7 +165,7 @@ export default function EditBracketMatchModal({
               id="cb-origen-1"
               disabled={loading || partidoBloqueado}
             >
-              <option value="">Sin definir</option>
+              {!partido.origenPareja1 && <option value="">Sin definir</option>}
               {originOptions.map(renderOption)}
             </select>
           </div>
@@ -188,7 +182,7 @@ export default function EditBracketMatchModal({
               id="cb-origen-2"
               disabled={loading || partidoBloqueado}
             >
-              <option value="">Sin definir</option>
+              {!partido.origenPareja2 && <option value="">Sin definir</option>}
               {originOptions.map(renderOption)}
             </select>
           </div>

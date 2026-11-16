@@ -592,6 +592,10 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
       if (p.esBye) rechazar('No se pueden editar cruces de un partido pase directo (BYE).');
     };
     if (!partido.faseEliminatoriaId) rechazar('El partido no pertenece a una fase eliminatoria.');
+    const primeraFase = await tx.faseEliminatoria.findFirst({
+      where: { categoriaId: partido.categoriaId }, orderBy: { ronda: 'desc' }, select: { id: true },
+    });
+    if (partido.faseEliminatoriaId !== primeraFase?.id) rechazar('Solo se pueden editar los cruces de la primera ronda.');
     validarEditable(partido, true);
 
     const { origenPareja1, origenPareja2, liberarEnOtros } = data;
@@ -602,6 +606,8 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
     if (nuevos[0] && nuevos[0] === nuevos[1]) rechazar('No podés asignar el mismo origen en ambos lados del partido.');
 
     const originales = await tx.partido.findMany({ where: { faseEliminatoriaId: partido.faseEliminatoriaId } });
+    const origenesAntes = new Set(originales.flatMap((p) => [p.origenPareja1, p.origenPareja2]).filter(Boolean));
+    if (nuevos.some((origen) => origen && !origenesAntes.has(origen))) rechazar('Ese origen no está en esta ronda.');
     const partidos = originales.map((p) => ({ ...p }));
     const actual = partidos.find((p) => p.id === partidoId);
     const lugares = partidos.flatMap((p) => [1, 2].map((lado) => ({ partido: p, lado })));
@@ -632,6 +638,9 @@ async function updateBracketMatch(organizadorId, partidoId, data) {
         actual[pareja] = null;
       }
     }
+
+    const origenesDespues = new Set(partidos.flatMap((p) => [p.origenPareja1, p.origenPareja2]).filter(Boolean));
+    if ([...origenesAntes].some((origen) => !origenesDespues.has(origen))) rechazar('Cada clasificado tiene que seguir en el cuadro.');
 
     let actualizado = partido;
     const campos = ['origenPareja1', 'origenPareja2', 'pareja1Id', 'pareja2Id'];
