@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const crypto = require('crypto');
+const { validarNombre } = require('../utils/nombres');
 const { parseFechaLocal } = require('../utils/dateUtils');
 
 function exigirTorneoNoFinalizado(torneo) {
@@ -44,11 +45,7 @@ function generarSlug(nombre) {
 }
 
 async function createTorneo(organizadorId, { nombre, fecha }) {
-  if (!nombre || !nombre.trim()) {
-    const error = new Error('El nombre del torneo es obligatorio.');
-    error.statusCode = 400;
-    throw error;
-  }
+  const nombreValidado = validarNombre(nombre, 'del torneo', 80);
 
   if (!fecha || (typeof fecha === 'string' && !fecha.trim())) {
     const error = new Error('La fecha de inicio del torneo es obligatoria.');
@@ -69,12 +66,12 @@ async function createTorneo(organizadorId, { nombre, fecha }) {
     throw error;
   }
 
-  const slug = generarSlug(nombre.trim());
+  const slug = generarSlug(nombreValidado);
 
   return await prisma.torneo.create({
     data: {
       organizadorId,
-      nombre: nombre.trim(),
+      nombre: nombreValidado,
       fecha: parsedFecha,
       slug,
     },
@@ -191,7 +188,7 @@ async function updateTorneo(organizadorId, torneoId, data) {
   }
 
   const updateData = {};
-  if (data.nombre !== undefined && data.nombre.trim()) updateData.nombre = data.nombre.trim();
+  if (data.nombre !== undefined) updateData.nombre = validarNombre(data.nombre, 'del torneo', 80);
   if (data.fecha !== undefined) updateData.fecha = parsedFecha;
 
   return await prisma.torneo.update({

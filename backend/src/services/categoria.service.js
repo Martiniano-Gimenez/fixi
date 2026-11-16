@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const canchasOverridesService = require('./canchasOverrides.service');
+const { validarNombre, claveNombre } = require('../utils/nombres');
 const { recalcularEstadoTorneo, exigirTorneoNoFinalizado, incluirFinalPodio, conPodioCategoria } = require('./torneo.service');
 
 async function recalcularEstadosPorPartido(tx, categoriaId) {
@@ -73,12 +74,15 @@ async function getCategoriaById(organizadorId, categoriaId, tx = null) {
   return conPodioCategoria(categoria);
 }
 
-async function createCategoria(organizadorId, torneoId, { nombre }) {
-  if (!nombre || !nombre.trim()) {
-    const error = new Error('El nombre de la categoría es obligatorio.');
-    error.statusCode = 400;
-    throw error;
+async function exigirNombreCategoriaDisponible(tx, torneoId, nombre, categoriaId) {
+  const categorias = await tx.categoria.findMany({ where: { torneoId, ...(categoriaId ? { id: { not: categoriaId } } : {}) }, select: { nombre: true } });
+  if (categorias.some((c) => claveNombre(c.nombre) === claveNombre(nombre))) {
+    throw Object.assign(new Error('Ya hay una categoría con ese nombre en este torneo.'), { statusCode: 409 });
   }
+}
+
+async function createCategoria(organizadorId, torneoId, { nombre }) {
+  const nombreValidado = validarNombre(nombre, 'de la categoría', 40);
 
   return await prisma.$transaction(async (tx) => {
     // Verificar propiedad y estado dentro de la misma transacción que el alta.
@@ -94,7 +98,8 @@ async function createCategoria(organizadorId, torneoId, { nombre }) {
       throw error;
     }
     exigirTorneoNoFinalizado(torneo);
-    return tx.categoria.create({ data: { torneoId, nombre: nombre.trim() } });
+    await exigirNombreCategoriaDisponible(tx, torneoId, nombreValidado);
+    return tx.categoria.create({ data: { torneoId, nombre: nombreValidado } });
   });
 }
 
@@ -133,23 +138,23 @@ async function getCategorias(organizadorId, torneoId) {
 }
 
 async function updateCategoria(organizadorId, categoriaId, data) {
-  const categoria = await getCategoriaById(organizadorId, categoriaId);
-  if (data.estado !== undefined && data.estado !== categoria.estado) {
-    const error = new Error('El estado de la categoría se actualiza automáticamente con los resultados.');
-    error.statusCode = 400;
-    throw error;
-  }
+  return prisma.$transaction(async (tx) => {
+    const categoria = await getCategoriaById(organizadorId, categoriaId, tx);
+    if (data.estado !== undefined && data.estado !== categoria.estado) {
+      const error = new Error('El estado de la categoría se actualiza automáticamente con los resultados.');
+      error.statusCode = 400;
+      throw error;
+    }
 
-  const updateData = {};
-  if (data.nombre !== undefined && data.nombre.trim()) {
-    updateData.nombre = data.nombre.trim();
-  }
-  if (data.estado !== undefined) {
-    updateData.estado = data.estado;
-  }
-  return await prisma.categoria.update({
-    where: { id: categoria.id },
-    data: updateData,
+    const updateData = {};
+    if (data.nombre !== undefined) {
+      updateData.nombre = validarNombre(data.nombre, 'de la categoría', 40);
+      if (claveNombre(updateData.nombre) !== claveNombre(categoria.nombre)) {
+        await exigirNombreCategoriaDisponible(tx, categoria.torneoId, updateData.nombre, categoriaId);
+      }
+    }
+    if (data.estado !== undefined) updateData.estado = data.estado;
+    return tx.categoria.update({ where: { id: categoria.id }, data: updateData });
   });
 }
 

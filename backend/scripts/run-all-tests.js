@@ -69,6 +69,7 @@ const TEST_SUITES = [
   'test-editar-cruces-primera-ronda.js',
   'test-torneo-fecha-guard.js',
   'test-estado-torneo-solo-al-iniciar.js',
+  'test-validar-textos-panel.js',
   'test-zona-horaria.js',
   'test-zona-horaria-frontend-parity.js',
   'test-zona-manual-sin-partidos.js',

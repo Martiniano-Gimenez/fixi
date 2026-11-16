@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const { getCategoriaById, recalcularEstadosPorPartido } = require('./categoria.service');
 const { conReintentoOrden } = require('../utils/reintentoOrden');
+const { MAX_NOMBRE, validarNombre } = require('../utils/nombres');
 const {
   calcularCompatibilidad,
   horaAMinutos,
@@ -2822,19 +2823,14 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
  * Crea la pareja y su asignación en la zona, regenera partidos y reasigna horarios atómicamente.
  */
 async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, jugador1, jugador2, slotIds = [] }) {
-  if (!categoriaId || !zonaDestinoId || !jugador1 || !jugador2) {
+  if (!categoriaId || !zonaDestinoId) {
     const error = new Error('Faltan parámetros requeridos: zonaDestinoId, jugador1 y jugador2 son obligatorios.');
     error.statusCode = 400;
     throw error;
   }
 
-  const j1 = String(jugador1).trim();
-  const j2 = String(jugador2).trim();
-  if (!j1 || !j2) {
-    const error = new Error('Los nombres de los jugadores no pueden estar vacíos.');
-    error.statusCode = 400;
-    throw error;
-  }
+  const j1 = validarNombre(jugador1, 'del jugador 1', MAX_NOMBRE);
+  const j2 = validarNombre(jugador2, 'del jugador 2', MAX_NOMBRE);
 
   if (!slotIds || !Array.isArray(slotIds) || slotIds.length === 0) {
     const error = new Error('La disponibilidad horaria de la pareja es obligatoria.');
