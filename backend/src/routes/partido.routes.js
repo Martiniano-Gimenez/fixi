@@ -9,8 +9,7 @@ router.use(auth);
 router.put('/:id/resultado', partidoController.cargarResultado);
 router.delete('/:id/resultado', partidoController.borrarResultado);
 
-// Update match time
-router.put('/:id/fecha-hora', partidoController.updateFechaHora);
+// Asignación manual de horario con validaciones
 router.put('/:id/asignar-horario-manual', partidoController.asignarHorarioManual);
 
 // Edición de brackets eliminatorios bracket

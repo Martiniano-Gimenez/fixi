@@ -23,14 +23,11 @@ export const origenPareja2 = (p) => p.origenPareja2 || p.displayOrigenPareja2 ||
 export const nombrePareja1 = (p) => p.pareja1 || p.displayPareja1 || acortarOrigen(origenPareja1(p)) || 'A definir';
 export const nombrePareja2 = (p) => p.pareja2 || p.displayPareja2 || acortarOrigen(origenPareja2(p)) || 'A definir';
 
-const empateExacto = (a, b) =>
-  a.puntos === b.puntos && a.pg === b.pg && a.sf - a.sc === b.sf - b.sc && a.gf - a.gc === b.gf - b.gc;
-
 /**
  * Parejas ya ubicadas en la llave por su lugar ("1° Zona A" → pareja), con la misma regla que usa el
  * backend para completar el cuadro: la zona terminó (todos sus partidos FINALIZADO) y la posición sale
- * de tabla[], que viene ordenada con ordenarZonaParejas. Si en round robin hay un empate exacto en
- * todos los criterios, el orden no está garantizado y esa posición no se resuelve.
+ * de tabla[], ya ordenada. empatePendiente indica los lugares que el backend todavía no resolvió;
+ * las estadísticas iguales por sí solas no implican que el orden esté pendiente.
  */
 export function clasificadosPorOrigen(categoria) {
   const mapa = new Map();
@@ -38,8 +35,9 @@ export function clasificadosPorOrigen(categoria) {
     const ps = z.partidos || [];
     if (!ps.length || !ps.every((p) => p.estado === 'FINALIZADO')) return;
     const t = z.tabla || [];
+    const pendientes = new Set(z.empatePendiente || []);
     for (let i = 0; i < Math.min(z.clasifican, t.length); i++) {
-      if (z.formato !== 'MINI_BRACKET' && [t[i - 1], t[i + 1]].some((o) => o && empateExacto(o, t[i]))) continue;
+      if (pendientes.has(t[i].parejaId)) continue;
       mapa.set(`${i + 1}° ${z.nombre}`, { nombre: t[i].pareja, parejaId: t[i].parejaId });
     }
   });
@@ -68,11 +66,11 @@ export function partidoCoincide(p, q, origenes = null) {
   return normalizar(nombres).includes(n);
 }
 
-// "Sáb 13:30"; sin día cuando la vista ya está filtrada por día
+// "Sábado 13:30"; sin día cuando la vista ya está filtrada por día
 export function horaPartido(fechaHora, conDia = true) {
   if (!fechaHora) return null;
   const hora = formatHora(fechaHora);
-  return conDia ? `${formatDiaNombre(fechaHora).slice(0, 3)} ${hora}` : hora;
+  return conDia ? `${formatDiaNombre(fechaHora)} ${hora}` : hora;
 }
 
 // Etiqueta de un partido de zona (mini-bracket: qué partido es)
@@ -98,9 +96,8 @@ export function partidosDeCategoria(cat) {
 
 // Parejas de todas las categorías que coinciden con la búsqueda, con su categoría
 export function parejasQueCoinciden(categorias, q) {
-  if (!q || !q.trim()) return [];
-  const n = normalizar(q.trim());
-  const palabras = n.split(/\s+/).filter(Boolean);
+  const palabras = normalizar(q).match(/\p{L}+/gu) || [];
+  if (palabras.join('').length < 2) return [];
   const out = [];
 
   (categorias || []).forEach((c) => {
@@ -142,8 +139,8 @@ export function parejasQueCoinciden(categorias, q) {
     });
 
     mapa.forEach((pareja) => {
-      const norm = normalizar(pareja.nombre);
-      const coincide = norm.includes(n) || (palabras.length > 1 && palabras.every((pal) => norm.includes(pal)));
+      const nombre = normalizar(pareja.nombre).match(/\p{L}+/gu) || [];
+      const coincide = palabras.every((pal) => nombre.some((parte) => parte.startsWith(pal)));
       if (coincide) out.push(pareja);
     });
   });
@@ -238,9 +235,9 @@ export function rangoFechas(dias) {
 
 export const diaDe = (p) => jornada(p.fechaHora)?.key || null;
 
-// Pendiente cuyo horario ya pasó (inicio + duración) y todavía no tiene resultado
+// Pendiente con ambas parejas definidas cuyo horario ya pasó (inicio + duración).
 export const sinResultado = (p, ahora = Date.now()) =>
-  p.estado === 'PENDIENTE' && Boolean(p.fechaHora) && new Date(p.fechaHora).getTime() + DURACION_PARTIDO_MIN * 60000 < ahora;
+  p.estado === 'PENDIENTE' && Boolean(p.pareja1Id && p.pareja2Id && p.fechaHora) && new Date(p.fechaHora).getTime() + DURACION_PARTIDO_MIN * 60000 < ahora;
 
 // "Dieciseisavos de Final" → "Dieciseisavos de final" (mayúscula solo al principio)
 export const fraseFase = (texto) => (texto || '').replace(/ de Final(?![a-záéíóú])/g, ' de final');
@@ -287,14 +284,14 @@ export function etapasDe(cat) {
 }
 
 // Estado de una categoría para su tarjeta y su encabezado
-export function estadoDe(cat, ahora = Date.now()) {
+export function estadoDe(cat) {
   const ps = partidosDeCategoria(cat);
   const total = ps.length;
   const jugados = ps.filter((p) => p.estado === 'FINALIZADO').length;
   const vivos = ps.filter((p) => p.estado === 'EN_CURSO').length;
   const terminada = total > 0 && jugados === total;
   const proximo = ps
-    .filter((p) => p.estado === 'PENDIENTE' && p.fechaHora && new Date(p.fechaHora).getTime() >= ahora)
+    .filter((p) => p.estado === 'PENDIENTE' && p.fechaHora)
     .sort(porHorario)[0] || null;
   const preparacion = !(cat?.zonas || []).length && !(cat?.eliminatoria || []).length;
   return { total, jugados, vivos, terminada, proximo, preparacion, podio: terminada ? podioDe(cat) : null };

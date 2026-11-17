@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../lib/prisma');
+const { exigirTorneoNoFinalizado } = require('./torneo.service');
 const {
   getSlotsValidosSet,
   generarGrillaOrganizador,
@@ -76,8 +77,8 @@ function buildFingerprint(organizador, categoriasConParejas) {
   return JSON.stringify([clubPart, ...categoriasPart]);
 }
 
-async function getOrganizador(organizadorId) {
-  const organizador = await prisma.organizador.findUnique({
+async function getOrganizador(organizadorId, db = prisma) {
+  const organizador = await db.organizador.findUnique({
     where: { id: organizadorId },
     select: {
       id: true,
@@ -103,31 +104,83 @@ async function getOrganizador(organizadorId) {
   return organizador;
 }
 
-async function simularCambioJornadaOrganizador(organizadorId, nuevaJornada) {
-  const organizador = await getOrganizador(organizadorId);
+const HORARIOS_CLUB = [
+  'viernesInicio', 'viernesFin', 'sabadoInicio', 'sabadoFin', 'domingoInicio', 'domingoFin',
+];
+// ConfiguracionClub ya permite hasta 30 canchas.
+const MAX_CANCHAS_CLUB = 30;
 
-  const organizadorProyectado = {
-    ...organizador,
-    viernesInicio: nuevaJornada.viernesInicio !== undefined ? nuevaJornada.viernesInicio : organizador.viernesInicio,
-    viernesFin: nuevaJornada.viernesFin !== undefined ? nuevaJornada.viernesFin : organizador.viernesFin,
-    sabadoInicio: nuevaJornada.sabadoInicio !== undefined ? nuevaJornada.sabadoInicio : organizador.sabadoInicio,
-    sabadoFin: nuevaJornada.sabadoFin !== undefined ? nuevaJornada.sabadoFin : organizador.sabadoFin,
-  };
+function errorConfiguracion(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
 
+function validarConfiguracionClub(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw errorConfiguracion('Enviá una configuración del club válida.');
+  }
+  const updateData = {};
+  if (data.nombre !== undefined) {
+    if (typeof data.nombre !== 'string' || data.nombre.trim().length < 2 || data.nombre.trim().length > 80) {
+      throw errorConfiguracion('El nombre del club debe tener entre 2 y 80 caracteres.');
+    }
+    updateData.nombre = data.nombre.trim();
+  }
+  if (data.cantidadCanchas !== undefined) {
+    if (!Number.isInteger(data.cantidadCanchas) || data.cantidadCanchas < 1 || data.cantidadCanchas > MAX_CANCHAS_CLUB) {
+      throw errorConfiguracion(`La cantidad de canchas debe ser un número entero entre 1 y ${MAX_CANCHAS_CLUB}.`);
+    }
+    updateData.cantidadCanchas = data.cantidadCanchas;
+  }
+  for (const campo of HORARIOS_CLUB) {
+    const valor = data[campo];
+    if (valor === undefined) continue;
+    if (valor !== null && (typeof valor !== 'string' || (valor !== '' && (valor.length !== 5 || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(valor))))) {
+      throw errorConfiguracion('Los horarios deben tener el formato HH:MM, entre 00:00 y 23:59, o quedar vacíos.');
+    }
+    updateData[campo] = valor === '' ? null : valor;
+  }
+  return updateData;
+}
+
+function cambianHorarios(organizador, updateData) {
+  return HORARIOS_CLUB.some((campo) => updateData[campo] !== undefined && updateData[campo] !== (organizador[campo] || null));
+}
+
+async function exigirCambioJornadaSinTorneoEnCurso(db, organizador, updateData) {
+  const canchasCambiadas = updateData.cantidadCanchas !== undefined && updateData.cantidadCanchas !== organizador.cantidadCanchas;
+  if (cambianHorarios(organizador, updateData) || canchasCambiadas) {
+    const torneoEnCurso = await db.torneo.findFirst({ where: { organizadorId: organizador.id, estado: 'EN_CURSO' }, select: { id: true } });
+    if (torneoEnCurso) {
+      throw errorConfiguracion('Tenés un torneo en curso. Podés cambiar las canchas y los horarios del club cuando termine. Para cerrar canchas un día, usá Lluvia.', 409);
+    }
+  }
+}
+
+async function slotsFueraDeJornada(db, organizadorId, organizadorProyectado) {
   const nuevosSlotsValidos = getSlotsValidosSet(organizadorProyectado);
-
-  const slotsActuales = await prisma.slotPareja.findMany({
+  const slotsActuales = await db.slotPareja.findMany({
     where: {
       pareja: {
         categoria: {
-          torneo: { organizadorId },
+          torneo: { organizadorId, estado: 'BORRADOR' },
         },
       },
     },
     select: { id: true, parejaId: true, slotId: true },
   });
 
-  const slotsInvalidos = slotsActuales.filter((s) => !nuevosSlotsValidos.has(s.slotId));
+  return slotsActuales.filter((s) => !nuevosSlotsValidos.has(s.slotId));
+}
+
+async function simularCambioJornadaOrganizador(organizadorId, nuevaJornada) {
+  const updateData = validarConfiguracionClub(nuevaJornada);
+  const organizador = await getOrganizador(organizadorId);
+  await exigirCambioJornadaSinTorneoEnCurso(prisma, organizador, updateData);
+  const slotsInvalidos = cambianHorarios(organizador, updateData)
+    ? await slotsFueraDeJornada(prisma, organizadorId, { ...organizador, ...updateData })
+    : [];
   const parejasAfectadasIds = new Set(slotsInvalidos.map((s) => s.parejaId));
 
   return {
@@ -137,19 +190,12 @@ async function simularCambioJornadaOrganizador(organizadorId, nuevaJornada) {
 }
 
 async function updateOrganizador(organizadorId, data) {
-  const organizador = await getOrganizador(organizadorId);
-
-  const updateData = {};
-  if (data.nombre !== undefined) updateData.nombre = data.nombre;
-  if (data.cantidadCanchas !== undefined) updateData.cantidadCanchas = Math.max(1, Number(data.cantidadCanchas));
-  if (data.viernesInicio !== undefined) updateData.viernesInicio = data.viernesInicio || null;
-  if (data.viernesFin !== undefined) updateData.viernesFin = data.viernesFin || null;
-  if (data.sabadoInicio !== undefined) updateData.sabadoInicio = data.sabadoInicio || null;
-  if (data.sabadoFin !== undefined) updateData.sabadoFin = data.sabadoFin || null;
-  if (data.domingoInicio !== undefined) updateData.domingoInicio = data.domingoInicio || null;
-  if (data.domingoFin !== undefined) updateData.domingoFin = data.domingoFin || null;
+  const updateData = validarConfiguracionClub(data);
 
   return await prisma.$transaction(async (tx) => {
+    const organizador = await getOrganizador(organizadorId, tx);
+    await exigirCambioJornadaSinTorneoEnCurso(tx, organizador, updateData);
+    const horariosCambiados = cambianHorarios(organizador, updateData);
     const updated = await tx.organizador.update({
       where: { id: organizador.id },
       data: updateData,
@@ -167,21 +213,8 @@ async function updateOrganizador(organizadorId, data) {
       },
     });
 
-    const nuevosSlotsValidos = getSlotsValidosSet(updated);
-    const slotsActuales = await tx.slotPareja.findMany({
-      where: {
-        pareja: {
-          categoria: {
-            torneo: { organizadorId },
-          },
-        },
-      },
-      select: { id: true, slotId: true },
-    });
-
-    const idsABorrar = slotsActuales
-      .filter((s) => !nuevosSlotsValidos.has(s.slotId))
-      .map((s) => s.id);
+    const slotsInvalidos = horariosCambiados ? await slotsFueraDeJornada(tx, organizadorId, updated) : [];
+    const idsABorrar = slotsInvalidos.map((s) => s.id);
 
     if (idsABorrar.length > 0) {
       await tx.slotPareja.deleteMany({
@@ -1529,7 +1562,7 @@ async function iniciarTorneoMultiCategoria(organizadorId, torneoId, planId = nul
       for (const cPlan of cached.categoriasPlan) {
         const categoria = await tx.categoria.findUnique({ where: { id: cPlan.categoriaId } });
         if (!categoria || categoria.estado !== 'BORRADOR') {
-          throw new Error(`La categoría "${cPlan.nombre}" ya no está en estado Borrador.`);
+          throw Object.assign(new Error(`La categoría "${cPlan.nombre}" ya no está en estado Borrador.`), { statusCode: 409 });
         }
 
         let asignadosCount = 0;
@@ -2033,6 +2066,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
     select: {
       id: true,
       nombre: true,
+      estado: true,
       zonas: {
         select: {
           id: true,
@@ -2064,6 +2098,7 @@ async function getEstadoEnVivo(organizadorId, torneoId) {
   const categoriasInfo = [];
 
   for (const cat of categoriasTorneo) {
+    if (cat.estado === 'BORRADOR') continue;
     let totalPartidosZona = 0;
     let partidosZonaFinalizados = 0;
 
@@ -2364,15 +2399,27 @@ async function armarHorariosAntesLluvia(tx, torneoId, diaKey, horariosClubObj) {
     select: { horariosAntesLluvia: true },
   });
   const enOtroRegistro = new Set();
+  const sinHorarioPrevios = new Set();
   for (const o of otrasJornadas) {
-    for (const id of Object.keys(leerJson(o.horariosAntesLluvia) || {})) enOtroRegistro.add(id);
+    for (const [id, previo] of Object.entries(leerJson(o.horariosAntesLluvia) || {})) {
+      enOtroRegistro.add(id);
+      if (previo?.fechaHora === null) sinHorarioPrevios.add(id);
+    }
   }
   const pendientes = await tx.partido.findMany({
-    where: { categoria: { torneoId }, estado: 'PENDIENTE', esBye: false, fechaHora: { not: null } },
-    select: { id: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true },
+    where: { categoria: { torneoId }, estado: 'PENDIENTE', esBye: false },
+    select: { id: true, zonaId: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true },
   });
   const registro = {};
   for (const p of pendientes) {
+    if (!p.fechaHora) {
+      // Recordar la ausencia previa en la primera lluvia y conservarla en las demás jornadas.
+      // No confundir con nuevos pendientes creados durante otra lluvia que ya estaba activa.
+      if (p.zonaId && (!otrasJornadas.length || sinHorarioPrevios.has(p.id))) {
+        registro[p.id] = { fechaHora: null, canchaNumero: p.canchaNumero, sinHorarioAsignado: p.sinHorarioAsignado };
+      }
+      continue;
+    }
     if (enOtroRegistro.has(p.id)) continue;
     if (getDiaCalendarioConTrasnoche(p.fechaHora, horariosClubObj)?.key !== diaKey) continue;
     registro[p.id] = {
@@ -2382,6 +2429,50 @@ async function armarHorariosAntesLluvia(tx, torneoId, diaKey, horariosClubObj) {
     };
   }
   return registro;
+}
+
+async function calcularPisosRestauracion(tx, torneo, organizador) {
+  const refFecha = requireTorneoFecha(torneo);
+  const partidos = await tx.partido.findMany({
+    where: { categoria: { torneoId: torneo.id }, esBye: false, fechaHora: { not: null } },
+    select: { estado: true, fechaHora: true, canchaNumero: true, sinHorarioAsignado: true },
+  });
+  const pisos = {};
+  const [viernesKey, sabadoKey] = clavesJornadasTorneo(refFecha);
+  for (const [dia, apertura, key] of [['Viernes', organizador.viernesInicio, viernesKey], ['Sabado', organizador.sabadoInicio, sabadoKey]]) {
+    const medianoche = proximaFechaPorDia(dia, refFecha);
+    const inicio = medianoche.getTime() + horaAMinutos(apertura) * 60_000;
+    const deJornada = partidos.filter((p) => getDiaCalendarioConTrasnoche(p.fechaHora, organizador).key === key);
+    const jugados = deJornada.filter((p) => p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO');
+    const pendientes = deJornada.filter((p) => p.estado === 'PENDIENTE' && p.canchaNumero && !p.sinHorarioAsignado);
+    pisos[key] = !jugados.length ? inicio : Math.max(inicio, pendientes.length
+      ? Math.min(...pendientes.map((p) => p.fechaHora.getTime()))
+      : Math.max(...jugados.map((p) => p.fechaHora.getTime() + DURACION_PARTIDO_MIN * 60_000)));
+  }
+  return pisos;
+}
+
+async function programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, overridesAnteriores, pisosPorJornada) {
+  const resumen = { partidosNuevosProgramados: 0, partidosNuevosSinHorario: 0 };
+  if (!jornadas.length) return resumen;
+  // Un partido de la otra jornada registrada debe esperar su propia restauración.
+  const registrados = new Set(overridesAnteriores.flatMap((o) => Object.keys(leerJson(o.horariosAntesLluvia) || {})));
+  const candidatos = await tx.partido.findMany({
+    where: { categoria: { torneoId, estado: { not: 'BORRADOR' } }, zonaId: { not: null }, faseEliminatoriaId: null,
+      estado: 'PENDIENTE', esBye: false, horarioManual: false, id: { notIn: [...registrados] },
+      OR: [{ fechaHora: null }, { canchaNumero: null }, { sinHorarioAsignado: true }] },
+    select: { id: true, categoriaId: true },
+  });
+  if (!candidatos.length) return resumen;
+  const partidoIds = candidatos.map((p) => p.id);
+  const categoriaIds = [...new Set(candidatos.map((p) => p.categoriaId))];
+  // Puede continuar el sábado, con su lluvia vigente. isPreCheck conserva la disponibilidad de P3/P4.
+  await asignarHorariosAutomatico(organizadorId, categoriaIds, tx, { partidoIds, pisosPorJornada, isPreCheck: true });
+  resumen.partidosNuevosProgramados = await tx.partido.count({ where: {
+    id: { in: partidoIds }, fechaHora: { not: null }, canchaNumero: { not: null }, sinHorarioAsignado: false,
+  } });
+  resumen.partidosNuevosSinHorario = candidatos.length - resumen.partidosNuevosProgramados;
+  return resumen;
 }
 
 /**
@@ -2406,6 +2497,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
     throw error;
   }
 
+  exigirTorneoNoFinalizado(torneo);
   if (torneo.estado !== 'EN_CURSO') {
     const error = new Error('El modo Día de Torneo solo está disponible para torneos en curso.');
     error.statusCode = 400;
@@ -2541,7 +2633,7 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       const p1 = p.pareja1 ? `${p.pareja1.jugador1}/${p.pareja1.jugador2}` : 'P1';
       const p2 = p.pareja2 ? `${p.pareja2.jugador1}/${p.pareja2.jugador2}` : 'P2';
       const error = new Error(
-        `No podés reducir a ${overrideNum} canchas porque hay un partido en curso en la Cancha ${p.canchaNumero} (${p1} vs ${p2}). Esperá a que termine o finalizalo antes de reducir.`
+        `No podés reducir a ${overrideNum} canchas mientras se juega ${p1} vs ${p2}. Esperá a que termine o cargá su resultado antes de reducir.`
       );
       error.statusCode = 400;
       throw error;
@@ -2557,6 +2649,10 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
   // Si cualquiera de las dos operaciones falla, todo hace rollback sin dejar estados inconsistentes.
   const { res: mcfRes, pendingMutations } = await prisma.$transaction(async (tx) => {
     let res;
+    const overridesAnteriores = esRestauracion ? await tx.overrideCanchasDia.findMany({
+      where: { torneoId }, orderBy: { diaKey: 'asc' },
+    }) : [];
+    const pisosPorJornada = esRestauracion ? await calcularPisosRestauracion(tx, torneo, organizador) : null;
 
     // Primera reducción del viernes o del sábado: guardar el horario de antes de la lluvia antes de mover nada.
     // Si la jornada ya tiene override (segunda reducción), su registro no se pisa.
@@ -2714,6 +2810,15 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       if (m) mutations.push(m);
     }
 
+    if (esRestauracion) {
+      const jornadas = overridesAnteriores.filter((o) => (!diaKeyJornada || o.diaKey === overrideDiaKey)
+        && getDiaCalendarioConTrasnoche(parseFechaLocal(o.diaKey), horariosClubObj)?.logicalDate.getDay() !== 0)
+        .map((o) => o.diaKey);
+      // Primero se recuperaron todos los registrados y se quitaron los overrides en DB. La caché
+      // sigue intacta hasta el commit; el asignador ve las jornadas restantes mediante la misma tx.
+      Object.assign(res, await programarZonasSinRegistro(tx, organizadorId, torneoId, jornadas, overridesAnteriores, pisosPorJornada));
+    }
+
     // Sincronizar estado en Torneo dentro de la misma tx (retrocompatibilidad)
     if (esRestauracion) {
       const remainingOverrides = await tx.overrideCanchasDia.findMany({
@@ -2762,6 +2867,10 @@ async function reprogramarPorReduccionCanchas(organizadorId, torneoId, nuevoCanc
       partidosSinCambio: mcfRes.partidosSinCambio,
       partidosSinHorarioNuevo: mcfRes.partidosSinHorarioNuevo,
       cambios: mcfRes.cambios || [],
+      ...(esRestauracion ? {
+        partidosNuevosProgramados: mcfRes.partidosNuevosProgramados,
+        partidosNuevosSinHorario: mcfRes.partidosNuevosSinHorario,
+      } : {}),
     },
   };
 }

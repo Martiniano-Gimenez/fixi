@@ -22,16 +22,6 @@ async function borrarResultado(req, res, next) {
   }
 }
 
-async function updateFechaHora(req, res, next) {
-  try {
-    const { fechaHora } = req.body;
-    const result = await partidoService.updateFechaHora(getOrgId(req), req.params.id, fechaHora);
-    res.json(result);
-  } catch (error) {
-    next(error);
-  }
-}
-
 async function getPartidosByCategoria(req, res, next) {
   try {
     const categoriaId = req.params.categoriaId || req.params.id;
@@ -79,7 +69,6 @@ async function updateEstado(req, res, next) {
 module.exports = {
   cargarResultado,
   borrarResultado,
-  updateFechaHora,
   getPartidosByCategoria,
   updateBracketMatch,
   asignarHorarioManual,

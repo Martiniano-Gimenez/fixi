@@ -4,7 +4,7 @@ import TarjetaPartido from './TarjetaPartido';
 import { fraseFase, ladoDe } from './utilidades';
 
 /**
- * Llave completa en escritorio: una columna por ronda, con líneas que unen cada cruce.
+ * Rondas visibles en escritorio: una columna por ronda, con líneas que unen cada cruce.
  * Los "pasa directo" ocupan su lugar (si no, las líneas no coinciden con los cruces).
  * Con una búsqueda (coincide), la pareja (su lugar y su próximo cruce) se destaca en azul y el resto
  * se atenúa en vez de desaparecer. origenes resuelve "1° Zona A" → pareja cuando su zona ya terminó.
@@ -15,7 +15,7 @@ export default function LlaveEscritorio({ fases, seguidaId, coincide, origenes }
     <div className="pv-llave">
       <div className="pv-llave-rondas" ref={rondasRef}>
         {fases.map((f) => (
-          <section key={f.id} className="pv-llave-ronda" aria-label={fraseFase(f.nombre)}>
+          <section key={f.id} data-fase={f.id} className="pv-llave-ronda" aria-label={fraseFase(f.nombre)}>
             <h3>{fraseFase(f.nombre)}</h3>
             <div className="pv-llave-col">
               {f.partidos.map((p) => {
@@ -45,7 +45,7 @@ export default function LlaveEscritorio({ fases, seguidaId, coincide, origenes }
           fases={fases}
           selectorRonda=".pv-llave-ronda"
           selectorPartido=".pv-llave-item"
-          color="var(--linea-fuerte)"
+          color="var(--gris)"
         />
       </div>
     </div>

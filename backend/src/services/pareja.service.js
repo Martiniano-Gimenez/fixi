@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const { getCategoriaById } = require('./categoria.service');
 const { conReintentoOrden } = require('../utils/reintentoOrden');
 const { colaAltasPareja } = require('../utils/colaSerial');
+const { MAX_NOMBRE, validarNombre } = require('../utils/nombres');
 
 async function createPareja(organizadorId, categoriaId, data) {
   const categoria = await getCategoriaById(organizadorId, categoriaId); // Verifica existencia y permisos
@@ -14,11 +15,8 @@ async function createPareja(organizadorId, categoriaId, data) {
     throw error;
   }
 
-  if (!data.jugador1 || !data.jugador2) {
-    const error = new Error('Los nombres de ambos jugadores son obligatorios.');
-    error.statusCode = 400;
-    throw error;
-  }
+  const jugador1 = validarNombre(data.jugador1, 'del jugador 1', MAX_NOMBRE);
+  const jugador2 = validarNombre(data.jugador2, 'del jugador 2', MAX_NOMBRE);
 
   // Orden = max(orden) + 1 (count + 1 repetía un orden si había huecos). En el proceso, las altas
   // van de a una (colaAltasPareja); entre procesos, dos pueden leer el mismo máximo: la restricción
@@ -28,8 +26,8 @@ async function createPareja(organizadorId, categoriaId, data) {
     return await prisma.pareja.create({
       data: {
         categoriaId,
-        jugador1: data.jugador1.trim(),
-        jugador2: data.jugador2.trim(),
+        jugador1,
+        jugador2,
         orden: (_max.orden ?? 0) + 1,
       },
     });
@@ -116,8 +114,8 @@ async function updatePareja(organizadorId, parejaId, data) {
   }
 
   const updateData = {};
-  if (data.jugador1) updateData.jugador1 = data.jugador1.trim();
-  if (data.jugador2) updateData.jugador2 = data.jugador2.trim();
+  if (data.jugador1 !== undefined) updateData.jugador1 = validarNombre(data.jugador1, 'del jugador 1', MAX_NOMBRE);
+  if (data.jugador2 !== undefined) updateData.jugador2 = validarNombre(data.jugador2, 'del jugador 2', MAX_NOMBRE);
 
   return await prisma.pareja.update({
     where: { id: pareja.id },

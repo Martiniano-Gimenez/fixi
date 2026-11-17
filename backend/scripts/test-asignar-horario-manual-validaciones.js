@@ -543,7 +543,7 @@ async function test7_no_regresion_colisiones() {
   }
   assert.ok(errorCancha, 'Debe arrojar error por cancha ocupada');
   assert.strictEqual(errorCancha.statusCode, 409, 'El status debe ser 409');
-  assert.ok(errorCancha.message.includes('ya está ocupada'), 'Mensaje debe indicar cancha ocupada');
+  assert.ok(errorCancha.message.includes('Ese horario se ocupó con otro partido. Elegí otro horario.'), 'Mensaje debe indicar horario ocupado');
 
   // Intento 2: colisión de parejas (Cancha 2, pero par2 ya juega a las 18:00) -> 409
   let errorPareja = null;

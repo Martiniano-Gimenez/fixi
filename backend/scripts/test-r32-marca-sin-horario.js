@@ -269,7 +269,7 @@ async function m5_lluvia_sabado() {
 async function m6_control_sin_fecha() {
   const { ctx, A } = await escenarioBase();
   const objetivo = conRival(await r32(A))[0];
-  // Mismo camino que PUT /partidos/:id/fecha-hora con fechaHora null
+  // Servicio interno sin ruta HTTP: updateFechaHora con null limpia el horario.
   await partidoService.updateFechaHora(ctx.org.id, objetivo.id, null);
   await cargarZonas(ctx, A);
   const p = await prisma.partido.findUnique({ where: { id: objetivo.id } });

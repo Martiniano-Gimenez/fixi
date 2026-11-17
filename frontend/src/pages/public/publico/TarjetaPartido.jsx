@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { horaPartido, ladoDe } from './utilidades';
 
 export function Estrella({ contorno = false, decorativa = false, className = '' }) {
@@ -45,7 +45,8 @@ function ganadorDe(p, lado) {
  * El resultado se lee primero: ganador en marino y peso fuerte, perdedor en gris;
  * en un partido en juego, el set que se está jugando va en un recuadro azul.
  */
-export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, seguidaId, clase = '', atrasado = false, origenes = null }) {
+export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, seguidaId, clase = '', atrasado = false, origenes = null, onAbrirPareja }) {
+  const id = useId();
   const vivo = p.estado === 'EN_CURSO';
   const terminado = p.estado === 'FINALIZADO';
   const sets = Array.isArray(p.sets) ? p.sets : [];
@@ -59,13 +60,19 @@ export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, se
     const gano = ganadorDe(p, lado);
     const clase = terminado ? (gano ? 'gano' : 'perdio') : '';
     const siguiendo = seguidaId && parejaId === seguidaId;
+    const puedeAbrir = Boolean(onAbrirPareja && definida && parejaId && !p.esBye);
+    const Nombre = puedeAbrir ? 'button' : 'span';
     return (
       <div className={`pv-p-fila ${clase}`}>
-        <span className={`pv-p-nombre ${definida ? '' : 'a-definir'}`} translate="no">
+        <Nombre className={`pv-p-nombre ${definida ? '' : 'a-definir'}${puedeAbrir ? ' pv-pareja-link' : ''}`} translate="no"
+          {...(puedeAbrir ? {
+            type: 'button', id: `${id}-pareja-${lado}`, 'aria-label': `Ver partidos de ${nombre}`,
+            onClick: (event) => onAbrirPareja({ parejaId, nombre }, event.currentTarget),
+          } : {})}>
           {nombre}
           {siguiendo && <Estrella />}
           {origen && <small className="pv-p-origen">{origen}</small>}
-        </span>
+        </Nombre>
         {[0, 1, 2].map((i) => {
           const s = sets[i];
           if (!s) return <span key={i} className="pv-set" aria-hidden="true" />;
@@ -89,7 +96,7 @@ export default function TarjetaPartido({ partido: p, etiqueta, conDia = true, se
       : null;
 
   return (
-    <article className={`pv-partido ${vivo ? 'vivo' : ''} ${esSeguida ? 'seguida' : ''} ${clase}`}>
+    <article className={`pv-partido ${vivo ? 'vivo' : ''} ${p.estado === 'PENDIENTE' ? 'pendiente' : ''} ${esSeguida ? 'seguida' : ''} ${clase}`}>
       <div className="pv-p-meta">
         <span className="pv-p-hora num">{hora || 'Horario a definir'}</span>
         {etiqueta ? <span>{etiqueta}</span> : null}

@@ -35,7 +35,7 @@ async function programarHorariosEliminatorias(
   canchasOverride = null,
   options = {}
 ) {
-  const { soloDomingo = false } = typeof options === 'object' && options !== null ? options : {};
+  const { soloDomingo = false, conservarHorarios = false, noAntesDeMs = 0 } = typeof options === 'object' && options !== null ? options : {};
   const db = externalTx || prisma;
 
   const organizador = await db.organizador.findUnique({
@@ -291,7 +291,9 @@ async function programarHorariosEliminatorias(
             Boolean(p.canchaNumero) &&
             !p.sinHorarioAsignado;
 
-          if ((p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || esManualActivo || esR32Fijo) && p.fechaHora) {
+          const esProgramado = conservarHorarios && p.fechaHora && p.canchaNumero && !p.sinHorarioAsignado &&
+            p.canchaNumero <= canchasDeLaJornada(new Date(p.fechaHora).getTime());
+          if ((p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO' || esManualActivo || esR32Fijo || esProgramado) && p.fechaHora) {
             const pStart = new Date(p.fechaHora).getTime();
             const pEnd = pStart + DURACION_MS;
             matchScheduleMap.set(`${cat.id}:${fase.ronda}:${p.posicionEnRonda}`, {
@@ -303,7 +305,7 @@ async function programarHorariosEliminatorias(
             });
             fijos.set(`${cat.id}:${fase.ronda}:${p.posicionEnRonda}`, {
               partido: p,
-              desfijable: p.estado === 'PENDIENTE' && esManualActivo,
+              desfijable: !conservarHorarios && p.estado === 'PENDIENTE' && esManualActivo,
             });
             if (p.canchaNumero && p.canchaNumero <= canchasDeLaJornada(pStart)) {
               if (esJornadaDomingo(pStart)) {
@@ -394,6 +396,7 @@ async function programarHorariosEliminatorias(
 
       const pendingMatches = fase32.partidos.filter((p) => {
         if (esPartidoBye(p, fase32, maxRonda)) return false;
+        if (conservarHorarios && matchScheduleMap.has(`${cat.id}:${fase32.ronda}:${p.posicionEnRonda}`)) return false;
         if (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') return false;
         const esManualActivo =
           Boolean(p.horarioManual) &&
@@ -473,7 +476,7 @@ async function programarHorariosEliminatorias(
       }
 
       // Piso de búsqueda para R32 = max(sabNightStartMs, fin del último partido de zona de ESA categoría)
-      let searchStartMs = Math.max(sabNightStartMs, maxZonaEnd);
+      let searchStartMs = Math.max(sabNightStartMs, maxZonaEnd, noAntesDeMs);
       if (searchStartMs > sabNightStartMs) {
         const offset = searchStartMs - sabNightStartMs;
         const rem = offset % STEP_MS;
@@ -565,6 +568,7 @@ async function programarHorariosEliminatorias(
 
       const pendingMatches = fase.partidos.filter((p) => {
         if (esPartidoBye(p, fase, maxRonda)) return false;
+        if (conservarHorarios && matchScheduleMap.has(`${cat.id}:${fase.ronda}:${p.posicionEnRonda}`)) return false;
         if (p.estado === 'FINALIZADO' || p.estado === 'EN_CURSO') return false;
         const esManualActivo =
           Boolean(p.horarioManual) &&
@@ -630,9 +634,10 @@ async function programarHorariosEliminatorias(
         targetEarliestMs = domDayStartMs;
       }
 
-      const absoluteEarliestMs = hasParentRonda && maxParentEndMs > 0
+      targetEarliestMs = Math.max(targetEarliestMs, noAntesDeMs);
+      const absoluteEarliestMs = Math.max(noAntesDeMs, hasParentRonda && maxParentEndMs > 0
         ? Math.max(domDayStartMs, maxParentEndMs + minRestMs)
-        : domDayStartMs;
+        : domDayStartMs);
 
       // Programar los partidos de esta ronda en bloque sincronizado (mismo horario o turnos más cercanos)
       let blockAssigned = false;
@@ -662,6 +667,7 @@ async function programarHorariosEliminatorias(
         const maxEndAllowedMs = fase.ronda === 2 ? domDayEndMs + 2 * DURACION_MS : domDayEndMs;
 
         for (let T = alignedStartMs; T + DURACION_MS <= maxEndAllowedMs && remainingMatches.length > 0; T += DURACION_MS) {
+          if (T < noAntesDeMs) continue;
           const tEnd = T + DURACION_MS;
           const freeCourts = [];
           for (let c = 1; c <= canchasDomingo; c++) {
@@ -784,6 +790,7 @@ async function programarHorariosEliminatorias(
           for (;;) {
             const techoMs = techoDe(key);
             for (let T = alignedPStart; T + DURACION_MS <= maxEndAllowedMs && T <= techoMs; T += DURACION_MS) {
+              if (T < noAntesDeMs) continue;
               const tEnd = T + DURACION_MS;
               for (let c = 1; c <= canchasDomingo; c++) {
                 if (
@@ -878,6 +885,7 @@ async function programarHorariosEliminatorias(
       const slotsRonda = Array.from(allSlotsSet).sort((a, b) => a - b);
 
       for (const slotTime of slotsRonda) {
+        if (slotTime < noAntesDeMs) continue;
         const partidosEnSlot = partidosRonda.filter((p) => p.startMs === slotTime);
 
         for (let c = 1; c <= canchasDomingo; c++) {
@@ -886,6 +894,7 @@ async function programarHorariosEliminatorias(
           // Cancha c libre en slotTime.
           // Buscar candidatos de esta misma ronda programados en turnos posteriores (cand.startMs > slotTime)
           const candidatos = partidosRonda.filter((cand) => {
+            if (conservarHorarios && fijos.has(`${cand.categoria.id}:${rondaTarget}:${cand.partido.posicionEnRonda}`)) return false;
             if (cand.startMs <= slotTime) return false;
             if (cand.partido.horarioManual && !desfijados.has(cand.partido.id)) return false;
             if (cand.partido.estado === 'FINALIZADO' || cand.partido.estado === 'EN_CURSO') return false;

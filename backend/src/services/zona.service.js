@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
-const { getCategoriaById } = require('./categoria.service');
+const { getCategoriaById, recalcularEstadosPorPartido } = require('./categoria.service');
 const { conReintentoOrden } = require('../utils/reintentoOrden');
+const { MAX_NOMBRE, validarNombre } = require('../utils/nombres');
 const {
   calcularCompatibilidad,
   horaAMinutos,
@@ -183,6 +184,7 @@ async function iniciarCategoria(organizadorId, categoriaId, externalTx = null) {
       where: { id: categoriaId },
       data: { estado: 'EN_CURSO' },
     });
+    await recalcularEstadosPorPartido(tx, categoriaId);
   };
 
   if (externalTx) {
@@ -534,7 +536,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
     // Armado impuesto por el optimizador del pre-check: grupos de parejaId en orden de juego (P1 = [0] vs [1], ...).
     const indice = new Map(parejas.map((p, i) => [p.id, i]));
     const aIndices = (ids) => ids.map((id) => {
-      if (!indice.has(id)) throw new Error('El armado impuesto incluye una pareja que no es de la categoría.');
+      if (!indice.has(id)) throw Object.assign(new Error('El armado impuesto incluye una pareja que no es de la categoría.'), { statusCode: 409 });
       return indice.get(id);
     });
     grupos = armado.grupos.map(aIndices);
@@ -623,6 +625,7 @@ async function iniciarCategoriaConDisponibilidad(organizadorId, categoriaId, ext
       where: { id: categoriaId },
       data: { estado: 'EN_CURSO' },
     });
+    await recalcularEstadosPorPartido(tx, categoriaId);
   };
 
   if (externalTx) {
@@ -747,7 +750,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   const categorias = await db.categoria.findMany({
     where: { id: { in: categoriaIds } },
     include: {
-      torneo: true,
+      torneo: { include: { overridesDia: { select: { diaKey: true } } } },
     },
   });
 
@@ -834,8 +837,8 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   const partidos = await db.partido.findMany({
     where: {
       categoriaId: { in: categoriaIds },
-      zonaId: options.zonaId ? options.zonaId : { not: null },
-      estado: 'PENDIENTE',
+      zonaId: options.zonaId ? options.zonaId : options.zonaIds ? { in: options.zonaIds } : { not: null },
+      estado: options.partidoIds ? undefined : 'PENDIENTE',
     },
     orderBy: [{ categoria: { nombre: 'asc' } }, { zona: { nombre: 'asc' } }, { posicionEnRonda: 'asc' }, { id: 'asc' }],
     include: {
@@ -858,8 +861,10 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
 
   const partidosFase1 = [];
   const partidosMiniBracketFase2 = [];
+  const idsPermitidos = options.partidoIds ? new Set(options.partidoIds) : null;
 
   for (const p of partidos) {
+    if (idsPermitidos && !idsPermitidos.has(p.id)) continue;
     if (yaAgendadosIds.has(p.id)) continue;
     if (p.zona?.requiereArmadoManual) continue;
     if (p.zona?.formato === 'MINI_BRACKET' && p.posicionEnRonda >= 3) {
@@ -945,8 +950,22 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
   grupo2.sort((a, b) => a.numOptions - b.numOptions);
 
   const updatesMap = new Map();
+  const jornadasConLluvia = new Set(categorias.flatMap((c) => c.torneo.overridesDia.map((o) => `${c.torneoId}:${o.diaKey}`)));
 
-  function isCourtFree(cancha, startMs, endMs) {
+  function isCourtFree(cancha, startMs, endMs, torneoId) {
+    // Sin overrides se conserva la capacidad del club. Con lluvia, la misma fuente que usa su scheduler.
+    if (jornadasConLluvia.size || options.diaKey || options.pisosPorJornada) {
+      const jornada = getDiaCalendarioConTrasnoche(new Date(startMs), organizador);
+      if (options.diaKey && jornada.key !== options.diaKey) return false;
+      if (options.pisosPorJornada) {
+        const piso = options.pisosPorJornada[jornada.key];
+        if (piso === undefined || startMs < piso) return false;
+      }
+      if (jornadasConLluvia.has(`${torneoId}:${jornada.key}`)) {
+        const habilitadas = canchasOverridesService.getCanchasDia(torneoId, jornada.key, cantidadCanchas).canchas;
+        if (cancha > habilitadas) return false;
+      }
+    }
     const timeline = courtTimelines.get(cancha) || [];
     for (const interval of timeline) {
       if (startMs < interval.endMs && endMs > interval.startMs) {
@@ -967,9 +986,9 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
     return true;
   }
 
-  function findFreeCourtAt(startMs, endMs) {
+  function findFreeCourtAt(startMs, endMs, torneoId) {
     for (let c = 1; c <= cantidadCanchas; c++) {
-      if (isCourtFree(c, startMs, endMs)) {
+      if (isCourtFree(c, startMs, endMs, torneoId)) {
         return c;
       }
     }
@@ -996,7 +1015,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
       return false;
     }
 
-    const canchaLibre = findFreeCourtAt(startMs, endMs);
+    const canchaLibre = findFreeCourtAt(startMs, endMs, partido.categoria.torneoId);
     if (canchaLibre !== null) {
       courtTimelines.get(canchaLibre).push({ startMs, endMs });
       if (!parejaAssignments.has(partido.pareja1Id)) parejaAssignments.set(partido.pareja1Id, []);
@@ -1030,7 +1049,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
         let T = wStart;
         while (T + DURACION_MS <= wEnd) {
           const tEnd = T + DURACION_MS;
-          if (isCourtFree(c, T, tEnd) && isPairFree(partido.pareja1Id, T, tEnd) && isPairFree(partido.pareja2Id, T, tEnd)) {
+          if (isCourtFree(c, T, tEnd, partido.categoria.torneoId) && isPairFree(partido.pareja1Id, T, tEnd) && isPairFree(partido.pareja2Id, T, tEnd)) {
             if (bestCandidateForWindow === null || T < bestCandidateForWindow.T) {
               bestCandidateForWindow = { T, cancha: c };
             }
@@ -1189,7 +1208,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
         }
         if (!withinShared) continue;
 
-        const canchaLibre = findFreeCourtAt(sWin.startMs, sWin.endMs);
+        const canchaLibre = findFreeCourtAt(sWin.startMs, sWin.endMs, m.categoria.torneoId);
         if (canchaLibre !== null) {
           courtTimelines.get(canchaLibre).push({ startMs: sWin.startMs, endMs: sWin.endMs });
           updatesMap.set(m.id, {
@@ -1218,7 +1237,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
             let T = wStart;
             while (T + DURACION_MS <= wEnd) {
               const tEnd = T + DURACION_MS;
-              if (isCourtFree(c, T, tEnd)) {
+              if (isCourtFree(c, T, tEnd, m.categoria.torneoId)) {
                 if (bestCandidate === null || T < bestCandidate.T) {
                   bestCandidate = { T, cancha: c };
                 }
@@ -1261,7 +1280,7 @@ async function asignarHorariosAutomatico(organizadorId, categoriaIdOrIds, extern
             let T = cWin.startMs;
             while (T + DURACION_MS <= cWin.endMs) {
               const tEnd = T + DURACION_MS;
-              if (isCourtFree(c, T, tEnd)) {
+              if (isCourtFree(c, T, tEnd, m.categoria.torneoId)) {
                 if (bestFallback === null || T < bestFallback.T) {
                   bestFallback = { T, cancha: c };
                 }
@@ -2339,7 +2358,7 @@ async function restaurarHorariosAntesLluvia(organizadorId, torneoId, diaKey, reg
 async function getZonasByCategoria(organizadorId, categoriaId) {
   await getCategoriaById(organizadorId, categoriaId);
 
-  return await prisma.zona.findMany({
+  const zonas = await prisma.zona.findMany({
     where: { categoriaId },
     include: {
       zonaParejas: {
@@ -2364,15 +2383,54 @@ async function getZonasByCategoria(organizadorId, categoriaId) {
     },
     orderBy: { nombre: 'asc' },
   });
+  const { resolverPosicionesZona } = require('./faseEliminatoria.service');
+  return zonas.map(zona => {
+    const { ordenadas, empatePendiente } = resolverPosicionesZona(zona.zonaParejas, zona.formato, zona.partidos);
+    return { ...zona, zonaParejas: ordenadas, empatePendiente };
+  });
+}
+
+async function resolverDesempateZona(organizadorId, categoriaId, zonaId, orden) {
+  return prisma.$transaction(async (tx) => {
+    const categoria = await getCategoriaById(organizadorId, categoriaId, tx);
+    const { exigirTorneoNoFinalizado } = require('./torneo.service');
+    exigirTorneoNoFinalizado(categoria.torneo);
+    const rechazar = mensaje => {
+      const error = new Error(mensaje);
+      error.statusCode = 400;
+      throw error;
+    };
+    const zona = await tx.zona.findUnique({ where: { id: zonaId }, include: { zonaParejas: true, partidos: true } });
+    if (!zona || zona.categoriaId !== categoriaId) rechazar('La zona no pertenece a esta categoría.');
+    if (zona.formato !== 'ROUND_ROBIN') rechazar('El desempate manual solo corresponde a zonas de todos contra todos.');
+    if (!zona.partidos.length || zona.partidos.some(p => p.estado !== 'FINALIZADO')) {
+      rechazar('Terminá todos los partidos de la zona antes de resolver el desempate.');
+    }
+    const { resolverPosicionesZona } = require('./faseEliminatoria.service');
+    const { empatePendiente } = resolverPosicionesZona(zona.zonaParejas, zona.formato, zona.partidos);
+    if (!empatePendiente.length) rechazar('La zona no tiene un empate pendiente de resolver.');
+    if (!Array.isArray(orden) || orden.length !== empatePendiente.length
+      || new Set(orden).size !== orden.length || orden.some(id => typeof id !== 'string' || !empatePendiente.includes(id))) {
+      rechazar('Elegí exactamente las parejas empatadas, sin repetir, en el orden que definiste.');
+    }
+    await tx.zonaPareja.updateMany({ where: { zonaId }, data: { posicion: 0 } });
+    for (let i = 0; i < orden.length; i++) {
+      await tx.zonaPareja.update({ where: { zonaId_parejaId: { zonaId, parejaId: orden[i] } }, data: { posicion: i + 1 } });
+    }
+    const { verificarYAutoAsignarEliminatoria } = require('./partido.service');
+    await verificarYAutoAsignarEliminatoria(organizadorId, categoriaId, tx, true);
+    await recalcularEstadosPorPartido(tx, categoriaId);
+    return { message: 'Desempate guardado.', zonaId, orden, empatePendiente: [] };
+  }, { maxWait: 10000, timeout: 30000 });
 }
 
 /**
  * Limpia todos los resultados de las zonas de una categoría
  */
 async function limpiarResultadosZonas(organizadorId, categoriaId) {
-  await getCategoriaById(organizadorId, categoriaId);
+  const categoria = await getCategoriaById(organizadorId, categoriaId);
 
-  await prisma.$transaction(async (tx) => {
+  const overridesActualizados = await prisma.$transaction(async (tx) => {
     const partidosZonas = await tx.partido.findMany({
       where: { categoriaId, zonaId: { not: null } },
     });
@@ -2385,7 +2443,7 @@ async function limpiarResultadosZonas(organizadorId, categoriaId) {
 
       await tx.partido.updateMany({
         where: { id: { in: partidoIds } },
-        data: { estado: 'PENDIENTE', ganadorId: null },
+        data: { estado: 'PENDIENTE', ganadorId: null, enJuegoDesde: null },
       });
 
       const zonasMiniBracket = await tx.zona.findMany({
@@ -2422,13 +2480,21 @@ async function limpiarResultadosZonas(organizadorId, categoriaId) {
     }
 
     const faseViejas = await tx.faseEliminatoria.findMany({ where: { categoriaId } });
+    let actualizados = [];
     if (faseViejas.length > 0) {
+      const partidosBorrados = await tx.partido.findMany({
+        where: { faseEliminatoriaId: { in: faseViejas.map((f) => f.id) } }, select: { id: true },
+      });
+      actualizados = await canchasOverridesService.quitarPartidosDeRegistros(tx, categoria.torneoId, partidosBorrados.map((p) => p.id));
       await tx.partido.deleteMany({
         where: { faseEliminatoriaId: { in: faseViejas.map((f) => f.id) } },
       });
       await tx.faseEliminatoria.deleteMany({ where: { categoriaId } });
     }
+    await recalcularEstadosPorPartido(tx, categoriaId);
+    return actualizados;
   });
+  canchasOverridesService.aplicarLimpiezaRegistros(overridesActualizados);
 
   return { message: 'Resultados de zonas reseteados.' };
 }
@@ -2504,7 +2570,10 @@ async function regenerarPartidosZona(tx, categoriaId, zonaId) {
     select: { id: true },
   });
   const ids = existingPartidos.map((p) => p.id);
+  let overridesActualizados = [];
   if (ids.length > 0) {
+    const categoria = await tx.categoria.findUnique({ where: { id: categoriaId }, select: { torneoId: true } });
+    overridesActualizados = await canchasOverridesService.quitarPartidosDeRegistros(tx, categoria.torneoId, ids);
     await tx.setPartido.deleteMany({
       where: { partidoId: { in: ids } },
     });
@@ -2517,6 +2586,8 @@ async function regenerarPartidosZona(tx, categoriaId, zonaId) {
   await generarPartidosZonaHelper(tx, categoriaId, zonaId, formato, size, parejasEnEstaZona, {
     sinHorarioAsignado: Boolean(requiereArmadoManual),
   });
+  await recalcularEstadosPorPartido(tx, categoriaId);
+  return overridesActualizados;
 }
 
 /**
@@ -2632,7 +2703,7 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
   }
 
   // 2. Transacción atómica
-  return await prisma.$transaction(async (tx) => {
+  const { resultado, overridesActualizados } = await prisma.$transaction(async (tx) => {
     // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
     const catCheck = await tx.categoria.findUnique({
       where: { id: categoriaId },
@@ -2715,11 +2786,12 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
     });
 
     // Regenerar partidos de ambas zonas
-    await regenerarPartidosZona(tx, categoriaId, zonaOrigenId);
-    await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
+    const overridesActualizados = await regenerarPartidosZona(tx, categoriaId, zonaOrigenId);
+    overridesActualizados.push(...await regenerarPartidosZona(tx, categoriaId, zonaDestinoId));
 
     // Asignar horarios a los partidos nuevos dentro de la transacción externa
-    await asignarHorariosAutomatico(organizadorId, [categoriaId], tx);
+    await asignarHorariosAutomatico(organizadorId, [categoriaId], tx,
+      { zonaIds: [zonaOrigenId, zonaDestinoId] });
 
     let cuadroDesactualizado = false;
     try {
@@ -2731,14 +2803,19 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
     }
 
     return {
-      message: 'Pareja movida de zona correctamente.',
-      categoriaId,
-      zonaOrigenId,
-      zonaDestinoId,
-      parejaId,
-      cuadroDesactualizado,
+      overridesActualizados,
+      resultado: {
+        message: 'Pareja movida de zona correctamente.',
+        categoriaId,
+        zonaOrigenId,
+        zonaDestinoId,
+        parejaId,
+        cuadroDesactualizado,
+      },
     };
   });
+  canchasOverridesService.aplicarLimpiezaRegistros(overridesActualizados);
+  return resultado;
 }
 
 /**
@@ -2746,19 +2823,14 @@ async function moverParejaDeZona(organizadorId, categoriaId, { parejaId, zonaOri
  * Crea la pareja y su asignación en la zona, regenera partidos y reasigna horarios atómicamente.
  */
 async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, jugador1, jugador2, slotIds = [] }) {
-  if (!categoriaId || !zonaDestinoId || !jugador1 || !jugador2) {
+  if (!categoriaId || !zonaDestinoId) {
     const error = new Error('Faltan parámetros requeridos: zonaDestinoId, jugador1 y jugador2 son obligatorios.');
     error.statusCode = 400;
     throw error;
   }
 
-  const j1 = String(jugador1).trim();
-  const j2 = String(jugador2).trim();
-  if (!j1 || !j2) {
-    const error = new Error('Los nombres de los jugadores no pueden estar vacíos.');
-    error.statusCode = 400;
-    throw error;
-  }
+  const j1 = validarNombre(jugador1, 'del jugador 1', MAX_NOMBRE);
+  const j2 = validarNombre(jugador2, 'del jugador 2', MAX_NOMBRE);
 
   if (!slotIds || !Array.isArray(slotIds) || slotIds.length === 0) {
     const error = new Error('La disponibilidad horaria de la pareja es obligatoria.');
@@ -2856,7 +2928,7 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
 
   // 2. Transacción atómica. Va entera dentro del reintento: un choque de orden (P2002) aborta la
   // transacción y el intento siguiente vuelve a leer max(orden) desde cero.
-  return await conReintentoOrden(() => prisma.$transaction(async (tx) => {
+  const { resultado, overridesActualizados } = await conReintentoOrden(() => prisma.$transaction(async (tx) => {
     // RE-CHEQUEO ATÓMICO DE GUARDS DENTRO DE LA TRANSACCIÓN
     const catCheck = await tx.categoria.findUnique({
       where: { id: categoriaId },
@@ -2940,7 +3012,7 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     });
 
     // Regenerar partidos de la zona destino
-    await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
+    const overridesActualizados = await regenerarPartidosZona(tx, categoriaId, zonaDestinoId);
 
     // Asignar horarios únicamente a los partidos de la zona destino dentro de la transacción externa
     await asignarHorariosAutomatico(organizadorId, [categoriaId], tx, { zonaId: zonaDestinoId });
@@ -2960,13 +3032,18 @@ async function agregarParejaAZona(organizadorId, categoriaId, { zonaDestinoId, j
     }
 
     return {
-      message: 'Pareja agregada a la zona correctamente.',
-      categoriaId,
-      zonaDestinoId,
-      pareja: parejaConSlots || nuevaPareja,
-      cuadroDesactualizado,
+      overridesActualizados,
+      resultado: {
+        message: 'Pareja agregada a la zona correctamente.',
+        categoriaId,
+        zonaDestinoId,
+        pareja: parejaConSlots || nuevaPareja,
+        cuadroDesactualizado,
+      },
     };
   }));
+  canchasOverridesService.aplicarLimpiezaRegistros(overridesActualizados);
+  return resultado;
 }
 
 module.exports = {
@@ -2975,6 +3052,7 @@ module.exports = {
   iniciarTorneo: iniciarCategoria,
   asignarHorariosAutomatico,
   getZonasByCategoria,
+  resolverDesempateZona,
   limpiarResultadosZonas,
   fusionarSlotsEnVentanas,
   interseccionVentanas,

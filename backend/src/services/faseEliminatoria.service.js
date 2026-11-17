@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
-const { getCategoriaById } = require('./categoria.service');
+const canchasOverridesService = require('./canchasOverrides.service');
+const { getCategoriaById, recalcularEstadosPorPartido } = require('./categoria.service');
 const { DURACION_PARTIDO_MIN } = require('./slots.service');
 const {
   calcularFinDeZonasCategoria,
@@ -8,28 +9,53 @@ const {
   resolverPadresEHijoEliminatoria,
 } = require('../utils/bracketWarnings');
 
-function ordenarZonaParejas(zonaParejas, formato) {
-  if (!Array.isArray(zonaParejas)) return [];
-  return [...zonaParejas].sort((a, b) => {
+function compararEstadisticasZona(a, b) {
+  return (b.puntos || 0) - (a.puntos || 0)
+    || (b.pg || 0) - (a.pg || 0)
+    || ((b.sf || 0) - (b.sc || 0)) - ((a.sf || 0) - (a.sc || 0))
+    || ((b.gf || 0) - (b.gc || 0)) - ((a.gf || 0) - (a.gc || 0));
+}
+
+function ordenarZonaParejas(zonaParejas, formato, partidos = []) {
+  return resolverPosicionesZona(zonaParejas, formato, partidos).ordenadas;
+}
+
+function resolverPosicionesZona(zonaParejas, formato, partidos = []) {
+  if (!Array.isArray(zonaParejas)) return { ordenadas: [], empatePendiente: [] };
+  const base = [...zonaParejas].sort((a, b) => {
     if (formato === 'MINI_BRACKET') {
-      const posA = a.posicion || 99;
-      const posB = b.posicion || 99;
-      if (posA !== posB) return posA - posB;
+      const posicion = (a.posicion || 99) - (b.posicion || 99);
+      if (posicion) return posicion;
     }
-
-    if (b.puntos !== a.puntos) return b.puntos - a.puntos;
-    if (b.pg !== a.pg) return b.pg - a.pg;
-
-    const diffSetsA = (a.sf || 0) - (a.sc || 0);
-    const diffSetsB = (b.sf || 0) - (b.sc || 0);
-    if (diffSetsB !== diffSetsA) return diffSetsB - diffSetsA;
-
-    const diffGamesA = (a.gf || 0) - (a.gc || 0);
-    const diffGamesB = (b.gf || 0) - (b.gc || 0);
-    if (diffGamesB !== diffGamesA) return diffGamesB - diffGamesA;
-
-    return 0;
+    return compararEstadisticasZona(a, b);
   });
+  if (formato !== 'ROUND_ROBIN') return { ordenadas: base, empatePendiente: [] };
+
+  const finalizada = partidos.length > 0 && partidos.every(p => p.estado === 'FINALIZADO');
+  const ordenadas = [], empatePendiente = [];
+  for (let inicio = 0; inicio < base.length;) {
+    let fin = inicio + 1;
+    while (fin < base.length && compararEstadisticasZona(base[inicio], base[fin]) === 0) fin++;
+    let grupo = base.slice(inicio, fin);
+    const ids = new Set(grupo.map(zp => zp.parejaId));
+    const directo = grupo.length === 2 && partidos.find(p => p.estado === 'FINALIZADO'
+      && ids.has(p.pareja1Id) && ids.has(p.pareja2Id) && ids.has(p.ganadorId));
+    if (directo) {
+      grupo.sort((a, b) => Number(b.parejaId === directo.ganadorId) - Number(a.parejaId === directo.ganadorId));
+    } else if (grupo.length > 1) {
+      const manualCompleto = grupo.every(zp => Number.isInteger(zp.posicion) && zp.posicion > 0)
+        && new Set(grupo.map(zp => zp.posicion)).size === grupo.length;
+      if (manualCompleto) grupo.sort((a, b) => a.posicion - b.posicion);
+      else {
+        // Orden de presentación por inscripción; estos lugares no definen clasificados.
+        grupo.sort((a, b) => (a.pareja?.orden || 0) - (b.pareja?.orden || 0));
+        if (finalizada) empatePendiente.push(...grupo.map(zp => zp.parejaId));
+      }
+    }
+    ordenadas.push(...grupo);
+    inicio = fin;
+  }
+  return { ordenadas, empatePendiente };
 }
 
 function nombreRonda(ronda) {
@@ -50,9 +76,15 @@ function nombreRonda(ronda) {
  * @param {string} categoriaId - ID de la categoría
  * @param {object|null} [externalTx] - Transacción externa opcional
  */
-async function generarEliminatoria(organizadorId, categoriaId, externalTx = null) {
-  const db = externalTx || prisma;
-  await getCategoriaById(organizadorId, categoriaId, externalTx);
+async function generarEliminatoria(organizadorId, categoriaId, externalTx = null, { soloValidar = false } = {}) {
+  if (!externalTx || externalTx === prisma) {
+    return prisma.$transaction((tx) => generarEliminatoria(organizadorId, categoriaId, tx, { soloValidar }), {
+      maxWait: 10000,
+      timeout: 30000,
+    });
+  }
+  const db = externalTx;
+  await getCategoriaById(organizadorId, categoriaId, db);
 
   // 0. Verificar si todos los partidos de las zonas están finalizados
   const partidosPendientes = await db.partido.count({
@@ -74,7 +106,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
         include: { pareja: true },
       },
       partidos: {
-        select: { estado: true },
+        select: { estado: true, pareja1Id: true, pareja2Id: true, ganadorId: true },
       },
     },
   });
@@ -91,7 +123,8 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
   const otros = [];
 
   zonas.forEach((zona) => {
-    const ordenadas = ordenarZonaParejas(zona.zonaParejas, zona.formato);
+    const { ordenadas, empatePendiente } = resolverPosicionesZona(zona.zonaParejas, zona.formato, zona.partidos);
+    const sinDefinir = new Set(empatePendiente);
     const topZona = ordenadas.slice(0, zona.clasifican);
     
     // Una zona individual está finalizada si tiene partidos y todos están FINALIZADO
@@ -101,7 +134,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       let parejaId = null;
       let pareja = null;
       
-      if ((gruposFinalizados || zonaFinalizada) && topZona[index]) {
+      if ((gruposFinalizados || zonaFinalizada) && topZona[index] && !sinDefinir.has(topZona[index].parejaId)) {
         parejaId = topZona[index].parejaId;
         pareja = topZona[index].pareja;
       }
@@ -145,6 +178,28 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       orderBy: { posicionEnRonda: 'asc' },
     });
 
+    // Comparar los orígenes actuales, incluidos los intercambiados desde Editar cruce.
+    // Los pases directos conservan su protección contra el partido de la ronda siguiente.
+    for (const partido of partidosPrimeraRonda) {
+      if (partido.esBye || !['EN_CURSO', 'FINALIZADO'].includes(partido.estado)) continue;
+      const cambiaPareja = [1, 2].some(lado => {
+        const clasificada = clasificadasMap.get(partido[`origenPareja${lado}`]);
+        return clasificada && clasificada.parejaId !== partido[`pareja${lado}Id`];
+      });
+      if (!cambiaPareja) continue;
+      const nombre = `partido #${partido.posicionEnRonda} de ${fasePrimeraRonda.nombre.toLowerCase()}`;
+      const destino = primeraRondaNum === 2 ? 'la final' : `el ${nombre}`;
+      const resultadoDestino = primeraRondaNum === 2 ? 'de la final' : `del ${nombre}`;
+      const detalle = partido.estado === 'EN_CURSO'
+        ? `${destino} ya está en juego. Volvelo a pendiente primero.`
+        : `${destino} ya tiene resultado. Borrá primero el resultado ${resultadoDestino}.`;
+      const error = new Error(`No se puede cambiar la clasificación: ${detalle}`);
+      error.statusCode = 400;
+      throw error;
+    }
+    // Si aún quedan zonas sin terminar, validar sin adelantar la asignación automática.
+    if (soloValidar) return null;
+
     for (const partido of partidosPrimeraRonda) {
       const updateData = {};
       
@@ -162,16 +217,16 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
         updateData.canchaNumero = null;
       }
       
-      // Solo actualizar parejas si el partido de primera ronda aún no comenzó (PENDIENTE)
-      if (partido.estado === 'PENDIENTE') {
+      // Un pase directo finalizado también depende de la clasificación actual de su zona.
+      if (partido.estado === 'PENDIENTE' || esBye) {
         if (partido.origenPareja1) {
           const c1 = clasificadasMap.get(partido.origenPareja1);
-          if (c1 && c1.parejaId) updateData.pareja1Id = c1.parejaId;
+          if (c1) updateData.pareja1Id = c1.parejaId;
         }
         
         if (partido.origenPareja2) {
           const c2 = clasificadasMap.get(partido.origenPareja2);
-          if (c2 && c2.parejaId) updateData.pareja2Id = c2.parejaId;
+          if (c2) updateData.pareja2Id = c2.parejaId;
         }
       }
 
@@ -179,23 +234,14 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
       const pareja1Id = updateData.pareja1Id !== undefined ? updateData.pareja1Id : partido.pareja1Id;
       const pareja2Id = updateData.pareja2Id !== undefined ? updateData.pareja2Id : partido.pareja2Id;
       
-      if (esBye && partido.estado !== 'FINALIZADO') {
-        if (pareja1Id && !pareja2Id) {
-          updateData.estado = 'FINALIZADO';
-          updateData.ganadorId = pareja1Id;
-        } else if (pareja2Id && !pareja1Id) {
-          updateData.estado = 'FINALIZADO';
-          updateData.ganadorId = pareja2Id;
-        }
-      }
-      
-      // Partidos ya finalizados previamente (caso edge de re-ejecución)
-      if (partido.estado === 'FINALIZADO') {
-        if (pareja1Id && !pareja2Id) {
-          updateData.ganadorId = pareja1Id;
-        } else if (pareja2Id && !pareja1Id) {
-          updateData.ganadorId = pareja2Id;
-        }
+      if (esBye) {
+        updateData.ganadorId = pareja1Id && !pareja2Id ? pareja1Id
+          : pareja2Id && !pareja1Id ? pareja2Id : null;
+        updateData.estado = updateData.ganadorId ? 'FINALIZADO' : 'PENDIENTE';
+
+        // Conservar el ganador anterior para que la protección entre rondas detecte el cambio.
+        const { propagarEliminatoria } = require('./partido.service');
+        await propagarEliminatoria({ ...partido, ...updateData, ganadorId: partido.ganadorId }, updateData.ganadorId, db);
       }
 
       if (Object.keys(updateData).length > 0) {
@@ -203,22 +249,18 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
           where: { id: partido.id }, 
           data: updateData 
         });
-
-        // Propagar ganador de BYE a la siguiente ronda
-        if (updateData.ganadorId) {
-          const { propagarEliminatoria } = require('./partido.service');
-          const updatedPartido = { ...partido, ...updateData };
-          await propagarEliminatoria(updatedPartido, updateData.ganadorId, db);
-        }
       }
     }
 
+    await recalcularEstadosPorPartido(db, categoriaId);
     return { 
       message: 'Clasificados asignados al bracket exitosamente.',
       primeraRonda: primeraRondaNum,
       esDieciseisavos,
     };
   }
+
+  if (soloValidar) return null;
 
   // 3. Determinar estructura de rondas
   const totalParejas = clasificadas.length;
@@ -360,7 +402,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
     let estado = 'PENDIENTE';
     let ganadorId = null;
 
-    if (isBye && (gruposFinalizados || (p1?.parejaId || p2?.parejaId))) {
+    if (isBye && (p1?.parejaId || p2?.parejaId)) {
       estado = 'FINALIZADO';
       if (p1?.parejaId) ganadorId = p1.parejaId;
       if (p2?.parejaId) ganadorId = p2.parejaId;
@@ -447,6 +489,7 @@ async function generarEliminatoria(organizadorId, categoriaId, externalTx = null
     });
   }
 
+  await recalcularEstadosPorPartido(db, categoriaId);
   return {
     totalParejas,
     potencia,
@@ -618,11 +661,15 @@ async function getFasesEliminatorias(organizadorId, categoriaId) {
   return fases;
 }
 
-async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null) {
-  await getCategoriaById(organizadorId, categoriaId, externalTx);
-  const db = externalTx || prisma;
+// Con tx externa, su dueño recibe las mutaciones y las publica solo después de confirmar.
+async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null, mutacionesCache = []) {
+  const categoria = await getCategoriaById(organizadorId, categoriaId, externalTx);
 
   const performDelete = async (tx) => {
+    const partidos = await tx.partido.findMany({
+      where: { categoriaId, faseEliminatoriaId: { not: null } }, select: { id: true },
+    });
+    const actualizados = await canchasOverridesService.quitarPartidosDeRegistros(tx, categoria.torneoId, partidos.map((p) => p.id));
     await tx.partido.deleteMany({
       where: {
         categoriaId,
@@ -633,14 +680,15 @@ async function borrarEliminatoria(organizadorId, categoriaId, externalTx = null)
     await tx.faseEliminatoria.deleteMany({
       where: { categoriaId },
     });
+    await recalcularEstadosPorPartido(tx, categoriaId);
+    return actualizados;
   };
 
   if (externalTx) {
-    await performDelete(externalTx);
+    mutacionesCache.push(...await performDelete(externalTx));
   } else {
-    await prisma.$transaction(async (tx) => {
-      await performDelete(tx);
-    });
+    const actualizados = await prisma.$transaction(performDelete);
+    canchasOverridesService.aplicarLimpiezaRegistros(actualizados);
   }
 
   return { message: 'Fase eliminatoria borrada exitosamente.' };
@@ -827,6 +875,7 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
 
   let resultadoGenerar = null;
   let schedulingResult = null;
+  const mutacionesCache = [];
 
   await prisma.$transaction(async (tx) => {
     const partidosJugadosTx = await tx.partido.count({
@@ -843,7 +892,7 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
     }
 
     // 1. Borrar eliminatorias existentes
-    await borrarEliminatoria(organizadorId, categoriaId, tx);
+    await borrarEliminatoria(organizadorId, categoriaId, tx, mutacionesCache);
 
     // 2. Generar eliminatorias nuevas
     resultadoGenerar = await generarEliminatoria(organizadorId, categoriaId, tx);
@@ -860,10 +909,12 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
         partidosSinHorario: 0,
       };
     }
+    await recalcularEstadosPorPartido(tx, categoriaId);
   }, {
     maxWait: 10000,
     timeout: 30000,
   });
+  canchasOverridesService.aplicarLimpiezaRegistros(mutacionesCache);
 
   return {
     message: 'Cuadro eliminatorio sincronizado exitosamente.',
@@ -877,6 +928,7 @@ async function sincronizarCuadro(organizadorId, categoriaId, { simular = false }
 
 module.exports = {
   ordenarZonaParejas,
+  resolverPosicionesZona,
   generarEliminatoria,
   getFasesEliminatorias,
   borrarEliminatoria,

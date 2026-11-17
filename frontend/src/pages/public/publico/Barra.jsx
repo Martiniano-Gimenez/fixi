@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, Search } from 'lucide-react';
+import { Award, ChevronLeft, Search } from 'lucide-react';
 
 // Cancha de pádel vista desde arriba: perímetro, red y líneas de saque
 export function Cancha() {
@@ -12,9 +12,9 @@ export function Cancha() {
   );
 }
 
-// Logo de Fixi: una F en azul eléctrico
+// Misma cinta que la marca del panel.
 export function Logo() {
-  return <span className="pv-logo" aria-hidden="true">F</span>;
+  return <Award size={20} strokeWidth={2} className="pv-logo" aria-hidden="true" />;
 }
 
 /**

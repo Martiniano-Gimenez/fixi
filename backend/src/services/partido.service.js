@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
-const { getCategoriaById } = require('./categoria.service');
+const { getCategoriaById, recalcularEstadosPorPartido } = require('./categoria.service');
+const { exigirTorneoNoFinalizado } = require('./torneo.service');
 const { parseSlotToDate } = require('./zona.service');
 const { requireTorneoFecha, getDiaCalendarioConTrasnoche, clavesJornadasTorneo } = require('../utils/dateUtils');
 const canchasOverridesService = require('./canchasOverrides.service');
@@ -40,13 +41,32 @@ async function getPartidoAndVerifyPermisos(organizadorId, partidoId) {
   return partido;
 }
 
+function validarParejasDistintas(partido) {
+  if (partido.pareja1Id && partido.pareja1Id === partido.pareja2Id) {
+    const error = new Error('El partido tiene la misma pareja de los dos lados. Corregí el cruce antes de cargar un resultado o cambiar su estado.');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+async function recalcularZonaTrasResultado(partido, db) {
+  const zona = await db.zona.findUnique({ where: { id: partido.zonaId } });
+  if (zona.formato === 'ROUND_ROBIN') {
+    // El orden manual solo vale para los resultados con los que se resolvió el empate.
+    await db.zonaPareja.updateMany({ where: { zonaId: partido.zonaId }, data: { posicion: 0 } });
+    await recalcularStatsZona(partido.zonaId, db);
+  } else if (zona.formato === 'MINI_BRACKET') {
+    await propagarMiniBracket(partido.zonaId, db);
+  }
+}
+
 /**
  * Recalcula todas las estadísticas de una zona (ROUND_ROBIN).
  * Se llama cada vez que se carga o edita el resultado de un partido de la zona.
  */
-async function recalcularStatsZona(zonaId) {
-  const zonaParejas = await prisma.zonaPareja.findMany({ where: { zonaId } });
-  const partidos = await prisma.partido.findMany({
+async function recalcularStatsZona(zonaId, db = prisma) {
+  const zonaParejas = await db.zonaPareja.findMany({ where: { zonaId } });
+  const partidos = await db.partido.findMany({
     where: { zonaId, estado: 'FINALIZADO' },
     include: { sets: true },
   });
@@ -106,7 +126,7 @@ async function recalcularStatsZona(zonaId) {
   // Guardar stats recalculadas
   for (const zp of zonaParejas) {
     const s = stats[zp.parejaId];
-    await prisma.zonaPareja.update({
+    await db.zonaPareja.update({
       where: { id: zp.id },
       data: s,
     });
@@ -114,14 +134,55 @@ async function recalcularStatsZona(zonaId) {
 }
 
 /**
- * Lógica para zonas de 4 (MINI_BRACKET): Propaga los ganadores y perdedores
- * de los partidos 1 y 2 hacia los partidos 3 y 4.
+ * Calcula los cambios de P3/P4 y los valida antes de escribir. Un resultado propuesto permite
+ * anticipar el bloqueo antes de validar si las parejas pueden volver a entrar en juego.
  */
-async function propagarMiniBracket(zonaId) {
-  const partidos = await prisma.partido.findMany({
+async function prepararPropagacionMiniBracket(zonaId, db, resultadoPropuesto = null) {
+  const partidos = await db.partido.findMany({
     where: { zonaId },
     orderBy: { posicionEnRonda: 'asc' },
   });
+  if (resultadoPropuesto) {
+    const origen = partidos.find(p => p.id === resultadoPropuesto.id);
+    if (origen) Object.assign(origen, resultadoPropuesto);
+  }
+  const porPosicion = new Map(partidos.map(p => [p.posicionEnRonda, p]));
+  const actualizaciones = new Map();
+  if ([1, 2, 3, 4].some(pos => !porPosicion.has(pos))) return { partidos, actualizaciones };
+
+  for (const pos of [1, 2]) {
+    const origen = porPosicion.get(pos);
+    const ganadorId = origen.estado === 'FINALIZADO' ? origen.ganadorId : null;
+    const perdedorId = ganadorId
+      ? ganadorId === origen.pareja1Id ? origen.pareja2Id : origen.pareja1Id : null;
+    const campo = pos === 1 ? 'pareja1Id' : 'pareja2Id';
+    for (const [destinoPos, parejaId] of [[3, ganadorId], [4, perdedorId]]) {
+      const destino = porPosicion.get(destinoPos);
+      if (destino[campo] === parejaId) continue;
+      if (destino.estado === 'EN_CURSO' || destino.estado === 'FINALIZADO') {
+        const zona = await db.zona.findUnique({ where: { id: zonaId } });
+        const nombre = `partido P${destinoPos} de ${zona.nombre}`;
+        const detalle = destino.estado === 'EN_CURSO'
+          ? `el ${nombre} ya está en juego. Volvelo a pendiente primero.`
+          : `el ${nombre} ya tiene resultado. Borrá primero el resultado del ${nombre}.`;
+        const error = new Error(`No se puede cambiar el resultado: ${detalle}`);
+        error.statusCode = 400;
+        throw error;
+      }
+      const data = actualizaciones.get(destino.id) || {};
+      data[campo] = parejaId;
+      actualizaciones.set(destino.id, data);
+    }
+  }
+  return { partidos, actualizaciones };
+}
+
+/**
+ * Lógica para zonas de 4 (MINI_BRACKET): Propaga los ganadores y perdedores
+ * de los partidos 1 y 2 hacia los partidos 3 y 4.
+ */
+async function propagarMiniBracket(zonaId, db = prisma) {
+  const { partidos, actualizaciones } = await prepararPropagacionMiniBracket(zonaId, db);
 
   const p1 = partidos.find(p => p.posicionEnRonda === 1);
   const p2 = partidos.find(p => p.posicionEnRonda === 2);
@@ -135,32 +196,14 @@ async function propagarMiniBracket(zonaId) {
     return partido.ganadorId === partido.pareja1Id ? partido.pareja2Id : partido.pareja1Id;
   };
 
-  // Si P1 terminó, propagamos su ganador y perdedor al slot 1 de P3 y P4
-  if (p1.estado === 'FINALIZADO' && p1.ganadorId) {
-    await prisma.partido.update({
-      where: { id: pGanadores.id },
-      data: { pareja1Id: p1.ganadorId },
-    });
-    await prisma.partido.update({
-      where: { id: pPerdedores.id },
-      data: { pareja1Id: getPerdedor(p1) },
-    });
-  }
-
-  // Si P2 terminó, propagamos su ganador y perdedor al slot 2 de P3 y P4
-  if (p2.estado === 'FINALIZADO' && p2.ganadorId) {
-    await prisma.partido.update({
-      where: { id: pGanadores.id },
-      data: { pareja2Id: p2.ganadorId },
-    });
-    await prisma.partido.update({
-      where: { id: pPerdedores.id },
-      data: { pareja2Id: getPerdedor(p2) },
-    });
+  // Aplicar solo cambios permitidos, incluidos los null al retirar un ganador.
+  for (const [id, data] of actualizaciones) {
+    await db.partido.update({ where: { id }, data });
+    Object.assign(partidos.find(p => p.id === id), data);
   }
 
   // --- LÓGICA DE POSICIONES EXACTAS ---
-  await prisma.zonaPareja.updateMany({
+  await db.zonaPareja.updateMany({
     where: { zonaId },
     data: { posicion: 0 }
   });
@@ -168,12 +211,12 @@ async function propagarMiniBracket(zonaId) {
   // Partido 3 define 1ro y 2do
   if (pGanadores.estado === 'FINALIZADO' && pGanadores.ganadorId) {
     const loser = getPerdedor(pGanadores);
-    await prisma.zonaPareja.updateMany({
+    await db.zonaPareja.updateMany({
       where: { zonaId, parejaId: pGanadores.ganadorId },
       data: { posicion: 1 }
     });
     if (loser) {
-      await prisma.zonaPareja.updateMany({
+      await db.zonaPareja.updateMany({
         where: { zonaId, parejaId: loser },
         data: { posicion: 2 }
       });
@@ -183,12 +226,12 @@ async function propagarMiniBracket(zonaId) {
   // Partido 4 define 3ro y 4to
   if (pPerdedores.estado === 'FINALIZADO' && pPerdedores.ganadorId) {
     const loser = getPerdedor(pPerdedores);
-    await prisma.zonaPareja.updateMany({
+    await db.zonaPareja.updateMany({
       where: { zonaId, parejaId: pPerdedores.ganadorId },
       data: { posicion: 3 }
     });
     if (loser) {
-      await prisma.zonaPareja.updateMany({
+      await db.zonaPareja.updateMany({
         where: { zonaId, parejaId: loser },
         data: { posicion: 4 }
       });
@@ -196,7 +239,7 @@ async function propagarMiniBracket(zonaId) {
   }
 
   // Actualizar stats visuales de la tabla
-  await recalcularStatsZona(zonaId);
+  await recalcularStatsZona(zonaId, db);
 }
 
 function validarSetPadel(gamesP1, gamesP2, setNum) {
@@ -273,6 +316,7 @@ async function validarParejasEnJuego(db, partido) {
 /** Cargar el resultado parcial o total de un partido (sets). */
 async function cargarResultado(organizadorId, partidoId, data) {
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  validarParejasDistintas(partido);
   const { sets } = data;
 
   if (!partido.pareja1Id || !partido.pareja2Id) {
@@ -330,9 +374,16 @@ async function cargarResultado(organizadorId, partidoId, data) {
     nuevoEstado = 'FINALIZADO';
   }
 
+  let asignacion;
   await prisma.$transaction(async (tx) => {
-    if (nuevoEstado === 'EN_CURSO' && partido.estado !== 'EN_CURSO') {
-      await validarParejasEnJuego(tx, partido);
+    if (partido.zona?.formato === 'MINI_BRACKET' && [1, 2].includes(partido.posicionEnRonda)) {
+      await prepararPropagacionMiniBracket(partido.zonaId, tx, { id: partidoId, ganadorId, estado: nuevoEstado });
+    }
+    if (partido.faseEliminatoriaId) {
+      const actual = await tx.partido.findUnique({ where: { id: partidoId } });
+      if (nuevoEstado === 'FINALIZADO' || actual.estado === 'FINALIZADO') {
+        await propagarEliminatoria(actual, ganadorId, tx);
+      }
     }
     // Reemplazar todos los sets con los nuevos
     await tx.setPartido.deleteMany({ where: { partidoId } });
@@ -357,48 +408,27 @@ async function cargarResultado(organizadorId, partidoId, data) {
           ? new Date() : undefined,
       },
     });
-  });
-
-  // Disparar lógica post-resultado solo cuando el partido está FINALIZADO
-  if (nuevoEstado === 'FINALIZADO') {
-    if (partido.zonaId) {
-      const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
-      if (zona.formato === 'ROUND_ROBIN') {
-        await recalcularStatsZona(partido.zonaId);
-      } else if (zona.formato === 'MINI_BRACKET') {
-        await propagarMiniBracket(partido.zonaId);
-      }
-
-      // Auto-asignación de clasificados y programación de domingo si concluyó la fase de grupos
-      try {
-        await verificarYAutoAsignarEliminatoria(organizadorId, partido.categoriaId);
-      } catch (errAuto) {
-        console.error('[Auto-Eliminatoria] Error al auto-asignar eliminatoria tras partido de zona:', errAuto);
-      }
+    if (partido.zonaId && (nuevoEstado === 'FINALIZADO' || partido.estado === 'FINALIZADO')) {
+      await recalcularZonaTrasResultado(partido, tx);
+      // La clasificación y los pases directos forman parte del resultado: sus errores deben hacer rollback.
+      asignacion = await verificarYAutoAsignarEliminatoria(
+        organizadorId, partido.categoriaId, tx, partido.estado === 'FINALIZADO',
+      );
     }
+    if (nuevoEstado === 'EN_CURSO' && partido.estado !== 'EN_CURSO') {
+      await validarParejasEnJuego(tx, partido);
+    }
+    await recalcularEstadosPorPartido(tx, partido.categoriaId);
+  }, { maxWait: 10000, timeout: 30000 });
 
-    if (partido.faseEliminatoriaId) {
-      await propagarEliminatoria(partido, ganadorId);
-    }
-  } else {
-    // Si el partido estaba FINALIZADO y ahora vuelve a EN_CURSO (edición parcial),
-    // revertimos las stats y la propagación del bracket
-    if (partido.estado === 'FINALIZADO') {
-      if (partido.zonaId) {
-        const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
-        if (zona.formato === 'ROUND_ROBIN') {
-          await recalcularStatsZona(partido.zonaId);
-        } else if (zona.formato === 'MINI_BRACKET') {
-          await propagarMiniBracket(partido.zonaId);
-        }
-      }
-      if (partido.faseEliminatoriaId) {
-        await propagarEliminatoria(partido, null);
-      }
-    }
+  if (nuevoEstado === 'FINALIZADO' && asignacion) {
+    await programarPrimeraRondaTrasAsignacion(organizadorId, partido.categoriaId, asignacion);
   }
 
-  return { message: nuevoEstado === 'FINALIZADO' ? 'Partido finalizado.' : 'Set guardado. Partido en curso.' };
+  return {
+    message: nuevoEstado === 'FINALIZADO' ? 'Partido finalizado.' : 'Set guardado. Partido en curso.',
+    ...(asignacion?.esDieciseisavos ? { schedulingResult: asignacion.schedulingResult ?? null } : {}),
+  };
 }
 
 /**
@@ -441,6 +471,20 @@ async function propagarEliminatoria(partido, ganadorId, externalTx = null) {
 
   if (!partidoDestino) return;
 
+  if (partidoDestino.estado === 'EN_CURSO' || partidoDestino.estado === 'FINALIZADO') {
+    // Corregir los sets sin cambiar al ganador no modifica un cruce que ya se jugó.
+    if (partido.ganadorId === ganadorId) return;
+    const nombreFase = faseSiguiente.nombre.replace(/ de Final\b/g, ' de final');
+    const destino = faseSiguiente.ronda === 2 ? 'la Final'
+      : `el partido #${partidoDestino.posicionEnRonda} de ${nombreFase}`;
+    const detalle = partidoDestino.estado === 'EN_CURSO'
+      ? `${destino} ya está en juego. Volvelo a pendiente primero.`
+      : `${destino} ya tiene resultado. Borrá primero el resultado de ${destino}.`;
+    const error = new Error(`No se puede cambiar el ganador: ${detalle}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
   // Determine origenPareja of the winner
   let origenGanador = null;
   let parejaGanadoraId = ganadorId;
@@ -477,6 +521,13 @@ async function borrarResultado(organizadorId, partidoId) {
   }
 
   await prisma.$transaction(async (tx) => {
+    if (partido.zona?.formato === 'MINI_BRACKET' && [1, 2].includes(partido.posicionEnRonda)) {
+      await prepararPropagacionMiniBracket(partido.zonaId, tx, { id: partidoId, ganadorId: null, estado: 'PENDIENTE' });
+    }
+    if (partido.faseEliminatoriaId) {
+      const actual = await tx.partido.findUnique({ where: { id: partidoId } });
+      await propagarEliminatoria(actual, null, tx);
+    }
     await tx.setPartido.deleteMany({ where: { partidoId } });
 
     await tx.partido.update({
@@ -487,28 +538,19 @@ async function borrarResultado(organizadorId, partidoId) {
         enJuegoDesde: null,
       },
     });
-  });
-
-  // Si es partido de zona, recalcular stats
-  if (partido.zonaId) {
-    const zona = await prisma.zona.findUnique({ where: { id: partido.zonaId } });
-    if (zona.formato === 'ROUND_ROBIN') {
-      await recalcularStatsZona(partido.zonaId);
-    } else if (zona.formato === 'MINI_BRACKET') {
-      await propagarMiniBracket(partido.zonaId);
+    if (partido.zonaId) {
+      await recalcularZonaTrasResultado(partido, tx);
+      await verificarYAutoAsignarEliminatoria(organizadorId, partido.categoriaId, tx, true);
     }
-  }
-
-  // Si es eliminatoria, limpiar la propagación
-  if (partido.faseEliminatoriaId) {
-    await propagarEliminatoria(partido, null);
-  }
+    await recalcularEstadosPorPartido(tx, partido.categoriaId);
+  }, { maxWait: 10000, timeout: 30000 });
 
   return { message: 'Resultado borrado exitosamente.' };
 }
 
 async function updateFechaHora(organizadorId, partidoId, fechaHora) {
-  await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  const verificado = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  exigirTorneoNoFinalizado(verificado.categoria.torneo);
   const data = {
     fechaHora: fechaHora ? new Date(fechaHora) : null,
   };
@@ -525,164 +567,92 @@ async function updateFechaHora(organizadorId, partidoId, fechaHora) {
 }
 
 async function updateBracketMatch(organizadorId, partidoId, data) {
-  const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  const verificado = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  exigirTorneoNoFinalizado(verificado.categoria.torneo);
 
-  if (!partido.faseEliminatoriaId) {
-    const error = new Error('El partido no pertenece a una fase eliminatoria.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (partido.estado === 'FINALIZADO') {
-    const error = new Error('No se puede editar un partido que ya finalizó.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (partido.esBye) {
-    const error = new Error('No se pueden editar cruces de un partido pase directo (BYE).');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const { origenPareja1, origenPareja2, liberarEnOtros } = data;
-
-  const nuevoOrigen1 = origenPareja1 !== undefined ? (origenPareja1 || null) : partido.origenPareja1;
-  const nuevoOrigen2 = origenPareja2 !== undefined ? (origenPareja2 || null) : partido.origenPareja2;
-
-  if (nuevoOrigen1 && nuevoOrigen2 && nuevoOrigen1 === nuevoOrigen2) {
-    const error = new Error('No podés asignar el mismo origen en ambos lados del partido.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  // Detectar colisiones con otros partidos de la misma ronda
-  let partidosEnConflicto = [];
-  if (nuevoOrigen1 || nuevoOrigen2) {
-    const otrosPartidos = await prisma.partido.findMany({
-      where: {
-        faseEliminatoriaId: partido.faseEliminatoriaId,
-        id: { not: partidoId },
-      },
-    });
-
-    partidosEnConflicto = otrosPartidos.filter((p) => {
-      const match1 = nuevoOrigen1 && (p.origenPareja1 === nuevoOrigen1 || p.origenPareja2 === nuevoOrigen1);
-      const match2 = nuevoOrigen2 && (p.origenPareja1 === nuevoOrigen2 || p.origenPareja2 === nuevoOrigen2);
-      return match1 || match2;
-    });
-
-    // Si algún partido en colisión está FINALIZADO, nunca se puede modificar
-    for (const p of partidosEnConflicto) {
-      if (p.estado === 'FINALIZADO') {
-        const error = new Error(
-          `No se puede mover el origen porque el Partido #${p.posicionEnRonda} ya está finalizado.`
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-    }
-
-    // Si hay colisión y no se autorizó la liberación, arrojar error descriptivo
-    if (partidosEnConflicto.length > 0 && !liberarEnOtros) {
-      const primerConflicto = partidosEnConflicto[0];
-      const origenConflictivo =
-        (nuevoOrigen1 && (primerConflicto.origenPareja1 === nuevoOrigen1 || primerConflicto.origenPareja2 === nuevoOrigen1))
-          ? nuevoOrigen1
-          : nuevoOrigen2;
-      const error = new Error(
-        `El origen "${origenConflictivo}" ya está asignado en el Partido #${primerConflicto.posicionEnRonda} de esta ronda.`
-      );
-      error.statusCode = 400;
+  return prisma.$transaction(async (tx) => {
+    const partido = await tx.partido.findUnique({ where: { id: partidoId } });
+    if (!partido) {
+      const error = new Error('Partido no encontrado.');
+      error.statusCode = 404;
       throw error;
     }
-  }
-
-  // Preparar update del partido actual
-  const updateDataActual = {};
-  let pareja1IdActual = partido.pareja1Id;
-  let pareja2IdActual = partido.pareja2Id;
-
-  if (origenPareja1 !== undefined) {
-    updateDataActual.origenPareja1 = nuevoOrigen1;
-    if (!nuevoOrigen1) {
-      pareja1IdActual = null;
-    }
-  }
-  if (origenPareja2 !== undefined) {
-    updateDataActual.origenPareja2 = nuevoOrigen2;
-    if (!nuevoOrigen2) {
-      pareja2IdActual = null;
-    }
-  }
-
-  // Si hay partidos en conflicto y liberarEnOtros está activo, ejecutar transacción atómica
-  if (partidosEnConflicto.length > 0 && liberarEnOtros) {
-    return await prisma.$transaction(async (tx) => {
-      // Liberar en los partidos en conflicto y rastrear parejas físicas a transferir
-      for (const p of partidosEnConflicto) {
-        const updateConflicto = {};
-        if (nuevoOrigen1 && p.origenPareja1 === nuevoOrigen1) {
-          updateConflicto.origenPareja1 = null;
-          if (p.pareja1Id) {
-            pareja1IdActual = p.pareja1Id;
-            updateConflicto.pareja1Id = null;
-          }
-        }
-        if (nuevoOrigen1 && p.origenPareja2 === nuevoOrigen1) {
-          updateConflicto.origenPareja2 = null;
-          if (p.pareja2Id) {
-            pareja1IdActual = p.pareja2Id;
-            updateConflicto.pareja2Id = null;
-          }
-        }
-        if (nuevoOrigen2 && p.origenPareja1 === nuevoOrigen2) {
-          updateConflicto.origenPareja1 = null;
-          if (p.pareja1Id) {
-            pareja2IdActual = p.pareja1Id;
-            updateConflicto.pareja1Id = null;
-          }
-        }
-        if (nuevoOrigen2 && p.origenPareja2 === nuevoOrigen2) {
-          updateConflicto.origenPareja2 = null;
-          if (p.pareja2Id) {
-            pareja2IdActual = p.pareja2Id;
-            updateConflicto.pareja2Id = null;
-          }
-        }
-
-        await tx.partido.update({
-          where: { id: p.id },
-          data: updateConflicto,
-        });
-      }
-
-      updateDataActual.pareja1Id = pareja1IdActual;
-      updateDataActual.pareja2Id = pareja2IdActual;
-
-      const updated = await tx.partido.update({
-        where: { id: partidoId },
-        data: updateDataActual,
-      });
-
-      return updated;
+    const rechazar = (mensaje) => {
+      const error = new Error(mensaje);
+      error.statusCode = 400;
+      throw error;
+    };
+    const validarEditable = (p, actual = false) => {
+      if (p.estado === 'FINALIZADO') rechazar(actual
+        ? 'No se puede editar un partido que ya finalizó.'
+        : `No se puede mover el origen porque el Partido #${p.posicionEnRonda} ya está finalizado.`);
+      if (p.estado === 'EN_CURSO') rechazar(actual
+        ? 'No se puede editar un partido que está en juego.'
+        : `No se puede mover el origen porque el Partido #${p.posicionEnRonda} está en juego.`);
+      if (p.esBye) rechazar('No se pueden editar cruces de un partido pase directo (BYE).');
+    };
+    if (!partido.faseEliminatoriaId) rechazar('El partido no pertenece a una fase eliminatoria.');
+    const primeraFase = await tx.faseEliminatoria.findFirst({
+      where: { categoriaId: partido.categoriaId }, orderBy: { ronda: 'desc' }, select: { id: true },
     });
-  }
+    if (partido.faseEliminatoriaId !== primeraFase?.id) rechazar('Solo se pueden editar los cruces de la primera ronda.');
+    validarEditable(partido, true);
 
-  // Sin colisiones: actualizar directamente
-  if (origenPareja1 !== undefined && !nuevoOrigen1) {
-    updateDataActual.pareja1Id = null;
-  }
-  if (origenPareja2 !== undefined && !nuevoOrigen2) {
-    updateDataActual.pareja2Id = null;
-  }
+    const { origenPareja1, origenPareja2, liberarEnOtros } = data;
+    const nuevos = [
+      origenPareja1 === undefined ? partido.origenPareja1 : origenPareja1 || null,
+      origenPareja2 === undefined ? partido.origenPareja2 : origenPareja2 || null,
+    ];
+    if (nuevos[0] && nuevos[0] === nuevos[1]) rechazar('No podés asignar el mismo origen en ambos lados del partido.');
 
-  const updated = await prisma.partido.update({
-    where: { id: partidoId },
-    data: updateDataActual,
+    const originales = await tx.partido.findMany({ where: { faseEliminatoriaId: partido.faseEliminatoriaId } });
+    const origenesAntes = new Set(originales.flatMap((p) => [p.origenPareja1, p.origenPareja2]).filter(Boolean));
+    if (nuevos.some((origen) => origen && !origenesAntes.has(origen))) rechazar('Ese origen no está en esta ronda.');
+    const partidos = originales.map((p) => ({ ...p }));
+    const actual = partidos.find((p) => p.id === partidoId);
+    const lugares = partidos.flatMap((p) => [1, 2].map((lado) => ({ partido: p, lado })));
+
+    // Resolver ambos lugares sobre el plan, antes de escribir. Un origen desplazado puede
+    // elegirse para el segundo lugar: los intercambios encadenados conservan cada origen.
+    for (const lado of [1, 2]) {
+      if (data[`origenPareja${lado}`] === undefined) continue;
+      const origen = `origenPareja${lado}`, pareja = `pareja${lado}Id`, elegido = nuevos[lado - 1];
+      if (actual[origen] === elegido && elegido) continue;
+      const fuentes = elegido ? lugares.filter((l) =>
+        l.partido[`origenPareja${l.lado}`] === elegido && !(l.partido.id === partidoId && l.lado === lado)) : [];
+      if (fuentes.length > 1) rechazar(`El origen "${elegido}" está repetido en esta ronda. Revisá los cruces.`);
+      const fuente = fuentes[0];
+      if (fuente) {
+        if (fuente.partido.id !== partidoId) {
+          validarEditable(fuente.partido);
+          if (!liberarEnOtros) rechazar(`El origen "${elegido}" ya está asignado en el Partido #${fuente.partido.posicionEnRonda} de esta ronda.`);
+        }
+        const origenFuente = `origenPareja${fuente.lado}`, parejaFuente = `pareja${fuente.lado}Id`;
+        const origenSaliente = actual[origen], parejaSaliente = actual[pareja];
+        actual[origen] = elegido;
+        actual[pareja] = fuente.partido[parejaFuente];
+        fuente.partido[origenFuente] = origenSaliente;
+        fuente.partido[parejaFuente] = parejaSaliente;
+      } else {
+        actual[origen] = elegido;
+        actual[pareja] = null;
+      }
+    }
+
+    const origenesDespues = new Set(partidos.flatMap((p) => [p.origenPareja1, p.origenPareja2]).filter(Boolean));
+    if ([...origenesAntes].some((origen) => !origenesDespues.has(origen))) rechazar('Cada clasificado tiene que seguir en el cuadro.');
+
+    let actualizado = partido;
+    const campos = ['origenPareja1', 'origenPareja2', 'pareja1Id', 'pareja2Id'];
+    for (const p of partidos) {
+      const anterior = originales.find((original) => original.id === p.id);
+      const cambios = Object.fromEntries(campos.filter((campo) => p[campo] !== anterior[campo]).map((campo) => [campo, p[campo]]));
+      if (!Object.keys(cambios).length) continue;
+      const guardado = await tx.partido.update({ where: { id: p.id }, data: cambios });
+      if (p.id === partidoId) actualizado = guardado;
+    }
+    return actualizado;
   });
-
-  return updated;
 }
 
 async function getPartidosByCategoria(organizadorId, categoriaId, filters = {}) {
@@ -747,6 +717,7 @@ function diasPermitidosPartido(partido) {
 
 async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  exigirTorneoNoFinalizado(partido.categoria.torneo);
   const { slotId, canchaNumero, fechaHora } = data;
 
   // Solo se asigna o reprograma un partido PENDIENTE
@@ -781,7 +752,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
 
   const canchaNum = parseInt(canchaNumero, 10);
   if (isNaN(canchaNum) || canchaNum < 1 || canchaNum > (organizador.cantidadCanchas || 1)) {
-    const error = new Error(`El número de cancha debe ser entre 1 y ${organizador.cantidadCanchas || 1}.`);
+    const error = new Error('No se pudo asignar una cancha válida. Elegí otro horario.');
     error.statusCode = 400;
     throw error;
   }
@@ -803,7 +774,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
 
   const canchasJornada = canchasOverridesService.getCanchasDia(torneo.id, jornada.key, organizador.cantidadCanchas || 1);
   if (canchaNum > canchasJornada.canchas) {
-    throw errorAsignacion(`La cancha ${canchaNum} está cerrada por lluvia el ${NOMBRES_DIA[diaLogico]}. Elegí otra cancha.`);
+    throw errorAsignacion(`Ese horario ya no tiene canchas libres: la lluvia cerró canchas el ${NOMBRES_DIA[diaLogico]}. Elegí otro horario.`);
   }
 
   const targetStartMs = targetDate.getTime();
@@ -829,7 +800,7 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
     const haySolapamiento = Math.max(targetStartMs, oStartMs) < Math.min(targetEndMs, oEndMs);
     if (haySolapamiento) {
       if (otro.canchaNumero === canchaNum) {
-        const error = new Error(`La cancha ${canchaNum} ya está ocupada en ese horario por otro partido.`);
+        const error = new Error('Ese horario se ocupó con otro partido. Elegí otro horario.');
         error.statusCode = 409;
         throw error;
       }
@@ -933,6 +904,26 @@ async function asignarHorarioManual(organizadorId, partidoId, data = {}) {
 
 const sinHorario = { OR: [{ fechaHora: null }, { canchaNumero: null }, { sinHorarioAsignado: true }] };
 
+// Generar el cuadro y asignar sus clasificados ya terminó su transacción. Si falla el scheduler,
+// se conserva ese trabajo; los cambios de horarios del intento fallido sí se revierten completos.
+async function programarCuadroConDieciseisavos(organizadorId, categoriaId, torneoId) {
+  try {
+    const pendientes = await prisma.partido.count({ where: {
+      categoriaId, faseEliminatoriaId: { not: null }, esBye: false, estado: 'PENDIENTE', ...sinHorario,
+    } });
+    if (!pendientes) return null;
+    const scheduler = require('./eliminatoriaScheduler.service');
+    return await prisma.$transaction(
+      (tx) => scheduler.programarHorariosEliminatorias(organizadorId, torneoId, categoriaId, tx, null,
+        { conservarHorarios: true, noAntesDeMs: Date.now() }),
+      { timeout: 60_000 },
+    );
+  } catch (err) {
+    console.warn(`[Auto-Scheduler] No se pudo programar el cuadro con dieciseisavos de ${categoriaId}:`, err.message);
+    return null;
+  }
+}
+
 /**
  * Programa los dieciseisavos de una categoría cuando ya no le quedan partidos de zona sin horario.
  * Usa programarHorariosEliminatorias, que respeta lo que ya tiene horario. Si falla, solo lo registra:
@@ -975,6 +966,7 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
   }
 
   const partido = await getPartidoAndVerifyPermisos(organizadorId, partidoId);
+  validarParejasDistintas(partido);
 
   if (partido.estado === 'FINALIZADO') {
     const error = new Error('No se puede modificar el estado de un partido finalizado desde aquí. Editá o borrá el resultado.');
@@ -1022,6 +1014,7 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
         pareja2: true,
       },
     });
+    await recalcularEstadosPorPartido(tx, partido.categoriaId);
   });
 
   return {
@@ -1034,11 +1027,12 @@ async function updateEstado(organizadorId, partidoId, nuevoEstado) {
  * Auto-asigna clasificados al cuadro eliminatorio si se completaron todos los partidos de zona de la categoría.
  * También dispara la auto-programación de primera ronda de domingo si corresponde.
  */
-async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId) {
+async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId, externalTx = null, actualizarIncompletas = false) {
+  const db = externalTx || prisma;
   if (!categoriaId || !organizadorId) return null;
 
   // 1. Contar partidos de zona no finalizados en esta categoría
-  const partidosPendientes = await prisma.partido.count({
+  const partidosPendientes = await db.partido.count({
     where: {
       categoriaId,
       zonaId: { not: null },
@@ -1046,11 +1040,11 @@ async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId) {
     },
   });
 
-  // Si aún quedan partidos de zona pendientes o en curso, no se auto-asigna
-  if (partidosPendientes > 0) return null;
+  // Con zonas incompletas se valida el cuadro jugado, conservando la asignación automática habitual.
+  const soloValidar = partidosPendientes > 0 && !actualizarIncompletas;
 
   // 2. Verificar si la categoría tiene fases eliminatorias creadas (bracket generado al inicio)
-  const fasesCount = await prisma.faseEliminatoria.count({
+  const fasesCount = await db.faseEliminatoria.count({
     where: { categoriaId },
   });
 
@@ -1058,9 +1052,24 @@ async function verificarYAutoAsignarEliminatoria(organizadorId, categoriaId) {
 
   // 3. Ejecutar asignación de clasificados (poblado dinámico del bracket existente)
   const { generarEliminatoria } = require('./faseEliminatoria.service');
+
+  const resultado = await generarEliminatoria(organizadorId, categoriaId, externalTx, { soloValidar });
+  if (!resultado) return null;
+  if (!externalTx) await programarPrimeraRondaTrasAsignacion(organizadorId, categoriaId, resultado);
+  return resultado;
+}
+
+// Los horarios se programan después del commit; nunca se absorben errores de clasificación.
+async function programarPrimeraRondaTrasAsignacion(organizadorId, categoriaId, resultado) {
   const { asignarHorariosRondaUno } = require('./eliminatoriaScheduler.service');
 
-  const resultado = await generarEliminatoria(organizadorId, categoriaId);
+  if (resultado.esDieciseisavos) {
+    const categoria = await prisma.categoria.findUnique({ where: { id: categoriaId }, select: { torneoId: true } });
+    if (categoria?.torneoId) {
+      resultado.schedulingResult = await programarCuadroConDieciseisavos(organizadorId, categoriaId, categoria.torneoId);
+    }
+    return resultado;
+  }
 
   // 4. Si no es dieciseisavos (que se juegan el sábado a la noche), programar domingo
   if (!resultado.esDieciseisavos) {
@@ -1093,4 +1102,5 @@ module.exports = {
   updateEstado,
   verificarYAutoAsignarEliminatoria,
   programarDieciseisavosAlCompletarZonas,
+  programarCuadroConDieciseisavos,
 };

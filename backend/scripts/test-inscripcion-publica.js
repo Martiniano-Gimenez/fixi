@@ -180,7 +180,7 @@ async function main() {
     assert(new Date(torneo.fecha).getTime() === parseFechaLocal(VIERNES).getTime(), `fecha: ${torneo.fecha}`);
     const nombres = (categorias || []).map((c) => c.nombre).sort();
     assert(JSON.stringify(nombres) === JSON.stringify(['4ta', '6ta']), `categorías: ${JSON.stringify(categorias)}`);
-    assert(categorias.every((c) => Object.keys(c).sort().join(',') === 'id,nombre'), `campos de categoría: ${JSON.stringify(categorias)}`);
+    assert(categorias.every((c) => Object.keys(c).sort().join(',') === 'completa,id,nombre'), `campos de categoría: ${JSON.stringify(categorias)}`);
     const esperada = generarGrillaOrganizador(orgA);
     assert(!('domingo' in grilla), 'la grilla trae domingo');
     assert(JSON.stringify(grilla.viernes) === JSON.stringify(esperada.viernes), 'grilla de viernes distinta a la del club');
@@ -289,7 +289,7 @@ async function main() {
     assert(parejaSlots, 'depende de I6');
     const vista = await http('GET', `/public/${t1.slug}`);
     esperar(vista, 200);
-    assert(vista.texto.includes('Lucía Ríos'), 'la vista pública no lista la pareja inscripta');
+    assert(!vista.texto.includes('Lucía Ríos'), 'la vista pública en borrador expone la pareja inscripta');
     assert(!vista.texto.includes(TELEFONO_NUCLEO), 'GET /public/:slug expone el teléfono');
     assert(!/telefono/i.test(vista.texto), 'GET /public/:slug trae un campo telefono');
     const insc = await http('GET', `/public/${t1.slug}/inscripcion`);
@@ -470,12 +470,14 @@ async function main() {
     esperar(await inscribir(t5.slug, cuerpo(cat5.id)), 409, 'INSCRIPCION_CERRADA');
   });
 
-  await caso('I25 PUT /torneos/:id con estado fuera de BORRADOR cierra la inscripción', async () => {
+  await caso('I25 PUT /torneos/:id no inicia el torneo ni cierra la inscripción', async () => {
     const t7 = await crearTorneo(orgA, 'Put Estado');
     esperar(await abrir(t7.id, true, tokenA), 200);
-    esperar(await http('PUT', `/torneos/${t7.id}`, { body: { estado: 'EN_CURSO' }, token: tokenA }), 200);
+    const r = await http('PUT', `/torneos/${t7.id}`, { body: { estado: 'EN_CURSO' }, token: tokenA });
+    esperar(r, 400);
+    assert(r.json.error === 'Para iniciar el torneo usá Iniciar torneo.', `mensaje: ${r.texto}`);
     const t = await prisma.torneo.findUnique({ where: { id: t7.id } });
-    assert(t.inscripcionAbierta === false, 'quedó abierta con el torneo en curso');
+    assert(t.estado === 'BORRADOR' && t.inscripcionAbierta === true, 'editar el estado inició el torneo o cerró la inscripción');
   });
 
   console.log('\n▶ Cola serial y esperas');
@@ -590,7 +592,7 @@ async function main() {
     const insc = await http('GET', `/public/${t9.slug}/inscripcion`);
     esperar(vista, 200);
     esperar(insc, 200);
-    assert(vista.texto.includes(parejaIndicaciones.jugador1), 'la vista no incluye la pareja de prueba');
+    assert(!vista.texto.includes(parejaIndicaciones.jugador1), 'la vista en borrador expone la pareja de prueba');
     for (const r of [vista, insc, respuestaIndicaciones]) {
       assert(!/"indicaciones"\s*:/i.test(r.texto) && !r.texto.includes('Necesitamos llegar juntos'), `se expusieron indicaciones: ${r.texto}`);
     }

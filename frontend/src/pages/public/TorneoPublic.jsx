@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { AlertTriangle } from 'lucide-react';
@@ -146,6 +147,7 @@ export default function TorneoPublic() {
   const location = useLocation();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [busquedaInmediata, setBusquedaInmediata] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -180,7 +182,7 @@ export default function TorneoPublic() {
   // Limpieza segura de favoritos huérfanos: la pareja ya no está en su categoría.
   // No limpia categorías vacías o en preparación.
   useEffect(() => {
-    if (!data || !slug) return;
+    if (!data || !slug || data.torneo.estado === 'BORRADOR') return;
     Object.entries(favs).forEach(([catId, favParejaId]) => {
       const cat = data.categorias?.find((c) => c.id === catId);
       if (!cat) return;
@@ -270,7 +272,14 @@ export default function TorneoPublic() {
   }, [slug]);
 
   // Página actual según la URL: ?cat=<nombre> es la página de esa categoría; sin cat, el inicio
-  const categorias = useMemo(() => data?.categorias || [], [data]);
+  const esBorrador = data?.torneo?.estado === 'BORRADOR';
+  const categorias = useMemo(() => {
+    const lista = data?.categorias || [];
+    // También se respeta la privacidad si llega una respuesta vieja con datos deportivos en borrador.
+    return data?.torneo?.estado === 'BORRADOR'
+      ? lista.map(({ id, nombre, estado, totalParejas }) => ({ id, nombre, estado, totalParejas }))
+      : lista;
+  }, [data]);
   const catNombre = searchParams.get('cat');
   const categoria = categorias.find((c) => c.nombre === catNombre) || null;
   const rondaParam = Number(searchParams.get('ronda'));
@@ -327,9 +336,17 @@ export default function TorneoPublic() {
 
   // Búsqueda en la URL: ?buscar=<texto>
   const buscarParam = searchParams.get('buscar');
-  const busquedaAbierta = searchParams.has('buscar');
+  const busquedaEnUrl = searchParams.has('buscar');
+  const busquedaAbierta = busquedaEnUrl || busquedaInmediata;
+
+  useEffect(() => {
+    if (busquedaEnUrl) setBusquedaInmediata(false);
+  }, [busquedaEnUrl]);
 
   const abrirBusqueda = () => {
+    // El teclado móvil necesita el campo y su foco dentro del gesto de la lupa.
+    flushSync(() => setBusquedaInmediata(true));
+    document.querySelector('.pv-busqueda-input')?.focus({ preventScroll: true });
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -356,6 +373,7 @@ export default function TorneoPublic() {
   };
 
   const cerrarBusqueda = () => {
+    setBusquedaInmediata(false);
     if (location.state?.busquedaDesdeApp) {
       navigate(-1);
     } else {
@@ -399,7 +417,7 @@ export default function TorneoPublic() {
   // en el inicio, solo los de la pareja seguida
   const avisoCat = categoria || seguidas[0]?.cat || null;
   const avisoPareja = categoria ? favs[categoria.id] || null : seguidas[0]?.parejaId || null;
-  const aviso = useAvisoResultados(data, avisoCat, avisoPareja);
+  const aviso = useAvisoResultados(esBorrador ? null : data, avisoCat, avisoPareja);
 
   if (loading) {
     return <TorneoPublicSkeleton />;
@@ -424,14 +442,16 @@ export default function TorneoPublic() {
   return (
     <div className={`publico ${categoria ? 'pv-pagina-cat' : ''}`}>
       <a className="pv-saltar" href="#contenido">Saltar al contenido</a>
-      <Barra volver={categoria ? { href: '?', onClick: volverAlInicio } : null} onBuscar={abrirBusqueda} />
+      <Barra volver={categoria ? { href: '?', onClick: volverAlInicio } : null} onBuscar={esBorrador ? null : abrirBusqueda} />
 
       <div id="contenido" tabIndex={-1} className="pv-contenido">
         {categoria ? (
           <Categoria
             key={categoria.id}
             categoria={categoria}
-            seguidaId={favs[categoria.id] || null}
+            torneoNombre={torneo.nombre}
+            torneoEstado={torneo.estado}
+            seguidaId={esBorrador ? null : favs[categoria.id] || null}
             isMobile={isMobile}
             rondaId={rondaId}
             onCambiarRonda={cambiarRonda}
@@ -453,7 +473,7 @@ export default function TorneoPublic() {
         )}
       </div>
 
-      {busquedaAbierta && (
+      {!esBorrador && busquedaAbierta && (
         <Busqueda
           categorias={categorias}
           queryInicial={buscarParam || ''}
@@ -466,7 +486,7 @@ export default function TorneoPublic() {
         />
       )}
 
-      <div className={`pv-aviso ${aviso ? 'on' : ''}`} role="status" aria-live="polite">
+      {!esBorrador && <div className={`pv-aviso ${aviso ? 'on' : ''}`} role="status" aria-live="polite">
         <span className="pv-aviso-icono" aria-hidden="true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
         </span>
@@ -474,7 +494,7 @@ export default function TorneoPublic() {
           <b>{aviso?.titulo}</b>
           <span>{aviso?.texto}</span>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

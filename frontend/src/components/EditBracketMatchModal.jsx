@@ -5,7 +5,6 @@ import { X } from 'lucide-react';
 export default function EditBracketMatchModal({
   isOpen = true,
   partido,
-  zonas = [],
   partidosRonda = [],
   onClose,
   onSuccess,
@@ -24,13 +23,16 @@ export default function EditBracketMatchModal({
     }
   }, [partido]);
 
-  // Mapa de origen -> { posicionEnRonda, finalizado, partidoId } de partidos ajenos al actual en la misma ronda
+  const bloqueado = (p) => p?.estado === 'FINALIZADO' || p?.estado === 'EN_CURSO';
+  const partidoBloqueado = bloqueado(partido);
+  // Orígenes de los otros partidos de esta ronda, con su estado para impedir mover uno ya iniciado.
   const orígenesEnUsoOtrosPartidos = new Map();
   partidosRonda.forEach((p) => {
     if (p.id !== partido?.id) {
       const info = {
         posicionEnRonda: p.posicionEnRonda,
-        finalizado: p.estado === 'FINALIZADO',
+        estado: p.estado,
+        bloqueado: bloqueado(p),
         partidoId: p.id,
       };
       if (p.origenPareja1) orígenesEnUsoOtrosPartidos.set(p.origenPareja1, info);
@@ -38,40 +40,42 @@ export default function EditBracketMatchModal({
     }
   });
 
-  // Detectar movimientos / swaps pendientes hacia este partido
-  const movimientos = [];
-  if (origen1 && orígenesEnUsoOtrosPartidos.has(origen1)) {
-    const info = orígenesEnUsoOtrosPartidos.get(origen1);
-    movimientos.push({
-      origen: origen1,
-      posicionDestino: 'Posición 1',
-      origenPartidoNum: info.posicionEnRonda,
-      finalizado: info.finalizado,
-    });
+  // Simular los dos lugares para que el aviso también describa un intercambio encadenado.
+  const otros = partidosRonda.filter((p) => p.id !== partido?.id);
+  const plan = partido ? [partido, ...otros].map((p) => ({ ...p })) : [];
+  for (const [index, elegido] of [origen1, origen2].entries()) {
+    if (!plan.length) break;
+    const campo = `origenPareja${index + 1}`;
+    if (plan[0][campo] === (elegido || null)) continue;
+    const fuente = elegido && plan.flatMap((p) => [1, 2].map((lado) => ({ partido: p, campo: `origenPareja${lado}` })))
+      .find((l) => l.partido[l.campo] === elegido && !(l.partido === plan[0] && l.campo === campo));
+    if (fuente) fuente.partido[fuente.campo] = plan[0][campo];
+    plan[0][campo] = elegido || null;
   }
-  if (origen2 && orígenesEnUsoOtrosPartidos.has(origen2)) {
-    const info = orígenesEnUsoOtrosPartidos.get(origen2);
-    movimientos.push({
-      origen: origen2,
-      posicionDestino: 'Posición 2',
-      origenPartidoNum: info.posicionEnRonda,
-      finalizado: info.finalizado,
-    });
-  }
+  const movimientos = partido ? otros.flatMap((p, index) => [1, 2].flatMap((lado) => {
+    const campo = `origenPareja${lado}`;
+    return p[campo] !== plan[index + 1][campo] ? [{ origen: p[campo], reemplazo: plan[index + 1][campo],
+      origenPartidoNum: p.posicionEnRonda, estado: p.estado, bloqueado: bloqueado(p) }] : [];
+  })) : [];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (partidoBloqueado) {
+      setError('No se puede editar un partido finalizado o en juego.');
+      return;
+    }
 
     if (origen1 && origen2 && origen1 === origen2) {
       setError('No podés asignar el mismo origen en ambos lados del partido.');
       return;
     }
 
-    const conflictoFinalizado = movimientos.find((m) => m.finalizado);
-    if (conflictoFinalizado) {
+    const conflictoBloqueado = movimientos.find((m) => m.bloqueado);
+    if (conflictoBloqueado) {
       setError(
-        `No se puede mover "${conflictoFinalizado.origen}" porque el Partido #${conflictoFinalizado.origenPartidoNum} ya está finalizado.`
+        `No se puede mover "${conflictoBloqueado.origen}" porque el Partido #${conflictoBloqueado.origenPartidoNum} ${conflictoBloqueado.estado === 'FINALIZADO' ? 'ya está finalizado' : 'está en juego'}.`
       );
       return;
     }
@@ -94,27 +98,22 @@ export default function EditBracketMatchModal({
 
   if (!isOpen || !partido) return null;
 
-  const originOptions = [];
-  zonas.forEach((z) => {
-    for (let i = 1; i <= z.clasifican; i++) {
-      originOptions.push(`${i}° ${z.nombre}`);
-    }
-  });
+  const originOptions = [...new Set(partidosRonda.flatMap((p) => [p.origenPareja1, p.origenPareja2]).filter(Boolean))];
 
   const renderOption = (opt) => {
     const info = orígenesEnUsoOtrosPartidos.get(opt);
     const estaEnUso = Boolean(info);
-    const estaFinalizado = info?.finalizado;
+    const estaBloqueado = info?.bloqueado;
 
     let label = opt;
-    if (estaFinalizado) {
-      label = `${opt} (Partido #${info.posicionEnRonda} finalizado)`;
+    if (estaBloqueado) {
+      label = `${opt} (Partido #${info.posicionEnRonda} ${info.estado === 'FINALIZADO' ? 'finalizado' : 'en juego'})`;
     } else if (estaEnUso) {
       label = `${opt} (en uso en Partido #${info.posicionEnRonda})`;
     }
 
     return (
-      <option key={opt} value={opt} disabled={estaFinalizado}>
+      <option key={opt} value={opt} disabled={estaBloqueado}>
         {label}
       </option>
     );
@@ -152,6 +151,7 @@ export default function EditBracketMatchModal({
             {error}
           </div>
         )}
+        {partidoBloqueado && <p className="pm-alert" role="status">No se puede editar un partido finalizado o en juego.</p>}
 
           <div>
             <label className="pm-label" htmlFor="cb-origen-1">
@@ -163,8 +163,9 @@ export default function EditBracketMatchModal({
               onChange={(e) => setOrigen1(e.target.value)}
               className="pm-select"
               id="cb-origen-1"
+              disabled={loading || partidoBloqueado}
             >
-              <option value="">Sin definir / vacío</option>
+              {!partido.origenPareja1 && <option value="">Sin definir</option>}
               {originOptions.map(renderOption)}
             </select>
           </div>
@@ -179,26 +180,27 @@ export default function EditBracketMatchModal({
               onChange={(e) => setOrigen2(e.target.value)}
               className="pm-select"
               id="cb-origen-2"
+              disabled={loading || partidoBloqueado}
             >
-              <option value="">Sin definir / vacío</option>
+              {!partido.origenPareja2 && <option value="">Sin definir</option>}
               {originOptions.map(renderOption)}
             </select>
           </div>
 
           {movimientos.length > 0 && (
             <div
-              className="pm-alert pm-stack"
+              className="pm-summary pm-stack"
+              role="status"
             >
               <div className="pm-strong">
-                Reasignación de cruces
+                Intercambio de cruces
               </div>
-              <p className="pm-alert-copy">
-                Al guardar, se liberará automáticamente la posición en los partidos correspondientes:
-              </p>
               <ul className="pm-warning-list">
                 {movimientos.map((m, idx) => (
                   <li key={idx}>
-                    <strong>{m.origen}</strong> se moverá desde el <strong>Partido #{m.origenPartidoNum}</strong> a este partido ({m.posicionDestino}).
+                    {m.reemplazo
+                      ? <><strong>{m.reemplazo}</strong> pasa al Partido #{m.origenPartidoNum} y <strong>{m.origen}</strong> viene a este partido.</>
+                      : <><strong>{m.origen}</strong> viene a este partido. El Partido #{m.origenPartidoNum} queda con un lugar sin definir.</>}
                   </li>
                 ))}
               </ul>
@@ -218,7 +220,7 @@ export default function EditBracketMatchModal({
             <button
               type="submit"
 
-              disabled={loading}
+              disabled={loading || partidoBloqueado}
               className="pm-button pm-primary pm-grow"
             >
               {loading

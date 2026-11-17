@@ -255,7 +255,50 @@ async function clearOverridesTorneo(torneoId, tx = null) {
   return mutation;
 }
 
+// Se ejecuta antes del borrado, en su misma transacción. No publica cambios en caché.
+async function quitarPartidosDeRegistros(tx, torneoId, ids) {
+  const partidoIds = new Set(ids);
+  if (!partidoIds.size) return [];
+  const quitarPartidos = (registro) => {
+    let datos = registro;
+    if (typeof registro === 'string') {
+      try { datos = JSON.parse(registro); } catch { return undefined; }
+    }
+    if (!datos || typeof datos !== 'object' || Array.isArray(datos)) return undefined;
+    const restantes = Object.entries(datos).filter(([id]) => !partidoIds.has(id));
+    if (restantes.length === Object.keys(datos).length) return undefined;
+    const limpio = Object.fromEntries(restantes);
+    return typeof registro === 'string' ? JSON.stringify(limpio) : limpio;
+  };
+  const overrides = await tx.overrideCanchasDia.findMany({ where: { torneoId } });
+  const actualizados = [];
+  for (const override of overrides) {
+    const horariosAntesLluvia = quitarPartidos(override.horariosAntesLluvia);
+    const partidosSinSlot = quitarPartidos(override.partidosSinSlot);
+    if (horariosAntesLluvia === undefined && partidosSinSlot === undefined) continue;
+    const actualizado = await tx.overrideCanchasDia.update({
+      where: { id: override.id },
+      data: { horariosAntesLluvia, partidosSinSlot, updatedAt: override.updatedAt },
+    });
+    // La caché solo guarda partidosSinSlot; el llamador la actualiza después del commit.
+    if (partidosSinSlot !== undefined) actualizados.push(actualizado);
+  }
+  return actualizados;
+}
+
+function aplicarLimpiezaRegistros(overridesActualizados) {
+  for (const override of overridesActualizados) {
+    applyCacheMutation('SET', {
+      ...override,
+      partidosSinSlot: typeof override.partidosSinSlot === 'string'
+        ? JSON.parse(override.partidosSinSlot) : override.partidosSinSlot,
+    });
+  }
+}
+
 module.exports = {
+  quitarPartidosDeRegistros,
+  aplicarLimpiezaRegistros,
   getOverridesTorneo,
   getCanchasDia,
   setOverrideDia,

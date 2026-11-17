@@ -1,7 +1,7 @@
 # Bitácora de Práctica Profesional Supervisada
 **Proyecto:** Sistema de Gestión de Torneos de Pádel
 
-A continuación se detalla el trabajo realizado, organizado por áreas temáticas de desarrollo. Cada entrada describe su etapa histórica: las reglas vigentes de lluvia y la presentación actual de Día de torneo y del pre-check están en las entradas 93 a 95 y en `CONTEXT.md`. Reemplazan las decisiones anteriores incompatibles, como no trasladar partidos del viernes al sábado o mostrar siempre el número de cancha en el panel.
+A continuación se detalla el trabajo realizado, organizado por áreas temáticas de desarrollo. Cada entrada describe su etapa histórica: las reglas vigentes de lluvia y la presentación actual de Día de torneo, del pre-check y de la página de categoría están en las entradas 93 a 96 y en `CONTEXT.md`. Reemplazan las decisiones anteriores incompatibles, como no trasladar partidos del viernes al sábado o mostrar siempre el número de cancha en el panel.
 
 ---
 
@@ -3133,9 +3133,215 @@ Las entradas 93 y 94 agrupan temáticamente 23 de los 24 commits de `48da50b..49
 
 ---
 
+## 96. Página de categoría: marcador, posiciones y reinicio (13/11/2026)
+
+### 1. Problema y objetivo
+- Las tarjetas separaban los nombres del resultado en chips y mostraban las acciones antes de las parejas. En celular, las posiciones repetían los títulos de las estadísticas en una tarjeta por pareja. El número de cancha seguía apareciendo en categoría y cuadro.
+- El análisis de «Limpiar resultados» y «Reiniciar categoría» sobre copias de «Impares Noviembre» → 5ta detectó que limpiar conservaba un inicio real viejo y reiniciar dejaba referencias a partidos borrados en el registro de lluvia. Día de torneo ofrecía generar un cuadro para una categoría que había vuelto a borrador, y ambas acciones mostraban los errores con `alert()`.
+
+### 2. Partidos y posiciones más claros
+- **Tarjetas tipo marcador:** estado y horario arriba; después, una fila por pareja con los games de cada set en columnas a la derecha; al final, las acciones. La pareja 1 sigue arriba, los games ganadores de cada set van en negrita y se mantienen el ganador destacado, el perdedor en gris y los números tabulares. Los nombres pueden pasar de renglón sin empujar el marcador. Se sacaron los chips de sets y el trofeo del ganador del partido; «Sin resultado cargado» y el «vs» de los pendientes se conservaron.
+- **Acciones y encabezado:** «Reprogramar» pasó a «Cambiar horario»; tanto esa acción como «Asignar horario» usan `Clock`. «Cargar resultado», «Actualizar resultado» y «Editar resultado» usan `ClipboardList`, con `title` y `aria-label` acordes. «Parejas (N)» quedó como botón común, igual que «Cuadro», y se retiró «Torneo: …», ya cubierto por el link de volver. Se conservaron los handlers, las llamadas y los cálculos.
+- **Sin número de cancha:** se retiraron el chip de `PartidoCard`, las dos apariciones del cuadro y el CSS sin uso. `FilaPartidoZona` dejó `mostrarCancha` en false por defecto; la prop se conservó porque hay llamadas que la pasan explícitamente. El número ya no se muestra en ninguna pantalla del panel ni en la vista pública; la cancha se sigue guardando y validando. Los controles de cantidad de canchas se mantienen.
+- **Tabla compacta hasta 767 px:** encabezado único (#, Pareja, P, G, S, Gm), PJ y PP ocultos, una fila por pareja, nombres con salto de línea y números centrados y tabulares. Se mantienen el fondo celeste de quienes clasifican, los títulos y textos para lectores de pantalla, el orden y los cálculos. Se eliminaron los grids de las tarjetas, los `::before` con etiquetas y los `data-label` sin uso. Escritorio conserva su presentación.
+
+### 3. Limpiar, reiniciar y seguir desde el panel
+- **Cronómetro limpio:** `limpiarResultadosZonas` ahora pone `enJuegoDesde` en null cuando devuelve los partidos de zona a `PENDIENTE`. Sigue borrando sus sets y ganador y poniendo las posiciones en cero, sin cambiar sus horarios; también elimina el cuadro de esa categoría. Un parcial posterior registra un inicio nuevo.
+- **Reinicio sin referencias colgadas:** en la misma transacción que elimina los partidos, `reiniciarCategoria` quita sus IDs de `horariosAntesLluvia` y `partidosSinSlot` en todos los overrides del torneo. Se conservan las entradas ajenas, los formatos de objeto o cadena JSON y los metadatos, incluidas las fechas. La caché solo guarda `partidosSinSlot` y se actualiza después del commit cuando ese mapa cambió. Un fallo previo revierte tanto la depuración como la eliminación y deja la caché intacta.
+- **Alcance:** la categoría vuelve a `BORRADOR`, sin zonas, posiciones, partidos ni cuadro. Conserva sus parejas y disponibilidad, con `resolucionManual` en false; el torneo y las demás categorías siguen como estaban. El plan del pre-check mantiene su control de nómina existente; no se cambió ese mecanismo.
+- **Camino para rearmar:** `getEstadoEnVivo` excluye los borradores de `categorias` y `categoriasListasParaEliminatoria`. En categoría aparece «Esta categoría no tiene zonas. Para volver a armarla, abrí el pre-check desde el torneo.» con «Ir al torneo». Si el torneo está en curso y hay categorías en borrador con parejas suficientes, el acceso al pre-check dice «Armar categorías pendientes»; con el torneo en borrador conserva «Iniciar torneo».
+- **Errores en la página:** si falla limpiar o reiniciar, se cierra el modal y el mensaje aparece arriba en un aviso del panel con `role="alert"` y cierre de 44 × 44 px. Se agregó un estado separado del error de carga para conservar el resto de la pantalla. No se modificó `ConfirmModal`.
+
+### 4. Verificación registrada
+- Categoría y rondas del cuadro de «Impares Noviembre», con 5ta, revisadas a 320, 375 y 1440 px sin desborde de página. El marcador se probó con nombres largos y tres sets. Las posiciones se verificaron en las ocho zonas, con resultados, en los límites de 767/768 px y con games de tres cifras; a 1440 px coincidieron medidas, estilos e imagen con la tabla anterior.
+- `backend/scripts/test-modo-dia-torneo.js`, ya incluido en `npm test`, cubre el inicio en null al limpiar, el cronómetro nuevo con un parcial, la depuración de lluvia y caché, la conservación de datos ajenos y metadatos, el rollback y la exclusión de borradores incluso con restos de zonas y cuadro. Las 53 suites del backend pasaron en ambos commits de los arreglos. Los builds del frontend compilaron y el lint conservó los mismos 7 avisos.
+- En una copia con lluvia de sábado, reiniciar 5ta quitó cinco referencias colgadas y conservó las otras 32 entradas del registro. La interfaz se probó con errores y éxitos de ambas acciones, avisos cerrables, navegación y textos según el estado, con 12 envíos interceptados. Las 13 tablas y el esquema de `dev.db` permanecieron intactos.
+- Esta entrada registra las verificaciones de esos cambios; la actualización documental no requirió ejecutar nuevamente build ni tests.
+
+### 5. Commits incluidos
+- Tarjetas y encabezado: `643556d`.
+- Número de cancha y posiciones en celular: `8bdd7fe`, `cc82b8e`.
+- Limpieza, reinicio, errores y camino para rearmar: `156a8d3`, `3fbc284`.
+
+---
+
+## 97. Cuadro: marcador, horarios e intercambio de cruces (14/11/2026)
+
+### 1. Problema y objetivo
+- Las tarjetas del cuadro tenían acciones poco visibles, separaban el resultado de las parejas y ocupaban demasiado alto. El chip «Esperando» y las pestañas de rondas en varias filas agregaban ruido en celular.
+- El modal de horario compartido necesitaba aprovechar el ancho de escritorio sin dejar espacio vacío al plegarse. Editar un cruce traía el origen elegido, pero dejaba vacío el otro partido aunque la posición editada ya tuviera un origen: debía intercambiarlos.
+
+### 2. Cuadro compacto y acciones visibles
+- **Tarjetas tipo marcador:** estado y día/hora arriba; una fila por pareja, con games por set en columnas a la derecha; acciones abajo. La pareja 1 sigue arriba, el ganador destacado, el perdedor en gris y los games ganadores de cada set en negrita, con números tabulares. Se redujeron el alto y los espacios sin achicar las áreas táctiles de 44 px. Las líneas del cuadro siguen alineadas y `BracketLines` no se modificó.
+- **Acciones con texto:** «Asignar horario» / «Cambiar horario» con `Clock`, «Cargar resultado» / «Editar resultado» con `ClipboardList` cuando están las dos parejas, y «Editar cruce» como acción secundaria. Se mantuvo el clic existente en la tarjeta, con botones visibles y nombres accesibles coherentes. Ningún texto muestra el número de cancha.
+- **Menos ruido:** se retiró el chip «Esperando», se dejó el `#N` chico porque identifica los cruces de origen y se cambió «BYE» por «Pasa directo». Se normalizaron «Octavos de final», «Cuartos de final» e «Ir a Día de torneo». El link de volver quedó solo arriba e «Ir a Día de torneo» pasó a las acciones, junto al estado de la categoría y como botón común.
+- **Una fila de rondas en celular:** hasta 767 px, pestañas de 44 px con «Octavos», «Cuartos», «Semis» y «Final», más «16avos» / «32avos» si corresponden. El nombre completo queda en `aria-label`; en escritorio se mantienen los títulos completos de columna.
+
+### 3. Modal de horario y decisión sobre descansos
+- **Una presentación compartida:** desde cuadro, categoría y Día de torneo, el título es «Asignar horario» o «Cambiar horario». Los días van completos y en minúscula en la recomendación, disponibilidad, selección, otros partidos y grilla, respetando el día civil de la trasnoche. Se actualizaron únicamente los textos esperados del test del modal, con autorización.
+- **Ancho útil sin alto fijo:** en escritorio, el modal tiene más ancho y toma el alto de su contenido, con un máximo que no supera la pantalla. Plegado queda compacto. La grilla usa columnas automáticas y recorre los horarios de izquierda a derecha y de arriba abajo; reemplaza los tres bloques de columnas del primer ajuste. Con una sola jornada se ve solo el título; con varias se conservan las pestañas. El pre-check mantiene su presentación, su plegado y sus textos.
+- **Decisión:** el modal no valida los descansos entre rondas: los decide el organizador y el backend solo avisa después de guardar. Las advertencias se muestran sin deshacer la asignación, con «Entendido», y también se pueden consultar desde «Revisar horario». Se conservan las validaciones bloqueantes de estado, jornada, lluvia y colisiones; la decisión se refiere a los descansos.
+
+### 4. Editar cruce intercambia las posiciones
+- **Intercambio atómico:** al elegir un origen que está en otro partido de la misma ronda, ese lugar recibe el origen que tenía la posición editada. Los IDs de las parejas acompañan a sus orígenes. Si el lugar editado estaba vacío, el otro queda vacío. La lectura, la validación y las escrituras de ambos partidos se resuelven en una sola transacción; un fallo revierte todo, sin cambiar horarios, estados ni resultados.
+- **Bloqueos y confirmación:** no se puede editar si cualquiera de los partidos involucrados está finalizado o en juego. Se mantiene el control de permisos, orígenes duplicados y colisiones sin `liberarEnOtros: true`. El modal deshabilita las opciones bloqueadas y «Sin definir / vacío» pasó a «Sin definir».
+- **Aviso informativo:** anticipa qué se intercambia con «1° Zona A pasa al Partido #8 y 2° Zona A viene a este partido.», en un bloque neutro. Si el otro lugar queda vacío, lo aclara. El aviso también refleja los intercambios encadenados, sin prometer una liberación distinta de lo que se guarda.
+
+### 5. Verificación registrada
+- Cuadro de «Impares Noviembre», con datos falsos en el navegador para nombres largos, tres sets y partidos en juego, revisado a 320, 375 y 1440 px sin desbordes. Se comprobaron las líneas de escritorio y las pestañas en una fila, incluidas rondas adicionales. Los envíos se interceptaron, sin modificar `dev.db`.
+- El modal compartido se verificó desde cuadro, categoría y Día de torneo en esos tres anchos, con una jornada y con varias, incluido sábado. En escritorio, el modal plegado quedó entre 417 y 445 px de alto; al abrir la grilla, se comprobó el orden continuo y el uso del ancho. El pre-check se revisó por separado sin cambios.
+- `test-grilla-horarios.mjs`, `test-elegir-horario.mjs` y `test-asignar-horario-modal.mjs` pasaron. El build del frontend compiló y el lint conservó los mismos 7 avisos. Las 53 suites del backend pasaron en ambos commits de horario e intercambio. `test-sincronizar-cuadro.js` cubre intercambios entre lados de octavos, lugar vacío, traslado de parejas, bloqueos por finalizado o en juego, cambios simultáneos y encadenados, partidos ajenos intactos y rollback.
+- Esta entrada registra las verificaciones de los cambios; la actualización documental no requirió volver a ejecutar build ni tests.
+
+### 6. Commits incluidos
+- Tarjetas y textos del cuadro: `3b194c5`, `e58a4db`.
+- Rondas en una fila: `34b98ff`.
+- Modal de horario y grilla continua: `e545dc0`, `e391020`.
+- Intercambio de cruces: `420ec78`.
+
+---
+
+## 98. Vista pública: navegación por fases, búsqueda y parejas (14/11/2026)
+
+### 1. Problema y decisiones de estructura
+- La página de categoría reunía todas las fases una debajo de otra, con un índice de chips y una sección de horarios que repetía los partidos. El recorrido de fases se veía como progreso, pero no permitía navegar. El buscador podía devolver demasiadas coincidencias y «Seguir» solo se descubría desde la lupa.
+- **Decisión:** la categoría dejó de ser «de corrido». El recorrido es la navegación y muestra el contenido de la fase elegida; queda fijo debajo de la barra superior al bajar. No se usaron pestañas Zonas/Cuadro/Horarios para no parecerse a Pádel Set. Zonas tiene «Posiciones | Partidos»; Partidos reemplaza la sección Horarios.
+- **Alternativas descartadas:** estrellas de «Seguir» en cada fila, por el ruido visual y los toques accidentales en celular, y recordar la elección Posiciones/Partidos entre visitas. El seguimiento por categoría conserva su guardado; el selector no agrega persistencia.
+
+### 2. Fases, zonas y cuadro
+- **Contenido siempre visible:** nombre del torneo sobre la categoría, campeones si terminó y «En juego y próximos», con su estado vacío. Debajo aparecen las fases existentes: Zonas, 16avos, 8vos, 4tos, Semi y Final. Abre en Zonas mientras haya partidos de zona sin terminar; después, en la primera ronda sin terminar y, si terminó todo, en Final. También se pueden consultar fases futuras.
+- **Recorrido como navegación:** pestañas de al menos 44 px con barra de progreso, nombre y cuenta jugados/total, colores de avance conservados y fase elegida blanca con sombra y nombre marino en negrita. Las cuentas se ocultan a 320 px para que entre. Usa `tablist`, `tab`, `tabpanel`, `aria-selected` y flechas; el anillo de teclado queda solo en `:focus-visible`. La fase va en el hash, incluido `#dieciseisavos`, para compartir enlaces y recorrer cambios con Atrás. El cambio anima opacity con movimiento reducido y no mueve el scroll si el recorrido está a la vista. El recorrido informativo del inicio no cambia.
+- **Zonas más limpias:** «clasifican N por zona» se muestra una sola vez en el subtítulo si todas clasifican igual, y en cada tabla si difieren. Se retiró la línea punteada: el número celeste y la referencia de clasificación alcanzan. El selector se ajusta al contenido en escritorio y ocupa el ancho en celular. Partidos se agrupa por jornada y hora, con la zona en cada tarjeta y la madrugada hasta las 6 asignada al día anterior.
+- **Jornadas plegables:** encabezados con cantidad, chevron, `aria-expanded`, `aria-controls` y al menos 44 px. Al entrar se abre la de hoy si está presente y el torneo está en curso; si no, la primera con pendientes o, si terminó todo, la última. Las otras empiezan plegadas; después se pueden abrir varias. Se incluyó «Sin horario» y el plegado también funciona en escritorio. Solo se animan opacity y transform, respetando movimiento reducido.
+- **Cuadro en escritorio:** arranca en la ronda elegida y sigue hasta la final; al elegir Final muestra también la semifinal si existe. Los títulos de columna quedaron comunes, sin aspecto de pestaña. Se sacó el panel blanco contenedor: tarjetas blancas con sombra directamente sobre el fondo, sin cambiar el ancho de columnas ni la alineación de las líneas. En celular se muestran solo los partidos de la ronda elegida, ordenados por hora, con sus orígenes si faltan parejas.
+
+### 3. Próximos, horarios y tarjetas
+- **Un demorado sigue siendo próximo:** en inicio y categoría se toma el primer pendiente con horario, ordenado por fecha y hora, aunque ya haya pasado. No se compara con la hora real para descartarlo; sigue ahí hasta que empiece o termine. Se conserva `fraseProximo`.
+- **Límites y avisos:** «En juego y próximos» muestra todos los partidos en juego primero y luego hasta 2 pendientes en celular (hasta 767 px) o hasta 4 en escritorio. La grilla usa una columna en celular, dos entre 768 y 1279 px y hasta cuatro desde 1280 px, evitando tarjetas huérfanas. En ese bloque no se muestra «Sin resultado cargado». En las otras vistas, `sinResultado` exige los IDs de ambas parejas además del estado pendiente y el inicio más 75 minutos ya pasado: un cruce sin definir nunca muestra el aviso.
+- **Presentación compartida:** días completos en los horarios («Viernes 15:15», «Sábado 15:15», «Domingo 15:15»). Pendientes más compactos hasta 767 px, con menos padding y separación y nombres a 16 px, sin achicar los botones de 44 px. En juego, terminados con marcador y escritorio conservan sus tamaños. El encabezado público pasó a la misma marca del panel, con cinta y «Fixi», manteniendo el link y el área táctil.
+
+### 4. Buscador y acceso desde la pareja
+- **Desde dos letras y por comienzo de palabra:** ignora tildes y mayúsculas; cada palabra escrita debe coincidir con el comienzo de alguna palabra del nombre de la pareja. «gen» encuentra Godoy, «alv gen» encuentra Amaya / Godoy y «ar» no encuentra Amaya. Se conservó la forma de reunir parejas de zonas y cuadro. El campo vacío muestra la ayuda de escribir apellido o nombre; con algo escrito y menos de dos letras, pide al menos dos. El chip de categoría ocupa solo el ancho del texto.
+- **Foco y teclado:** la lupa abre con el campo listo para escribir; el campo se monta y enfoca dentro del gesto para solicitar el teclado móvil. Se evitó que la limpieza del efecto en StrictMode robara ese foco. El cierre conserva Escape, el historial y el retorno al origen.
+- **Tocar para ver partidos:** en categoría, toda la fila de posiciones y los nombres reales en tarjetas abren el panel actual con esa pareja exacta por ID y categoría, sus partidos y «Seguir». Así no se mezclan parejas de nombres parecidos o iguales de otra categoría. Cerrar devuelve el foco al botón tocado, con `aria-label="Ver partidos de {pareja}"`; consultar desde un nombre no enfoca el campo ni pide teclado. Pases directos, cruces sin definir y nombres del cuadro de escritorio no tienen esta acción.
+- **Resaltado sin subrayado:** las filas toman un fondo suave y los nombres en tarjetas pasan a `--marca` al pasar el puntero o enfocar con teclado, sin sumar negrita; conservan los estilos normales de ganador y perdedor. Se mantiene un único botón por fila, con foco visible solo por teclado y hover limitado a dispositivos que lo soportan, para que no quede pegado después de tocar.
+
+### 5. Verificación registrada y esfuerzo estimado
+- Durante estos cambios se revisaron «Impares Noviembre» y respuestas interceptadas para categorías en zonas, eliminatoria y terminadas, a 320, 375 y 1440 px, además de 768 px en navegación y cuadro. Se probaron hashes, Atrás, rondas de 5ta, 7ma y Suma 7, líneas alineadas, nombres largos, tres sets, estados en vivo y partidos demorados, sin scroll horizontal de página.
+- Se verificaron búsqueda por prefijos y tildes, foco de la lupa, apertura por ID con homónimos, seguimiento con la misma clave de guardado y foco de vuelta con Cerrar, Escape y Atrás. En el ajuste de resaltados, el contraste mínimo medido de los textos de fila fue 4,83:1. Las jornadas se probaron con hoy, primera pendiente, todas terminadas y solo sin horario; también se comprobó la madrugada y que en juego, finalizados y escritorio conservaran su tamaño al compactar pendientes.
+- Los builds del frontend compilaron y el lint mantuvo los mismos 7 avisos. Las pruebas de presentación usaron lecturas o respuestas interceptadas, sin modificar `dev.db`. Esta entrada registra esas verificaciones; el cambio documental solo requiere revisar el diff, sin volver a correr build ni tests.
+- **Esfuerzo estimado:** ~12 a 18 horas para navegación e historial, cuadro, búsqueda y acceso a parejas, ajustes visuales y pruebas. Es una estimación de esfuerzo, no una medición cronometrada ni la diferencia entre fechas de commits.
+
+### 6. Commits incluidos
+- Próximos, marca y horarios: `746cee1`, `87e9d34`, `3e1f7a7`.
+- Búsqueda, ayuda y foco: `57d44b2`, `d54d795`, `8d7ca99`, `b85a864`.
+- Navegación por fases, encabezado, zonas y recorrido fijo: `7d4ad17`, `6618bd3`, `07433bf`, `753983f`.
+- Rondas de escritorio y cuadro sin panel: `152a2d5`, `d5bb832`.
+- Parejas tocables, resaltados, compactación y jornadas: `fcc4fdc`, `d007548`, `2d13e4d`.
+
+---
+
+## 99. Cierre automático del torneo y campeones (14/11/2026)
+
+### 1. Análisis previo y decisión de producto
+- Se completó 5ta de «Impares Noviembre» de punta a punta con los servicios reales: resultados de todas las zonas, generación del cuadro y resultados hasta la final. Se dejó 7ma a medias para comparar una categoría terminada con un torneo todavía en juego.
+- **Hallazgos:** los estados de categoría y torneo nunca pasaban automáticamente a `FINALIZADO`. El público podía mostrar campeones a partir de la final, pero el panel seguía ofreciendo acciones y textos de torneo en curso. Además, cambiar el ganador de una semifinal con la final ya jugada podía dejar un campeón que no había jugado la final.
+- **Decisión del usuario:** cierre completamente automático, sin botón «Finalizar torneo» ni acción de reapertura manual. Se descartó la propuesta mixta de cerrar cada categoría automáticamente y pedir al organizador que confirmara el cierre del torneo. Las correcciones de resultados siguen permitidas y, si dejan partidos sin terminar, los estados vuelven automáticamente a `EN_CURSO`.
+
+### 2. Ganadores protegidos y estados coherentes
+- **Entre rondas:** cambiar el ganador, retirarlo por un parcial o borrar el resultado se rechaza con 400 si el partido siguiente está en juego o finalizado. El mensaje identifica ese partido y pide volverlo a pendiente o borrar primero su resultado. Corregir los sets con el mismo ganador sigue permitido; con el siguiente pendiente se actualiza su pareja. Resultado y propagación quedan en una sola transacción, con rollback completo ante errores.
+- **Categoría:** se cierra al terminar todos los partidos reales de zonas y eliminatoria, con una final real incluida. Los pases directos no cuentan. Una categoría iniciada sin final o con algún partido real pendiente o en juego queda `EN_CURSO`.
+- **Torneo:** se cierra cuando tiene categorías jugables y todas están terminadas. Una categoría en borrador con dos parejas o más cuenta como pendiente; con menos de dos, no cuenta. Si una categoría vuelve a estar en curso, el torneo también.
+- **Recálculo en cada operación:** toda acción que modifica resultados, estados o el conjunto de partidos recalcula categoría y torneo en la misma transacción. Incluye limpiar resultados de zonas, armar o regenerar partidos de zona, generar el cuadro o reasignar sus clasificados, borrarlo y sincronizarlo; mover o agregar parejas queda cubierto al regenerar los partidos. Reiniciar una categoría la deja en `BORRADOR` y recalcula el torneo; eliminar una categoría también lo recalcula. La asignación que solo cambia horarios no altera el avance deportivo.
+- **Preparación preservada:** el recálculo nunca saca al torneo de `BORRADOR` ni escribe sobre él mientras está en preparación. Armar una categoría o su cuadro no inicia el torneo: el inicio formal del panel sigue siendo por el pre-check. Borrar un cuadro vacío tampoco inicia una categoría en borrador.
+
+### 3. Qué queda bloqueado al finalizar
+- Día de torneo deja de estar disponible. Lluvia y restauración, cambios de horario, generar/borrar/sincronizar o editar el cuadro, mover o agregar parejas, limpiar o reiniciar una categoría y crear o eliminar categorías se rechazan con HTTP 400. Las operaciones bloqueadas comparten «El torneo está finalizado. Solo se pueden corregir resultados o reiniciar el torneo.»; las que exigen estar en curso conservan su validación de estado.
+- Cargar, corregir y borrar resultados sigue disponible, respetando la protección del ganador entre rondas. Corregir sets con el mismo ganador mantiene el cierre; borrar la final o dejarla parcial devuelve automáticamente categoría y torneo a `EN_CURSO`, sin una acción manual de reapertura.
+- Se conservan la consulta del historial y la vista pública, la edición de nombres y el reinicio completo del torneo a `BORRADOR`, con la limpieza habitual de partidos, lluvia y pre-check.
+
+### 4. Panel y público al terminar
+- **Panel:** Mis torneos y el detalle muestran «Finalizado». Cada categoría terminada muestra «Terminada» y sus campeones; la página de categoría agrega «Campeones» con trofeo dorado y «Subcampeones». Se ocultan mover y agregar pareja al terminar la categoría, y limpiar/reiniciar cuando también terminó el torneo. En el detalle del torneo finalizado desaparecen crear y eliminar categorías, incluso la acción de agregar en la lista vacía.
+- **Cuadro:** estado «Terminada» y campeones destacados en la final con el trofeo dorado junto al nombre. En categoría y cuadro, cada partido finalizado conserva «Editar resultado» con `ClipboardList`, como texto chico sin borde a la izquierda y con 44 px táctiles. Se mantuvo el botón semántico que abre el modal; cargar y actualizar resultados conservan su presentación.
+- **Público:** se mantienen los campeones en la tarjeta del inicio y el podio en categoría, con el recorrido completo y apertura en Final cuando terminó todo. «En juego y próximos» se omite si no tiene partidos. En escritorio, los partidos en juego ocupan primero las cuatro plazas y los pendientes completan lo que quede; si hay más de cuatro en juego, se muestran todos. Se retiró el estiramiento de la última tarjeta y las columnas del cuadro aprovechan hasta unos 280 px cuando hay pocas rondas. El celular conserva todos los partidos en juego y hasta dos próximos.
+
+### 5. Verificación, copias y esfuerzo estimado
+- **Análisis:** `capturas/analisis-cierre-2026-11-14` conserva la copia inicial, el resultado del recorrido y las pruebas de estados y del bloqueo entre rondas. Se revisaron Mis torneos, detalle del torneo, categoría, cuadro, Día de torneo e inicio y categoría públicos, con una categoría completa y otra parcial.
+- **Cierre implementado:** `capturas/cierre-auto-2026-11-14` conserva `mixto.db` (5ta terminada y otras categorías en curso) y `terminado.db` (todas las categorías y el torneo terminados), con sus metadatos para repetir las pantallas. Las pruebas de servicios y HTTP se hicieron en la base de tests; las del navegador usaron copias y respuestas interceptadas, bloqueando los envíos. `dev.db` mantuvo el mismo hash.
+- `test-padres-hijo-fijo.js` cubre la protección del ganador, última final y última categoría, borradores y pases directos, correcciones y borrado de final, operaciones bloqueadas, limpiar 5ta y terminar 7ma sin cerrar el torneo, regeneración del cuadro, conservación de `BORRADOR` y rollback atómico. Las 53 suites del backend pasaron en los cambios que lo requerían. Build correcto y lint con los mismos 7 avisos; panel y público revisados a 320, 375 y 1440 px, sin desbordes, con teclado, nombres largos y líneas del cuadro alineadas.
+- **Recorrido completo cerrado:** se verificó el ciclo de prueba desde zonas hasta campeones y cierre del torneo, incluyendo el estado mixto, las correcciones posteriores y los bloqueos. Es el cierre del recorrido de prueba, no una modificación de los datos de desarrollo.
+- **Esfuerzo estimado:** ~10 a 14 horas para análisis, decisiones, protección entre rondas, cierre y recálculos, presentación, pruebas y documentación. Es una estimación de esfuerzo, no una medición cronometrada. Esta actualización documental solo revisó el diff; no volvió a ejecutar build ni tests.
+
+### 6. Commits incluidos
+- Protección de ganadores entre rondas: `d25c93f`.
+- Cierre automático y recálculos al limpiar o rearmar, sin iniciar torneos en preparación: `6c3007d`, `c1a3e04`, `a5b7d6f`.
+- Presentación de terminados en el panel y ajustes del público: `b7a2957`, `029ad2a`.
+- Crear/eliminar categorías bloqueado y edición de resultados discreta: `2c1f241`, `99cf206`.
+
+---
+
+## 100. Auditoría: correcciones, seguridad y cierre documental (16/11/2026)
+
+### 1. Alcance y resultado de la auditoría
+- Se integraron en `main`, por avances rápidos locales y sin push, los 24 commits de `d92aa9c` a `b99ce18`. La auditoría cubrió correcciones de zonas con cuadro jugado, empates, acceso, configuración del club, programación y restauración por lluvia, registros de partidos borrados, edición de cruces, privacidad pública, inscripción y validaciones del panel.
+- Resultados, propagación y recálculo de categoría/torneo conservan las transacciones y protecciones entre rondas. Se reutilizaron los schedulers existentes, sin cambiar el esquema en estos arreglos. La base de desarrollo no se modificó para las pruebas de esta auditoría; se usó la base de tests y respuestas interceptadas en frontend.
+- `CONTEXT.md` resume el estado vigente por tema y los contratos de `empatePendiente`, desempate manual y categoría completa. Se retiraron de pendientes el desempate exacto y el cambio de estado por edición del torneo; las demás deudas previas no se dan por resueltas.
+
+### 2. Decisiones del dueño
+- **Empate exacto:** si quedan dos parejas empatadas en todos los criterios, decide su partido entre sí. Si persiste el empate total, el organizador define el orden a mano; hasta entonces esos lugares del cuadro quedan sin pareja. Corregir resultados invalida el orden manual de esa zona.
+- **Club con torneo en curso:** no se cambian canchas ni horarios y no se reprograma por esta vía. Simulación y guardado comparan con los valores actuales y comparten el 409. Para cerrar canchas de una jornada se usa Lluvia; nombre y valores iguales siguen permitidos.
+- **Privacidad en borrador:** el público no recibe nombres de inscriptos, zonas, partidos ni cuadro hasta que empiece el torneo. Conserva los datos del evento y la cantidad de parejas por categoría; no muestra buscador ni seguimiento en borrador.
+- **Inscripción por link:** máximo de 48 parejas por categoría, incluyendo las cargadas desde el panel. El panel sigue sin tope. El límite se controla en la cola y transacción del alta; GET publica solo `completa`, sin cantidades.
+
+### 3. Commits integrados
+- `d92aa9c`: fix: corregir clasificados de zona con pase directo.
+- `1159a5e`: fix: proteger la segunda ronda de zonas de cuatro.
+- `eb3f1fa`: fix: proteger clasificados de zona con el cuadro jugado.
+- `ba036c9`: fix: resolver empates exactos en zonas.
+- `570eef1`: feat: resolver empates de zona desde el panel.
+- `709cc51`: fix: respetar empates pendientes en la vista pública.
+- `2c5ce3a`: fix: validar registro y limitar intentos de acceso.
+- `6d39574`: fix: proteger la configuración del club con torneos en curso.
+- `d59c224`: fix: retirar el endpoint de fecha y hora sin validaciones.
+- `5a9bd90`: fix: ocultar detalles internos en errores de la API.
+- `d7b450b`: fix: preservar reintentos y proteger los registros de errores.
+- `22320f9`: fix: programar el cuadro regenerado con dieciseisavos.
+- `e2ff6b2`: fix: respetar la lluvia al mover o agregar parejas de zona.
+- `0119a14`: fix: programar partidos nuevos al restaurar la lluvia.
+- `9083dda`: fix: respetar los pisos de jornada al restaurar la lluvia.
+- `8c0c603`: fix: limpiar registros de lluvia al borrar partidos.
+- `c102a93`: fix: proteger la edición de cruces de primera ronda.
+- `24134b1`: fix: ocultar parejas en borrador en la vista pública.
+- `97b8616`: fix: impedir cambios de estado al editar un torneo.
+- `d5242dd`: fix: quitar números de cancha de los mensajes del panel.
+- `ee462cc`: fix: restringir CORS y agregar cabeceras de seguridad.
+- `0af34c3`: fix: validar nombres del panel y evitar categorías duplicadas.
+- `cea3392`: fix: limitar la inscripción pública a 48 parejas por categoría.
+- `b99ce18`: fix: proteger la simulación de jornada con un torneo en curso.
+
+**Ajuste del manejo de errores:** `d7b450b` corrige el manejo inicial de `5a9bd90`: conserva el 503 `REINTENTAR` y evita registrar cuerpos del parser o stacks de errores esperados. I27 mantiene la exigencia original de 409/503 y nunca 500.
+
+### 4. Limpieza final de este cierre
+- Se retiraron `mostrarCancha` y su render de `FilaPartidoZona` en `ElegirHorarioPartido.jsx`. La búsqueda confirmó un solo pase explícito, siempre `false`; los demás consumidores no usaban la prop. Las condiciones y validaciones internas de cancha no cambian.
+- `.pv-btn` pasó de 40 a 44 px de alto mínimo. Se conservaron el resto de los estilos y la estructura de las pantallas, sin compensaciones.
+- Se corrigieron las referencias al endpoint retirado en CONTEXT y el comentario de `test-r32-marca-sin-horario.js`: `updateFechaHora` es un servicio interno sin ruta HTTP. Las pruebas que verifican el 404 o usan el servicio no se reescribieron, ni las entradas históricas de esta bitácora.
+
+### 5. Qué sigue pendiente
+- **Sesión:** JWT de 7 días guardado en `localStorage`, sin revocación desde el servidor. Decisión de diseño postergada.
+- **Lluvia:** los P1/P2 de un mini cuadro creados durante la lluvia no se adelantan al restaurar aunque aparezca lugar antes; esa dependencia puede dejar P3/P4 sin horario. No se cambia en este cierre.
+- **Deploy:** configurar `TRUST_PROXY` según el proxy real para que los límites por IP funcionen por cliente; mantener `CORS_ORIGIN` vacío con frontend/API del mismo origen, o declarar los orígenes exactos separados por comas si hay clientes cruzados. Ambas notas siguen juntas en CONTEXT.
+- Las otras deudas técnicas previas documentadas en CONTEXT conservan su alcance; esta auditoría no las cierra por omisión.
+
+### 6. Verificación del cierre
+- `npm test` completo: backend 69/69 suites y frontend 15/15 pruebas. `npm run build` correcto; `npm run lint` con los mismos 7 avisos, sin nuevos.
+- Las páginas reales, con fetch interceptado, se revisaron en navegador a 320, 375 y 1440 px: inicio en borrador/en curso, categoría, búsqueda, inscripción y estados cerrada, completa, iniciado, no encontrado, error y confirmación. Las 33 combinaciones quedaron sin scroll horizontal y todos los `.pv-btn` visibles midieron al menos 44 px; no se necesitaron compensaciones de estilo.
+- Diff limitado a los 5 archivos autorizados, sin lógica de negocio ni esquema nuevos. `dev.db` mantuvo el mismo SHA256 antes y después. Se cierra en `chore/cierre-auditoria`, sin push.
+
+---
+
 ## ⏱️ Resumen de Tiempos y Esfuerzo Estimado
 
-El registro reúne 95 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 304 y 373 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 95 agrega entre 8 y 12 horas estimadas por el alcance de los cambios y sus pruebas. Las filas 91 a 95 agregan entre 32,25 y 46,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 304,25 a 372,5 horas. Se redondea a horas enteras. Las entradas 93 a 95 agrupan trabajo de varios días, no sesiones cronometradas únicas; no se estimó el esfuerzo por la distancia entre fechas de commits.
+El registro reúne 99 sesiones o entradas temáticas de trabajo, con un total aproximado de entre 340 y 426 horas de programación, refactorización, depuración, documentación y testeo. Las horas son estimaciones de esfuerzo, no mediciones cronometradas. La entrada 99 agrega entre 10 y 14 horas estimadas para el análisis y cierre automático del torneo, sus ajustes y pruebas. Las filas 91 a 99 agregan entre 68,25 y 99,5 horas al subtotal de 272 a 326 horas de las primeras 90: el total sin redondear es de 340,25 a 425,5 horas. Se redondea a horas enteras. Las entradas temáticas pueden agrupar varios pedidos o días; no se estimó el esfuerzo por la distancia entre fechas de commits.
 
 | Sesión | Tiempo estimado (estimación, no medición) | Temas cubiertos |
 |--------|-------------------------------------------|------------------|
@@ -3233,8 +3439,12 @@ El registro reúne 95 sesiones o entradas temáticas de trabajo, con un total ap
 | **92** | ~0,25 a 0,5 horas (estimación) | Aclaración de los cambios manuales al restaurar y documentación de la decisión, sin cambiar lógica. |
 | **93** | ~8 a 12 horas (estimación) | Horarios por pareja, motivos y opciones del pre-check, diseño móvil, pendientes ordenados, dieciseisavos automáticos y confirmación de inicio. |
 | **94** | ~10 a 14 horas (estimación) | Vista compacta de Día de torneo, reglas y pruebas de lluvia/restauración, controles al final, tiempo transcurrido y cambio de horario desde la pantalla. |
-| **95** | ~8 a 12 horas (estimación nueva) | Modal de canchas con una acción por vez, encabezado simplificado, grilla con un solo Ver todos en el modal, cronómetro real y migración con backup, cruces claros y bloqueo de parejas en dos partidos en juego, con pruebas. |
-| **Total** | **~304 a 373 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación de las sesiones 91 a 95. |
+| **95** | ~8 a 12 horas (estimación) | Modal de canchas con una acción por vez, encabezado simplificado, grilla con un solo Ver todos en el modal, cronómetro real y migración con backup, cruces claros y bloqueo de parejas en dos partidos en juego, con pruebas. |
+| **96** | ~8 a 12 horas (estimación) | Tarjetas tipo marcador, número de cancha oculto, posiciones compactas en celular, limpieza del cronómetro y referencias de lluvia al reiniciar, errores en la página y camino para rearmar. |
+| **97** | ~6 a 9 horas (estimación) | Cuadro tipo marcador, acciones con texto, rondas en una fila, modal de horario amplio y compacto con grilla continua e intercambio transaccional de cruces, con pruebas y documentación. |
+| **98** | ~12 a 18 horas (estimación) | Vista pública con navegación fija por fases e historial, zonas por posiciones o partidos y jornadas plegables, cuadro desde la ronda elegida sin panel, próximos demorados, búsqueda por prefijos, parejas tocables con seguimiento y foco, compactación móvil y pruebas. |
+| **99** | ~10 a 14 horas (estimación) | Análisis de cierre con copias, protección de ganadores entre rondas, estados automáticos y recálculos transaccionales, preparación preservada, bloqueos al finalizar, campeones en el panel, ajustes del público y de edición de resultados, recorrido completo y pruebas. |
+| **Total estimado (1 a 99)** | **~340 a 426 horas** | Desarrollo integral de Fixi: torneos, categorías, zonas y cuadros, disponibilidad y programación, pre-check, operación en vivo y modo lluvia, pruebas y diagnósticos, inscripción por link, rediseños de la vista pública y del panel, y mejoras de operación y cierre de las sesiones 91 a 99. |
 
 > **Nota:** esta tabla cubre las sesiones o entradas de codificación, depuración, pruebas y documentación técnica. No incluye el tiempo dedicado a definición de producto, validación con usuarios, diseño UX/UI en wireframes, revisión de pantallas y planificación de alcance (secciones 6 a 8), que representan trabajo adicional real de la Práctica Profesional Supervisada.
 

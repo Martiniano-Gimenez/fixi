@@ -18,6 +18,7 @@ const { conReintentoOrden } = require('../utils/reintentoOrden');
 const { colaAltasPareja } = require('../utils/colaSerial');
 
 const MAX_NOMBRE = 60;
+const MAX_PAREJAS_INSCRIPCION = 48;
 const MIN_DIGITOS_TEL = 8;
 const MAX_DIGITOS_TEL = 15; // E.164
 // Transacción de inscripción: espera explícita por el bloqueo del torneo (inscripciones simultáneas)
@@ -33,6 +34,7 @@ const errores = {
   cerrada: () => error(409, 'INSCRIPCION_CERRADA', 'La inscripción de este torneo está cerrada.'),
   categoriaNoEncontrada: () => error(404, 'CATEGORIA_NO_DISPONIBLE', 'Esa categoría no existe en este torneo.'),
   categoriaIniciada: () => error(409, 'CATEGORIA_NO_DISPONIBLE', 'Esa categoría ya empezó y no acepta inscripciones.'),
+  categoriaCompleta: () => error(409, 'CATEGORIA_COMPLETA', 'Esta categoría ya está completa. Elegí otra o consultá con la organización.'),
   duplicado: () => error(409, 'DUPLICADO', 'Esa pareja ya está inscripta en esta categoría. Si necesitás un cambio, avisale al organizador.'),
   datos: (mensaje) => error(400, 'DATOS_INVALIDOS', mensaje),
 };
@@ -104,7 +106,7 @@ async function getInscripcionPublica(slug) {
       categorias: {
         where: { estado: 'BORRADOR' },
         orderBy: [{ nombre: 'asc' }, { createdAt: 'asc' }],
-        select: { id: true, nombre: true },
+        select: { id: true, nombre: true, _count: { select: { parejas: true } } },
       },
     },
   });
@@ -119,7 +121,9 @@ async function getInscripcionPublica(slug) {
       estado: torneo.estado,
       inscripcionAbierta: torneo.inscripcionAbierta,
     },
-    categorias: torneo.categorias,
+    categorias: torneo.categorias.map(({ id, nombre, _count }) => ({
+      id, nombre, completa: _count.parejas >= MAX_PAREJAS_INSCRIPCION,
+    })),
     grilla: { viernes, sabado },
   };
 }
@@ -198,6 +202,10 @@ async function crearInscripcionSinMapear(slug, body) {
     const cat = await tx.categoria.findUnique({ where: { id: categoria.id } });
     if (!cat || cat.estado !== 'BORRADOR') throw errores.categoriaIniciada();
 
+    // El cupo incluye las altas del panel y se verifica bajo el mismo bloqueo que el alta.
+    const cantidad = await tx.pareja.count({ where: { categoriaId: categoria.id } });
+    if (cantidad >= MAX_PAREJAS_INSCRIPCION) throw errores.categoriaCompleta();
+
     const existentes = await tx.pareja.findMany({
       where: { categoriaId: categoria.id },
       select: { jugador1: true, jugador2: true },
@@ -260,4 +268,5 @@ module.exports = {
   claveNombre,
   normalizarTelefono,
   MAX_NOMBRE,
+  MAX_PAREJAS_INSCRIPCION,
 };

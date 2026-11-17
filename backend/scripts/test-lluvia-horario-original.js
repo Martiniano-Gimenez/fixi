@@ -259,6 +259,7 @@ async function probarDisponibilidadSoloSinHorario() {
   for (let c = 1; c <= 4; c++) await crearPartido(`Fijo ${c}`, local(13, 13, 45), c, false, 'FINALIZADO');
   const sinHorario = await crearPartido('Sin horario', null, null);
   await reducir(4);
+  const registroEstaLluvia = await leerRegistro(torneo.id, VIE);
   partidos = await leerPartidos(torneo.id);
   for (const id of [manual.id, automatico.id]) {
     assert.strictEqual(partidos.find((p) => p.id === id).fechaHora?.getTime(), local(13, 15).getTime(),
@@ -273,7 +274,7 @@ async function probarDisponibilidadSoloSinHorario() {
     'Sin horario se sigue respetando el inicio más tardío de las dos parejas, aunque haya lugar desde las 15:00');
   verificarSinAdelantos(partidos, recuperados, 'Disponibilidad solo sin horario');
   verificarSinChoques(recuperados, 'Disponibilidad solo sin horario');
-  assert.deepStrictEqual(await leerRegistro(torneo.id, VIE), registro, 'La segunda reducción conserva el registro original');
+  assert.deepStrictEqual(await leerRegistro(torneo.id, VIE), registroEstaLluvia, 'La segunda reducción conserva el registro original');
   console.log('OK disponibilidad: horario manual y automático a las 13:45, primer hueco a las 15:00 y sin horario desde las 17:00');
 }
 

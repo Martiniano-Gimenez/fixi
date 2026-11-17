@@ -9,6 +9,7 @@ import './publico/publico.css';
 import Barra from './publico/Barra';
 
 const MAX_NOMBRE = 60;
+const MENSAJE_COMPLETA = 'Esta categoría ya está completa. Elegí otra o consultá con la organización.';
 
 // Mismas reglas que el backend (inscripcion.service.js); el backend valida igual
 function validarTelefono(valor) {
@@ -59,6 +60,7 @@ export default function InscripcionPublica() {
       setDatos((prev) => ({ ...d, grilla: prev?.grilla ?? d.grilla }));
       if (d.torneo.estado !== 'BORRADOR') setPantalla('iniciado');
       else if (!d.torneo.inscripcionAbierta || d.categorias.length === 0) setPantalla('cerrada');
+      else if (d.categorias.every((c) => c.completa)) setPantalla('completas');
       else setPantalla((p) => (p === 'confirmacion' ? p : 'abierta'));
       return d;
     } catch (err) {
@@ -73,7 +75,7 @@ export default function InscripcionPublica() {
 
   // Con una sola categoría, queda elegida
   useEffect(() => {
-    if (datos?.categorias?.length === 1) {
+    if (datos?.categorias?.length === 1 && !datos.categorias[0].completa) {
       setForm((f) => (f.categoriaId ? f : { ...f, categoriaId: datos.categorias[0].id }));
     }
   }, [datos]);
@@ -94,6 +96,7 @@ export default function InscripcionPublica() {
     if (enviando) return;
     setErrorEnvio('');
     const errs = validar(form);
+    if (datos.categorias.find((c) => c.id === form.categoriaId)?.completa) errs.categoriaId = MENSAJE_COMPLETA;
     setErrores(errs);
     if (Object.keys(errs).length > 0) return;
 
@@ -115,6 +118,10 @@ export default function InscripcionPublica() {
     } catch (err) {
       if (PANTALLA_POR_CODIGO[err.codigo]) {
         setPantalla(PANTALLA_POR_CODIGO[err.codigo]);
+      } else if (err.codigo === 'CATEGORIA_COMPLETA') {
+        // Conservamos el formulario, incluso si se acaba de ocupar el último cupo del torneo.
+        setDatos((d) => ({ ...d, categorias: d.categorias.map((c) => c.id === form.categoriaId ? { ...c, completa: true } : c) }));
+        setErrores((er) => ({ ...er, categoriaId: err.message }));
       } else if (err.codigo === 'REINTENTAR') {
         // 503: la base estuvo ocupada (por ejemplo, mientras se inicia el torneo). No se guardó
         // nada; el formulario queda cargado para volver a enviarlo.
@@ -137,9 +144,8 @@ export default function InscripcionPublica() {
     setErrores({});
     setErrorEnvio('');
     setConfirmada(null);
-    cargar().then((d) => {
-      if (d && d.torneo.estado === 'BORRADOR' && d.torneo.inscripcionAbierta && d.categorias.length > 0) setPantalla('abierta');
-    });
+    setPantalla('cargando');
+    cargar();
   };
 
   const torneo = datos?.torneo;
@@ -150,6 +156,7 @@ export default function InscripcionPublica() {
     abierta: 'Inscripción abierta',
     confirmacion: 'Inscripción abierta',
     cerrada: 'Inscripción cerrada',
+    completas: 'Inscripción cerrada',
     iniciado: 'Torneo en curso',
   }[pantalla];
   const encabezado = (
@@ -200,7 +207,7 @@ export default function InscripcionPublica() {
   }
 
   // Estados sin formulario: no encontrado, error, cerrada, torneo iniciado
-  if (['no-encontrado', 'error', 'iniciado', 'cerrada'].includes(pantalla)) {
+  if (['no-encontrado', 'error', 'iniciado', 'cerrada', 'completas'].includes(pantalla)) {
     const estados = {
       'no-encontrado': {
         icono: <SearchX size={26} aria-hidden="true" />,
@@ -227,6 +234,12 @@ export default function InscripcionPublica() {
         icono: <Lock size={26} aria-hidden="true" />,
         titulo: 'La inscripción está cerrada',
         texto: 'Por ahora no se aceptan inscripciones por link. Consultá con el organizador.',
+        accion: <Link to={linkPublico} className="pv-btn pv-btn-secundario">Ver el torneo</Link>,
+      },
+      completas: {
+        icono: <Lock size={26} aria-hidden="true" />,
+        titulo: 'La inscripción está cerrada',
+        texto: 'Todas las categorías están completas.',
         accion: <Link to={linkPublico} className="pv-btn pv-btn-secundario">Ver el torneo</Link>,
       },
     };
@@ -322,7 +335,7 @@ export default function InscripcionPublica() {
             >
               <option value="">Elegí una categoría</option>
               {datos.categorias.map((c) => (
-                <option key={c.id} value={c.id}>{c.nombre}</option>
+                <option key={c.id} value={c.id} disabled={Boolean(c.completa)}>{c.nombre}{c.completa ? ' (completa)' : ''}</option>
               ))}
             </select>
             {errores.categoriaId && <p id="insc-categoria-error" className="pv-error">{errores.categoriaId}</p>}

@@ -19,6 +19,7 @@ import {
   Eye,
   Settings,
   Activity,
+  Trophy,
   Edit2,
   X,
   GitBranch,
@@ -403,7 +404,7 @@ export default function TorneoDetail() {
                 to={`/admin/torneos/${id}/iniciar`}
                 className={`td-button${torneo.estado === 'EN_CURSO' ? '' : ' td-primary'}`}
               >
-                <Play size={16} /> Iniciar torneo
+                <Play size={16} /> {torneo.estado === 'EN_CURSO' ? 'Armar categorías pendientes' : 'Iniciar torneo'}
               </Link>
             )}
           </div>
@@ -440,7 +441,7 @@ export default function TorneoDetail() {
           </h2>
         </div>
 
-        {torneo.categorias?.length > 0 && (
+        {torneo.estado !== 'FINALIZADO' && torneo.categorias?.length > 0 && (
           <div className="td-category-tools">
             <button
               type="button"
@@ -458,15 +459,17 @@ export default function TorneoDetail() {
           <Layers size={44} className="td-empty-icon" />
           <h3 className="td-empty-title">No hay categorías cargadas</h3>
           <p className="td-empty-copy">
-            Agregá las categorías que se juegan en este torneo.
+            {torneo.estado === 'FINALIZADO' ? 'Este torneo no tiene categorías.' : 'Agregá las categorías que se juegan en este torneo.'}
           </p>
-          <button
-            type="button"
-            onClick={() => setNuevaCatModalOpen(true)}
-            className="td-button td-primary"
-          >
-            <Plus size={16} /> Agregar categoría
-          </button>
+          {torneo.estado !== 'FINALIZADO' && (
+            <button
+              type="button"
+              onClick={() => setNuevaCatModalOpen(true)}
+              className="td-button td-primary"
+            >
+              <Plus size={16} /> Agregar categoría
+            </button>
+          )}
         </div>
       ) : (
         <div className="td-category-grid">
@@ -487,11 +490,18 @@ export default function TorneoDetail() {
                   <div className="td-category-heading">
                     <h3 className="td-category-title">{cat.nombre}</h3>
                     <div className="td-category-state">
-                      {cat.estado !== torneo.estado && (
-                        <span className={`td-state td-state-${cat.estado.toLowerCase()}`}>{estadoLabel(cat.estado)}</span>
+                      {(cat.estado === 'FINALIZADO' || cat.estado !== torneo.estado) && (
+                        <span className={`td-state td-state-${cat.estado.toLowerCase()}`}>{cat.estado === 'FINALIZADO' ? 'Terminada' : estadoLabel(cat.estado)}</span>
                       )}
                     </div>
                   </div>
+
+                  {cat.estado === 'FINALIZADO' && cat.campeones && (
+                    <div className="td-champions">
+                      <Trophy size={18} aria-hidden="true" />
+                      <div><span>Campeones</span><strong>{cat.campeones.jugador1} / {cat.campeones.jugador2}</strong></div>
+                    </div>
+                  )}
 
                   <div className="td-category-meta">
                     <span className="td-meta-item">
@@ -545,15 +555,17 @@ export default function TorneoDetail() {
                     </Link>
                   )}
 
-                  <button
-                    type="button"
-                    className="td-button td-delete"
-                    title="Eliminar categoría"
-                    aria-label={`Eliminar categoría ${cat.nombre}`}
-                    onClick={() => setCategoriaAEliminar(cat)}
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {torneo.estado !== 'FINALIZADO' && (
+                    <button
+                      type="button"
+                      className="td-button td-delete"
+                      title="Eliminar categoría"
+                      aria-label={`Eliminar categoría ${cat.nombre}`}
+                      onClick={() => setCategoriaAEliminar(cat)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
               </div>
             );

@@ -1,6 +1,42 @@
 const prisma = require('../lib/prisma');
 const crypto = require('crypto');
+const { validarNombre } = require('../utils/nombres');
 const { parseFechaLocal } = require('../utils/dateUtils');
+
+function exigirTorneoNoFinalizado(torneo) {
+  if (torneo.estado === 'FINALIZADO') {
+    const error = new Error('El torneo está finalizado. Solo se pueden corregir resultados o reiniciar el torneo.');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+const seleccionParejaPodio = { id: true, jugador1: true, jugador2: true };
+const incluirFinalPodio = { where: { ronda: 2 }, include: { partidos: { include: {
+  ganador: { select: seleccionParejaPodio }, pareja1: { select: seleccionParejaPodio }, pareja2: { select: seleccionParejaPodio },
+} } } };
+
+function conPodioCategoria(categoria) {
+  const final = categoria.fasesEliminatorias?.flatMap((fase) => fase.partidos)
+    .find((partido) => !partido.esBye && partido.estado === 'FINALIZADO' && partido.ganadorId);
+  const campeones = categoria.estado === 'FINALIZADO' ? final?.ganador || null : null;
+  const subcampeones = campeones ? (final.ganadorId === final.pareja1Id ? final.pareja2 : final.pareja1) : null;
+  return { ...categoria, campeones, subcampeones };
+}
+
+async function recalcularEstadoTorneo(tx, torneoId) {
+  const torneo = await tx.torneo.findUnique({ where: { id: torneoId }, select: { estado: true } });
+  // El inicio por pre-check es el que saca al torneo de preparación.
+  if (torneo?.estado === 'BORRADOR') return;
+
+  const categorias = await tx.categoria.findMany({ where: { torneoId }, select: {
+    estado: true, _count: { select: { parejas: true } },
+  } });
+  const jugables = categorias.filter((categoria) => categoria.estado !== 'BORRADOR' || categoria._count.parejas >= 2);
+  const estado = jugables.length > 0 && jugables.every((categoria) => categoria.estado === 'FINALIZADO')
+    ? 'FINALIZADO' : 'EN_CURSO';
+  await tx.torneo.update({ where: { id: torneoId }, data: { estado } });
+}
 
 function generarSlug(nombre) {
   const base = nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
@@ -9,11 +45,7 @@ function generarSlug(nombre) {
 }
 
 async function createTorneo(organizadorId, { nombre, fecha }) {
-  if (!nombre || !nombre.trim()) {
-    const error = new Error('El nombre del torneo es obligatorio.');
-    error.statusCode = 400;
-    throw error;
-  }
+  const nombreValidado = validarNombre(nombre, 'del torneo', 80);
 
   if (!fecha || (typeof fecha === 'string' && !fecha.trim())) {
     const error = new Error('La fecha de inicio del torneo es obligatoria.');
@@ -34,12 +66,12 @@ async function createTorneo(organizadorId, { nombre, fecha }) {
     throw error;
   }
 
-  const slug = generarSlug(nombre.trim());
+  const slug = generarSlug(nombreValidado);
 
   return await prisma.torneo.create({
     data: {
       organizadorId,
-      nombre: nombre.trim(),
+      nombre: nombreValidado,
       fecha: parsedFecha,
       slug,
     },
@@ -86,6 +118,7 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
           },
           zonas: { select: { id: true, nombre: true } },
           partidos: { select: { id: true, estado: true, esBye: true } },
+          fasesEliminatorias: incluirFinalPodio,
         },
         orderBy: { createdAt: 'asc' },
       },
@@ -104,11 +137,19 @@ async function getTorneoById(organizadorId, torneoId, tx = null) {
     throw error;
   }
 
-  return torneo;
+  return { ...torneo, categorias: torneo.categorias.map(conPodioCategoria) };
 }
 
 async function updateTorneo(organizadorId, torneoId, data) {
   const torneo = await getTorneoById(organizadorId, torneoId);
+  const esInicio = torneo.estado === 'BORRADOR' && data.estado === 'EN_CURSO';
+  if (data.estado !== undefined && data.estado !== torneo.estado) {
+    const error = new Error(esInicio
+      ? 'Para iniciar el torneo usá Iniciar torneo.'
+      : 'El estado del torneo se actualiza automáticamente con los resultados.');
+    error.statusCode = 400;
+    throw error;
+  }
 
   let parsedFecha;
   if (data.fecha !== undefined) {
@@ -147,11 +188,8 @@ async function updateTorneo(organizadorId, torneoId, data) {
   }
 
   const updateData = {};
-  if (data.nombre !== undefined && data.nombre.trim()) updateData.nombre = data.nombre.trim();
+  if (data.nombre !== undefined) updateData.nombre = validarNombre(data.nombre, 'del torneo', 80);
   if (data.fecha !== undefined) updateData.fecha = parsedFecha;
-  if (data.estado !== undefined) updateData.estado = data.estado;
-  // La inscripción por link solo vive en BORRADOR (que este endpoint acepte `estado` queda como pendiente aparte)
-  if (data.estado !== undefined && data.estado !== 'BORRADOR') updateData.inscripcionAbierta = false;
 
   return await prisma.torneo.update({
     where: { id: torneo.id },
@@ -241,6 +279,10 @@ async function reiniciarTorneo(organizadorId, torneoId) {
 }
 
 module.exports = {
+  exigirTorneoNoFinalizado,
+  recalcularEstadoTorneo,
+  incluirFinalPodio,
+  conPodioCategoria,
   createTorneo,
   getTorneos,
   getTorneoById,

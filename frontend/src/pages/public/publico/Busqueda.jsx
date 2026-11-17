@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import TarjetaPartido, { Estrella } from './TarjetaPartido';
 import {
   agruparPartidosPorJornada,
@@ -131,19 +132,31 @@ export default function Busqueda({
   hrefCategoria,
   onAbrirCategoria,
 }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const seleccion = location.state?.parejaBusqueda;
   const [query, setQuery] = useState(queryInicial);
   const inputRef = useRef(null);
   const overlayRef = useRef(null);
   const navegandoRef = useRef(false);
+  const aperturaRef = useRef({ directa: Boolean(seleccion), focoOrigen: seleccion?.focoOrigen });
   const ahora = Date.now();
 
-  // Foco automático en el input al abrir y retorno de foco a la lupa al cerrar
+  // Desde una pareja, no hace falta abrir el teclado; al cerrar, volver a su nombre.
   useEffect(() => {
-    inputRef.current?.focus();
+    const apertura = aperturaRef.current;
+    if (apertura.directa) {
+      overlayRef.current?.querySelector('.pv-busqueda-cerrar')?.focus({ preventScroll: true });
+    } else {
+      inputRef.current?.focus();
+    }
     return () => {
       if (!navegandoRef.current) {
         requestAnimationFrame(() => {
-          document.querySelector('.pv-lupa')?.focus();
+          if (!document.querySelector('.pv-busqueda-overlay')) {
+            const origen = apertura.focoOrigen && document.getElementById(apertura.focoOrigen);
+            (origen || document.querySelector('.pv-lupa'))?.focus({ preventScroll: true });
+          }
         });
       }
     };
@@ -207,15 +220,29 @@ export default function Busqueda({
     };
   }, []);
 
+  const cambiarQuery = (valor) => {
+    if (seleccion) {
+      const params = new URLSearchParams(location.search);
+      params.set('buscar', valor);
+      navigate({ pathname: location.pathname, search: params.toString(), hash: location.hash }, {
+        replace: true,
+        state: { ...location.state, parejaBusqueda: null },
+        preventScrollReset: true,
+      });
+    } else {
+      onCambiarQuery(valor);
+    }
+  };
+
   const handleInputChange = (e) => {
     const val = e.target.value;
     setQuery(val);
-    onCambiarQuery(val);
+    cambiarQuery(val);
   };
 
   const handleLimpiar = () => {
     setQuery('');
-    onCambiarQuery('');
+    cambiarQuery('');
     inputRef.current?.focus();
   };
 
@@ -226,10 +253,16 @@ export default function Busqueda({
   };
 
   const diasTorneo = useMemo(() => diasDelTorneo(categorias), [categorias]);
-  const resultados = useMemo(() => parejasQueCoinciden(categorias, query), [categorias, query]);
+  const resultados = useMemo(() => {
+    if (seleccion) {
+      const cat = categorias.find((categoria) => categoria.id === seleccion.categoriaId);
+      return cat ? [{ parejaId: seleccion.parejaId, nombre: seleccion.nombre, cat }] : [];
+    }
+    return parejasQueCoinciden(categorias, query);
+  }, [categorias, query, seleccion]);
 
   const textoLimpio = query.trim();
-  const hayBusqueda = textoLimpio.length > 0;
+  const hayBusqueda = Boolean(seleccion) || (textoLimpio.match(/\p{L}/gu) || []).length >= 2;
   const sinResultados = hayBusqueda && resultados.length === 0;
 
   const handleAbrirCategoria = (cat, e) => {
@@ -243,7 +276,7 @@ export default function Busqueda({
       className="pv-busqueda-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label="Buscar pareja o jugador"
+      aria-label={seleccion ? `Partidos de ${seleccion.nombre}` : 'Buscar pareja o jugador'}
       onClick={handleOverlayClick}
     >
       <div className="pv-busqueda-panel">
@@ -254,6 +287,7 @@ export default function Busqueda({
               <input
                 ref={inputRef}
                 type="search"
+                autoFocus={!aperturaRef.current.directa}
                 className="pv-busqueda-input"
                 value={query}
                 onChange={handleInputChange}
@@ -287,7 +321,9 @@ export default function Busqueda({
         <div className="pv-busqueda-cuerpo">
           {!hayBusqueda && (
             <p className="pv-busqueda-guia">
-              Escribí el apellido o nombre de un jugador para ver sus partidos.
+              {textoLimpio
+                ? 'Escribí al menos dos letras.'
+                : 'Escribí el apellido o nombre de un jugador para ver sus partidos.'}
             </p>
           )}
 
