@@ -38,7 +38,7 @@ Fixi automatiza esa parte:
 
 ## Tests
 
-- **53 suites de integración en el backend** (`npm test`): cada una levanta el servidor contra una base de test aislada. Un guard impide correr tests contra la base de desarrollo. Cubren el scheduler, el modo lluvia, las eliminatorias, la autorización entre organizadores (IDOR), la inscripción pública, el determinismo de las consultas y la paridad de zona horaria entre frontend y backend en tres husos distintos.
+- **69 suites de integración en el backend** (`npm test`): cada una levanta el servidor contra una base de test aislada. Un guard impide correr tests contra la base de desarrollo. Cubren el scheduler, el modo lluvia, las eliminatorias, la autorización entre organizadores (IDOR), la inscripción pública, el determinismo de las consultas y la paridad de zona horaria entre frontend y backend en tres husos distintos.
 - **Fuzz testing del scheduler** (`npm run test:fuzz`): genera torneos aleatorios con 500 semillas reproducibles, los inicia, les aplica una lluvia y los restaura. Después de cada etapa verifica invariantes: ninguna cancha ni pareja con dos partidos superpuestos, todo dentro del horario del club y alineado a la grilla de 15 minutos, ningún partido de zona el domingo y al menos 75 minutos de descanso entre rondas eliminatorias. Los hashes de los resultados se comparan con un baseline para detectar cambios de comportamiento.
 - **Tests del frontend** (`npm test` en `frontend/`) para la lógica de presentación: grilla de horarios, agrupación por jornada y avisos del pre-check.
 
